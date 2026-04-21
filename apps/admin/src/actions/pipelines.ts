@@ -28,6 +28,7 @@ export async function createPipeline(name: string) {
     for (let i = 0; i < stages.length; i++) {
       await admin.from("pipeline_stages").insert({
         pipeline_id: pipeline.id,
+        organization_id: orgId,
         name: stages[i],
         sort_order: i,
         color: colors[i],
@@ -40,7 +41,25 @@ export async function createPipeline(name: string) {
 
 export async function createDeal(data: { pipeline_id: string; stage_id: string; title: string; value: number; lead_id?: string }) {
   const { admin, orgId } = await requireSuperadminForOrg();
-  // Validate pipeline belongs to active org
+  const { data: stage } = await admin
+    .from("pipeline_stages")
+    .select("id, pipeline_id, organization_id")
+    .eq("id", data.stage_id)
+    .eq("pipeline_id", data.pipeline_id)
+    .eq("organization_id", orgId)
+    .single();
+  if (!stage) return null;
+
+  if (data.lead_id) {
+    const { data: lead } = await admin
+      .from("leads")
+      .select("id")
+      .eq("id", data.lead_id)
+      .eq("organization_id", orgId)
+      .single();
+    if (!lead) return null;
+  }
+
   const { data: pipeline } = await admin
     .from("pipelines")
     .select("id")
@@ -68,6 +87,22 @@ export async function createDeal(data: { pipeline_id: string; stage_id: string; 
 
 export async function moveDeal(dealId: string, stageId: string, sortOrder: number) {
   const { admin, orgId } = await requireSuperadminForOrg();
+  const { data: stage } = await admin
+    .from("pipeline_stages")
+    .select("id, pipeline_id, organization_id")
+    .eq("id", stageId)
+    .eq("organization_id", orgId)
+    .single();
+  if (!stage) return;
+
+  const { data: deal } = await admin
+    .from("deals")
+    .select("id, pipeline_id")
+    .eq("id", dealId)
+    .eq("organization_id", orgId)
+    .single();
+  if (!deal || deal.pipeline_id !== stage.pipeline_id) return;
+
   await admin
     .from("deals")
     .update({ stage_id: stageId, sort_order: sortOrder })
@@ -100,7 +135,11 @@ export async function createStage(pipelineId: string, name: string, sortOrder: n
   if (!pipeline) return null;
 
   const { data } = await admin.from("pipeline_stages").insert({
-    pipeline_id: pipelineId, name, sort_order: sortOrder, color: color || "#3b82f6",
+    pipeline_id: pipelineId,
+    organization_id: orgId,
+    name,
+    sort_order: sortOrder,
+    color: color || "#3b82f6",
   }).select().single();
   revalidatePath("/crm");
   return data;
@@ -146,8 +185,8 @@ export async function deleteStage(stageId: string) {
     .single();
   if (!stage) return;
 
-  await admin.from("deals").delete().eq("stage_id", stageId);
-  await admin.from("pipeline_stages").delete().eq("id", stageId);
+  await admin.from("deals").delete().eq("stage_id", stageId).eq("organization_id", orgId);
+  await admin.from("pipeline_stages").delete().eq("id", stageId).eq("organization_id", orgId);
   revalidatePath("/crm");
 }
 
@@ -162,13 +201,17 @@ export async function deletePipeline(pipelineId: string) {
     .single();
   if (!pipeline) return;
 
-  const { data: stages } = await admin.from("pipeline_stages").select("id").eq("pipeline_id", pipelineId);
+  const { data: stages } = await admin
+    .from("pipeline_stages")
+    .select("id")
+    .eq("pipeline_id", pipelineId)
+    .eq("organization_id", orgId);
   if (stages) {
     for (const s of stages) {
-      await admin.from("deals").delete().eq("stage_id", s.id);
+      await admin.from("deals").delete().eq("stage_id", s.id).eq("organization_id", orgId);
     }
   }
-  await admin.from("pipeline_stages").delete().eq("pipeline_id", pipelineId);
-  await admin.from("pipelines").delete().eq("id", pipelineId);
+  await admin.from("pipeline_stages").delete().eq("pipeline_id", pipelineId).eq("organization_id", orgId);
+  await admin.from("pipelines").delete().eq("id", pipelineId).eq("organization_id", orgId);
   revalidatePath("/crm");
 }

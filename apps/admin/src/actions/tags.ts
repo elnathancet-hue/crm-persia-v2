@@ -23,7 +23,9 @@ export async function createTag(name: string, color: string) {
     .select()
     .single();
   if (error) return { data: null, error: error.message };
+  revalidatePath("/tags");
   revalidatePath("/leads");
+  revalidatePath("/crm");
   return { data, error: null };
 }
 
@@ -38,9 +40,23 @@ export async function addTagToLead(leadId: string, tagId: string) {
     .single();
   if (!lead) return { error: "Lead nao encontrado nesta organizacao" };
 
-  const { error } = await admin.from("lead_tags").insert({ lead_id: leadId, tag_id: tagId });
-  if (error) return { error: error.message };
+  const { data: tag } = await admin
+    .from("tags")
+    .select("id")
+    .eq("id", tagId)
+    .eq("organization_id", orgId)
+    .single();
+  if (!tag) return { error: "Tag nao encontrada nesta organizacao" };
+
+  const { error } = await admin
+    .from("lead_tags")
+    .insert({ lead_id: leadId, tag_id: tagId, organization_id: orgId });
+  if (error) {
+    if (error.code === "23505") return { error: null };
+    return { error: error.message };
+  }
   revalidatePath("/leads");
+  revalidatePath("/crm");
   return { error: null };
 }
 
@@ -58,6 +74,7 @@ export async function removeTagFromLead(leadId: string, tagId: string) {
   const { error } = await admin.from("lead_tags").delete().eq("lead_id", leadId).eq("tag_id", tagId);
   if (error) return { error: error.message };
   revalidatePath("/leads");
+  revalidatePath("/crm");
   return { error: null };
 }
 
@@ -72,9 +89,15 @@ export async function updateTag(tagId: string, data: { name?: string; color?: st
     .single();
   if (!tag) return { error: "Tag nao encontrada nesta organizacao" };
 
-  const { error } = await admin.from("tags").update(data).eq("id", tagId);
+  const { error } = await admin
+    .from("tags")
+    .update(data)
+    .eq("id", tagId)
+    .eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath("/tags");
+  revalidatePath("/leads");
+  revalidatePath("/crm");
   return { error: null };
 }
 
@@ -89,9 +112,15 @@ export async function deleteTag(tagId: string) {
     .single();
   if (!tag) return { error: "Tag nao encontrada nesta organizacao" };
 
-  await admin.from("lead_tags").delete().eq("tag_id", tagId);
-  const { error } = await admin.from("tags").delete().eq("id", tagId);
+  await admin.from("lead_tags").delete().eq("tag_id", tagId).eq("organization_id", orgId);
+  const { error } = await admin
+    .from("tags")
+    .delete()
+    .eq("id", tagId)
+    .eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath("/tags");
+  revalidatePath("/leads");
+  revalidatePath("/crm");
   return { error: null };
 }

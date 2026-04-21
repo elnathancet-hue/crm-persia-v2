@@ -221,14 +221,42 @@ export async function getDeals(pipelineId?: string) {
 
 export async function createDeal(formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
+  const pipelineId = formData.get("pipeline_id") as string;
+  const stageId = formData.get("stage_id") as string;
+  const leadId = (formData.get("lead_id") as string) || null;
+
+  const { data: stage } = await supabase
+    .from("pipeline_stages")
+    .select("id, pipeline_id, organization_id")
+    .eq("id", stageId)
+    .eq("pipeline_id", pipelineId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!stage) {
+    throw new Error("Etapa nao encontrada neste funil");
+  }
+
+  if (leadId) {
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("id", leadId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+
+    if (!lead) {
+      throw new Error("Lead nao encontrado nesta organizacao");
+    }
+  }
 
   const { data, error } = await supabase
     .from("deals")
     .insert({
       organization_id: orgId,
-      pipeline_id: formData.get("pipeline_id") as string,
-      stage_id: formData.get("stage_id") as string,
-      lead_id: (formData.get("lead_id") as string) || null,
+      pipeline_id: pipelineId,
+      stage_id: stageId,
+      lead_id: leadId,
       title: formData.get("title") as string,
       value: parseFloat((formData.get("value") as string) || "0"),
       status: "open",

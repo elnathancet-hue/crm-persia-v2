@@ -69,16 +69,22 @@ export async function createTag({ name, color }: { name: string; color: string }
 }
 
 export async function updateTag(id: string, { name, color }: { name?: string; color?: string }) {
-  const { supabase } = await requireRole("agent");
+  const { supabase, orgId } = await requireRole("agent");
 
   const updateData: Record<string, string> = {};
   if (name !== undefined) updateData.name = name;
   if (color !== undefined) updateData.color = color;
 
-  const { error } = await supabase.from("tags").update(updateData as never).eq("id", id);
+  const { error } = await supabase
+    .from("tags")
+    .update(updateData as never)
+    .eq("id", id)
+    .eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
   revalidatePath("/tags");
+  revalidatePath("/leads");
+  revalidatePath("/crm");
 }
 
 export async function deleteTag(id: string) {
@@ -87,14 +93,42 @@ export async function deleteTag(id: string) {
   // Remove all lead_tags first
   await supabase.from("lead_tags").delete().eq("tag_id", id).eq("organization_id", orgId);
 
-  const { error } = await supabase.from("tags").delete().eq("id", id);
+  const { error } = await supabase
+    .from("tags")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
   revalidatePath("/tags");
+  revalidatePath("/leads");
+  revalidatePath("/crm");
 }
 
 export async function addTagToLead(leadId: string, tagId: string) {
   const { supabase, orgId } = await requireRole("agent");
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!lead) {
+    throw new Error("Lead nao encontrado nesta organizacao");
+  }
+
+  const { data: tag } = await supabase
+    .from("tags")
+    .select("id")
+    .eq("id", tagId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!tag) {
+    throw new Error("Tag nao encontrada nesta organizacao");
+  }
 
   const { error } = await supabase.from("lead_tags").insert({
     lead_id: leadId,
@@ -116,6 +150,8 @@ export async function addTagToLead(leadId: string, tagId: string) {
   });
 
   revalidatePath("/leads");
+  revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/crm");
 }
 
 export async function removeTagFromLead(leadId: string, tagId: string) {
@@ -138,15 +174,18 @@ export async function removeTagFromLead(leadId: string, tagId: string) {
   });
 
   revalidatePath("/leads");
+  revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/crm");
 }
 
 export async function getLeadTags(leadId: string) {
-  const { supabase } = await requireRole("agent");
+  const { supabase, orgId } = await requireRole("agent");
 
   const { data, error } = await supabase
     .from("lead_tags")
     .select("tag_id, tags(id, name, color)")
-    .eq("lead_id", leadId);
+    .eq("lead_id", leadId)
+    .eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
   return (data || []).map((lt: any) => lt.tags).flat().filter(Boolean);

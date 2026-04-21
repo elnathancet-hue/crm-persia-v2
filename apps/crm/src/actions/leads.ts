@@ -67,6 +67,33 @@ export async function getLeads(filters: LeadFilters = {}) {
 
   const from = (page - 1) * limit;
   const to = from + limit - 1;
+  let leadIdsFromTags: string[] | null = null;
+
+  if (tags && tags.length > 0) {
+    const { data: taggedLeads, error: tagError } = await supabase
+      .from("lead_tags")
+      .select("lead_id")
+      .eq("organization_id", orgId)
+      .in("tag_id", tags);
+
+    if (tagError) {
+      throw new Error(tagError.message);
+    }
+
+    leadIdsFromTags = Array.from(
+      new Set((taggedLeads || []).map((row) => row.lead_id).filter(Boolean))
+    );
+
+    if (leadIdsFromTags.length === 0) {
+      return {
+        leads: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      };
+    }
+  }
 
   let query = supabase
     .from("leads")
@@ -89,13 +116,20 @@ export async function getLeads(filters: LeadFilters = {}) {
     .range(from, to);
 
   if (search) {
-    query = query.or(
-      `name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
-    );
+    const sanitized = search.replace(/[%_,()\\]/g, "").trim();
+    if (sanitized) {
+      query = query.or(
+        `name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`
+      );
+    }
   }
 
   if (status && status !== "all") {
     query = query.eq("status", status);
+  }
+
+  if (leadIdsFromTags) {
+    query = query.in("id", leadIdsFromTags);
   }
 
   const { data, error, count } = await query;
@@ -104,16 +138,8 @@ export async function getLeads(filters: LeadFilters = {}) {
     throw new Error(error.message);
   }
 
-  let filteredData = data as LeadWithTags[];
-
-  if (tags && tags.length > 0) {
-    filteredData = filteredData.filter((lead) =>
-      lead.lead_tags?.some((lt) => tags.includes(lt.tag_id))
-    );
-  }
-
   return {
-    leads: filteredData,
+    leads: data as LeadWithTags[],
     total: count ?? 0,
     page,
     limit,
@@ -308,6 +334,28 @@ export async function getOrgTags() {
 export async function addTagToLead(leadId: string, tagId: string) {
   const { supabase, orgId } = await requireRole("agent");
 
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!lead) {
+    throw new Error("Lead nao encontrado nesta organizacao");
+  }
+
+  const { data: tag } = await supabase
+    .from("tags")
+    .select("id")
+    .eq("id", tagId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!tag) {
+    throw new Error("Tag nao encontrada nesta organizacao");
+  }
+
   const { error } = await supabase
     .from("lead_tags")
     .insert({ lead_id: leadId, tag_id: tagId, organization_id: orgId });
@@ -317,7 +365,9 @@ export async function addTagToLead(leadId: string, tagId: string) {
     throw new Error(error.message);
   }
 
+  revalidatePath("/leads");
   revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/crm");
 }
 
 export async function removeTagFromLead(leadId: string, tagId: string) {
@@ -335,4 +385,6 @@ export async function removeTagFromLead(leadId: string, tagId: string) {
   }
 
   revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/leads");
+  revalidatePath("/crm");
 }

@@ -31,9 +31,28 @@ export type LeadFilters = {
 
 export async function getLeads(filters: LeadFilters = {}) {
   const { admin, orgId } = await requireSuperadminForOrg();
-  const { search, status, page = 1, limit = 20 } = filters;
+  const { search, status, tags, page = 1, limit = 20 } = filters;
   const from = (page - 1) * limit;
   const to = from + limit - 1;
+  let leadIdsFromTags: string[] | null = null;
+
+  if (tags && tags.length > 0) {
+    const { data: taggedLeads, error: tagError } = await admin
+      .from("lead_tags")
+      .select("lead_id")
+      .eq("organization_id", orgId)
+      .in("tag_id", tags);
+
+    if (tagError) return { data: null, error: tagError.message, count: 0 };
+
+    leadIdsFromTags = Array.from(
+      new Set((taggedLeads || []).map((row) => row.lead_id).filter(Boolean))
+    );
+
+    if (leadIdsFromTags.length === 0) {
+      return { data: [], error: null, count: 0 };
+    }
+  }
 
   let query = admin
     .from("leads")
@@ -49,6 +68,7 @@ export async function getLeads(filters: LeadFilters = {}) {
     }
   }
   if (status) query = query.eq("status", status);
+  if (leadIdsFromTags) query = query.in("id", leadIdsFromTags);
 
   const { data, error, count } = await query;
   if (error) return { data: null, error: error.message, count: 0 };

@@ -38,20 +38,23 @@ function formDataOf(obj: Record<string, string>) {
 }
 
 describe("getLeads", () => {
-  it("returns paginated leads and applies tag filter client-side", async () => {
+  it("returns paginated leads and applies tag filter before pagination", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
+    supabase.queue("lead_tags", {
+      data: [{ lead_id: "l1" }],
+      error: null,
+    });
     supabase.queue("leads", {
       data: [
         { id: "l1", lead_tags: [{ tag_id: "t1", tags: { id: "t1", name: "VIP", color: "#f00" } }] },
-        { id: "l2", lead_tags: [] },
       ],
       error: null,
-      count: 2,
+      count: 1,
     });
 
     const result = await getLeads({ tags: ["t1"], page: 1, limit: 10 });
-    expect(result.total).toBe(2);
+    expect(result.total).toBe(1);
     expect(result.leads.map((l) => l.id)).toEqual(["l1"]);
   });
 
@@ -176,6 +179,8 @@ describe("addTagToLead", () => {
   it("swallows duplicate errors (23505)", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
+    supabase.queue("leads", { data: { id: "l1" }, error: null });
+    supabase.queue("tags", { data: { id: "t1" }, error: null });
     supabase.queue("lead_tags", {
       data: null,
       error: { message: "duplicate", code: "23505" },
@@ -186,6 +191,8 @@ describe("addTagToLead", () => {
   it("throws on other errors", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
+    supabase.queue("leads", { data: { id: "l1" }, error: null });
+    supabase.queue("tags", { data: { id: "t1" }, error: null });
     supabase.queue("lead_tags", {
       data: null,
       error: { message: "something", code: "23502" },

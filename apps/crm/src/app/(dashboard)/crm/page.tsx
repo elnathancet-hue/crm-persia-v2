@@ -65,14 +65,12 @@ export default async function CrmPage() {
     );
   }
 
-  const activePipeline = pipelines[0];
-
   // Fetch stages, deals, leads
   const [stagesResult, dealsResult, leadsResult] = await Promise.all([
     supabase
       .from("pipeline_stages")
       .select("*")
-      .eq("pipeline_id", activePipeline.id)
+      .eq("organization_id", orgId)
       .order("sort_order", { ascending: true }),
     supabase
       .from("deals")
@@ -88,7 +86,7 @@ export default async function CrmPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight font-heading">CRM - {activePipeline.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight font-heading">CRM - Funil de Vendas</h1>
       </div>
       <CrmClient
         pipelines={pipelines}

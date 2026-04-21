@@ -83,6 +83,10 @@ export async function moveDealToStage(params: MoveDealParams): Promise<MoveDealR
     return { ok: false, error: "Etapa não pertence à organização" };
   }
 
+  if (targetStage.pipeline_id !== deal.pipeline_id) {
+    return { ok: false, error: "Etapa não pertence ao funil do negócio" };
+  }
+
   // 4. Get from-stage name for activity log
   let fromStageName = "";
   if (deal.stage_id) {

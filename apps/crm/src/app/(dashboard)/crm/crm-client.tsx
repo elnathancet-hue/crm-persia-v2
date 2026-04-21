@@ -64,6 +64,7 @@ interface Deal {
   value: number;
   status: string;
   lead_id: string | null;
+  pipeline_id: string;
   sort_order: number;
   leads: {
     name: string;
@@ -76,6 +77,7 @@ interface Deal {
 
 interface Stage {
   id: string;
+  pipeline_id: string;
   name: string;
   color: string;
   sort_order: number;
@@ -127,13 +129,17 @@ export function CrmClient({
   const [isPending, startTransition] = React.useTransition();
 
   // Sort stages by sort_order
-  const sortedStages = [...initialStages].sort(
-    (a, b) => a.sort_order - b.sort_order
+  const sortedStages = React.useMemo(
+    () =>
+      initialStages
+        .filter((stage) => stage.pipeline_id === selectedPipeline)
+        .sort((a, b) => a.sort_order - b.sort_order),
+    [initialStages, selectedPipeline]
   );
 
   // Filter deals
   const filteredDeals = React.useMemo(() => {
-    let filtered = localDeals;
+    let filtered = localDeals.filter((deal) => deal.pipeline_id === selectedPipeline);
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -148,7 +154,7 @@ export function CrmClient({
       filtered = filtered.filter((d) => d.status === statusFilter);
     }
     return filtered;
-  }, [localDeals, searchQuery, statusFilter]);
+  }, [localDeals, searchQuery, selectedPipeline, statusFilter]);
 
   // Group deals by stage
   function dealsByStage(stageId: string) {
