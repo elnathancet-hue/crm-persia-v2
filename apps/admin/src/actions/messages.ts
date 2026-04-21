@@ -94,7 +94,7 @@ export async function resendMessage(
     let result;
     if (message.type === "text") {
       result = await provider.sendText({ phone, message: message.content || "" });
-    } else if (["image", "audio", "video", "document"].includes(message.type)) {
+    } else if (message.type && ["image", "audio", "video", "document"].includes(message.type)) {
       if (!message.media_url) throw new Error("Media ausente para reenvio");
       result = await provider.sendMedia({
         phone,

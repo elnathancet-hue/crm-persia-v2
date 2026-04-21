@@ -23,7 +23,7 @@ export async function auditLog(params: {
       entity_type: params.entityType || null,
       entity_id: params.entityId || null,
       metadata: params.metadata || {},
-    });
+    } as never);
   } catch (err) {
     // Never block the main operation because of audit failure
     console.error("[Audit] Failed to log:", err instanceof Error ? err.message : String(err));

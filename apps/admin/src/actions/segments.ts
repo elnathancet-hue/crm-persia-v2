@@ -24,7 +24,7 @@ export async function createSegment(data: { name: string; description?: string; 
     name: data.name,
     description: data.description || null,
     rules: data.rules || { operator: "AND", conditions: [] },
-  }).select().single();
+  } as never).select().single();
   if (error) return { data: null, error: error.message };
   revalidatePath("/segments");
   return { data: segment, error: null };

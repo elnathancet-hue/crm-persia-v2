@@ -191,7 +191,7 @@ export async function GET(req: NextRequest) {
           campaign_id: row.campaign_id,
           variables: row.variables,
         },
-      });
+      } as never);
 
       summary.sent++;
     } catch (err: unknown) {

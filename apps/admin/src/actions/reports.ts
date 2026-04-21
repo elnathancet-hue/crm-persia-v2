@@ -54,7 +54,8 @@ export async function getLeadsTimeline(days: number = 30) {
     grouped[key] = 0;
   }
 
-  (leads || []).forEach((l: { created_at: string }) => {
+  (leads || []).forEach((l: { created_at: string | null }) => {
+    if (!l.created_at) return;
     const key = l.created_at.split("T")[0];
     if (grouped[key] !== undefined) grouped[key]++;
   });
@@ -86,7 +87,8 @@ export async function getMessagesTimeline(days: number = 30) {
     grouped[key] = { humano: 0, ia: 0 };
   }
 
-  (msgs || []).forEach((m: { created_at: string; sender: string }) => {
+  (msgs || []).forEach((m: { created_at: string | null; sender: string }) => {
+    if (!m.created_at) return;
     const key = m.created_at.split("T")[0];
     if (grouped[key]) {
       if (m.sender === "ai") grouped[key].ia++;

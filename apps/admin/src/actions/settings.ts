@@ -206,7 +206,7 @@ export async function createAssistant(data: {
     model: "gpt-4.1-mini",
     is_active: true,
     message_splitting: { enabled: false, threshold: 100, delay_seconds: 2 },
-  }).select().single();
+  } as never).select().single();
   if (error) return { data: null, error: error.message };
   revalidatePath("/settings/ai");
   revalidatePath("/automations/assistant");

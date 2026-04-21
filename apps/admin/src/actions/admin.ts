@@ -194,7 +194,7 @@ export async function deleteOrganization(orgId: string) {
 
 export interface AuditLogRow {
   id: string;
-  created_at: string;
+  created_at: string | null;
   user_id: string;
   user_email: string;
   user_name: string;

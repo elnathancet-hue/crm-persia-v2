@@ -38,7 +38,7 @@ export default function LoginPage() {
       router.push("/");
       router.refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Erro" || "Erro de conexão");
+      setError(err instanceof Error ? err.message : "Erro de conexão");
       setLoading(false);
     }
   }

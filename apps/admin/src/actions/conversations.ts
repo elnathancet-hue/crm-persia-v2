@@ -72,7 +72,7 @@ export async function getConversations(
       .order("created_at", { ascending: false })
       .limit(ids.length * 3);
 
-    const lastMessages = new Map<string, { content: string | null; sender: string; created_at: string }>();
+    const lastMessages = new Map<string, { content: string | null; sender: string; created_at: string | null }>();
     if (messages) {
       for (const msg of messages) {
         if (!lastMessages.has(msg.conversation_id)) {
@@ -192,7 +192,7 @@ export async function generateAgentResponse(
 
   if (!conv) return { suggestion: "", error: "Conversa nao encontrada nesta organizacao" };
 
-  let assistant: { prompt: string; tone: string } | null = null;
+  let assistant: { prompt: string; tone: string | null } | null = null;
   if (assistantId) {
     // Validate assistant belongs to the same org
     const { data } = await admin

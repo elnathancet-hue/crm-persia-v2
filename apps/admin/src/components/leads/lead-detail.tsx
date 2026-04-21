@@ -55,7 +55,7 @@ export function LeadDetail({ leadId, onBack }: Props) {
         setName(leadResult.data.name || "");
         setPhone(leadResult.data.phone || "");
         setEmail(leadResult.data.email || "");
-        setStatus(leadResult.data.status);
+        setStatus(leadResult.data.status || "");
       }
       setActivities(actResult.data || []);
       setAllTags(tagsResult);

@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
             const uazapi = createUazapiClient(conn.instance_url!, conn.instance_token!, uazapiAdminToken);
 
             const created = await uazapi.createInstance(conn.organization_id);
-            const raw = created as Record<string, unknown>;
+            const raw = created as unknown as Record<string, unknown>;
             const newToken =
               (raw.instance as Record<string, unknown> | undefined)?.token as string | undefined
               ?? raw.token as string | undefined;

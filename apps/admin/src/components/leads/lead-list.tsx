@@ -31,7 +31,7 @@ export function LeadListPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [tags, setTags] = useState<any[]>([]);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!isManagingClient) return;

@@ -37,7 +37,7 @@ export default function WhatsAppPage() {
   const [qrExpired, setQrExpired] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tab, setTab] = useState<ProviderTab>("uazapi");
-  const qrIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const qrIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const qrPollCountRef = useRef(0);
 
   function stopPolling() {

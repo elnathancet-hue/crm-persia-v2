@@ -380,7 +380,7 @@ function EditClientModal({ org, onSaved, onClose }: { org: Org; onSaved: () => v
       toast.success("Conta atualizada");
       onSaved();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Erro" || "Erro ao salvar");
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
     }
     setSaving(false);
   }

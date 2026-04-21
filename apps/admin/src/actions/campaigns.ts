@@ -57,7 +57,7 @@ export async function createCampaign(data: {
     status: "draft",
     scheduled_at: data.scheduled_at || null,
     send_interval_seconds: data.send_interval_seconds ?? 30,
-  }).select().single();
+  } as never).select().single();
 
   if (error) return { data: null, error: error.message };
   revalidatePath("/campaigns");
@@ -120,7 +120,9 @@ export async function executeCampaign(campaignId: string): Promise<{ sent: numbe
     targetLeads = leads.filter((l) => leadIdSet.has(l.id));
   }
 
-  const validLeads = targetLeads.filter((l) => l.phone);
+  const validLeads = targetLeads.filter(
+    (l): l is { id: string; phone: string; name: string | null } => !!l.phone
+  );
   if (validLeads.length === 0) return { sent: 0, error: "Nenhum lead com telefone na segmentacao" };
 
   // Template-based (Meta Cloud) → enqueue em wa_template_sends. O cron envia.
@@ -215,7 +217,7 @@ async function enqueueTemplateCampaign(
     status: "queued",
   }));
 
-  const { error } = await admin.from("wa_template_sends").insert(rows);
+  const { error } = await admin.from("wa_template_sends").insert(rows as never);
   if (error) return { sent: 0, queued: 0, error: error.message };
 
   await admin.from("campaigns").update({

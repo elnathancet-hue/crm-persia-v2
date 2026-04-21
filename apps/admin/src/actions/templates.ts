@@ -174,7 +174,7 @@ async function upsertTemplates(
 
   const { error } = await admin
     .from("wa_templates")
-    .upsert(rows, { onConflict: "connection_id,name,language" });
+    .upsert(rows as never, { onConflict: "connection_id,name,language" });
 
   if (error) {
     console.error("[templates] upsert error:", error.message);

@@ -29,7 +29,7 @@ export default function OrgSettingsPage() {
       setOrg(data);
       setName(data?.name || "");
       setNiche(data?.niche || "");
-      setServices(data?.services || {});
+      setServices((data?.services as Record<string, boolean>) || {});
       setLoading(false);
     });
   }, [activeOrgId]);
