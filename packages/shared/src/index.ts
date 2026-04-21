@@ -45,3 +45,11 @@ export type {
 } from "./whatsapp";
 
 export { hasTemplates } from "./whatsapp";
+
+// Providers (factory + implementations + low-level UAZAPI client)
+export {
+  createProvider,
+  UazapiAdapter,
+  MetaCloudAdapter,
+} from "./providers";
+export { UazapiClient, phoneToJid } from "./providers/uazapi-client";

@@ -17,6 +17,14 @@
     "./whatsapp": {
       "types": "./src/whatsapp.ts",
       "default": "./src/whatsapp.ts"
+    },
+    "./providers": {
+      "types": "./src/providers/index.ts",
+      "default": "./src/providers/index.ts"
+    },
+    "./providers/*": {
+      "types": "./src/providers/*.ts",
+      "default": "./src/providers/*.ts"
     }
   },
   "scripts": {
