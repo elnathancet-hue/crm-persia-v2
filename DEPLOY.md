@@ -27,26 +27,43 @@ Estrategia: criar 2 servicos novos em paralelo, validar, trocar o dominio.
 ## 1. Arquitetura do deploy
 
 Cada app vira um servico separado no EasyPanel. Ambos apontam pro **mesmo repo**
-(`crm-persia-v2`) mas com build/start commands diferentes via `NIXPACKS_*` env vars.
+(`crm-persia-v2`) mas com build/start commands diferentes configurados direto
+nos campos visuais do painel (aba **Construção**).
 
 ```
 EasyPanel VPS (168.231.99.92)
 │
 ├─ service: persia-crm-v2          (novo, Fase 2.3)
-│    Source: crm-persia-v2, branch main
-│    NIXPACKS_BUILD_CMD = pnpm install --frozen-lockfile && pnpm run build:crm
-│    NIXPACKS_START_CMD = pnpm run start:crm
-│    Domain: crm.funilpersia.top   (so depois de validar)
+│    Fonte: Git, git@github.com:elnathancet-hue/crm-persia-v2.git, ramo main
+│    Caminho de Build: /        (NAO setar apps/crm — pnpm workspace precisa do root)
+│    Construcao: Nixpacks, versao 1.34.1
+│    Comando de Instalacao: pnpm install --frozen-lockfile
+│    Comando de Build:       pnpm run build:crm
+│    Comando de Inicio:      pnpm run start:crm
+│    Domain: crm-v2.funilpersia.top  (staging) -> crm.funilpersia.top (cutover)
 │
 ├─ service: persia-admin-v2        (novo, Fase 2.3)
-│    Source: crm-persia-v2, branch main
-│    NIXPACKS_BUILD_CMD = pnpm install --frozen-lockfile && pnpm run build:admin
-│    NIXPACKS_START_CMD = pnpm run start:admin
-│    Domain: crm-admin-persia.funilpersia.top  (novo subdomain, validacao)
+│    Fonte: Git, git@github.com:elnathancet-hue/crm-persia-v2.git, ramo main
+│    Caminho de Build: /
+│    Construcao: Nixpacks, versao 1.34.1
+│    Comando de Instalacao: pnpm install --frozen-lockfile
+│    Comando de Build:       pnpm run build:admin
+│    Comando de Inicio:      pnpm run start:admin
+│    Domain: admin-v2.funilpersia.top (staging) -> crm-admin-crm-persia-admin.5laby1.easypanel.host (cutover)
 │
 ├─ service: crm_persia             (antigo, mantido durante transicao)
 └─ service: crm-persia-admin       (antigo, mantido durante transicao)
 ```
+
+**Nota sobre "Caminho de Build":** O hint do painel sugere util pra monorepo.
+Aqui NAO setar `apps/crm` nem `apps/admin` — o Nixpacks roda `pnpm install` no
+cwd desse caminho, e pnpm workspace so funciona instalando da raiz. Deixar `/`
+e usar os Comandos custom pra filtrar qual app builda/starta.
+
+**Chave SSH:** o painel ja tem a chave do usuario configurada pros repos
+antigos. Adicionar a mesma chave publica (ssh-ed25519 AAAAC3Nza... root@...)
+nos settings do repo `crm-persia-v2` no GitHub (Settings → Deploy keys →
+Add key, marcar "Allow write access" desmarcado — so leitura basta).
 
 **Nao deletar os 2 antigos** ate validar 24-48h os novos em prod.
 Rollback = voltar o CNAME do dominio pro servico antigo.
@@ -72,9 +89,8 @@ Rollback = voltar o CNAME do dominio pro servico antigo.
 | `STRIPE_SECRET_KEY` | (copiar do antigo, se aplicavel) | EasyPanel UI |
 | `STRIPE_WEBHOOK_SECRET` | (copiar do antigo, se aplicavel) | EasyPanel UI |
 | `RESEND_API_KEY` | (copiar do antigo, se aplicavel) | EasyPanel UI |
-| `NIXPACKS_BUILD_CMD` | `pnpm install --frozen-lockfile && pnpm run build:crm` | novo |
-| `NIXPACKS_START_CMD` | `pnpm run start:crm` | novo |
-| `NIXPACKS_NODE_VERSION` | `20` | novo |
+
+Build/start vao nos campos visuais (aba **Construção**), nao em env vars.
 
 ### 2.2 persia-admin-v2
 
@@ -89,9 +105,8 @@ Rollback = voltar o CNAME do dominio pro servico antigo.
 | `OPENAI_API_KEY` | (copiar do antigo) | EasyPanel UI |
 | `CRM_CLIENT_BASE_URL` | `https://crm.funilpersia.top` | prod |
 | `ADMIN_CONTEXT_SECRET` | (copiar do antigo — NAO regenerar, cookies invalidariam) | EasyPanel UI |
-| `NIXPACKS_BUILD_CMD` | `pnpm install --frozen-lockfile && pnpm run build:admin` | novo |
-| `NIXPACKS_START_CMD` | `pnpm run start:admin` | novo |
-| `NIXPACKS_NODE_VERSION` | `20` | novo |
+
+Build/start vao nos campos visuais (aba **Construção**), nao em env vars.
 
 **Forma rapida de copiar env vars do antigo**: no EasyPanel, servico antigo →
 aba Environment → Export → colar no servico novo.
@@ -102,16 +117,41 @@ aba Environment → Export → colar no servico novo.
 
 ### 3.1 Criar servicos (staging mode — sem dominio oficial)
 
-1. EasyPanel → New Service → App
-2. Nome: `persia-admin-v2` (admin primeiro — menor trafego, mais facil validar)
-3. Source: GitHub, repo `crm-persia-v2`, branch `main`
-4. Colar env vars da secao 2.2
-5. Domain: `admin-v2.funilpersia.top` (subdomain temporario pra validacao)
-6. Deploy
-7. Aguardar build (~5-8min primeiro deploy)
-8. Ver logs: pnpm install ok → build ok → start ok
+**A - Criar `persia-admin-v2` primeiro (menor trafego, mais facil validar):**
 
-Repetir pro `persia-crm-v2` com dominio temporario `crm-v2.funilpersia.top`.
+1. EasyPanel → `crm-admin` (mesmo projeto dos antigos) → **+ Serviço** → **App**
+2. Nome: `persia-admin-v2`
+3. Aba **Fonte** → **Git**:
+   - URL do Repositorio: `git@github.com:elnathancet-hue/crm-persia-v2.git`
+   - Ramo: `main`
+   - Caminho de Build: `/` (deixar o default — NAO setar `apps/admin`)
+   - Chave SSH: usar a mesma ja configurada do admin antigo, OU copiar a
+     chave publica e adicionar no GitHub (Settings → Deploy keys do repo
+     `crm-persia-v2`)
+   - Salvar
+4. Aba **Construção**:
+   - Selecionar **Nixpacks**
+   - Versao: `1.34.1` (default)
+   - Comando de Instalacao: `pnpm install --frozen-lockfile`
+   - Comando de Build: `pnpm run build:admin`
+   - Comando de Inicio: `pnpm run start:admin`
+   - Pacotes Nix / APT: deixar vazio
+   - Salvar
+5. Aba **Environment**: colar env vars da secao 2.2 (export do servico antigo,
+   importar aqui)
+6. Aba **Domains**: adicionar `admin-v2.funilpersia.top` (subdominio de staging
+   — o DNS wildcard ja cobre)
+7. Clicar **Implantar** (botao verde)
+8. Aba **Logs**: aguardar build (~5-8min primeiro deploy):
+   - Instalando: pnpm install ~3min
+   - Construindo: next build ~2min
+   - Iniciando: server.js ouvindo porta 3000
+
+**B - Criar `persia-crm-v2`** com mesmos passos, trocando:
+- Comando de Build: `pnpm run build:crm`
+- Comando de Inicio: `pnpm run start:crm`
+- Env vars: secao 2.1
+- Domain staging: `crm-v2.funilpersia.top`
 
 ### 3.2 Validar staging
 
