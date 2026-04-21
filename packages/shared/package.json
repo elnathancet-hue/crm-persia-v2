@@ -25,6 +25,10 @@
     "./providers/*": {
       "types": "./src/providers/*.ts",
       "default": "./src/providers/*.ts"
+    },
+    "./template-parser": {
+      "types": "./src/template-parser.ts",
+      "default": "./src/template-parser.ts"
     }
   },
   "scripts": {

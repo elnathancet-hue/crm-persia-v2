@@ -53,3 +53,19 @@ export {
   MetaCloudAdapter,
 } from "./providers";
 export { UazapiClient, phoneToJid } from "./providers/uazapi-client";
+
+// Template parser (Meta Cloud components <-> ParamsSchema + variable builder)
+export type {
+  ParamFormat,
+  ParamSpec,
+  HeaderSchema,
+  ButtonSchema,
+  ParamsSchema,
+  MetaComponent,
+  MetaButton,
+  TemplateVariableValues,
+} from "./template-parser";
+export {
+  parseTemplateParams,
+  buildTemplateComponents,
+} from "./template-parser";
