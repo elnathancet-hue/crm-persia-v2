@@ -10,6 +10,8 @@
     "build": "pnpm -r build",
     "build:crm": "pnpm --filter @persia/crm build",
     "build:admin": "pnpm --filter @persia/admin build",
+    "start:crm": "pnpm --filter @persia/crm start",
+    "start:admin": "pnpm --filter @persia/admin start",
     "dev:crm": "pnpm --filter @persia/crm dev",
     "dev:admin": "pnpm --filter @persia/admin dev",
     "lint": "pnpm --filter @persia/crm lint",
