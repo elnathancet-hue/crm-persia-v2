@@ -1,0 +1,444 @@
+"use client";
+
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardAction,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { LeadForm } from "@/components/leads/lead-form";
+import {
+  updateLead,
+  deleteLead,
+  addTagToLead,
+  removeTagFromLead,
+  type LeadDetail,
+  type LeadActivity,
+} from "@/actions/leads";
+import {
+  ArrowLeft,
+  Pencil,
+  Trash2,
+  Phone,
+  Mail,
+  MessageCircle,
+  Star,
+  Tag,
+  X,
+  Plus,
+  Clock,
+  User,
+  Activity,
+} from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { useRole } from "@/lib/hooks/use-role";
+
+const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  new: { label: "Novo", variant: "default" },
+  contacted: { label: "Contactado", variant: "secondary" },
+  qualified: { label: "Qualificado", variant: "outline" },
+  customer: { label: "Cliente", variant: "default" },
+  lost: { label: "Perdido", variant: "destructive" },
+};
+
+const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
+  message: <MessageCircle className="size-4" />,
+  call: <Phone className="size-4" />,
+  email: <Mail className="size-4" />,
+  note: <Pencil className="size-4" />,
+  status_change: <Activity className="size-4" />,
+};
+
+type OrgTag = {
+  id: string;
+  name: string;
+  color: string;
+  organization_id: string;
+  created_at: string;
+};
+
+type LeadDetailClientProps = {
+  lead: LeadDetail;
+  activities: LeadActivity[];
+  orgTags: OrgTag[];
+};
+
+export function LeadDetailClient({
+  lead,
+  activities,
+  orgTags,
+}: LeadDetailClientProps) {
+  const router = useRouter();
+  const { isAgent } = useRole(); // agent+ can edit/delete/tag
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [isDeleting, startDeleteTransition] = React.useTransition();
+  const [isAddingTag, startAddTagTransition] = React.useTransition();
+  const [selectedTagToAdd, setSelectedTagToAdd] = React.useState("");
+
+  const statusInfo = STATUS_MAP[lead.status] ?? {
+    label: lead.status,
+    variant: "outline" as const,
+  };
+
+  const currentTagIds = lead.lead_tags?.map((lt) => lt.tag_id) ?? [];
+  const availableTags = orgTags.filter((t) => !currentTagIds.includes(t.id));
+
+  async function handleUpdate(formData: FormData) {
+    await updateLead(lead.id, formData);
+    setIsEditOpen(false);
+    router.refresh();
+  }
+
+  function handleDelete() {
+    startDeleteTransition(async () => {
+      await deleteLead(lead.id);
+      router.push("/leads");
+    });
+  }
+
+  function handleAddTag(tagId: string) {
+    if (!tagId) return;
+    startAddTagTransition(async () => {
+      await addTagToLead(lead.id, tagId);
+      setSelectedTagToAdd("");
+      router.refresh();
+    });
+  }
+
+  function handleRemoveTag(tagId: string) {
+    startAddTagTransition(async () => {
+      await removeTagFromLead(lead.id, tagId);
+      router.refresh();
+    });
+  }
+
+  function formatDate(dateStr: string | null) {
+    if (!dateStr) return "-";
+    return new Date(dateStr).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function openWhatsApp() {
+    if (!lead.phone) return;
+    const cleaned = lead.phone.replace(/\D/g, "");
+    const number = cleaned.startsWith("55") ? cleaned : `55${cleaned}`;
+    window.open(`https://wa.me/${number}`, "_blank");
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Top bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/leads")}
+            aria-label="Voltar para leads"
+          >
+            <ArrowLeft />
+          </Button>
+          <div>
+            <h1 className="text-xl font-semibold">
+              {lead.name || "Sem nome"}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Criado em {formatDate(lead.created_at)}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {lead.phone && (
+            <Button variant="outline" onClick={openWhatsApp}>
+              <MessageCircle className="size-4" data-icon="inline-start" />
+              Chamar no WhatsApp
+            </Button>
+          )}
+          {isAgent && (
+            <>
+              <Button variant="outline" onClick={() => setIsEditOpen(true)}>
+                <Pencil className="size-4" data-icon="inline-start" />
+                Editar
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={<Button variant="destructive" />}
+                >
+                  {isDeleting ? <Spinner className="mr-1.5" /> : <Trash2 className="size-4" data-icon="inline-start" />}
+                  Excluir
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Excluir lead</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tem certeza que deseja excluir este lead? Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeleting && <Spinner className="mr-1.5" />}
+                      Excluir
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Left column: lead info */}
+        <div className="flex flex-col gap-6 md:col-span-2">
+          {/* Info card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Informacoes do Lead</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <InfoRow icon={<User className="size-4" />} label="Nome" value={lead.name || "-"} />
+                <InfoRow icon={<Phone className="size-4" />} label="Telefone" value={lead.phone || "-"} />
+                <InfoRow icon={<Mail className="size-4" />} label="E-mail" value={lead.email || "-"} />
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 text-muted-foreground">
+                    <Activity className="size-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Status</p>
+                    <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+                  </div>
+                </div>
+                <InfoRow icon={<Tag className="size-4" />} label="Origem" value={lead.source} />
+                <InfoRow icon={<Star className="size-4" />} label="Score" value={String(lead.score)} />
+                <InfoRow icon={<MessageCircle className="size-4" />} label="Canal" value={lead.channel} />
+                <InfoRow
+                  icon={<Clock className="size-4" />}
+                  label="Última interação"
+                  value={formatDate(lead.last_interaction_at)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tags card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tags</CardTitle>
+              <CardAction>
+                {isAgent && availableTags.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={selectedTagToAdd}
+                      onValueChange={(val) => {
+                        setSelectedTagToAdd(val ?? "");
+                        if (val) handleAddTag(val);
+                      }}
+                    >
+                      <SelectTrigger size="sm">
+                        <Plus className="size-3.5 mr-1" />
+                        <SelectValue placeholder="Adicionar tag" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableTags.map((tag) => (
+                          <SelectItem key={tag.id} value={tag.id}>
+                            <span
+                              className="mr-1.5 inline-block size-2 rounded-full"
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            {tag.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {isAddingTag && <Spinner className="size-3.5" />}
+                  </div>
+                )}
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {lead.lead_tags?.map((lt) => (
+                  <Badge
+                    key={lt.tag_id}
+                    variant="secondary"
+                    className="gap-1 pr-1"
+                    style={{
+                      backgroundColor: lt.tags?.color
+                        ? `${lt.tags.color}20`
+                        : undefined,
+                      color: lt.tags?.color || undefined,
+                    }}
+                  >
+                    {lt.tags?.name}
+                    {isAgent && (
+                      <button
+                        type="button"
+                        className="ml-0.5 rounded-full p-0.5 hover:bg-foreground/10"
+                        onClick={() => handleRemoveTag(lt.tag_id)}
+                        aria-label={`Remover tag ${lt.tags?.name || ""}`}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </Badge>
+                ))}
+                {(!lead.lead_tags || lead.lead_tags.length === 0) && (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhuma tag adicionada.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Custom fields */}
+          {lead.lead_custom_field_values &&
+            lead.lead_custom_field_values.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Campos personalizados</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {lead.lead_custom_field_values.map((cfv) => (
+                      <div key={cfv.id}>
+                        <p className="text-xs text-muted-foreground">
+                          {cfv.custom_fields?.name ?? "Campo"}
+                        </p>
+                        <p className="text-sm font-medium">{cfv.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+        </div>
+
+        {/* Right column: timeline */}
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Atividades</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {activities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma atividade registrada.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {activities.map((act, idx) => (
+                    <div key={act.id}>
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                          {ACTIVITY_ICONS[act.type] ?? (
+                            <Activity className="size-4" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm">{act.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(act.created_at)}
+                          </p>
+                        </div>
+                      </div>
+                      {idx < activities.length - 1 && (
+                        <Separator className="mt-4" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Lead</DialogTitle>
+            <DialogDescription>
+              Altere os dados do lead.
+            </DialogDescription>
+          </DialogHeader>
+          <LeadForm
+            defaultValues={{
+              name: lead.name,
+              phone: lead.phone,
+              email: lead.email,
+              source: lead.source,
+              status: lead.status,
+              channel: lead.channel,
+            }}
+            onSubmit={handleUpdate}
+            onCancel={() => setIsEditOpen(false)}
+            submitLabel="Salvar alteracoes"
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 text-muted-foreground">{icon}</div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm font-medium">{value}</p>
+      </div>
+    </div>
+  );
+}

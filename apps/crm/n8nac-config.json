@@ -1,0 +1,24 @@
+{
+  "version": 2,
+  "activeInstanceId": "instance-197afb43",
+  "instances": [
+    {
+      "id": "instance-197afb43",
+      "name": "n8n-n8n.5laby1.easypanel.host · Elnathan Nicolas",
+      "host": "https://n8n-n8n.5laby1.easypanel.host",
+      "syncFolder": "workflows",
+      "instanceIdentifier": "n8n_n8n_5laby1_easypanel_host_elnathan_n",
+      "verification": {
+        "status": "verified",
+        "normalizedHost": "https://n8n-n8n.5laby1.easypanel.host",
+        "userId": "d183dc06-1b9a-4fac-ad7a-8034d602825b",
+        "userName": "Elnathan Nicolas",
+        "userEmail": "elnathannicolaslima@gmail.com",
+        "lastCheckedAt": "2026-04-02T02:08:31.355Z"
+      }
+    }
+  ],
+  "host": "https://n8n-n8n.5laby1.easypanel.host",
+  "syncFolder": "workflows",
+  "instanceIdentifier": "n8n_n8n_5laby1_easypanel_host_elnathan_n"
+}

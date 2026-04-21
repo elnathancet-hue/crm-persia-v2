@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, test, build (both apps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint CRM
+        run: pnpm --filter @persia/crm lint
+        # NOTE: admin tem 77 lint errors pre-existentes. Habilitar na Fase 2.2
+        # quando extrair shared lib e atacar admin technical debt.
+
+      - name: Typecheck CRM
+        run: pnpm --filter @persia/crm typecheck
+        # NOTE: admin has no typecheck script — 234 pre-existing type errors
+        # (ignoreBuildErrors:true em next.config). Resolver na Fase 2.2 quando
+        # extrair shared types.
+
+      - name: Test CRM
+        run: pnpm --filter @persia/crm test
+
+      - name: Build CRM
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ci-dummy
+          ADMIN_CONTEXT_SECRET: ci-dummy-admin-secret
+          CRM_API_SECRET: ci-dummy
+          CRON_SECRET: ci-dummy
+          NEXT_PUBLIC_PERSIA_WHATSAPP: "5511000000000"
+        run: pnpm --filter @persia/crm build
+
+      - name: Build Admin
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ci-dummy
+          ADMIN_CONTEXT_SECRET: ci-dummy-admin-secret
+          NEXT_PUBLIC_SUPABASE_URL: https://fake.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-dummy-anon
+        run: pnpm --filter @persia/admin build

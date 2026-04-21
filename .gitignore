@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Testing
+coverage/
+
+# Env
+.env
+.env*.local
+
+# OS / editors
+.DS_Store
+*.pem
+.vscode/
+.idea/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+apps/*/next-env.d.ts
+
+# Supabase local
+apps/*/supabase/.temp/
+
+# Deploy
+.vercel
+
+# Claude local
+.claude/

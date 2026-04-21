@@ -1,0 +1,97 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { createProvider } from "@/lib/whatsapp/providers";
+import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
+
+/**
+ * UAZAPI webhook handler.
+ *
+ * Payload (UAZAPI v2): { owner, token, message: {...}, BaseUrl, EventType, chat }.
+ * The message is NESTED in body.message; provider.parseWebhook tolerates both.
+ *
+ * Pipeline after matching the connection and parsing the message is shared with
+ * the Meta webhook via processIncomingMessage — the only UAZAPI-specific step
+ * here is the media download (UAZAPI does not include fileURL in the payload).
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = getSupabase();
+    const body = await request.json();
+
+    // 1. Match org by owner phone OR instance token.
+    const ownerPhone = String(body.owner || body.message?.owner || "").replace(/\D/g, "");
+    const webhookToken = String(body.token || "");
+
+    const { data: connections } = await supabase
+      .from("whatsapp_connections")
+      .select(
+        "organization_id, provider, instance_url, instance_token, phone_number, phone_number_id, waba_id, access_token, webhook_verify_token",
+      )
+      .eq("status", "connected")
+      .eq("provider", "uazapi");
+
+    const matchedConn = connections?.find((c) => {
+      const connPhone = String(c.phone_number || "").replace(/\D/g, "");
+      return (connPhone && connPhone === ownerPhone) || c.instance_token === webhookToken;
+    });
+
+    if (!matchedConn) {
+      // Return 200 to stop UAZAPI retries but do not echo owner back
+      return NextResponse.json({ ok: true, skipped: "unknown instance" });
+    }
+
+    // 2. Normalize payload.
+    const provider = createProvider(matchedConn);
+    const msg = provider.parseWebhook(body.message || body);
+    if (!msg) {
+      return NextResponse.json({ ok: true, skipped: "no processable message" });
+    }
+
+    // 3. UAZAPI-specific: fetch media URL via POST /message/download.
+    //    (UAZAPI does not include fileURL in the webhook for media messages.)
+    const isMediaType = msg.type !== "text" && msg.type !== "sticker";
+    if (isMediaType && !msg.mediaUrl && msg.messageId) {
+      try {
+        const isAudio = msg.type === "audio";
+        const download = await provider.downloadMedia(msg.messageId, {
+          transcribe: isAudio, // Whisper transcription for audio
+          generateMp3: isAudio,
+        });
+        if (download.fileURL) msg.mediaUrl = download.fileURL;
+        if (download.mimetype) msg.mediaMimeType = download.mimetype;
+        if (isAudio && download.transcription) msg.text = download.transcription;
+      } catch (err: unknown) {
+        console.error(
+          "[UAZAPI webhook] Media download error:",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+
+    // 4. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
+    const result = await processIncomingMessage({
+      supabase,
+      orgId: matchedConn.organization_id,
+      provider,
+      msg,
+    });
+
+    return NextResponse.json(result);
+  } catch (error: unknown) {
+    // Log internally; do not expose internals to the caller
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[UAZAPI webhook] error:", message);
+    return NextResponse.json({ ok: false }, { status: 500 });
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({ status: "active", service: "crm-persia" });
+}

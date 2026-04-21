@@ -1,0 +1,188 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono, "JetBrains Mono"), ui-monospace, monospace;
+  --font-heading: var(--font-heading, "DM Sans"), ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ============================================
+   PérsiaCRM - Brand Theme
+   Navy + Gold palette
+   Contraste minimo 4.5:1 WCAG AA
+   ============================================ */
+
+:root {
+  /* Light Mode - PérsiaCRM */
+  --background: hsl(30, 25%, 96%);         /* #F8F5F0 off-white */
+  --foreground: hsl(0, 0%, 5%);            /* #0D0D0D */
+  --card: hsl(0, 0%, 98%);                 /* #FAFAFA */
+  --card-foreground: hsl(0, 0%, 5%);       /* #0D0D0D */
+  --popover: hsl(0, 0%, 94%);              /* #F0F0F0 */
+  --popover-foreground: hsl(0, 0%, 5%);    /* #0D0D0D */
+  --primary: hsl(217, 91%, 60%);            /* #3B82F6 blue */
+  --primary-foreground: hsl(0, 0%, 100%);  /* #FFFFFF */
+  --secondary: hsl(230, 10%, 86%);         /* navy-tinted gray */
+  --secondary-foreground: hsl(0, 0%, 5%);  /* #0D0D0D */
+  --muted: hsl(230, 10%, 88%);             /* navy-tinted muted */
+  --muted-foreground: hsl(0, 0%, 35%);     /* #595959 - 4.5:1 on white */
+  --accent: hsl(230, 12%, 90%);            /* navy-tinted accent */
+  --accent-foreground: hsl(0, 0%, 5%);     /* #0D0D0D */
+  --destructive: hsl(0, 84%, 60%);         /* #EF4444 */
+  --border: hsl(0, 0%, 90%);               /* #E5E5E5 */
+  --input: hsl(0, 0%, 75%);                /* #BFBFBF */
+  --ring: hsl(217, 91%, 60%);              /* #3B82F6 blue */
+
+  --chart-1: hsl(43, 54%, 54%);            /* gold */
+  --chart-2: hsl(142, 72%, 29%);           /* #16A34A */
+  --chart-3: hsl(230, 45%, 35%);           /* navy accent */
+  --chart-4: hsl(43, 80%, 65%);            /* gold-light */
+  --chart-5: hsl(330, 81%, 60%);           /* #EC4899 */
+
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: hsl(30, 15%, 95%);            /* warm off-white */
+  --sidebar-foreground: hsl(0, 0%, 5%);    /* #0D0D0D */
+  --sidebar-primary: hsl(217, 91%, 60%);   /* #3B82F6 blue */
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(0, 0%, 92%);       /* #EBEBEB */
+  --sidebar-accent-foreground: hsl(0, 0%, 5%);
+  --sidebar-border: hsl(0, 0%, 92%);
+  --sidebar-ring: hsl(217, 91%, 60%);      /* blue */
+}
+
+.dark {
+  /* Dark Mode - PérsiaCRM Navy + Gold */
+  --background: hsl(230, 45%, 7%);         /* #090B1A navy */
+  --foreground: hsl(30, 25%, 96%);         /* #F8F5F0 off-white */
+  --card: hsl(230, 40%, 10%);              /* navy-mid area */
+  --card-foreground: hsl(30, 25%, 96%);    /* #F8F5F0 */
+  --popover: hsl(230, 38%, 12%);           /* navy slightly lighter */
+  --popover-foreground: hsl(30, 25%, 96%); /* #F8F5F0 */
+  --primary: hsl(43, 54%, 54%);            /* #C9A84C gold */
+  --primary-foreground: hsl(0, 0%, 100%);  /* #FFFFFF */
+  --secondary: hsl(230, 20%, 18%);         /* navy secondary */
+  --secondary-foreground: hsl(30, 25%, 96%);
+  --muted: hsl(230, 20%, 16%);             /* navy muted */
+  --muted-foreground: hsl(0, 0%, 65%);     /* #A6A6A6 */
+  --accent: hsl(230, 20%, 14%);            /* navy accent */
+  --accent-foreground: hsl(30, 25%, 96%);  /* #F8F5F0 */
+  --destructive: hsl(0, 84%, 60%);         /* #EF4444 */
+  --border: hsl(230, 25%, 18%);            /* navy border */
+  --input: hsl(230, 15%, 30%);             /* navy input */
+  --ring: hsl(43, 54%, 54%);               /* #C9A84C gold */
+
+  --chart-1: hsl(43, 60%, 60%);            /* gold bright */
+  --chart-2: hsl(142, 69%, 58%);           /* #4ADE80 */
+  --chart-3: hsl(230, 50%, 65%);           /* navy-blue */
+  --chart-4: hsl(43, 85%, 70%);            /* gold-light */
+  --chart-5: hsl(330, 86%, 70%);           /* #F472B6 */
+
+  /* Sidebar - deeper navy */
+  --sidebar: hsl(230, 45%, 5%);            /* deep navy */
+  --sidebar-foreground: hsl(30, 25%, 96%); /* #F8F5F0 */
+  --sidebar-primary: hsl(43, 54%, 54%);    /* #C9A84C gold */
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(230, 35%, 12%);    /* navy accent */
+  --sidebar-accent-foreground: hsl(30, 25%, 96%);
+  --sidebar-border: hsl(230, 35%, 12%);    /* navy border */
+  --sidebar-ring: hsl(43, 54%, 54%);       /* gold */
+}
+
+@layer utilities {
+  .font-heading {
+    font-family: var(--font-heading), "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html {
+    @apply font-sans scroll-smooth;
+  }
+
+  /* Focus visibility - WCAG */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  /* Smooth transitions */
+  button, a, input, select, textarea {
+    @apply transition-colors duration-150;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

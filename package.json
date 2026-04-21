@@ -1,0 +1,36 @@
+{
+  "name": "crm-persia-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:crm": "pnpm --filter @persia/crm build",
+    "build:admin": "pnpm --filter @persia/admin build",
+    "dev:crm": "pnpm --filter @persia/crm dev",
+    "dev:admin": "pnpm --filter @persia/admin dev",
+    "lint": "pnpm --filter @persia/crm lint",
+    "typecheck": "pnpm --filter @persia/crm typecheck",
+    "test": "pnpm -r test",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2"
+  },
+  "lint-staged": {
+    "apps/crm/**/*.{ts,tsx}": "pnpm --filter @persia/crm exec eslint"
+  },
+  "pnpm": {
+    "overrides": {
+      "@supabase/supabase-js": "2.101.1",
+      "react": "^19.2.4",
+      "react-dom": "^19.2.4",
+      "@types/react": "^19",
+      "@types/react-dom": "^19"
+    }
+  }
+}
