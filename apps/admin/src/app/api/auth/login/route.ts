@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getAdmin } from "@/lib/supabase-admin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,6 +38,21 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error("[LOGIN] Auth error:", error.message);
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
+    const admin = getAdmin();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("is_superadmin")
+      .eq("id", data.user.id)
+      .single<{ is_superadmin: boolean }>();
+
+    if (!profile?.is_superadmin) {
+      await supabase.auth.signOut();
+      return NextResponse.json(
+        { error: "Acesso restrito ao painel administrativo" },
+        { status: 403 }
+      );
     }
 
     // Return response with auth cookies set

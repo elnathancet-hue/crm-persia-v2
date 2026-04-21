@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getLeadDetail, updateLead, getLeadActivities } from "@/actions/leads";
 import { getTags, addTagToLead, removeTagFromLead } from "@/actions/tags";
+import { createDeal, getPipelines } from "@/actions/pipelines";
 import { ArrowLeft, Loader2, Save, Tag, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,6 +31,14 @@ export function LeadDetail({ leadId, onBack }: Props) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
   const [showTagPicker, setShowTagPicker] = useState(false);
+  const [showCreateDeal, setShowCreateDeal] = useState(false);
+  const [creatingDeal, setCreatingDeal] = useState(false);
+  const [dealTitle, setDealTitle] = useState("");
+  const [dealValue, setDealValue] = useState("");
+  const [selectedPipelineId, setSelectedPipelineId] = useState("");
+  const [selectedStageId, setSelectedStageId] = useState("");
+  const [pipelines, setPipelines] = useState<any[]>([]);
+  const [dealError, setDealError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   function setFieldError(field: string, msg: string) { setErrors(prev => ({ ...prev, [field]: msg })); }
@@ -53,6 +62,27 @@ export function LeadDetail({ leadId, onBack }: Props) {
       setLoading(false);
     });
   }, [leadId]);
+
+  useEffect(() => {
+    if (!showCreateDeal) return;
+
+    setDealTitle(lead?.name ? `Negocio - ${lead.name}` : "Novo negocio");
+    setDealError("");
+
+    getPipelines()
+      .then((data) => {
+        const pipelineList = (data || []) as any[];
+        setPipelines(pipelineList);
+        const firstPipeline = pipelineList[0];
+        setSelectedPipelineId(firstPipeline?.id || "");
+        setSelectedStageId(firstPipeline?.pipeline_stages?.[0]?.id || "");
+      })
+      .catch(() => {
+        setPipelines([]);
+        setSelectedPipelineId("");
+        setSelectedStageId("");
+      });
+  }, [showCreateDeal, lead?.name]);
 
   async function handleSave() {
     let valid = true; const newErrors: Record<string, string> = {};
@@ -89,6 +119,35 @@ export function LeadDetail({ leadId, onBack }: Props) {
     }
   }
 
+  async function handleCreateDeal() {
+    if (!selectedPipelineId || !selectedStageId || !dealTitle.trim()) {
+      setDealError("Preencha titulo, funil e etapa.");
+      return;
+    }
+
+    setDealError("");
+    setCreatingDeal(true);
+
+    const created = await createDeal({
+      pipeline_id: selectedPipelineId,
+      stage_id: selectedStageId,
+      title: dealTitle.trim(),
+      value: parseFloat(dealValue) || 0,
+      lead_id: leadId,
+    });
+
+    if (!created) {
+      toast.error("Nao foi possivel criar o negocio");
+      setCreatingDeal(false);
+      return;
+    }
+
+    toast.success("Negocio criado no CRM");
+    setShowCreateDeal(false);
+    setCreatingDeal(false);
+    setDealValue("");
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -101,6 +160,8 @@ export function LeadDetail({ leadId, onBack }: Props) {
 
   const leadTagIds = new Set((lead.lead_tags || []).map((lt: any) => lt.tag_id));
   const availableTags = allTags.filter((t) => !leadTagIds.has(t.id));
+  const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
+  const stageOptions = (selectedPipeline?.pipeline_stages || []) as any[];
 
   return (
     <div className="space-y-6">
@@ -187,6 +248,96 @@ export function LeadDetail({ leadId, onBack }: Props) {
               ))}
               {(lead.lead_tags || []).length === 0 && <span className="text-xs text-muted-foreground/60">Nenhuma tag</span>}
             </div>
+          </div>
+
+          {/* CRM */}
+          <div className="bg-card border border-border rounded-xl p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">CRM</h2>
+              <button
+                onClick={() => setShowCreateDeal((v) => !v)}
+                className="text-xs text-primary hover:text-primary/80"
+              >
+                {showCreateDeal ? "Fechar" : "Criar negocio"}
+              </button>
+            </div>
+
+            {showCreateDeal ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Titulo *</label>
+                  <input
+                    value={dealTitle}
+                    onChange={(e) => setDealTitle(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-muted border border-border rounded-lg text-foreground outline-none focus:border-primary"
+                    placeholder="Nome do negocio"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Valor (R$)</label>
+                  <input
+                    value={dealValue}
+                    onChange={(e) => setDealValue(e.target.value)}
+                    type="number"
+                    step="0.01"
+                    className="w-full px-3 py-2 text-sm bg-muted border border-border rounded-lg text-foreground outline-none focus:border-primary"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Funil *</label>
+                  <select
+                    value={selectedPipelineId}
+                    onChange={(e) => {
+                      const pipelineId = e.target.value;
+                      setSelectedPipelineId(pipelineId);
+                      const pipeline = pipelines.find((p) => p.id === pipelineId);
+                      setSelectedStageId((pipeline?.pipeline_stages || [])[0]?.id || "");
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-muted border border-border rounded-lg text-foreground outline-none"
+                  >
+                    <option value="">Selecione...</option>
+                    {pipelines.map((pipeline) => (
+                      <option key={pipeline.id} value={pipeline.id}>
+                        {pipeline.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Etapa *</label>
+                  <select
+                    value={selectedStageId}
+                    onChange={(e) => setSelectedStageId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-muted border border-border rounded-lg text-foreground outline-none"
+                  >
+                    <option value="">Selecione...</option>
+                    {stageOptions.map((stage) => (
+                      <option key={stage.id} value={stage.id}>
+                        {stage.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {dealError && (
+                  <p className="text-xs text-red-500 md:col-span-2">{dealError}</p>
+                )}
+                <div className="md:col-span-2 flex justify-end">
+                  <button
+                    onClick={handleCreateDeal}
+                    disabled={creatingDeal}
+                    className="px-4 py-2 text-sm bg-primary hover:bg-primary/80 text-white rounded-xl disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {creatingDeal && <Loader2 className="size-4 animate-spin" />}
+                    Criar no CRM
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground/70">
+                Crie um negocio para este lead sem sair desta tela.
+              </p>
+            )}
           </div>
         </div>
 

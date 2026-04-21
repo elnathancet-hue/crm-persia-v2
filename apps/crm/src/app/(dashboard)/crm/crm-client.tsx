@@ -29,6 +29,11 @@ import {
   Search,
   MessageCircle,
   Settings,
+  CircleDollarSign,
+  Target,
+  TrendingUp,
+  Flag,
+  Percent,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -88,6 +93,11 @@ interface Pipeline {
   name: string;
 }
 
+interface PipelineGoal {
+  revenue: number;
+  won: number;
+}
+
 // ============ HELPERS ============
 
 function formatCurrency(value: number): string {
@@ -101,6 +111,26 @@ function formatCurrency(value: number): string {
 function cleanPhone(phone: string): string {
   return phone.replace(/\D/g, "");
 }
+
+function getStageMetrics(deals: Deal[]) {
+  const total = deals.reduce((sum, deal) => sum + (deal.value || 0), 0);
+  const average = deals.length > 0 ? total / deals.length : 0;
+
+  return {
+    count: deals.length,
+    total,
+    average,
+  };
+}
+
+function getConversionRate(won: number, lost: number) {
+  const closed = won + lost;
+  if (closed === 0) return 0;
+  return (won / closed) * 100;
+}
+
+const GOALS_STORAGE_KEY = "crm-kanban-goals-v1";
+const DEFAULT_PIPELINE_GOAL: PipelineGoal = { revenue: 0, won: 0 };
 
 // ============ MAIN COMPONENT ============
 
@@ -126,7 +156,39 @@ export function CrmClient({
     null
   );
   const [localDeals, setLocalDeals] = React.useState<Deal[]>(initialDeals);
+  const [goalsByPipeline, setGoalsByPipeline] = React.useState<
+    Record<string, PipelineGoal>
+  >({});
+  const [showGoalsEditor, setShowGoalsEditor] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
+
+  React.useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(GOALS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, Partial<PipelineGoal>>;
+      const normalized = Object.fromEntries(
+        Object.entries(parsed).map(([pipelineId, goal]) => [
+          pipelineId,
+          {
+            revenue: Math.max(0, Number(goal.revenue) || 0),
+            won: Math.max(0, Number(goal.won) || 0),
+          },
+        ])
+      ) as Record<string, PipelineGoal>;
+      setGoalsByPipeline(normalized);
+    } catch {
+      setGoalsByPipeline({});
+    }
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(goalsByPipeline));
+    } catch {
+      // ignore persistence errors
+    }
+  }, [goalsByPipeline]);
 
   // Sort stages by sort_order
   const sortedStages = React.useMemo(
@@ -155,6 +217,42 @@ export function CrmClient({
     }
     return filtered;
   }, [localDeals, searchQuery, selectedPipeline, statusFilter]);
+
+  const boardMetrics = React.useMemo(() => {
+    const total = filteredDeals.reduce((sum, deal) => sum + (deal.value || 0), 0);
+    const won = filteredDeals.filter((deal) => deal.status === "won").length;
+    const lost = filteredDeals.filter((deal) => deal.status === "lost").length;
+    const conversionRate = getConversionRate(won, lost);
+
+    return {
+      count: filteredDeals.length,
+      total,
+      won,
+      lost,
+      conversionRate,
+    };
+  }, [filteredDeals]);
+
+  const pipelineGoal = goalsByPipeline[selectedPipeline] || DEFAULT_PIPELINE_GOAL;
+  const revenueProgress =
+    pipelineGoal.revenue > 0
+      ? Math.min((boardMetrics.total / pipelineGoal.revenue) * 100, 100)
+      : 0;
+  const wonProgress =
+    pipelineGoal.won > 0
+      ? Math.min((boardMetrics.won / pipelineGoal.won) * 100, 100)
+      : 0;
+
+  function updatePipelineGoal(field: keyof PipelineGoal, value: number) {
+    if (!selectedPipeline) return;
+    setGoalsByPipeline((prev) => ({
+      ...prev,
+      [selectedPipeline]: {
+        ...(prev[selectedPipeline] || DEFAULT_PIPELINE_GOAL),
+        [field]: Math.max(0, value),
+      },
+    }));
+  }
 
   // Group deals by stage
   function dealsByStage(stageId: string) {
@@ -295,12 +393,35 @@ export function CrmClient({
 
         {/* Total info + Settings */}
         <div className="ml-auto flex items-center gap-2">
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-xs font-medium"
-          >
-            {filteredDeals.length} negócios
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-medium gap-1.5">
+            <Target className="size-3.5" />
+            {boardMetrics.count} negocios
           </Badge>
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-medium gap-1.5">
+            <CircleDollarSign className="size-3.5" />
+            R$ {formatCurrency(boardMetrics.total)}
+          </Badge>
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-medium gap-1.5">
+            <TrendingUp className="size-3.5" />
+            {boardMetrics.won} ganhos
+          </Badge>
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-medium gap-1.5">
+            <Percent className="size-3.5" />
+            {boardMetrics.conversionRate.toFixed(1)}% conv.
+          </Badge>
+          <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs font-medium">
+            {boardMetrics.lost} perdidos
+          </Badge>
+          <Button
+            type="button"
+            variant={showGoalsEditor ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 rounded-md px-2.5"
+            onClick={() => setShowGoalsEditor((prev) => !prev)}
+          >
+            <Flag className="size-3.5" />
+            Metas
+          </Button>
           {isAdmin && (
             <Link href="/crm/settings">
               <Button
@@ -316,11 +437,76 @@ export function CrmClient({
         </div>
       </div>
 
+      {showGoalsEditor && (
+        <div className="rounded-xl border bg-card p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="goal-revenue" className="text-xs">
+                Meta de receita (R$)
+              </Label>
+              <Input
+                id="goal-revenue"
+                type="number"
+                min={0}
+                step="0.01"
+                value={pipelineGoal.revenue === 0 ? "" : String(pipelineGoal.revenue)}
+                onChange={(e) => updatePipelineGoal("revenue", Number(e.target.value))}
+                placeholder="Ex: 50000"
+                className="h-9 rounded-md"
+              />
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${revenueProgress}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {pipelineGoal.revenue > 0
+                  ? `${revenueProgress.toFixed(1)}% da meta`
+                  : "Defina uma meta para acompanhar o progresso"}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="goal-won" className="text-xs">
+                Meta de negocios ganhos
+              </Label>
+              <Input
+                id="goal-won"
+                type="number"
+                min={0}
+                step="1"
+                value={pipelineGoal.won === 0 ? "" : String(pipelineGoal.won)}
+                onChange={(e) => updatePipelineGoal("won", Number(e.target.value))}
+                placeholder="Ex: 25"
+                className="h-9 rounded-md"
+              />
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${wonProgress}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {pipelineGoal.won > 0
+                  ? `${wonProgress.toFixed(1)}% da meta`
+                  : "Defina uma meta para acompanhar os ganhos"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ====== KANBAN COLUMNS ====== */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {sortedStages.map((stage) => {
+      <div className={`flex gap-4 overflow-x-auto pb-4 ${isPending ? "opacity-90" : ""}`}>
+        {sortedStages.map((stage, index) => {
           const stageDeals = dealsByStage(stage.id);
           const isOver = dragOverStageId === stage.id;
+          const metrics = getStageMetrics(stageDeals);
+          const previousCount =
+            index === 0 ? stageDeals.length : dealsByStage(sortedStages[index - 1].id).length;
+          const stageConversion =
+            index === 0 ? 100 : previousCount > 0 ? (metrics.count / previousCount) * 100 : 0;
 
           return (
             <div
@@ -332,7 +518,7 @@ export function CrmClient({
             >
               <div
                 className={`rounded-xl bg-muted/30 transition-all duration-200 min-h-[500px] flex flex-col ${
-                  isOver ? "ring-2 ring-primary/50" : ""
+                  isOver ? "ring-2 ring-primary/50 bg-primary/5 -translate-y-0.5" : ""
                 }`}
               >
                 {/* Column header with 3px top border */}
@@ -340,13 +526,18 @@ export function CrmClient({
                   className="px-3 py-2.5 flex items-center justify-between rounded-t-xl bg-card border-b"
                   style={{ borderTop: `3px solid ${stage.color}` }}
                 >
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm">
-                      {stage.name}
-                    </h3>
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold">
-                      {stageDeals.length}
-                    </Badge>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-sm">{stage.name}</h3>
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-bold">
+                        {metrics.count}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span>R$ {formatCurrency(metrics.total)}</span>
+                      <span>Ticket medio: R$ {formatCurrency(metrics.average)}</span>
+                      {index > 0 && <span>Conv: {stageConversion.toFixed(1)}%</span>}
+                    </div>
                   </div>
                   {isAgent && (
                     <AddDealDialog
@@ -361,6 +552,11 @@ export function CrmClient({
 
                 {/* Cards area */}
                 <div className="p-2 space-y-2 flex-1 overflow-y-auto">
+                  {isOver && draggedDealId && (
+                    <div className="border border-dashed border-primary/60 bg-primary/5 text-primary rounded-md py-2 text-center text-[11px]">
+                      Solte aqui para mover
+                    </div>
+                  )}
                   {stageDeals.map((deal) => (
                     <DealCard
                       key={deal.id}
@@ -424,16 +620,24 @@ function DealCard({
   return (
     <>
       <div
-        className={`bg-card border rounded-lg p-3 hover:shadow-sm transition-all duration-150 ${
+        className={`bg-card border rounded-lg p-3 hover:shadow-sm hover:-translate-y-0.5 hover:border-primary/30 transition-all duration-150 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
         } ${isDragging ? "opacity-40 ring-2 ring-primary" : ""}`}
         draggable={canEdit}
         onDragStart={(e) => canEdit && onDragStart(e, deal.id)}
         onClick={() => setDetailOpen(true)}
       >
-        {/* Lead name */}
-        <p className="text-sm font-medium truncate">
-          {lead?.name || deal.title}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm font-medium truncate">
+            {lead?.name || deal.title}
+          </p>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {deal.status === "won" ? "Ganho" : deal.status === "lost" ? "Perdido" : "Aberto"}
+          </Badge>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground truncate mt-1">
+          {deal.title}
         </p>
 
         {/* Tags */}
@@ -454,7 +658,7 @@ function DealCard({
           </div>
         )}
 
-        {/* WhatsApp + Pessoa responsavel */}
+        {/* Contact actions */}
         <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-1.5">
             {phone && (

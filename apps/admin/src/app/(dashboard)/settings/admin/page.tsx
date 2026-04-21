@@ -15,11 +15,16 @@ export default function AdminPage() {
   const [adding, setAdding] = useState(false);
 
   function load() {
-    Promise.all([getSuperadmins(), getAdminStats()]).then(([admins, s]) => {
-      setSuperadmins(admins);
-      setStats(s);
-      setLoading(false);
-    });
+    Promise.all([getSuperadmins(), getAdminStats()])
+      .then(([admins, s]) => {
+        setSuperadmins(admins);
+        setStats(s);
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : "Erro ao carregar";
+        toast.error(msg);
+      })
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => { load(); }, []);

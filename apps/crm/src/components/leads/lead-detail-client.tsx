@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -46,6 +48,7 @@ import {
   type LeadDetail,
   type LeadActivity,
 } from "@/actions/leads";
+import { createDeal, getPipelines, getStages } from "@/actions/crm";
 import {
   ArrowLeft,
   Pencil,
@@ -63,6 +66,7 @@ import {
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { useRole } from "@/lib/hooks/use-role";
+import { toast } from "sonner";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   new: { label: "Novo", variant: "default" },
@@ -94,6 +98,16 @@ type LeadDetailClientProps = {
   orgTags: OrgTag[];
 };
 
+type Pipeline = {
+  id: string;
+  name: string;
+};
+
+type Stage = {
+  id: string;
+  name: string;
+};
+
 export function LeadDetailClient({
   lead,
   activities,
@@ -102,9 +116,18 @@ export function LeadDetailClient({
   const router = useRouter();
   const { isAgent } = useRole(); // agent+ can edit/delete/tag
   const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [isCreateDealOpen, setIsCreateDealOpen] = React.useState(false);
   const [isDeleting, startDeleteTransition] = React.useTransition();
   const [isAddingTag, startAddTagTransition] = React.useTransition();
+  const [isCreatingDeal, startCreateDealTransition] = React.useTransition();
   const [selectedTagToAdd, setSelectedTagToAdd] = React.useState("");
+  const [pipelines, setPipelines] = React.useState<Pipeline[]>([]);
+  const [stages, setStages] = React.useState<Stage[]>([]);
+  const [selectedPipelineId, setSelectedPipelineId] = React.useState("");
+  const [selectedStageId, setSelectedStageId] = React.useState("");
+  const [dealTitle, setDealTitle] = React.useState("");
+  const [dealValue, setDealValue] = React.useState("");
+  const [dealFormError, setDealFormError] = React.useState("");
 
   const statusInfo = STATUS_MAP[lead.status] ?? {
     label: lead.status,
@@ -113,6 +136,45 @@ export function LeadDetailClient({
 
   const currentTagIds = lead.lead_tags?.map((lt) => lt.tag_id) ?? [];
   const availableTags = orgTags.filter((t) => !currentTagIds.includes(t.id));
+
+  React.useEffect(() => {
+    if (!isCreateDealOpen) return;
+
+    const defaultTitle = lead.name ? `Negocio - ${lead.name}` : "Novo negocio";
+    setDealTitle(defaultTitle);
+    setDealFormError("");
+
+    getPipelines()
+      .then((data) => {
+        const pipelineList = (data || []) as Pipeline[];
+        setPipelines(pipelineList);
+        const firstPipelineId = pipelineList[0]?.id || "";
+        setSelectedPipelineId(firstPipelineId);
+      })
+      .catch(() => {
+        setPipelines([]);
+        setSelectedPipelineId("");
+      });
+  }, [isCreateDealOpen, lead.name]);
+
+  React.useEffect(() => {
+    if (!isCreateDealOpen || !selectedPipelineId) {
+      setStages([]);
+      setSelectedStageId("");
+      return;
+    }
+
+    getStages(selectedPipelineId)
+      .then((data) => {
+        const stageList = (data || []) as Stage[];
+        setStages(stageList);
+        setSelectedStageId(stageList[0]?.id || "");
+      })
+      .catch(() => {
+        setStages([]);
+        setSelectedStageId("");
+      });
+  }, [isCreateDealOpen, selectedPipelineId]);
 
   async function handleUpdate(formData: FormData) {
     await updateLead(lead.id, formData);
@@ -140,6 +202,35 @@ export function LeadDetailClient({
     startAddTagTransition(async () => {
       await removeTagFromLead(lead.id, tagId);
       router.refresh();
+    });
+  }
+
+  function handleCreateDeal() {
+    if (!selectedPipelineId || !selectedStageId || !dealTitle.trim()) {
+      setDealFormError("Preencha titulo, funil e etapa.");
+      return;
+    }
+
+    setDealFormError("");
+    startCreateDealTransition(async () => {
+      const formData = new FormData();
+      formData.set("pipeline_id", selectedPipelineId);
+      formData.set("stage_id", selectedStageId);
+      formData.set("lead_id", lead.id);
+      formData.set("title", dealTitle.trim());
+      if (dealValue.trim()) {
+        formData.set("value", dealValue.trim());
+      }
+
+      try {
+        await createDeal(formData);
+        setIsCreateDealOpen(false);
+        setDealValue("");
+        toast.success("Negocio criado no CRM.");
+        router.push("/crm");
+      } catch {
+        toast.error("Nao foi possivel criar o negocio.");
+      }
     });
   }
 
@@ -192,6 +283,10 @@ export function LeadDetailClient({
           )}
           {isAgent && (
             <>
+              <Button variant="outline" onClick={() => setIsCreateDealOpen(true)}>
+                <Plus className="size-4" data-icon="inline-start" />
+                Criar Negocio
+              </Button>
               <Button variant="outline" onClick={() => setIsEditOpen(true)}>
                 <Pencil className="size-4" data-icon="inline-start" />
                 Editar
@@ -417,6 +512,96 @@ export function LeadDetailClient({
             onCancel={() => setIsEditOpen(false)}
             submitLabel="Salvar alteracoes"
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCreateDealOpen} onOpenChange={setIsCreateDealOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Criar Negocio</DialogTitle>
+            <DialogDescription>
+              Crie um negocio para este lead e acompanhe no Kanban.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Titulo</Label>
+              <Input
+                value={dealTitle}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setDealTitle(e.target.value)
+                }
+                placeholder="Nome do negocio"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Funil</Label>
+              <Select
+                value={selectedPipelineId}
+                onValueChange={(value) => setSelectedPipelineId(value ?? "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um funil" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map((pipeline) => (
+                    <SelectItem key={pipeline.id} value={pipeline.id}>
+                      {pipeline.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Etapa</Label>
+              <Select
+                value={selectedStageId}
+                onValueChange={(value) => setSelectedStageId(value ?? "")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma etapa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map((stage) => (
+                    <SelectItem key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Valor (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={dealValue}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setDealValue(e.target.value)
+                }
+                placeholder="0.00"
+              />
+            </div>
+            {dealFormError && (
+              <p className="text-sm text-destructive">{dealFormError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsCreateDealOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleCreateDeal}
+                disabled={isCreatingDeal}
+              >
+                {isCreatingDeal ? "Criando..." : "Criar no CRM"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

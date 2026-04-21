@@ -29,7 +29,12 @@ import {
 } from "@/components/ui/empty";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { LeadForm } from "@/components/leads/lead-form";
-import { getLeads, createLead, type LeadWithTags } from "@/actions/leads";
+import {
+  getLeads,
+  createLead,
+  getOrgTags,
+  type LeadWithTags,
+} from "@/actions/leads";
 import {
   Plus,
   Search,
@@ -79,6 +84,14 @@ type LeadListProps = {
   initialTotalPages: number;
 };
 
+type OrgTag = {
+  id: string;
+  name: string;
+  color: string;
+  organization_id: string;
+  created_at: string;
+};
+
 export function LeadList({
   initialLeads,
   initialTotal,
@@ -93,17 +106,25 @@ export function LeadList({
   const [totalPages, setTotalPages] = React.useState(initialTotalPages);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [orgTags, setOrgTags] = React.useState<OrgTag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([]);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchLeads = React.useCallback(
-    async (params: { search?: string; status?: string; page?: number }) => {
+    async (params: {
+      search?: string;
+      status?: string;
+      tags?: string[];
+      page?: number;
+    }) => {
       setIsLoading(true);
       try {
         const result = await getLeads({
           search: params.search || undefined,
           status: params.status || undefined,
+          tags: params.tags && params.tags.length > 0 ? params.tags : undefined,
           page: params.page || 1,
           limit: 20,
         });
@@ -120,28 +141,55 @@ export function LeadList({
     []
   );
 
+  React.useEffect(() => {
+    getOrgTags()
+      .then((tags) => setOrgTags(tags as OrgTag[]))
+      .catch(() => {
+        setOrgTags([]);
+      });
+  }, []);
+
   function handleSearchChange(value: string) {
     setSearch(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchLeads({ search: value, status: statusFilter, page: 1 });
+      fetchLeads({
+        search: value,
+        status: statusFilter,
+        tags: selectedTagIds,
+        page: 1,
+      });
     }, 400);
   }
 
   function handleStatusChange(value: string | null) {
     if (!value) return;
     setStatusFilter(value);
-    fetchLeads({ search, status: value, page: 1 });
+    fetchLeads({ search, status: value, tags: selectedTagIds, page: 1 });
+  }
+
+  function handleTagToggle(tagId: string) {
+    const nextTags = selectedTagIds.includes(tagId)
+      ? selectedTagIds.filter((id) => id !== tagId)
+      : [...selectedTagIds, tagId];
+
+    setSelectedTagIds(nextTags);
+    fetchLeads({
+      search,
+      status: statusFilter,
+      tags: nextTags,
+      page: 1,
+    });
   }
 
   function handlePageChange(newPage: number) {
-    fetchLeads({ search, status: statusFilter, page: newPage });
+    fetchLeads({ search, status: statusFilter, tags: selectedTagIds, page: newPage });
   }
 
   async function handleCreate(formData: FormData) {
     await createLead(formData);
     setIsCreateOpen(false);
-    fetchLeads({ search, status: statusFilter, page });
+    fetchLeads({ search, status: statusFilter, tags: selectedTagIds, page });
   }
 
   function formatDate(dateStr: string | null) {
@@ -300,7 +348,7 @@ export function LeadList({
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -325,6 +373,47 @@ export function LeadList({
           </SelectContent>
         </Select>
       </div>
+
+      {orgTags.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {orgTags.map((tag) => {
+            const active = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => handleTagToggle(tag.id)}
+                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  active ? "border-transparent" : "border-border hover:bg-muted"
+                }`}
+                style={
+                  active
+                    ? {
+                        backgroundColor: `${tag.color}20`,
+                        color: tag.color,
+                      }
+                    : undefined
+                }
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+          {selectedTagIds.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                setSelectedTagIds([]);
+                fetchLeads({ search, status: statusFilter, tags: [], page: 1 });
+              }}
+            >
+              Limpar tags
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       <Card className={`border rounded-xl ${isLoading ? "opacity-60 transition-opacity" : ""}`}>

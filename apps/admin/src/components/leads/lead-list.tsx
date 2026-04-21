@@ -25,6 +25,7 @@ export function LeadListPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -35,12 +36,17 @@ export function LeadListPage() {
   useEffect(() => {
     if (!isManagingClient) return;
     setLoading(true);
-    getLeads({ search: search || undefined, status: statusFilter || undefined, page }).then(({ data, count }) => {
+    getLeads({
+      search: search || undefined,
+      status: statusFilter || undefined,
+      tags: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+      page,
+    }).then(({ data, count }) => {
       setLeads(data || []);
       setTotalCount(count || 0);
       setLoading(false);
     });
-  }, [activeOrgId, search, statusFilter, page]);
+  }, [activeOrgId, search, selectedTagIds, statusFilter, page]);
 
   useEffect(() => {
     getTags().then(setTags).catch(() => {});
@@ -49,6 +55,13 @@ export function LeadListPage() {
   function handleSearch(value: string) {
     setSearch(value);
     setPage(1);
+  }
+
+  function handleTagToggle(tagId: string) {
+    setPage(1);
+    setSelectedTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
   }
 
   if (!isManagingClient) {
@@ -100,6 +113,46 @@ export function LeadListPage() {
           ))}
         </select>
       </div>
+
+      {tags.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {tags.map((tag) => {
+            const active = selectedTagIds.includes(tag.id);
+            return (
+              <button
+                key={tag.id}
+                type="button"
+                onClick={() => handleTagToggle(tag.id)}
+                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                  active ? "border-transparent" : "border-border hover:bg-muted"
+                }`}
+                style={
+                  active
+                    ? {
+                        backgroundColor: `${tag.color}20`,
+                        color: tag.color,
+                      }
+                    : undefined
+                }
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+          {selectedTagIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedTagIds([]);
+                setPage(1);
+              }}
+              className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Limpar tags
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       {loading ? (
