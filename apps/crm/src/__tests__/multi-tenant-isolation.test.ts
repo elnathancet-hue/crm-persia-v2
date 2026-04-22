@@ -13,6 +13,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type MockSupabase } from "@/test/helpers/supabase-mock";
 
+// server-only throws in test env; stub it out since we're exercising
+// server-module imports (audit.ts, admin.ts).
+vi.mock("server-only", () => ({}));
+
 // --- team.ts calls @supabase/supabase-js directly; capture it ---
 let lastAdminClient: MockSupabase | null = null;
 vi.mock("@supabase/supabase-js", async () => {
@@ -25,6 +29,18 @@ vi.mock("@supabase/supabase-js", async () => {
     }),
   };
 });
+
+// The CRM audit helper writes to admin_audit_log via a fresh service-role
+// client. For isolation assertions we don't care about audit writes — mock
+// it to a noop so the toggleMemberActive path doesn't demand extra queue setup.
+vi.mock("@/lib/audit", () => ({
+  auditLog: vi.fn(async () => {}),
+  auditFailure: vi.fn(async () => {}),
+  withAuditedAdmin: vi.fn(async (_meta: unknown, fn: (admin: unknown) => Promise<unknown>) => {
+    if (!lastAdminClient) throw new Error("lastAdminClient not set for this test");
+    return fn(lastAdminClient);
+  }),
+}));
 
 vi.mock("@/lib/auth", () => ({
   requireRole: vi.fn(),

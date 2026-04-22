@@ -10,6 +10,9 @@ vi.mock("@/lib/whatsapp/providers", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(() => ({
+    from: vi.fn(() => ({
+      insert: vi.fn(async () => ({ error: null })),
+    })),
     storage: {
       from: vi.fn(() => ({
         createSignedUrl: vi.fn(),
@@ -22,6 +25,9 @@ vi.mock("@/lib/supabase/admin", () => ({
   })),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => new Headers({ "x-request-id": "test-request-id" })),
+}));
 
 import { requireRole } from "@/lib/auth";
 import { createProvider } from "@/lib/whatsapp/providers";
