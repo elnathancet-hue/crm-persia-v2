@@ -8,6 +8,7 @@ import {
   getUazapiConnectionMatchMethod,
   logUazapiWebhookDiagnostics,
 } from "@/lib/whatsapp/uazapi-webhook-diagnostics";
+import { validateUazapiWebhookSignature } from "@/lib/whatsapp/uazapi-webhook-verifier";
 
 function getSupabase() {
   return createClient(
@@ -29,7 +30,27 @@ function getSupabase() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabase();
-    const body = (await request.json()) as Record<string, unknown>;
+    const rawBody = await request.text();
+    const signature = validateUazapiWebhookSignature({
+      rawBody,
+      headers: request.headers,
+      secret: process.env.UAZAPI_WEBHOOK_SIGNATURE_SECRET,
+      mode: process.env.UAZAPI_WEBHOOK_SIGNATURE_MODE,
+    });
+
+    if (signature.configured && signature.mode !== "off" && !signature.valid) {
+      const log = signature.mode === "enforce" ? console.warn : console.info;
+      log("[UAZAPI webhook] signature check failed", {
+        mode: signature.mode,
+        present: signature.present,
+        headerName: signature.headerName,
+      });
+    }
+    if (!signature.accepted) {
+      return NextResponse.json({ ok: false }, { status: 401 });
+    }
+
+    const body = JSON.parse(rawBody) as Record<string, unknown>;
 
     // 1. Match org by owner phone OR instance token.
     const ownerPhone = extractUazapiOwnerPhone(body);
