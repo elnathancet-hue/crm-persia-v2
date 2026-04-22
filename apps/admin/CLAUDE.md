@@ -13,6 +13,7 @@ Este projeto e o painel administrativo do CRM Persia. Antes de qualquer alteraca
 5. **Deploy** — Push em `main` faz auto-deploy no EasyPanel
 6. **Build** — Sempre `npm run build` antes de push
 7. **Sincronia** — Verificar impacto no CRM (D:\tmp\crm-persia) a cada mudanca
+8. **Migrations** — NAO criar/editar nada em `apps/admin/supabase/migrations/` (pasta congelada, historico pre-monorepo). Toda migration nova vai em `apps/crm/supabase/migrations/NNN_...sql` + `cd apps/crm && supabase db push`. Ver `apps/admin/supabase/migrations/README.md`
 
 ## Skills Disponíveis
 

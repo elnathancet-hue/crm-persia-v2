@@ -65,7 +65,7 @@ export async function getWhatsAppStatus(): Promise<{
   }
 }
 
-const UAZAPI_SERVER = process.env.UAZAPI_SERVER_URL || "https://chat.funilpersia.top";
+const UAZAPI_SERVER = process.env.UAZAPI_SERVER_URL || "https://persia.uazapi.com";
 const UAZAPI_ADMIN_TOKEN = process.env.UAZAPI_ADMIN_TOKEN!;
 // CRM client webhook URL ��� never point to the CRM client app, not this client
 const CRM_WEBHOOK_URL = process.env.NEXT_PUBLIC_APP_URL
