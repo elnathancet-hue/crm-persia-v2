@@ -97,7 +97,8 @@ export async function toggleMemberActive(memberId: string) {
   const { error } = await admin
     .from("organization_members")
     .update({ is_active: !member.is_active })
-    .eq("id", memberId);
+    .eq("id", memberId)
+    .eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
   revalidatePath("/settings/team");
