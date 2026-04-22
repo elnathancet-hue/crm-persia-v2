@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
+import {
+  extractUazapiOwnerPhone,
+  extractUazapiWebhookToken,
+  getUazapiConnectionMatchMethod,
+  logUazapiWebhookDiagnostics,
+} from "@/lib/whatsapp/uazapi-webhook-diagnostics";
 
 function getSupabase() {
   return createClient(
@@ -23,11 +29,11 @@ function getSupabase() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabase();
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
 
     // 1. Match org by owner phone OR instance token.
-    const ownerPhone = String(body.owner || body.message?.owner || "").replace(/\D/g, "");
-    const webhookToken = String(body.token || "");
+    const ownerPhone = extractUazapiOwnerPhone(body);
+    const webhookToken = extractUazapiWebhookToken(body);
 
     const { data: connections } = await supabase
       .from("whatsapp_connections")
@@ -41,6 +47,11 @@ export async function POST(request: NextRequest) {
       const connPhone = String(c.phone_number || "").replace(/\D/g, "");
       return (connPhone && connPhone === ownerPhone) || c.instance_token === webhookToken;
     });
+
+    const matchedBy = matchedConn
+      ? getUazapiConnectionMatchMethod(matchedConn, { ownerPhone, webhookToken })
+      : "none";
+    logUazapiWebhookDiagnostics({ body, headers: request.headers, matchedBy });
 
     if (!matchedConn) {
       // Return 200 to stop UAZAPI retries but do not echo owner back
