@@ -3,6 +3,7 @@
  * Full coverage of UAZAPI OpenAPI specification
  * Docs: https://docs.uazapi.com
  */
+import type { UazapiWebhookConfig } from "./uazapi-webhook-config";
 
 // ============ CONFIG ============
 
@@ -239,10 +240,6 @@ interface LegacySendLocationParams {
 
 // ============ SESSION / WEBHOOK ============
 
-interface WebhookConfig {
-  webhookURL: string;
-}
-
 interface SessionStatus {
   connected: boolean;
   loggedIn: boolean;
@@ -409,7 +406,7 @@ export class UazapiClient {
 
   // ============ WEBHOOK ============
 
-  async setWebhook(config: WebhookConfig): Promise<void> {
+  async setWebhook(config: UazapiWebhookConfig): Promise<void> {
     await this.request("POST", "/webhook", config as unknown as Record<string, unknown>);
   }
 

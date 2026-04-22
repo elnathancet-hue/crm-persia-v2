@@ -51,6 +51,17 @@ export {
   createProvider,
   UazapiAdapter,
   MetaCloudAdapter,
+  buildUazapiWebhookConfig,
+  configureUazapiWebhook,
+  UAZAPI_DEFAULT_EXCLUDED_MESSAGES,
+  UAZAPI_DEFAULT_WEBHOOK_EVENTS,
+} from "./providers";
+export type {
+  BuildUazapiWebhookConfigOptions,
+  ConfigureUazapiWebhookOptions,
+  UazapiWebhookConfig,
+  UazapiWebhookEvent,
+  UazapiWebhookExcludedMessage,
 } from "./providers";
 export { UazapiClient, phoneToJid } from "./providers/uazapi-client";
 

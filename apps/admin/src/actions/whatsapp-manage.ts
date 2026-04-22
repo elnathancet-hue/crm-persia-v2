@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditLog } from "@/lib/audit";
-import { createProvider } from "@/lib/whatsapp/providers";
+import { configureUazapiWebhook, createProvider } from "@/lib/whatsapp/providers";
 import { MetaCloudAdapter } from "@/lib/whatsapp/providers/meta-cloud";
 
 
@@ -106,15 +106,10 @@ export async function autoProvisionWhatsApp(): Promise<{
 
       // 1. POST /webhook — set webhook to receive messages (CRITICAL — must succeed)
       const webhookUrl = getCrmWebhookUrl();
-      const webhookRes = await fetch(`${UAZAPI_SERVER}/webhook`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          url: webhookUrl,
-          events: ["messages"],
-          enabled: true,
-          excludeMessages: ["wasSentByApi"],
-        }),
+      const webhookRes = await configureUazapiWebhook({
+        baseUrl: UAZAPI_SERVER,
+        token: instanceToken,
+        url: webhookUrl,
       });
       if (!webhookRes.ok) {
         throw new Error("Falha ao configurar webhook. Instância não será salva sem webhook funcional.");

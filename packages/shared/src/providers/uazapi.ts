@@ -1,4 +1,5 @@
 import { UazapiClient, phoneToJid } from "./uazapi-client";
+import { buildUazapiWebhookConfig } from "./uazapi-webhook-config";
 import type {
   ConnectionResult,
   CreateCampaignOptions,
@@ -255,7 +256,7 @@ export class UazapiAdapter implements WhatsAppProvider {
   }
 
   async setWebhook(url: string): Promise<void> {
-    await this.client.setWebhook({ webhookURL: url });
+    await this.client.setWebhook(buildUazapiWebhookConfig({ url }));
   }
 
   async checkNumber(phone: string): Promise<boolean> {

@@ -2,7 +2,7 @@
 
 import { requireRole } from "@/lib/auth";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
-import { createProvider } from "@/lib/whatsapp/providers";
+import { configureUazapiWebhook, createProvider } from "@/lib/whatsapp/providers";
 
 function getAdminDb() {
   return createSupabaseAdmin(
@@ -115,15 +115,10 @@ export async function connectWhatsApp(): Promise<{
       const headers = { token: instanceToken, "Content-Type": "application/json" };
 
       // Webhook config (critical — must succeed)
-      const webhookRes = await fetch(`${UAZAPI_SERVER}/webhook`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          url: CRM_WEBHOOK_URL,
-          events: ["messages"],
-          enabled: true,
-          excludeMessages: ["wasSentByApi"],
-        }),
+      const webhookRes = await configureUazapiWebhook({
+        baseUrl: UAZAPI_SERVER,
+        token: instanceToken,
+        url: CRM_WEBHOOK_URL,
       });
       if (!webhookRes.ok) {
         return { status: "error", error: "Falha ao configurar webhook. Instância não salva." };

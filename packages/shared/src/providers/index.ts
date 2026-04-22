@@ -40,3 +40,16 @@ export function createProvider(connection: WhatsAppConnection): WhatsAppProvider
 
 export { MetaCloudAdapter } from "./meta-cloud";
 export { UazapiAdapter } from "./uazapi";
+export {
+  buildUazapiWebhookConfig,
+  configureUazapiWebhook,
+  UAZAPI_DEFAULT_EXCLUDED_MESSAGES,
+  UAZAPI_DEFAULT_WEBHOOK_EVENTS,
+} from "./uazapi-webhook-config";
+export type {
+  BuildUazapiWebhookConfigOptions,
+  ConfigureUazapiWebhookOptions,
+  UazapiWebhookConfig,
+  UazapiWebhookEvent,
+  UazapiWebhookExcludedMessage,
+} from "./uazapi-webhook-config";
