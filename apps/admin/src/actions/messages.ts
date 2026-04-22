@@ -1,7 +1,7 @@
 "use server";
 
 import { requireSuperadminForOrg } from "@/lib/auth";
-import { auditLog } from "@/lib/audit";
+import { auditFailure, auditLog } from "@/lib/audit";
 import { createProvider } from "@/lib/whatsapp/providers";
 
 export type Message = {
@@ -119,6 +119,15 @@ export async function resendMessage(
     return { data: updated as Message };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Falha ao reenviar";
+    await auditFailure({
+      userId,
+      orgId,
+      action: "resend_message",
+      entityType: "conversation",
+      entityId: message.conversation_id,
+      metadata: { messageId },
+      error: err,
+    });
     const { data: updated } = await admin
       .from("messages")
       .update({ status: "failed" })
@@ -273,6 +282,15 @@ export async function sendMessageViaWhatsApp(
       return { data: { ...(message as Message), status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Falha ao enviar ao WhatsApp";
+      await auditFailure({
+        userId,
+        orgId,
+        action: "send_message",
+        entityType: "conversation",
+        entityId: conversationId,
+        metadata: { messageId: message.id },
+        error: err,
+      });
       await admin.from("messages").update({ status: "failed" }).eq("id", message.id);
       return { data: { ...(message as Message), status: "failed" }, error: reason };
     }
@@ -365,6 +383,15 @@ export async function sendMediaViaWhatsApp(
       return { data: { ...(message as Message), status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Falha ao enviar ao WhatsApp";
+      await auditFailure({
+        userId,
+        orgId,
+        action: "send_media",
+        entityType: "conversation",
+        entityId: conversationId,
+        metadata: { messageId: message.id, type: file.type },
+        error: err,
+      });
       await admin.from("messages").update({ status: "failed" }).eq("id", message.id);
       return { data: { ...(message as Message), status: "failed" }, error: reason };
     }

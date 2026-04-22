@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { requireSuperadminForOrg } from "@/lib/auth";
-import { auditLog } from "@/lib/audit";
+import { auditFailure, auditLog } from "@/lib/audit";
 import { configureUazapiWebhook, createProvider } from "@/lib/whatsapp/providers";
 import { MetaCloudAdapter } from "@/lib/whatsapp/providers/meta-cloud";
 
@@ -50,8 +50,10 @@ export async function autoProvisionWhatsApp(): Promise<{
   qrCode?: string;
   error?: string;
 }> {
+  let auditCtx: { userId: string; orgId: string } | null = null;
   try {
     const { admin, orgId, userId } = await requireSuperadminForOrg();
+    auditCtx = { userId, orgId };
 
     // Check if connection already exists
     const { data: existing } = await admin
@@ -169,6 +171,15 @@ export async function autoProvisionWhatsApp(): Promise<{
     return { status: "error", error: "Não foi possível gerar o QR Code" };
   } catch (e: unknown) {
     console.error("[WhatsApp] Auto-provision error:", e instanceof Error ? e.message : String(e));
+    if (auditCtx) {
+      await auditFailure({
+        userId: auditCtx.userId,
+        orgId: auditCtx.orgId,
+        action: "whatsapp_provision",
+        entityType: "whatsapp",
+        error: e,
+      });
+    }
     return { status: "error", error: e instanceof Error ? e.message : String(e) || "Erro ao configurar WhatsApp" };
   }
 }
@@ -266,8 +277,10 @@ export async function resetAndGetQRAdmin(): Promise<{ qrCode: string | null; err
  * UAZAPI: POST /instance/disconnect (token)
  */
 export async function disconnectWhatsAppAdmin(): Promise<{ error?: string }> {
+  let auditCtx: { userId: string; orgId: string } | null = null;
   try {
     const ctx = await getConnection();
+    if (ctx) auditCtx = { userId: ctx.userId, orgId: ctx.orgId };
     if (!ctx) return { error: "Não configurado" };
 
     const provider = createProvider(ctx.connection);
@@ -291,6 +304,15 @@ export async function disconnectWhatsAppAdmin(): Promise<{ error?: string }> {
     return {};
   } catch (e: unknown) {
     console.error("[WhatsApp Admin] Disconnect error:", e instanceof Error ? e.message : String(e));
+    if (auditCtx) {
+      await auditFailure({
+        userId: auditCtx.userId,
+        orgId: auditCtx.orgId,
+        action: "whatsapp_disconnect",
+        entityType: "whatsapp",
+        error: e,
+      });
+    }
     return { error: "Erro ao desconectar. Tente novamente." };
   }
 }
@@ -323,8 +345,10 @@ export interface MetaConnectResult {
 }
 
 export async function connectMetaCloudWhatsApp(input: MetaConnectInput): Promise<MetaConnectResult> {
+  let auditCtx: { userId: string; orgId: string } | null = null;
   try {
     const { admin, orgId, userId } = await requireSuperadminForOrg();
+    auditCtx = { userId, orgId };
 
     // Sanitize inputs
     const phone_number_id = input.phone_number_id.trim();
@@ -398,6 +422,16 @@ export async function connectMetaCloudWhatsApp(input: MetaConnectInput): Promise
     };
   } catch (e: unknown) {
     console.error("[WhatsApp Admin] Meta connect error:", e instanceof Error ? e.message : String(e));
+    if (auditCtx) {
+      await auditFailure({
+        userId: auditCtx.userId,
+        orgId: auditCtx.orgId,
+        action: "whatsapp_connect_meta",
+        entityType: "whatsapp",
+        metadata: { phone_number_id: input.phone_number_id, waba_id: input.waba_id },
+        error: e,
+      });
+    }
     return { status: "error", error: e instanceof Error ? e.message : "Erro ao conectar Meta Cloud" };
   }
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { requireSuperadminForOrg, requireSuperadminWithUser } from "@/lib/auth";
-import { auditLog } from "@/lib/audit";
+import { auditFailure, auditLog } from "@/lib/audit";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { revalidatePath } from "next/cache";
 
@@ -18,7 +18,10 @@ export async function getOrgSettings() {
 export async function updateOrgSettings(updates: Record<string, unknown>) {
   const { admin, orgId, userId } = await requireSuperadminForOrg();
   const { error } = await admin.from("organizations").update({ ...updates, updated_at: new Date().toISOString() }).eq("id", orgId);
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFailure({ userId, orgId, action: "update_org_settings", entityType: "organization", entityId: orgId, error });
+    return { error: error.message };
+  }
   await auditLog({ userId, orgId, action: "update_org_settings", entityType: "organization", entityId: orgId });
   revalidatePath("/settings");
   return { error: null };
@@ -64,6 +67,14 @@ export async function createTeamMember(data: {
   });
 
   if (authErr) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "create_team_member",
+      entityType: "member",
+      metadata: { email: data.email, role: data.role },
+      error: authErr,
+    });
     if (authErr.message.includes("already been registered")) return { error: "Email ja cadastrado" };
     return { error: authErr.message };
   }
@@ -71,7 +82,18 @@ export async function createTeamMember(data: {
   const newUserId = newUser.user!.id;
   await admin.from("profiles").upsert({ id: newUserId, full_name: `${data.firstName} ${data.lastName}`, phone: data.phone });
   const { error } = await admin.from("organization_members").insert({ user_id: newUserId, organization_id: orgId, role: data.role, is_active: true });
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "create_team_member",
+      entityType: "member",
+      entityId: newUserId,
+      metadata: { email: data.email, role: data.role },
+      error,
+    });
+    return { error: error.message };
+  }
 
   await auditLog({ userId, orgId, action: "create_team_member", entityType: "member", metadata: { email: data.email, role: data.role } });
   revalidatePath("/settings/team");
@@ -82,7 +104,10 @@ export async function updateMemberRole(memberId: string, role: string) {
   const { admin, orgId, userId } = await requireSuperadminForOrg();
   // Verify member belongs to active org
   const { error } = await admin.from("organization_members").update({ role }).eq("id", memberId).eq("organization_id", orgId);
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFailure({ userId, orgId, action: "update_member_role", entityType: "member", entityId: memberId, metadata: { role }, error });
+    return { error: error.message };
+  }
   await auditLog({ userId, orgId, action: "update_member_role", entityType: "member", entityId: memberId, metadata: { role } });
   revalidatePath("/settings/team");
   return { error: null };
@@ -96,7 +121,10 @@ export async function toggleMemberActive(memberId: string) {
   if (member.role === "owner") return { error: "Nao pode desativar o dono" };
 
   const { error } = await admin.from("organization_members").update({ is_active: !member.is_active }).eq("id", memberId).eq("organization_id", orgId);
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFailure({ userId, orgId, action: "toggle_member_active", entityType: "member", entityId: memberId, error });
+    return { error: error.message };
+  }
   await auditLog({ userId, orgId, action: "toggle_member_active", entityType: "member", entityId: memberId });
   revalidatePath("/settings/team");
   return { error: null };
@@ -293,7 +321,10 @@ export async function addSuperadmin(email: string) {
   if (profile?.is_superadmin) return { error: "Ja e superadmin" };
 
   const { error } = await admin.from("profiles").update({ is_superadmin: true }).eq("id", user.id);
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFailure({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", entityId: user.id, metadata: { email }, error });
+    return { error: error.message };
+  }
   await auditLog({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", metadata: { email } });
   return { error: null };
 }
@@ -304,7 +335,10 @@ export async function removeSuperadmin(targetUserId: string) {
   if (callerId === targetUserId) return { error: "Nao pode remover a si mesmo" };
 
   const { error } = await admin.from("profiles").update({ is_superadmin: false }).eq("id", targetUserId);
-  if (error) return { error: error.message };
+  if (error) {
+    await auditFailure({ userId: callerId, orgId: null, action: "remove_superadmin", entityType: "superadmin", entityId: targetUserId, error });
+    return { error: error.message };
+  }
   await auditLog({ userId: callerId, orgId: null, action: "remove_superadmin", entityType: "superadmin", entityId: targetUserId });
   return { error: null };
 }

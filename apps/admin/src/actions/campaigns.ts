@@ -1,7 +1,7 @@
 "use server";
 
 import { requireSuperadminForOrg } from "@/lib/auth";
-import { auditLog } from "@/lib/audit";
+import { auditFailure, auditLog } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import type { TemplateVariableValues } from "@/lib/whatsapp/template-parser";
 
@@ -179,6 +179,15 @@ async function sendUazapiCampaign(
     revalidatePath("/campaigns");
     return { sent: phones.length };
   } catch (e: unknown) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "execute_campaign",
+      entityType: "campaign",
+      entityId: campaign.id as string,
+      metadata: { kind: "uazapi" },
+      error: e,
+    });
     return { sent: 0, error: e instanceof Error ? e.message : String(e) || "Erro ao enviar" };
   }
 }
@@ -218,7 +227,18 @@ async function enqueueTemplateCampaign(
   }));
 
   const { error } = await admin.from("wa_template_sends").insert(rows as never);
-  if (error) return { sent: 0, queued: 0, error: error.message };
+  if (error) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "execute_campaign",
+      entityType: "campaign",
+      entityId: campaign.id as string,
+      metadata: { kind: "meta_template", queued: rows.length },
+      error,
+    });
+    return { sent: 0, queued: 0, error: error.message };
+  }
 
   await admin.from("campaigns").update({
     status: "sending",

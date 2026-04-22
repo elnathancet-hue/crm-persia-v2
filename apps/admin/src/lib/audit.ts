@@ -2,6 +2,7 @@
 
 import { withAdmin } from "@/lib/supabase-admin";
 import type { TablesInsert } from "@persia/shared";
+import { headers } from "next/headers";
 
 /**
  * Canonical actions logged by the admin panel. Add new values here as
@@ -42,6 +43,15 @@ export type AuditAction =
 
 type AuditInsert = TablesInsert<"admin_audit_log">;
 
+async function getRequestIdFromHeaders(): Promise<string | null> {
+  try {
+    const headerStore = await headers();
+    return headerStore.get("x-request-id") || null;
+  } catch {
+    return null;
+  }
+}
+
 export interface AuditLogParams {
   userId: string;
   orgId: string | null;
@@ -67,6 +77,7 @@ export interface AuditLogParams {
  */
 export async function auditLog(params: AuditLogParams): Promise<void> {
   try {
+    const requestId = params.requestId ?? await getRequestIdFromHeaders();
     const row: AuditInsert = {
       user_id: params.userId,
       target_org_id: params.orgId,
@@ -76,7 +87,7 @@ export async function auditLog(params: AuditLogParams): Promise<void> {
       metadata: (params.metadata ?? {}) as TablesInsert<"admin_audit_log">["metadata"],
       result: params.result ?? "success",
       error_msg: params.errorMsg ?? null,
-      request_id: params.requestId ?? null,
+      request_id: requestId,
       ip: params.ip ?? null,
       user_agent: params.userAgent ?? null,
     };
