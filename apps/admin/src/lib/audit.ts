@@ -40,20 +40,7 @@ export type AuditAction =
   // escape hatch — always allowed but discouraged
   | (string & {});
 
-/**
- * Columns added by migration 012 that may not yet be present in the
- * generated Database types. Marked optional so the type is a no-op
- * once `supabase gen types` is rerun.
- */
-type AuditExtras = {
-  result?: "success" | "failure" | "partial" | null;
-  error_msg?: string | null;
-  request_id?: string | null;
-  ip?: string | null;
-  user_agent?: string | null;
-};
-
-type AuditInsert = TablesInsert<"admin_audit_log"> & AuditExtras;
+type AuditInsert = TablesInsert<"admin_audit_log">;
 
 export interface AuditLogParams {
   userId: string;

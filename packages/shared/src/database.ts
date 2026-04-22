@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.4"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       admin_audit_log: {
@@ -20,9 +45,14 @@ export type Database = {
           created_at: string | null
           entity_id: string | null
           entity_type: string | null
+          error_msg: string | null
           id: string
+          ip: unknown
           metadata: Json | null
+          request_id: string | null
+          result: string | null
           target_org_id: string | null
+          user_agent: string | null
           user_id: string
         }
         Insert: {
@@ -30,9 +60,14 @@ export type Database = {
           created_at?: string | null
           entity_id?: string | null
           entity_type?: string | null
+          error_msg?: string | null
           id?: string
+          ip?: unknown
           metadata?: Json | null
+          request_id?: string | null
+          result?: string | null
           target_org_id?: string | null
+          user_agent?: string | null
           user_id: string
         }
         Update: {
@@ -40,9 +75,14 @@ export type Database = {
           created_at?: string | null
           entity_id?: string | null
           entity_type?: string | null
+          error_msg?: string | null
           id?: string
+          ip?: unknown
           metadata?: Json | null
+          request_id?: string | null
+          result?: string | null
           target_org_id?: string | null
+          user_agent?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1658,7 +1698,7 @@ export type Database = {
           created_at: string | null
           full_name: string | null
           id: string
-          is_superadmin: boolean | null
+          is_superadmin: boolean
           phone: string | null
           updated_at: string | null
         }
@@ -1667,7 +1707,7 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           id: string
-          is_superadmin?: boolean | null
+          is_superadmin?: boolean
           phone?: string | null
           updated_at?: string | null
         }
@@ -1676,7 +1716,7 @@ export type Database = {
           created_at?: string | null
           full_name?: string | null
           id?: string
-          is_superadmin?: boolean | null
+          is_superadmin?: boolean
           phone?: string | null
           updated_at?: string | null
         }
@@ -2301,6 +2341,9 @@ export type Database = {
       get_user_org_ids: { Args: never; Returns: string[] }
       get_user_org_role: { Args: { p_org_id: string }; Returns: string }
       is_org_admin: { Args: { org_id: string }; Returns: boolean }
+      is_superadmin:
+        | { Args: never; Returns: boolean }
+        | { Args: { p_user_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
@@ -2429,6 +2472,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
