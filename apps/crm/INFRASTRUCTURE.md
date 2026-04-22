@@ -223,7 +223,7 @@ bash /opt/n8n-tenants/list-tenants.sh      # Listar tenants
 | `*.funilpersia.top` | Wildcard (todos os tenants) |
 | `easypanel.funilpersia.top` | Painel Easypanel |
 | `n8n.funilpersia.top` | n8n admin |
-| `chat.funilpersia.top` | Evolution API |
+| `persia.uazapi.com` | UAZAPI Cloud (WhatsApp provider) |
 | `<cliente>.funilpersia.top` | n8n do cliente |
 
 ---

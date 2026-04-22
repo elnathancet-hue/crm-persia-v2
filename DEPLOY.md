@@ -100,7 +100,7 @@ Build/start vao nos campos visuais (aba **Construção**), nao em env vars.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (copiar do antigo `crm-persia-admin`) | EasyPanel UI |
 | `SUPABASE_SERVICE_ROLE_KEY` | (copiar do antigo) | EasyPanel UI |
 | `NEXT_PUBLIC_APP_URL` | `https://crm-admin-persia.funilpersia.top` (staging) → `.5laby1.easypanel.host` (prod) | ajustar em cutover |
-| `UAZAPI_SERVER_URL` | `https://chat.funilpersia.top` | prod |
+| `UAZAPI_SERVER_URL` | `https://persia.uazapi.com` | prod |
 | `UAZAPI_ADMIN_TOKEN` | (copiar do antigo) | EasyPanel UI |
 | `OPENAI_API_KEY` | (copiar do antigo) | EasyPanel UI |
 | `CRM_CLIENT_BASE_URL` | `https://crm.funilpersia.top` | prod |

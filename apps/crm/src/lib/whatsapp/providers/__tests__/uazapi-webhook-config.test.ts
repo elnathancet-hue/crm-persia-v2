@@ -18,13 +18,13 @@ describe("UAZAPI webhook config", () => {
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
 
     await configureUazapiWebhook({
-      baseUrl: "https://chat.funilpersia.top/",
+      baseUrl: "https://persia.uazapi.com/",
       token: "instance-token",
       url: "https://crm.funilpersia.top/api/whatsapp/webhook",
       fetchImpl,
     });
 
-    expect(fetchImpl).toHaveBeenCalledWith("https://chat.funilpersia.top/webhook", {
+    expect(fetchImpl).toHaveBeenCalledWith("https://persia.uazapi.com/webhook", {
       method: "POST",
       headers: {
         token: "instance-token",
