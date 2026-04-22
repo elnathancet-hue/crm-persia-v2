@@ -8,6 +8,7 @@ import type { AuditLogRow } from "@/actions/admin";
 interface Filters {
   action: string;
   orgId: string;
+  result: string;
   since: string;
   until: string;
 }
@@ -32,6 +33,17 @@ const ACTION_LABELS: Record<string, string> = {
   send_message: "Enviar mensagem",
   update_whatsapp: "Atualizar WhatsApp",
   disconnect_whatsapp: "Desconectar WhatsApp",
+  whatsapp_provision: "Provisionar WhatsApp",
+  whatsapp_disconnect: "Desconectar WhatsApp",
+  whatsapp_connect_meta: "Conectar Meta Cloud",
+  execute_campaign: "Executar campanha",
+  schedule_campaign: "Agendar campanha",
+  update_org_settings: "Atualizar organizacao",
+  create_team_member: "Criar membro",
+  update_member_role: "Atualizar permissao",
+  toggle_member_active: "Ativar/desativar membro",
+  add_superadmin: "Adicionar superadmin",
+  remove_superadmin: "Remover superadmin",
 };
 
 function formatAction(action: string): string {
@@ -49,6 +61,18 @@ function formatDate(iso: string | null): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function formatResult(result: string | null): string {
+  if (result === "failure") return "Falha";
+  if (result === "partial") return "Parcial";
+  return "Sucesso";
+}
+
+function resultBadgeClass(result: string | null): string {
+  if (result === "failure") return "bg-destructive/10 text-destructive";
+  if (result === "partial") return "bg-amber-500/10 text-amber-700";
+  return "bg-emerald-500/10 text-emerald-700";
 }
 
 function toUtcIso(localDt: string): string {
@@ -70,6 +94,7 @@ function buildQuery(filters: Filters, offset: number): string {
   const params = new URLSearchParams();
   if (filters.action) params.set("action", filters.action);
   if (filters.orgId) params.set("org", filters.orgId);
+  if (filters.result) params.set("result", filters.result);
   if (filters.since) params.set("since", toUtcIso(filters.since));
   if (filters.until) params.set("until", toUtcIso(filters.until));
   if (offset > 0) params.set("offset", String(offset));
@@ -95,7 +120,7 @@ export function AuditClient({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const hasFilters = useMemo(
-    () => !!(filters.action || filters.orgId || filters.since || filters.until),
+    () => !!(filters.action || filters.orgId || filters.result || filters.since || filters.until),
     [filters]
   );
 
@@ -111,7 +136,7 @@ export function AuditClient({
   }
 
   function clearFilters() {
-    const empty: Filters = { action: "", orgId: "", since: "", until: "" };
+    const empty: Filters = { action: "", orgId: "", result: "", since: "", until: "" };
     setFilters(empty);
     navigate(empty, 0);
   }
@@ -137,7 +162,7 @@ export function AuditClient({
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <label className="text-xs text-muted-foreground block mb-1">Acao</label>
             <select
@@ -166,6 +191,19 @@ export function AuditClient({
                   {o.name}
                 </option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">Resultado</label>
+            <select
+              value={filters.result}
+              onChange={(e) => setFilters({ ...filters, result: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+            >
+              <option value="">Todos</option>
+              <option value="success">Sucesso</option>
+              <option value="failure">Falha</option>
+              <option value="partial">Parcial</option>
             </select>
           </div>
           <div>
@@ -222,6 +260,7 @@ export function AuditClient({
                   <th className="px-4 py-2 font-medium">Quando</th>
                   <th className="px-4 py-2 font-medium">Usuario</th>
                   <th className="px-4 py-2 font-medium">Acao</th>
+                  <th className="px-4 py-2 font-medium">Resultado</th>
                   <th className="px-4 py-2 font-medium">Organizacao</th>
                   <th className="px-4 py-2 font-medium">Entidade</th>
                 </tr>
@@ -229,7 +268,7 @@ export function AuditClient({
               <tbody>
                 {initialRows.map((row) => {
                   const isExpanded = expanded === row.id;
-                  const hasMetadata = Object.keys(row.metadata).length > 0;
+                  const hasDetails = Object.keys(row.metadata).length > 0 || !!row.error_msg || !!row.request_id || !!row.ip || !!row.user_agent;
                   return (
                     <Fragment key={row.id}>
                       <tr
@@ -237,7 +276,7 @@ export function AuditClient({
                         onClick={() => setExpanded(isExpanded ? null : row.id)}
                       >
                         <td className="px-4 py-2 text-muted-foreground">
-                          {hasMetadata ? (
+                          {hasDetails ? (
                             isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />
                           ) : null}
                         </td>
@@ -251,8 +290,13 @@ export function AuditClient({
                             {formatAction(row.action)}
                           </span>
                         </td>
+                        <td className="px-4 py-2">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium ${resultBadgeClass(row.result)}`}>
+                            {formatResult(row.result)}
+                          </span>
+                        </td>
                         <td className="px-4 py-2 text-xs">
-                          {row.target_org_name || <span className="text-muted-foreground">—</span>}
+                          {row.target_org_name || <span className="text-muted-foreground">-</span>}
                         </td>
                         <td className="px-4 py-2 text-xs text-muted-foreground">
                           {row.entity_type ? (
@@ -265,12 +309,28 @@ export function AuditClient({
                           )}
                         </td>
                       </tr>
-                      {isExpanded && hasMetadata && (
+                      {isExpanded && hasDetails && (
                         <tr className="border-b border-border bg-muted/10">
-                          <td colSpan={6} className="px-4 py-3">
-                            <pre className="text-xs bg-background p-3 rounded-lg overflow-x-auto border border-border">
-                              {JSON.stringify(row.metadata, null, 2)}
-                            </pre>
+                          <td colSpan={7} className="px-4 py-3">
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div className="rounded-lg border border-border bg-background p-3 text-xs">
+                                <div className="font-medium mb-2">Rastreamento</div>
+                                <dl className="space-y-1 text-muted-foreground">
+                                  <div><dt className="inline text-foreground">Request ID: </dt><dd className="inline break-all">{row.request_id || "-"}</dd></div>
+                                  <div><dt className="inline text-foreground">IP: </dt><dd className="inline break-all">{row.ip || "-"}</dd></div>
+                                  <div><dt className="inline text-foreground">User agent: </dt><dd className="inline break-all">{row.user_agent || "-"}</dd></div>
+                                </dl>
+                              </div>
+                              <div className="rounded-lg border border-border bg-background p-3 text-xs">
+                                <div className="font-medium mb-2">Erro</div>
+                                <p className="text-muted-foreground whitespace-pre-wrap break-words">{row.error_msg || "-"}</p>
+                              </div>
+                            </div>
+                            {Object.keys(row.metadata).length > 0 && (
+                              <pre className="mt-3 text-xs bg-background p-3 rounded-lg overflow-x-auto border border-border">
+                                {JSON.stringify(row.metadata, null, 2)}
+                              </pre>
+                            )}
                           </td>
                         </tr>
                       )}

@@ -16,6 +16,7 @@ export default async function AuditPage({ searchParams }: PageProps) {
   const filters = {
     action: pickString(params.action),
     orgId: pickString(params.org),
+    result: pickString(params.result),
     since: pickString(params.since),
     until: pickString(params.until),
     limit: 50,
@@ -42,6 +43,7 @@ export default async function AuditPage({ searchParams }: PageProps) {
         initialFilters={{
           action: filters.action || "",
           orgId: filters.orgId || "",
+          result: filters.result || "",
           since: filters.since || "",
           until: filters.until || "",
         }}

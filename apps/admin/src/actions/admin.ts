@@ -204,16 +204,26 @@ export interface AuditLogRow {
   entity_type: string | null;
   entity_id: string | null;
   metadata: Record<string, unknown>;
+  result: string | null;
+  error_msg: string | null;
+  request_id: string | null;
+  ip: string | null;
+  user_agent: string | null;
 }
 
 export interface AuditLogFilters {
   action?: string;
   orgId?: string;
   userId?: string;
+  result?: string;
   since?: string; // ISO date
   until?: string; // ISO date
   limit?: number;
   offset?: number;
+}
+
+function nullableString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 export async function getAuditLogs(filters: AuditLogFilters = {}): Promise<{ rows: AuditLogRow[]; total: number }> {
@@ -223,13 +233,14 @@ export async function getAuditLogs(filters: AuditLogFilters = {}): Promise<{ row
 
   let query = admin
     .from("admin_audit_log")
-    .select("id, created_at, user_id, target_org_id, action, entity_type, entity_id, metadata", { count: "exact" })
+    .select("id, created_at, user_id, target_org_id, action, entity_type, entity_id, metadata, result, error_msg, request_id, ip, user_agent", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (filters.action) query = query.eq("action", filters.action);
   if (filters.orgId) query = query.eq("target_org_id", filters.orgId);
   if (filters.userId) query = query.eq("user_id", filters.userId);
+  if (filters.result) query = query.eq("result", filters.result);
   if (filters.since) query = query.gte("created_at", filters.since);
   if (filters.until) query = query.lte("created_at", filters.until);
 
@@ -274,6 +285,11 @@ export async function getAuditLogs(filters: AuditLogFilters = {}): Promise<{ row
     entity_type: r.entity_type,
     entity_id: r.entity_id,
     metadata: (r.metadata as Record<string, unknown>) || {},
+    result: nullableString(r.result),
+    error_msg: nullableString(r.error_msg),
+    request_id: nullableString(r.request_id),
+    ip: nullableString(r.ip),
+    user_agent: nullableString(r.user_agent),
   }));
 
   return { rows, total: count || 0 };
