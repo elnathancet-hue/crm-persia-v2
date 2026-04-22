@@ -1,6 +1,6 @@
 "use server";
 
-import { getAdmin } from "@/lib/supabase-admin";
+import { withAdmin } from "@/lib/supabase-admin";
 import type { TablesInsert } from "@persia/shared";
 
 /**
@@ -67,7 +67,6 @@ export interface AuditLogParams {
  */
 export async function auditLog(params: AuditLogParams): Promise<void> {
   try {
-    const admin = getAdmin();
     const row: AuditInsert = {
       user_id: params.userId,
       target_org_id: params.orgId,
@@ -81,7 +80,9 @@ export async function auditLog(params: AuditLogParams): Promise<void> {
       ip: params.ip ?? null,
       user_agent: params.userAgent ?? null,
     };
-    await admin.from("admin_audit_log").insert(row);
+    await withAdmin("audit_log_insert", async (admin) => {
+      await admin.from("admin_audit_log").insert(row);
+    });
   } catch (err) {
     console.error(
       "[Audit] Failed to log:",

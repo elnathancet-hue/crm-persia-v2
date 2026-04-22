@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase-server";
-import { getAdmin } from "@/lib/supabase-admin";
+import { withAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
 import { readAdminContext } from "@/lib/admin-context";
 import { ShellSwitcher } from "@/components/shell-switcher";
@@ -11,12 +11,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect("/login");
 
   // Verify superadmin
-  const admin = getAdmin();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .single();
+  const { data: profile } = await withAdmin("dashboard_layout_superadmin_check", async (admin) =>
+    await admin
+      .from("profiles")
+      .select("is_superadmin")
+      .eq("id", user.id)
+      .single()
+  );
 
   if (!profile?.is_superadmin) redirect("/login");
 
@@ -29,11 +30,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let clientOrgName: string | null = null;
   if (adminContext) {
     clientOrgId = adminContext.orgId;
-    const { data: org } = await admin
-      .from("organizations")
-      .select("name")
-      .eq("id", adminContext.orgId)
-      .single();
+    const { data: org } = await withAdmin("dashboard_layout_context_org", async (admin) =>
+      await admin
+        .from("organizations")
+        .select("name")
+        .eq("id", adminContext.orgId)
+        .single()
+    );
     clientOrgName = org?.name || null;
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdmin } from "@/lib/supabase-admin";
+import { withAdmin } from "@/lib/supabase-admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { hasTemplates, type WhatsAppConnection } from "@/lib/whatsapp/provider";
 import { buildTemplateComponents, type ParamsSchema } from "@/lib/whatsapp/template-parser";
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = getAdmin();
+  return withAdmin("cron_process_campaign_sends", async (admin) => {
   const summary = { processed: 0, sent: 0, failed: 0, campaignsCompleted: 0 };
 
   const { data: queued } = await admin
@@ -249,4 +249,5 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, ...summary, timestamp: new Date().toISOString() });
+  });
 }

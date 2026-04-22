@@ -2,7 +2,7 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditLog } from "@/lib/audit";
-import { getAdmin } from "@/lib/supabase-admin";
+import { withAdmin, type AdminClient } from "@/lib/supabase-admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { hasTemplates, type RemoteTemplate } from "@/lib/whatsapp/provider";
 import { parseTemplateParams, type MetaComponent, type ParamsSchema } from "@/lib/whatsapp/template-parser";
@@ -115,38 +115,39 @@ export async function syncAllMetaTemplatesForCron(): Promise<{
   synced: number;
   errors: number;
 }> {
-  const admin = getAdmin();
-  const summary = { checked: 0, synced: 0, errors: 0 };
+  return withAdmin("cron_sync_meta_templates", async (admin) => {
+    const summary = { checked: 0, synced: 0, errors: 0 };
 
-  const { data: conns } = await admin
-    .from("whatsapp_connections")
-    .select("id, organization_id, provider, phone_number_id, waba_id, access_token, webhook_verify_token")
-    .eq("provider", "meta_cloud")
-    .eq("status", "connected");
+    const { data: conns } = await admin
+      .from("whatsapp_connections")
+      .select("id, organization_id, provider, phone_number_id, waba_id, access_token, webhook_verify_token")
+      .eq("provider", "meta_cloud")
+      .eq("status", "connected");
 
-  for (const conn of conns ?? []) {
-    summary.checked++;
-    try {
-      const provider = createProvider(conn);
-      if (!hasTemplates(provider)) continue;
-      const remote = await provider.listRemoteTemplates();
-      summary.synced += await upsertTemplates(admin, conn.organization_id, conn.id, remote);
-    } catch (err) {
-      summary.errors++;
-      console.error(
-        `[templates cron] org=${conn.organization_id} sync failed:`,
-        err instanceof Error ? err.message : String(err),
-      );
+    for (const conn of conns ?? []) {
+      summary.checked++;
+      try {
+        const provider = createProvider(conn);
+        if (!hasTemplates(provider)) continue;
+        const remote = await provider.listRemoteTemplates();
+        summary.synced += await upsertTemplates(admin, conn.organization_id, conn.id, remote);
+      } catch (err) {
+        summary.errors++;
+        console.error(
+          `[templates cron] org=${conn.organization_id} sync failed:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
-  }
 
-  return summary;
+    return summary;
+  });
 }
 
 // ============ internals ============
 
 async function upsertTemplates(
-  admin: ReturnType<typeof getAdmin>,
+  admin: AdminClient,
   orgId: string,
   connectionId: string,
   remote: RemoteTemplate[],
