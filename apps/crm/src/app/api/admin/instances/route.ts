@@ -3,6 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 
 const UAZAPI_BASE = process.env.UAZAPI_BASE_URL || "https://persia.uazapi.com";
 const ADMIN_TOKEN = process.env.UAZAPI_ADMIN_TOKEN || "";
+const LEGACY_ROUTE_ENABLED = process.env.ENABLE_LEGACY_UAZAPI_ADMIN_ROUTES === "true";
+
+function legacyRouteDisabled() {
+  console.warn(
+    "[UAZAPI Admin Instances] Legacy global admin route blocked. " +
+      "Set ENABLE_LEGACY_UAZAPI_ADMIN_ROUTES=true only for temporary rollback."
+  );
+  return NextResponse.json({ error: "Endpoint disabled" }, { status: 404 });
+}
 
 async function requireAdmin(request?: NextRequest) {
   const supabase = await createClient();
@@ -23,6 +32,8 @@ async function requireAdmin(request?: NextRequest) {
 
 // GET - List all instances
 export async function GET() {
+  if (!LEGACY_ROUTE_ENABLED) return legacyRouteDisabled();
+
   try {
     await requireAdmin();
 
@@ -39,6 +50,8 @@ export async function GET() {
 
 // POST - Create instance + connect (returns QR code)
 export async function POST(request: NextRequest) {
+  if (!LEGACY_ROUTE_ENABLED) return legacyRouteDisabled();
+
   try {
     await requireAdmin();
     const { name, action, token: instanceToken } = await request.json();
