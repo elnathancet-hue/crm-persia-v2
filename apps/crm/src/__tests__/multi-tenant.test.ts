@@ -363,50 +363,44 @@ describe("tags — INSERT carries org, UPDATE/DELETE scope by org", () => {
 // ============================================================
 // PIPELINE STAGES — documents a real known bug
 // ============================================================
-describe("pipeline_stages — known isolation gap in createStage", () => {
-  // Current behavior: createStage writes organization_id = caller's org onto
-  // pipeline_stages, but it never verifies that the supplied pipelineId
-  // actually belongs to that org. An admin on ORG_A with the UUID of a
-  // pipeline from ORG_B can produce a stage row with
-  // organization_id=ORG_A AND pipeline_id=<foreign>, creating inconsistent
-  // data and polluting the foreign pipeline's stage view (ignored by RLS
-  // reads, but integrity is broken).
-  //
-  // When the fix lands (pre-validate pipeline ownership), change `.fails`
-  // to a plain `it` below.
-  it.fails(
-    "[BUG] createStage SHOULD reject a pipelineId from another org — currently it writes it anyway",
-    async () => {
-      const supabase = createSupabaseMock();
-      stubAuth(supabase, ORG_A, "admin");
-      // If createStage were fixed, it would first SELECT the pipeline to
-      // check organization_id; that select would return null (foreign
-      // pipeline) and the action would throw before any INSERT.
-      supabase.queue("pipelines", { data: null, error: null });
-      supabase.queue("pipeline_stages", { data: null, error: null });
-
-      await expect(
-        createStage("pipe-foreign", "New Stage", 1),
-      ).rejects.toThrow(/pipeline/i);
-
-      expect(supabase.inserts.pipeline_stages).toBeUndefined();
-    },
-  );
-
-  it("[CURRENT] createStage DOES stamp organization_id on the inserted stage (insufficient alone)", async () => {
+describe("pipeline_stages — createStage validates pipeline ownership", () => {
+  it("createStage rejects a pipelineId from another org (pipeline lookup is null)", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase, ORG_A, "admin");
+    // Foreign pipeline: the scoped SELECT returns null
+    supabase.queue("pipelines", { data: null, error: null });
+
+    await expect(
+      createStage("pipe-foreign", "New Stage", 1),
+    ).rejects.toThrow(/pipeline/i);
+
+    // Must never reach the INSERT
+    expect(supabase.inserts.pipeline_stages).toBeUndefined();
+  });
+
+  it("createStage stamps organization_id on the inserted stage when pipeline is valid", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase, ORG_A, "admin");
+    // Pipeline belongs to caller's org
+    supabase.queue("pipelines", { data: { id: "pipe-own" }, error: null });
     supabase.queue("pipeline_stages", { data: { id: "s1" }, error: null });
 
-    await createStage("pipe-any", "Won", 99);
+    await createStage("pipe-own", "Won", 99);
 
     const inserted = supabase.inserts.pipeline_stages?.[0] as Record<
       string,
       unknown
     >;
-    // Stamps org — prevents cross-org READS via RLS — but does NOT validate
-    // the pipeline_id, which is the open gap.
     expect(inserted.organization_id).toBe(ORG_A);
-    expect(inserted.pipeline_id).toBe("pipe-any");
+    expect(inserted.pipeline_id).toBe("pipe-own");
+
+    // Both the pipeline lookup and the insert path must be scoped
+    const pipelineEqs = supabase.filters.pipelines?.eq ?? [];
+    expect(pipelineEqs).toEqual(
+      expect.arrayContaining([
+        ["id", "pipe-own"],
+        ["organization_id", ORG_A],
+      ]),
+    );
   });
 });

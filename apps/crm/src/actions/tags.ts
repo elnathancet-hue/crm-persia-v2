@@ -35,7 +35,8 @@ export async function getTagsWithCount(orgId?: string) {
   const { data: leadTags, error: ltError } = await ctx.supabase
     .from("lead_tags")
     .select("tag_id")
-    .in("tag_id", tagIds);
+    .in("tag_id", tagIds)
+    .eq("organization_id", resolvedOrgId);
 
   if (ltError) throw new Error(ltError.message);
 

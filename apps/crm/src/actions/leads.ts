@@ -173,7 +173,7 @@ export async function getLead(id: string) {
     throw new Error(error.message);
   }
 
-  // Fetch custom field values separately
+  // Fetch custom field values separately — org_id filter is defense in depth
   const { data: customFieldValues } = await supabase
     .from("lead_custom_field_values")
     .select(
@@ -188,13 +188,15 @@ export async function getLead(id: string) {
       )
     `
     )
-    .eq("lead_id", id);
+    .eq("lead_id", id)
+    .eq("organization_id", orgId);
 
-  // Fetch activities
+  // Fetch activities — org_id filter is defense in depth
   const { data: activities } = await supabase
     .from("lead_activities")
     .select("*")
     .eq("lead_id", id)
+    .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
 
   return {
