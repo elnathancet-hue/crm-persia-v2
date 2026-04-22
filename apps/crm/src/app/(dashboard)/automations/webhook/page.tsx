@@ -12,7 +12,9 @@ export default async function WebhookPage() {
     .select("organization_id, organizations(settings)")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (!member) redirect("/login");
 

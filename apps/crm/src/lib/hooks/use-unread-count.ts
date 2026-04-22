@@ -22,7 +22,9 @@ export function useUnreadCount() {
         .select("organization_id")
         .eq("user_id", user.id)
         .eq("is_active", true)
-        .single();
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
       if (member) setOrgId(member.organization_id);
     })();
   }, []);
