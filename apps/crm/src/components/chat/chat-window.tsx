@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
-import { getMessages, resendMessage, type Message } from "@/actions/messages";
+import { getMessages, resendMessage, resolveMessageMediaUrl, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -26,13 +26,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import {
   AlertCircle,
   ArrowLeft,
@@ -97,6 +90,11 @@ function getInitials(name: string | null): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function shouldResolveMediaUrl(mediaUrl: string | null): boolean {
+  if (!mediaUrl) return false;
+  return mediaUrl.startsWith("chat-media:") || mediaUrl.includes("/storage/v1/object/public/chat-media/");
 }
 
 // ---- Schedule Message Dialog ----
@@ -383,6 +381,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     }
   }, []);
 
+  const withResolvedMediaUrl = useCallback(async (message: Message): Promise<Message> => {
+    if (!shouldResolveMediaUrl(message.media_url)) return message;
+    const result = await resolveMessageMediaUrl(message.id).catch(() => null);
+    return result?.url ? { ...message, media_url: result.url } : message;
+  }, []);
+
   // Load conversation + messages when selected conversation changes
   useEffect(() => {
     if (!conversationId) {
@@ -439,9 +443,11 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
+          withResolvedMediaUrl(newMsg).then((resolvedMsg) => {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === resolvedMsg.id)) return prev;
+              return [...prev, resolvedMsg];
+            });
           });
           shouldAutoScroll.current = true;
 
@@ -462,7 +468,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         },
         (payload) => {
           const updated = payload.new as Message;
-          setMessages((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+          withResolvedMediaUrl(updated).then((resolvedMsg) => {
+            setMessages((prev) => prev.map((m) => (m.id === resolvedMsg.id ? resolvedMsg : m)));
+          });
         }
       )
       .subscribe((status) => {
@@ -474,7 +482,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, conversation, playNotification, desktopNotify]);
+  }, [conversationId, conversation, playNotification, desktopNotify, withResolvedMediaUrl]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {

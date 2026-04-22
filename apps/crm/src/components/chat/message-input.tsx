@@ -15,7 +15,6 @@ import {
   Paperclip,
   X,
   FileText,
-  ImageIcon,
   Loader2,
   Sparkles,
   Smile,

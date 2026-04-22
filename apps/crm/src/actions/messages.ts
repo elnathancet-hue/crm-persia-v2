@@ -1,6 +1,16 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
+import {
+  CHAT_MEDIA_BUCKET,
+  createChatMediaPath,
+  ensureChatMediaBucket,
+  resolveChatMediaUrl,
+  resolveProviderChatMediaUrl,
+  toChatMediaRef,
+  withSignedChatMediaUrls,
+} from "@/lib/chat-media";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 
 export type Message = {
@@ -48,8 +58,28 @@ export async function getMessages(
 
   // Return in chronological order
   const sorted = (data || []).reverse();
+  const admin = createAdminClient();
+  const signedMessages = await withSignedChatMediaUrls(admin, sorted as Message[]);
 
-  return { data: sorted as Message[], error: null };
+  return { data: signedMessages, error: null };
+}
+
+export async function resolveMessageMediaUrl(
+  messageId: string
+): Promise<{ url: string | null; error?: string }> {
+  const { orgId } = await requireRole("agent");
+  const admin = createAdminClient();
+  const { data: message, error } = await admin
+    .from("messages")
+    .select("id, media_url")
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (error) return { url: null, error: error.message };
+  if (!message?.media_url) return { url: null };
+
+  return { url: await resolveChatMediaUrl(admin, message.media_url) };
 }
 
 export async function sendMessage(
@@ -214,8 +244,9 @@ export async function sendMessageViaWhatsApp(
 
 /**
  * Envia midia (imagem, audio, video, documento) via WhatsApp.
- * 1. Salva mensagem no DB com media_url (base64)
- * 2. Envia via UAZAPI /send/media com base64
+ * 1. Salva a midia no bucket privado chat-media
+ * 2. Salva mensagem no DB com ref interna (chat-media:path)
+ * 3. Envia via provider usando signed URL temporaria
  * 3. Retorna a mensagem salva
  */
 export async function sendMediaViaWhatsApp(
@@ -254,6 +285,27 @@ export async function sendMediaViaWhatsApp(
 
   const lead = (conversation as Record<string, unknown>).leads as Record<string, unknown> | null;
   const phone = lead?.phone as string | null;
+  const admin = createAdminClient();
+
+  const match = /^data:([^;]+);base64,(.+)$/.exec(file.base64);
+  if (!match) return { error: "Formato de midia invalido" };
+
+  const mimeType = match[1];
+  const content = match[2];
+  const buffer = Buffer.from(content, "base64");
+  if (buffer.byteLength > 16 * 1024 * 1024) {
+    return { error: "Arquivo maior que 16MB" };
+  }
+
+  await ensureChatMediaBucket(admin);
+  const mediaPath = createChatMediaPath({ orgId, conversationId, fileName: file.fileName });
+  const { error: uploadError } = await admin.storage
+    .from(CHAT_MEDIA_BUCKET)
+    .upload(mediaPath, buffer, { contentType: mimeType, upsert: false });
+
+  if (uploadError) return { error: uploadError.message };
+
+  const mediaRef = toChatMediaRef(mediaPath);
 
   // 3. Save message to DB with status='sending'
   const now = new Date().toISOString();
@@ -268,13 +320,14 @@ export async function sendMediaViaWhatsApp(
       sender_user_id: userId,
       content: file.caption || null,
       type: file.type,
-      media_url: file.base64,
+      media_url: mediaRef,
       status: "sending",
     })
     .select()
     .single();
 
   if (msgError) {
+    await admin.storage.from(CHAT_MEDIA_BUCKET).remove([mediaPath]).catch(() => {});
     console.error("Error saving media message:", msgError);
     return { error: msgError.message };
   }
@@ -296,31 +349,36 @@ export async function sendMediaViaWhatsApp(
 
     if (!connection) {
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
-      return { data: { ...(message as Message), status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
+      const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+      return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
     }
 
     try {
       const provider = createProvider(connection);
+      const providerMediaUrl = await resolveProviderChatMediaUrl(admin, mediaRef);
       const result = await provider.sendMedia({
         phone,
         type: file.type,
-        media: file.base64,
+        media: providerMediaUrl,
         caption: file.caption,
         fileName: file.type === "document" ? file.fileName : undefined,
       });
       const update: Record<string, unknown> = { status: "sent" };
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
       await supabase.from("messages").update(update as never).eq("id", message.id);
-      return { data: { ...(message as Message), status: "sent", whatsapp_msg_id: result.messageId ?? null } };
+      const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+      return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Falha ao enviar midia ao WhatsApp";
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
-      return { data: { ...(message as Message), status: "failed" }, error: reason };
+      const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+      return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: reason };
     }
   }
 
   await supabase.from("messages").update({ status: "sent" }).eq("id", message.id);
-  return { data: { ...(message as Message), status: "sent" } };
+  const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+  return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent" } };
 }
 
 /**
@@ -362,7 +420,9 @@ export async function resendMessage(
 
   if (!connection) {
     const { data: updated } = await supabase.from("messages").update({ status: "failed" }).eq("id", messageId).select().single();
-    return { data: updated as Message, error: "Nenhuma conexao WhatsApp ativa" };
+    const admin = createAdminClient();
+    const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    return { data: signed[0], error: "Nenhuma conexao WhatsApp ativa" };
   }
 
   try {
@@ -372,10 +432,12 @@ export async function resendMessage(
       result = await provider.sendText({ phone, message: message.content || "" });
     } else if (message.type && ["image", "audio", "video", "document"].includes(message.type)) {
       if (!message.media_url) throw new Error("Media ausente para reenvio");
+      const admin = createAdminClient();
+      const mediaUrl = await resolveProviderChatMediaUrl(admin, message.media_url);
       result = await provider.sendMedia({
         phone,
         type: message.type as "image" | "audio" | "video" | "document",
-        media: message.media_url,
+        media: mediaUrl,
         caption: message.content || undefined,
       });
     } else {
@@ -385,10 +447,14 @@ export async function resendMessage(
     const update: Record<string, unknown> = { status: "sent" };
     if (result.messageId) update.whatsapp_msg_id = result.messageId;
     const { data: updated } = await supabase.from("messages").update(update as never).eq("id", messageId).select().single();
-    return { data: updated as Message };
+    const admin = createAdminClient();
+    const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    return { data: signed[0] };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Falha ao reenviar";
     const { data: updated } = await supabase.from("messages").update({ status: "failed" }).eq("id", messageId).select().single();
-    return { data: updated as Message, error: reason };
+    const admin = createAdminClient();
+    const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    return { data: signed[0], error: reason };
   }
 }

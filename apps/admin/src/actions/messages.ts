@@ -2,6 +2,15 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
+import {
+  CHAT_MEDIA_BUCKET,
+  createChatMediaPath,
+  ensureChatMediaBucket,
+  resolveChatMediaUrl,
+  resolveProviderChatMediaUrl,
+  toChatMediaRef,
+  withSignedChatMediaUrls,
+} from "@/lib/chat-media";
 import { createProvider } from "@/lib/whatsapp/providers";
 
 export type Message = {
@@ -20,8 +29,6 @@ export type Message = {
   metadata: unknown;
   created_at: string;
 };
-
-const CHAT_MEDIA_BUCKET = "chat-media";
 
 /**
  * Lightweight WhatsApp connection status check (DB-only, does not poll UAZAPI).
@@ -86,7 +93,8 @@ export async function resendMessage(
       .eq("id", messageId)
       .select()
       .single();
-    return { data: updated as Message, error: "Nenhuma conexao WhatsApp ativa" };
+    const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    return { data: signed[0], error: "Nenhuma conexao WhatsApp ativa" };
   }
 
   try {
@@ -96,10 +104,11 @@ export async function resendMessage(
       result = await provider.sendText({ phone, message: message.content || "" });
     } else if (message.type && ["image", "audio", "video", "document"].includes(message.type)) {
       if (!message.media_url) throw new Error("Media ausente para reenvio");
+      const mediaUrl = await resolveProviderChatMediaUrl(admin, message.media_url);
       result = await provider.sendMedia({
         phone,
         type: message.type as "image" | "audio" | "video" | "document",
-        media: message.media_url,
+        media: mediaUrl,
         caption: message.content || undefined,
       });
     } else {
@@ -116,7 +125,8 @@ export async function resendMessage(
       .single();
 
     await auditLog({ userId, orgId, action: "resend_message", entityType: "conversation", entityId: message.conversation_id, metadata: { messageId } });
-    return { data: updated as Message };
+    const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    return { data: signed[0] };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Falha ao reenviar";
     await auditFailure({
@@ -134,7 +144,8 @@ export async function resendMessage(
       .eq("id", messageId)
       .select()
       .single();
-    return { data: updated as Message, error: reason };
+    const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    return { data: signed[0], error: reason };
   }
 }
 
@@ -158,11 +169,12 @@ export async function getMessages(
   const { data, error } = await query;
   if (error) return { data: null, error: error.message };
 
-  return { data: (data || []).reverse() as Message[], error: null };
+  const signedMessages = await withSignedChatMediaUrls(admin, (data || []).reverse() as Message[]);
+  return { data: signedMessages, error: null };
 }
 
 /**
- * Upload base64 media to Supabase Storage and return a public URL.
+ * Upload base64 media to Supabase Storage and return an internal media ref.
  * Used before sending via WhatsApp to avoid storing base64 in the DB row.
  */
 export async function uploadChatMedia(
@@ -192,14 +204,8 @@ export async function uploadChatMedia(
     return { error: "Arquivo maior que 16MB" };
   }
 
-  // Ensure bucket exists (idempotent)
-  const { data: buckets } = await admin.storage.listBuckets();
-  if (!buckets?.some((b) => b.name === CHAT_MEDIA_BUCKET)) {
-    await admin.storage.createBucket(CHAT_MEDIA_BUCKET, { public: true });
-  }
-
-  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-60);
-  const path = `${orgId}/${conversationId}/${Date.now()}-${safeName}`;
+  await ensureChatMediaBucket(admin);
+  const path = createChatMediaPath({ orgId, conversationId, fileName });
 
   const { error: uploadError } = await admin.storage
     .from(CHAT_MEDIA_BUCKET)
@@ -207,8 +213,24 @@ export async function uploadChatMedia(
 
   if (uploadError) return { error: uploadError.message };
 
-  const { data } = admin.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(path);
-  return { url: data.publicUrl };
+  return { url: toChatMediaRef(path) };
+}
+
+export async function resolveMessageMediaUrl(
+  messageId: string
+): Promise<{ url: string | null; error?: string }> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { data: message, error } = await admin
+    .from("messages")
+    .select("id, media_url")
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (error) return { url: null, error: error.message };
+  if (!message?.media_url) return { url: null };
+
+  return { url: await resolveChatMediaUrl(admin, message.media_url) };
 }
 
 /**
@@ -303,7 +325,7 @@ export async function sendMessageViaWhatsApp(
 
 /**
  * Send media message via WhatsApp.
- * `mediaUrl` must be a public URL (use uploadChatMedia first).
+ * `mediaUrl` may be a legacy public URL or an internal chat-media ref.
  */
 export async function sendMediaViaWhatsApp(
   conversationId: string,
@@ -364,15 +386,17 @@ export async function sendMediaViaWhatsApp(
 
     if (!connection) {
       await admin.from("messages").update({ status: "failed" }).eq("id", message.id);
-      return { data: { ...(message as Message), status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
+      const signedMediaUrl = await resolveChatMediaUrl(admin, file.mediaUrl);
+      return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
     }
 
     try {
       const provider = createProvider(connection);
+      const providerMediaUrl = await resolveProviderChatMediaUrl(admin, file.mediaUrl);
       const result = await provider.sendMedia({
         phone,
         type: file.type,
-        media: file.mediaUrl,
+        media: providerMediaUrl,
         caption: file.caption,
         fileName: file.type === "document" ? file.fileName : undefined,
       });
@@ -380,7 +404,8 @@ export async function sendMediaViaWhatsApp(
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
       await admin.from("messages").update(update).eq("id", message.id);
       await auditLog({ userId, orgId, action: "send_media", entityType: "conversation", entityId: conversationId, metadata: { type: file.type } });
-      return { data: { ...(message as Message), status: "sent", whatsapp_msg_id: result.messageId ?? null } };
+      const signedMediaUrl = await resolveChatMediaUrl(admin, file.mediaUrl);
+      return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Falha ao enviar ao WhatsApp";
       await auditFailure({
@@ -393,11 +418,13 @@ export async function sendMediaViaWhatsApp(
         error: err,
       });
       await admin.from("messages").update({ status: "failed" }).eq("id", message.id);
-      return { data: { ...(message as Message), status: "failed" }, error: reason };
+      const signedMediaUrl = await resolveChatMediaUrl(admin, file.mediaUrl);
+      return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: reason };
     }
   }
 
   await admin.from("messages").update({ status: "sent" }).eq("id", message.id);
   await auditLog({ userId, orgId, action: "send_media", entityType: "conversation", entityId: conversationId, metadata: { type: file.type } });
-  return { data: { ...(message as Message), status: "sent" } };
+  const signedMediaUrl = await resolveChatMediaUrl(admin, file.mediaUrl);
+  return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent" } };
 }

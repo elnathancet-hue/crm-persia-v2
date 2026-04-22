@@ -80,3 +80,14 @@ export {
   parseTemplateParams,
   buildTemplateComponents,
 } from "./template-parser";
+
+export {
+  CHAT_MEDIA_BUCKET,
+  CHAT_MEDIA_PROVIDER_URL_TTL_SECONDS,
+  CHAT_MEDIA_REF_PREFIX,
+  CHAT_MEDIA_SIGNED_URL_TTL_SECONDS,
+  getChatMediaPath,
+  isExternalMediaUrl,
+  needsChatMediaSigning,
+  toChatMediaRef,
+} from "./chat-media";

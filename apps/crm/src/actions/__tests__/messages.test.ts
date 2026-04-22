@@ -1,11 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSupabaseMock, type MockSupabase } from "@/test/helpers/supabase-mock";
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth", () => ({
   requireRole: vi.fn(),
 }));
 vi.mock("@/lib/whatsapp/providers", () => ({
   createProvider: vi.fn(),
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(() => ({
+    storage: {
+      from: vi.fn(() => ({
+        createSignedUrl: vi.fn(),
+        remove: vi.fn(),
+        upload: vi.fn(),
+      })),
+      listBuckets: vi.fn(),
+      createBucket: vi.fn(),
+    },
+  })),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 

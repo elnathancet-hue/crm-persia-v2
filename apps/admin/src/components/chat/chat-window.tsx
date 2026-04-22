@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { getRealtimeClient } from "@/lib/supabase";
 import { getConversation, closeConversation, assignConversation, markConversationAsRead } from "@/actions/conversations";
-import { getMessages, sendMessageViaWhatsApp, sendMediaViaWhatsApp, resendMessage, getWhatsAppConnectionStatus, type Message } from "@/actions/messages";
+import { getMessages, sendMessageViaWhatsApp, sendMediaViaWhatsApp, resendMessage, getWhatsAppConnectionStatus, resolveMessageMediaUrl, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { ArrowLeft, Bot, Loader2, MoreHorizontal, X, FileText, Video, Mic, Download, Check, AlertCircle, RotateCw } from "lucide-react";
 import { useClientStore } from "@/lib/stores/client-store";
@@ -73,6 +73,11 @@ type ConversationDetail = {
 
 const AUTO_SCROLL_THRESHOLD_PX = 120;
 
+function shouldResolveMediaUrl(mediaUrl: string | null): boolean {
+  if (!mediaUrl) return false;
+  return mediaUrl.startsWith("chat-media:") || mediaUrl.includes("/storage/v1/object/public/chat-media/");
+}
+
 export function ChatWindow({ conversationId, onBack }: Props) {
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -97,6 +102,12 @@ export function ChatWindow({ conversationId, onBack }: Props) {
     onBack();
   }
 
+  const withResolvedMediaUrl = useCallback(async (message: Message): Promise<Message> => {
+    if (!shouldResolveMediaUrl(message.media_url)) return message;
+    const result = await resolveMessageMediaUrl(message.id).catch(() => null);
+    return result?.url ? { ...message, media_url: result.url } : message;
+  }, []);
+
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -114,14 +125,14 @@ export function ChatWindow({ conversationId, onBack }: Props) {
     });
 
     markConversationAsRead(conversationId).catch(() => {});
-  }, [conversationId]);
+  }, [conversationId, withResolvedMediaUrl]);
 
   // Check WhatsApp connection status (DB-only) once per conversation open
   useEffect(() => {
     getWhatsAppConnectionStatus()
       .then((s) => { if (isMountedRef.current) setWaConnected(s.connected); })
       .catch(() => { if (isMountedRef.current) setWaConnected(false); });
-  }, [conversationId]);
+  }, [conversationId, withResolvedMediaUrl]);
 
   // Smart auto-scroll: only if user is near the bottom (reading latest)
   useEffect(() => {
@@ -151,9 +162,12 @@ export function ChatWindow({ conversationId, onBack }: Props) {
       }, (payload) => {
         if (!isMountedRef.current) return;
         const newMsg = payload.new as Message;
-        setMessages(prev => {
-          if (prev.some(m => m.id === newMsg.id)) return prev;
-          return [...prev, newMsg];
+        withResolvedMediaUrl(newMsg).then((resolvedMsg) => {
+          if (!isMountedRef.current) return;
+          setMessages(prev => {
+            if (prev.some(m => m.id === resolvedMsg.id)) return prev;
+            return [...prev, resolvedMsg];
+          });
         });
         markConversationAsRead(conversationId).catch(() => {});
       })
@@ -165,7 +179,10 @@ export function ChatWindow({ conversationId, onBack }: Props) {
       }, (payload) => {
         if (!isMountedRef.current) return;
         const updated = payload.new as Message;
-        setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+        withResolvedMediaUrl(updated).then((resolvedMsg) => {
+          if (!isMountedRef.current) return;
+          setMessages(prev => prev.map(m => m.id === resolvedMsg.id ? resolvedMsg : m));
+        });
       })
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
@@ -176,7 +193,7 @@ export function ChatWindow({ conversationId, onBack }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId]);
+  }, [conversationId, withResolvedMediaUrl]);
 
   async function handleSend(content: string) {
     if (!content.trim()) return;
