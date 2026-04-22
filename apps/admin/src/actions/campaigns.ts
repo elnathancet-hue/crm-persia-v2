@@ -2,6 +2,7 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 import type { TemplateVariableValues } from "@/lib/whatsapp/template-parser";
 
@@ -133,6 +134,21 @@ export async function deleteCampaign(campaignId: string) {
 
 export async function executeCampaign(campaignId: string): Promise<{ sent: number; queued?: number; error?: string }> {
   const { admin, userId, orgId } = await requireSuperadminForOrg();
+
+  try {
+    await assertRateLimit({ admin, userId, orgId, action: "execute_campaign" });
+  } catch (error) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "execute_campaign",
+      entityType: "campaign",
+      entityId: campaignId,
+      metadata: { reason: "rate_limit" },
+      error,
+    });
+    return { sent: 0, error: error instanceof Error ? error.message : "Muitas tentativas. Tente novamente em instantes." };
+  }
 
   const { data: campaign } = await admin.from("campaigns").select("*").eq("id", campaignId).eq("organization_id", orgId).single();
   if (!campaign) return { sent: 0, error: "Campanha nao encontrada nesta organizacao" };

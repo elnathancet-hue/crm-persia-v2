@@ -2,6 +2,7 @@
 
 import { requireSuperadminForOrg, requireSuperadminWithUser } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { revalidatePath } from "next/cache";
 
@@ -312,6 +313,20 @@ export async function getWhatsAppStatus() {
 
 export async function addSuperadmin(email: string) {
   const { admin, userId } = await requireSuperadminWithUser();
+
+  try {
+    await assertRateLimit({ admin, userId, action: "add_superadmin" });
+  } catch (error) {
+    await auditFailure({
+      userId,
+      orgId: null,
+      action: "add_superadmin",
+      entityType: "superadmin",
+      metadata: { email, reason: "rate_limit" },
+      error,
+    });
+    return { error: error instanceof Error ? error.message : "Muitas tentativas. Tente novamente em instantes." };
+  }
 
   const { data: users } = await admin.auth.admin.listUsers();
   const user = users?.users?.find((u) => u.email === email);

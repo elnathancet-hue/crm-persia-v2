@@ -2,7 +2,8 @@
 
 import { requireSuperadmin, requireSuperadminWithUser } from "@/lib/auth";
 import { setAdminContext, clearAdminContext, readAdminContext } from "@/lib/admin-context";
-import { auditLog } from "@/lib/audit";
+import { auditFailure, auditLog } from "@/lib/audit";
+import { assertRateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 
 // ============ ADMIN CONTEXT ============
@@ -14,7 +15,7 @@ import { revalidatePath } from "next/cache";
  */
 export async function switchAdminContext(orgId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { admin, userId } = await requireSuperadminWithUser(orgId);
+    const { userId } = await requireSuperadminWithUser(orgId);
     // orgId validated by requireSuperadminWithUser(orgId) — confirms org exists
 
     await setAdminContext(orgId, userId);
@@ -127,11 +128,14 @@ export async function getOrganizationDetail(orgId: string) {
     for (const u of authData.users) emailMap.set(u.id, u.email || "");
   }
 
-  const enrichedMembers = (members || []).map((m) => ({
-    ...m,
-    email: emailMap.get(m.user_id) || "",
-    name: (m as any).profiles?.full_name || "Sem nome",
-  }));
+  const enrichedMembers = (members || []).map((m) => {
+    const profile = (m as Record<string, unknown> & { profiles?: { full_name?: string | null } }).profiles;
+    return {
+      ...m,
+      email: emailMap.get(m.user_id) || "",
+      name: profile?.full_name || "Sem nome",
+    };
+  });
 
   const [leads, conversations, connections] = await Promise.all([
     admin.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
@@ -184,6 +188,21 @@ export async function updateOrganization(orgId: string, data: Record<string, unk
 
 export async function deleteOrganization(orgId: string) {
   const { admin, userId } = await requireSuperadminWithUser(orgId);
+  try {
+    await assertRateLimit({ admin, userId, orgId, action: "delete_organization" });
+  } catch (error) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "delete_organization",
+      entityType: "organization",
+      entityId: orgId,
+      metadata: { reason: "rate_limit" },
+      error,
+    });
+    throw error;
+  }
+
   const { error } = await admin.from("organizations").delete().eq("id", orgId);
   if (error) throw new Error(error.message);
   await auditLog({ userId, orgId, action: "delete_organization", entityType: "organization", entityId: orgId });
