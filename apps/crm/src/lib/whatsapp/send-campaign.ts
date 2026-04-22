@@ -116,7 +116,9 @@ export async function executeCampaign(job: CampaignJob): Promise<{
       const lead = leadByPhone.get(phone);
       return {
         campaign_id: job.campaignId,
+        organization_id: job.orgId,
         lead_id: lead?.id,
+        phone,
         status: "queued",
         sent_at: new Date().toISOString(),
       };
