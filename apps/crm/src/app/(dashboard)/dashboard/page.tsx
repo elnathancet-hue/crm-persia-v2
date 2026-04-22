@@ -12,12 +12,17 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Picks the oldest active membership when the user has >1 org.
+  // Mirrors pickActiveMembership in @/lib/auth so /dashboard, /, and the auth
+  // helpers all converge on the same active org.
   const { data: member } = await supabase
     .from("organization_members")
     .select("organization_id")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (!member) {
     return (
