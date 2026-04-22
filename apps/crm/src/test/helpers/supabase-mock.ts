@@ -37,6 +37,12 @@ export interface MockSupabase {
   updates: Record<string, unknown[]>;
   deletes: Record<string, unknown>;
   selects: Record<string, unknown[]>;
+  /**
+   * Filters captured per table, grouped by chain operation.
+   * Useful to assert multi-tenant scoping: `filters.organization_members.eq`
+   * contains each `[col, val]` pair passed to `.eq()` on that table.
+   */
+  filters: Record<string, { eq: Array<[string, unknown]>; in: Array<[string, unknown[]]> }>;
   /** Reset state between tests. */
   reset: () => void;
 }
@@ -49,6 +55,7 @@ export function createSupabaseMock(opts?: {
   const updates: Record<string, unknown[]> = {};
   const deletes: Record<string, unknown> = {};
   const selects: Record<string, unknown[]> = {};
+  const filters: Record<string, { eq: Array<[string, unknown]>; in: Array<[string, unknown[]]> }> = {};
 
   const nextResult = (table: string): QueryResult => {
     const q = queues.get(table);
@@ -89,6 +96,14 @@ export function createSupabaseMock(opts?: {
         if (m === "select") {
           selects[table] ??= [];
           selects[table].push(args);
+        }
+        if (m === "eq" && args.length >= 2) {
+          filters[table] ??= { eq: [], in: [] };
+          filters[table].eq.push([args[0] as string, args[1]]);
+        }
+        if (m === "in" && args.length >= 2) {
+          filters[table] ??= { eq: [], in: [] };
+          filters[table].in.push([args[0] as string, args[1] as unknown[]]);
         }
         return builder;
       });
@@ -147,12 +162,14 @@ export function createSupabaseMock(opts?: {
     updates,
     deletes,
     selects,
+    filters,
     reset: () => {
       queues.clear();
       for (const k of Object.keys(inserts)) delete inserts[k];
       for (const k of Object.keys(updates)) delete updates[k];
       for (const k of Object.keys(deletes)) delete deletes[k];
       for (const k of Object.keys(selects)) delete selects[k];
+      for (const k of Object.keys(filters)) delete filters[k];
     },
   };
 
