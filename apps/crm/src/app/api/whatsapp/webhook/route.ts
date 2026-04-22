@@ -6,6 +6,7 @@ import {
   extractUazapiOwnerPhone,
   extractUazapiWebhookToken,
   getUazapiConnectionMatchMethod,
+  isUazapiOwnerPhoneFallbackAllowed,
   logUazapiWebhookDiagnostics,
 } from "@/lib/whatsapp/uazapi-webhook-diagnostics";
 import { validateUazapiWebhookSignature } from "@/lib/whatsapp/uazapi-webhook-verifier";
@@ -55,6 +56,9 @@ export async function POST(request: NextRequest) {
     // 1. Match org by owner phone OR instance token.
     const ownerPhone = extractUazapiOwnerPhone(body);
     const webhookToken = extractUazapiWebhookToken(body);
+    const allowOwnerPhoneFallback = isUazapiOwnerPhoneFallbackAllowed(
+      process.env.UAZAPI_WEBHOOK_ALLOW_OWNER_PHONE_FALLBACK,
+    );
 
     const { data: connections } = await supabase
       .from("whatsapp_connections")
@@ -64,14 +68,18 @@ export async function POST(request: NextRequest) {
       .eq("status", "connected")
       .eq("provider", "uazapi");
 
+    let matchedBy: ReturnType<typeof getUazapiConnectionMatchMethod> = "none";
     const matchedConn = connections?.find((c) => {
-      const connPhone = String(c.phone_number || "").replace(/\D/g, "");
-      return (connPhone && connPhone === ownerPhone) || c.instance_token === webhookToken;
+      const method = getUazapiConnectionMatchMethod(c, {
+        ownerPhone,
+        webhookToken,
+        allowOwnerPhoneFallback,
+      });
+      if (method === "none") return false;
+      matchedBy = method;
+      return true;
     });
 
-    const matchedBy = matchedConn
-      ? getUazapiConnectionMatchMethod(matchedConn, { ownerPhone, webhookToken })
-      : "none";
     logUazapiWebhookDiagnostics({ body, headers: request.headers, matchedBy });
 
     if (!matchedConn) {

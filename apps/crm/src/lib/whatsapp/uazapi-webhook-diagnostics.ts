@@ -84,11 +84,14 @@ export function extractUazapiWebhookToken(body: unknown): string {
 
 export function getUazapiConnectionMatchMethod(
   connection: UazapiConnectionForMatch,
-  params: { ownerPhone: string; webhookToken: string },
+  params: { ownerPhone: string; webhookToken: string; allowOwnerPhoneFallback?: boolean },
 ): UazapiMatchMethod {
   if (params.webhookToken && connection.instance_token === params.webhookToken) {
     return "instance_token";
   }
+
+  const allowOwnerPhoneFallback = params.allowOwnerPhoneFallback ?? true;
+  if (!allowOwnerPhoneFallback) return "none";
 
   const connPhone = normalizeDigits(connection.phone_number);
   if (connPhone && connPhone === params.ownerPhone) {
@@ -96,6 +99,10 @@ export function getUazapiConnectionMatchMethod(
   }
 
   return "none";
+}
+
+export function isUazapiOwnerPhoneFallbackAllowed(value: string | undefined): boolean {
+  return value !== "false";
 }
 
 export function getUazapiWebhookDiagnostics(params: {

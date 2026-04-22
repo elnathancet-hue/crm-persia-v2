@@ -4,6 +4,7 @@ import {
   extractUazapiWebhookToken,
   getUazapiConnectionMatchMethod,
   getUazapiWebhookDiagnostics,
+  isUazapiOwnerPhoneFallbackAllowed,
   logUazapiWebhookDiagnostics,
 } from "@/lib/whatsapp/uazapi-webhook-diagnostics";
 
@@ -52,6 +53,35 @@ describe("uazapi webhook diagnostics", () => {
         webhookToken: "",
       }),
     ).toBe("owner_phone_legacy");
+  });
+
+  it("can disable the legacy owner-phone fallback without affecting token matches", () => {
+    const connection = {
+      instance_token: "instance-token",
+      phone_number: "+55 11 98888-0000",
+    };
+
+    expect(
+      getUazapiConnectionMatchMethod(connection, {
+        ownerPhone: "5511988880000",
+        webhookToken: "",
+        allowOwnerPhoneFallback: false,
+      }),
+    ).toBe("none");
+
+    expect(
+      getUazapiConnectionMatchMethod(connection, {
+        ownerPhone: "5511988880000",
+        webhookToken: "instance-token",
+        allowOwnerPhoneFallback: false,
+      }),
+    ).toBe("instance_token");
+  });
+
+  it("keeps the owner-phone fallback enabled unless explicitly disabled", () => {
+    expect(isUazapiOwnerPhoneFallbackAllowed(undefined)).toBe(true);
+    expect(isUazapiOwnerPhoneFallbackAllowed("true")).toBe(true);
+    expect(isUazapiOwnerPhoneFallbackAllowed("false")).toBe(false);
   });
 
   it("returns safe shape diagnostics without raw token, phone, or message text", () => {
