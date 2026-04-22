@@ -1,6 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
+import { auditFailure, auditLog } from "@/lib/audit";
 import {
   CHAT_MEDIA_BUCKET,
   createChatMediaPath,
@@ -220,6 +221,15 @@ export async function sendMessageViaWhatsApp(
 
     if (!connection) {
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
+      await auditFailure({
+        userId,
+        orgId,
+        action: "crm_send_message",
+        entityType: "message",
+        entityId: message.id,
+        metadata: { conversation_id: conversationId, channel: conversation.channel, stage: "missing_connection" },
+        error: new Error("Nenhuma conexao WhatsApp ativa"),
+      });
       return { data: { ...(message as Message), status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
     }
 
@@ -229,16 +239,41 @@ export async function sendMessageViaWhatsApp(
       const update: Record<string, unknown> = { status: "sent" };
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
       await supabase.from("messages").update(update as never).eq("id", message.id);
+      await auditLog({
+        userId,
+        orgId,
+        action: "crm_send_message",
+        entityType: "message",
+        entityId: message.id,
+        metadata: { conversation_id: conversationId, channel: conversation.channel, provider: connection.provider },
+      });
       return { data: { ...(message as Message), status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Falha ao enviar ao WhatsApp";
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
+      await auditFailure({
+        userId,
+        orgId,
+        action: "crm_send_message",
+        entityType: "message",
+        entityId: message.id,
+        metadata: { conversation_id: conversationId, channel: conversation.channel, stage: "provider_send" },
+        error: err,
+      });
       return { data: { ...(message as Message), status: "failed" }, error: reason };
     }
   }
 
   // Not a WhatsApp channel: still mark as sent
   await supabase.from("messages").update({ status: "sent" }).eq("id", message.id);
+  await auditLog({
+    userId,
+    orgId,
+    action: "crm_send_message",
+    entityType: "message",
+    entityId: message.id,
+    metadata: { conversation_id: conversationId, channel: conversation.channel },
+  });
   return { data: { ...(message as Message), status: "sent" } };
 }
 
@@ -303,7 +338,18 @@ export async function sendMediaViaWhatsApp(
     .from(CHAT_MEDIA_BUCKET)
     .upload(mediaPath, buffer, { contentType: mimeType, upsert: false });
 
-  if (uploadError) return { error: uploadError.message };
+  if (uploadError) {
+    await auditFailure({
+      userId,
+      orgId,
+      action: "crm_send_media",
+      entityType: "conversation",
+      entityId: conversationId,
+      metadata: { stage: "upload", media_type: file.type, mime_type: mimeType, bytes: buffer.byteLength },
+      error: uploadError,
+    });
+    return { error: uploadError.message };
+  }
 
   const mediaRef = toChatMediaRef(mediaPath);
 
@@ -329,6 +375,15 @@ export async function sendMediaViaWhatsApp(
   if (msgError) {
     await admin.storage.from(CHAT_MEDIA_BUCKET).remove([mediaPath]).catch(() => {});
     console.error("Error saving media message:", msgError);
+    await auditFailure({
+      userId,
+      orgId,
+      action: "crm_send_media",
+      entityType: "conversation",
+      entityId: conversationId,
+      metadata: { stage: "save_message", media_type: file.type, mime_type: mimeType, bytes: buffer.byteLength },
+      error: msgError,
+    });
     return { error: msgError.message };
   }
 
@@ -350,6 +405,15 @@ export async function sendMediaViaWhatsApp(
     if (!connection) {
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
       const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+      await auditFailure({
+        userId,
+        orgId,
+        action: "crm_send_media",
+        entityType: "message",
+        entityId: message.id,
+        metadata: { conversation_id: conversationId, media_type: file.type, stage: "missing_connection" },
+        error: new Error("Nenhuma conexao WhatsApp ativa"),
+      });
       return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
     }
 
@@ -367,17 +431,42 @@ export async function sendMediaViaWhatsApp(
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
       await supabase.from("messages").update(update as never).eq("id", message.id);
       const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+      await auditLog({
+        userId,
+        orgId,
+        action: "crm_send_media",
+        entityType: "message",
+        entityId: message.id,
+        metadata: { conversation_id: conversationId, media_type: file.type, provider: connection.provider },
+      });
       return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
       const reason = err instanceof Error ? err.message : "Falha ao enviar midia ao WhatsApp";
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
       const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+      await auditFailure({
+        userId,
+        orgId,
+        action: "crm_send_media",
+        entityType: "message",
+        entityId: message.id,
+        metadata: { conversation_id: conversationId, media_type: file.type, stage: "provider_send" },
+        error: err,
+      });
       return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: reason };
     }
   }
 
   await supabase.from("messages").update({ status: "sent" }).eq("id", message.id);
   const signedMediaUrl = await resolveChatMediaUrl(admin, mediaRef);
+  await auditLog({
+    userId,
+    orgId,
+    action: "crm_send_media",
+    entityType: "message",
+    entityId: message.id,
+    metadata: { conversation_id: conversationId, media_type: file.type, channel: conversation.channel },
+  });
   return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent" } };
 }
 
@@ -387,7 +476,7 @@ export async function sendMediaViaWhatsApp(
 export async function resendMessage(
   messageId: string
 ): Promise<{ data?: Message; error?: string }> {
-  const { supabase, orgId } = await requireRole("agent");
+  const { supabase, orgId, userId } = await requireRole("agent");
 
   const { data: message, error: fetchError } = await supabase
     .from("messages")
@@ -422,6 +511,15 @@ export async function resendMessage(
     const { data: updated } = await supabase.from("messages").update({ status: "failed" }).eq("id", messageId).select().single();
     const admin = createAdminClient();
     const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    await auditFailure({
+      userId,
+      orgId,
+      action: "crm_resend_message",
+      entityType: "message",
+      entityId: messageId,
+      metadata: { conversation_id: message.conversation_id, message_type: message.type, stage: "missing_connection" },
+      error: new Error("Nenhuma conexao WhatsApp ativa"),
+    });
     return { data: signed[0], error: "Nenhuma conexao WhatsApp ativa" };
   }
 
@@ -449,12 +547,29 @@ export async function resendMessage(
     const { data: updated } = await supabase.from("messages").update(update as never).eq("id", messageId).select().single();
     const admin = createAdminClient();
     const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    await auditLog({
+      userId,
+      orgId,
+      action: "crm_resend_message",
+      entityType: "message",
+      entityId: messageId,
+      metadata: { conversation_id: message.conversation_id, message_type: message.type, provider: connection.provider },
+    });
     return { data: signed[0] };
   } catch (err) {
     const reason = err instanceof Error ? err.message : "Falha ao reenviar";
     const { data: updated } = await supabase.from("messages").update({ status: "failed" }).eq("id", messageId).select().single();
     const admin = createAdminClient();
     const signed = await withSignedChatMediaUrls(admin, [updated as Message]);
+    await auditFailure({
+      userId,
+      orgId,
+      action: "crm_resend_message",
+      entityType: "message",
+      entityId: messageId,
+      metadata: { conversation_id: message.conversation_id, message_type: message.type, stage: "provider_send" },
+      error: err,
+    });
     return { data: signed[0], error: reason };
   }
 }

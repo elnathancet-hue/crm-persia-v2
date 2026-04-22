@@ -1,14 +1,12 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { auditFailure, auditLog } from "@/lib/audit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { configureUazapiWebhook, createProvider } from "@/lib/whatsapp/providers";
 
 function getAdminDb() {
-  return createSupabaseAdmin(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return createAdminClient();
 }
 
 /** Fetches the WhatsApp connection for the caller's org using service_role (bypasses RLS). */
@@ -77,8 +75,10 @@ export async function connectWhatsApp(): Promise<{
   qrCode?: string;
   error?: string;
 }> {
+  let auditCtx: { userId: string; orgId: string; connectionId?: string } | null = null;
   try {
-    const { orgId } = await requireRole("admin");
+    const { orgId, userId } = await requireRole("admin");
+    auditCtx = { orgId, userId };
     let ctx = await getConnectionForOrg(orgId);
 
     // If connection exists but instance is dead on UAZAPI, clean up and re-provision
@@ -106,10 +106,30 @@ export async function connectWhatsApp(): Promise<{
         body: JSON.stringify({ name: instanceName }),
       });
 
+      if (!createRes.ok) {
+        await auditFailure({
+          userId,
+          orgId,
+          action: "crm_whatsapp_connect",
+          entityType: "whatsapp_connection",
+          metadata: { stage: "create_instance", provider: "uazapi", http_status: createRes.status },
+          error: new Error("Erro ao criar instancia no servidor"),
+        });
+      }
       if (!createRes.ok) return { status: "error", error: "Erro ao criar instância no servidor" };
 
       const createData = await createRes.json();
       const instanceToken = createData.token || createData.instance?.token;
+      if (!instanceToken) {
+        await auditFailure({
+          userId,
+          orgId,
+          action: "crm_whatsapp_connect",
+          entityType: "whatsapp_connection",
+          metadata: { stage: "create_instance", provider: "uazapi" },
+          error: new Error("Token nao retornado pelo servidor"),
+        });
+      }
       if (!instanceToken) return { status: "error", error: "Token não retornado pelo servidor" };
 
       const headers = { token: instanceToken, "Content-Type": "application/json" };
@@ -121,6 +141,14 @@ export async function connectWhatsApp(): Promise<{
         url: CRM_WEBHOOK_URL,
       });
       if (!webhookRes.ok) {
+        await auditFailure({
+          userId,
+          orgId,
+          action: "crm_whatsapp_connect",
+          entityType: "whatsapp_connection",
+          metadata: { stage: "configure_webhook", provider: "uazapi", http_status: webhookRes.status },
+          error: new Error("Falha ao configurar webhook"),
+        });
         return { status: "error", error: "Falha ao configurar webhook. Instância não salva." };
       }
 
@@ -144,9 +172,20 @@ export async function connectWhatsApp(): Promise<{
       });
 
       ctx = await getConnectionForOrg(orgId);
+      if (!ctx) {
+        await auditFailure({
+          userId,
+          orgId,
+          action: "crm_whatsapp_connect",
+          entityType: "whatsapp_connection",
+          metadata: { stage: "save_connection", provider: "uazapi" },
+          error: new Error("Erro ao salvar configuracao"),
+        });
+      }
       if (!ctx) return { status: "error", error: "Erro ao salvar configuração" };
     }
 
+    auditCtx.connectionId = ctx.connection.id;
     const provider = createProvider(ctx.connection);
     const result = await provider.connect();
 
@@ -156,15 +195,51 @@ export async function connectWhatsApp(): Promise<{
         .update({ status: "connected", updated_at: new Date().toISOString() })
         .eq("id", ctx.connection.id)
         .eq("organization_id", orgId);
+      await auditLog({
+        userId,
+        orgId,
+        action: "crm_whatsapp_connect",
+        entityType: "whatsapp_connection",
+        entityId: ctx.connection.id,
+        metadata: { status: "connected", provider: ctx.connection.provider },
+      });
       return { status: "connected" };
     }
 
     if (result.status === "qr" && result.qrCode) {
+      await auditLog({
+        userId,
+        orgId,
+        action: "crm_whatsapp_connect",
+        entityType: "whatsapp_connection",
+        entityId: ctx.connection.id,
+        metadata: { status: "qr", provider: ctx.connection.provider },
+      });
       return { status: "qr", qrCode: result.qrCode };
     }
 
+    await auditFailure({
+      userId,
+      orgId,
+      action: "crm_whatsapp_connect",
+      entityType: "whatsapp_connection",
+      entityId: ctx.connection.id,
+      metadata: { stage: "provider_connect", provider: ctx.connection.provider },
+      error: new Error(result.error || "Erro desconhecido"),
+    });
     return { status: "error", error: result.error || "Erro desconhecido" };
   } catch (e: unknown) {
+    if (auditCtx) {
+      await auditFailure({
+        userId: auditCtx.userId,
+        orgId: auditCtx.orgId,
+        action: "crm_whatsapp_connect",
+        entityType: "whatsapp_connection",
+        entityId: auditCtx.connectionId,
+        metadata: { stage: "unexpected" },
+        error: e,
+      });
+    }
     return { status: "error", error: e instanceof Error ? e.message : "Erro ao conectar" };
   }
 }
@@ -184,12 +259,25 @@ export async function getQRCode(): Promise<{ qrCode: string | null; error?: stri
 }
 
 export async function disconnectWhatsApp(): Promise<{ error?: string }> {
+  let auditCtx: { userId: string; orgId: string; connectionId?: string } | null = null;
   try {
-    const { orgId } = await requireRole("admin");
+    const { orgId, userId } = await requireRole("admin");
+    auditCtx = { orgId, userId };
     const ctx = await getConnectionForOrg(orgId);
+    if (!ctx) {
+      await auditFailure({
+        userId,
+        orgId,
+        action: "crm_whatsapp_disconnect",
+        entityType: "whatsapp_connection",
+        metadata: { stage: "missing_connection" },
+        error: new Error("WhatsApp nao configurado"),
+      });
+    }
     if (!ctx) return { error: "Não configurado" };
 
     const provider = createProvider(ctx.connection);
+    auditCtx.connectionId = ctx.connection.id;
 
     try {
       await provider.logout();
@@ -205,12 +293,40 @@ export async function disconnectWhatsApp(): Promise<{ error?: string }> {
 
     if (dbError) {
       console.error("[WhatsApp] DB update failed:", dbError.message);
+      await auditFailure({
+        userId,
+        orgId,
+        action: "crm_whatsapp_disconnect",
+        entityType: "whatsapp_connection",
+        entityId: ctx.connection.id,
+        metadata: { stage: "db_update", provider: ctx.connection.provider },
+        error: dbError,
+      });
       return { error: "Erro ao atualizar status. Tente novamente." };
     }
 
+    await auditLog({
+      userId,
+      orgId,
+      action: "crm_whatsapp_disconnect",
+      entityType: "whatsapp_connection",
+      entityId: ctx.connection.id,
+      metadata: { provider: ctx.connection.provider },
+    });
     return {};
   } catch (e: unknown) {
     console.error("[WhatsApp] Disconnect error:", e instanceof Error ? e.message : String(e));
+    if (auditCtx) {
+      await auditFailure({
+        userId: auditCtx.userId,
+        orgId: auditCtx.orgId,
+        action: "crm_whatsapp_disconnect",
+        entityType: "whatsapp_connection",
+        entityId: auditCtx.connectionId,
+        metadata: { stage: "unexpected" },
+        error: e,
+      });
+    }
     return { error: "Erro ao desconectar. Tente novamente." };
   }
 }

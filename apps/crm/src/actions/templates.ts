@@ -1,6 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
+import { auditFailure, auditLog } from "@/lib/audit";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { hasTemplates } from "@/lib/whatsapp/provider";
 import {
@@ -242,6 +243,21 @@ export async function sendTemplateMessage(input: SendTemplateInput): Promise<Sen
       .update({ last_message_at: now, unread_count: 0, updated_at: now })
       .eq("id", input.conversationId);
 
+    await auditLog({
+      userId,
+      orgId,
+      action: "crm_send_template",
+      entityType: "message",
+      entityId: message?.id,
+      metadata: {
+        conversation_id: input.conversationId,
+        template_id: input.templateId,
+        template_name: t.name,
+        language: t.language,
+        send_id: sendRow?.id,
+      },
+    });
+
     return { ok: true, messageId: message?.id, wamid };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -250,6 +266,20 @@ export async function sendTemplateMessage(input: SendTemplateInput): Promise<Sen
       .from("wa_template_sends")
       .update({ status: "failed", error_detail: msg })
       .eq("id", sendRow?.id);
+    await auditFailure({
+      userId,
+      orgId,
+      action: "crm_send_template",
+      entityType: "wa_template_send",
+      entityId: sendRow?.id,
+      metadata: {
+        conversation_id: input.conversationId,
+        template_id: input.templateId,
+        template_name: t.name,
+        language: t.language,
+      },
+      error: err,
+    });
     return { ok: false, error: msg };
   }
 }
