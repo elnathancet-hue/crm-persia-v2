@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getAdmin, type AdminClient } from "@/lib/supabase-admin";
+import { withAdmin, type AdminClient } from "@/lib/supabase-admin";
 import { readAdminContext } from "@/lib/admin-context";
 
 /**
@@ -45,7 +45,7 @@ export async function resolveOrgContext(
   opts: ResolveOrgOptions = {}
 ): Promise<OrgContext | null> {
   const allow = opts.allow ?? ["explicit", "cookie"];
-  const admin = getAdmin();
+  return withAdmin("resolve_org_context", async (admin) => {
 
   let orgId: string | null = null;
   let source: OrgSource | null = null;
@@ -100,7 +100,8 @@ export async function resolveOrgContext(
     return null;
   }
 
-  return { orgId, source };
+    return { orgId, source };
+  });
 }
 
 /**
@@ -113,7 +114,7 @@ export async function resolveOrgContext(
 export async function listUserOrgs(userId: string): Promise<
   Array<{ orgId: string; role: string; orgName: string }>
 > {
-  const admin = getAdmin();
+  return withAdmin("list_user_orgs", async (admin) => {
   const { data, error } = await admin
     .from("organization_members")
     .select("organization_id, role, organizations(name)")
@@ -136,6 +137,7 @@ export async function listUserOrgs(userId: string): Promise<
       role: r.role,
       orgName: r.organizations?.name ?? "",
     }));
+  });
 }
 
 /**

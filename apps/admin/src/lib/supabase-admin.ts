@@ -13,10 +13,9 @@ let adminClient: AdminClient | undefined;
 /**
  * Service-role Supabase client. Bypasses RLS — use with care.
  *
- * Prefer the auth helpers in @/lib/auth (requireSuperadmin*) when possible,
- * since those validate the caller before exposing the client.
- *
- * Direct callers (layout, login, cron routes) must self-validate the caller.
+ * Internal primitive for this module. Application code should prefer
+ * `withAdmin(reason, fn)` or the auth helpers in @/lib/auth so every
+ * service-role escalation is named and greppable.
  */
 export function getAdmin(): AdminClient {
   if (!adminClient) {

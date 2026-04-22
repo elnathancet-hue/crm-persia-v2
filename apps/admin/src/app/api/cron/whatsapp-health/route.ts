@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdmin } from "@/lib/supabase-admin";
+import { withAdmin } from "@/lib/supabase-admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { createUazapiClient } from "@/lib/whatsapp/uazapi";
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   const uazapiAdminToken = process.env.UAZAPI_ADMIN_TOKEN;
-  const admin = getAdmin();
+  return withAdmin("cron_whatsapp_health", async (admin) => {
 
   const { data: connections, error } = await admin
     .from("whatsapp_connections")
@@ -104,5 +104,6 @@ export async function GET(req: NextRequest) {
     })
   );
 
-  return NextResponse.json({ ...results, timestamp: new Date().toISOString() });
+    return NextResponse.json({ ...results, timestamp: new Date().toISOString() });
+  });
 }

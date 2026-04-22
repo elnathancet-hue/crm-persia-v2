@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
-import { getAdmin, type AdminClient } from "@/lib/supabase-admin";
+import { withAdmin, type AdminClient } from "@/lib/supabase-admin";
 import { readAdminContext } from "@/lib/admin-context";
 import { resolveOrgContext } from "@/lib/org-context";
 
@@ -39,12 +39,14 @@ async function assertSuperadmin(): Promise<SuperadminGuardResult> {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Nao autenticado");
 
-  const admin = getAdmin();
-  const { data: profile, error } = await admin
-    .from("profiles")
-    .select("is_superadmin")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { admin, profile, error } = await withAdmin("auth_assert_superadmin", async (admin) => {
+    const result = await admin
+      .from("profiles")
+      .select("is_superadmin")
+      .eq("id", user.id)
+      .maybeSingle();
+    return { admin, profile: result.data, error: result.error };
+  });
 
   if (error) {
     console.error("[Auth] Profile query error:", error.message);
