@@ -75,7 +75,10 @@ export async function autoProvisionWhatsApp(): Promise<{
         // Instance is alive — skip creation, just try to connect below
       } catch {
         // Instance is dead/unreachable — clear credentials to force re-creation
-        console.warn("[WhatsApp] Existing instance unreachable, will re-provision");
+        console.warn("[WhatsApp] existing instance unreachable, will re-provision", {
+          organization_id: orgId,
+          action: "whatsapp_provision",
+        });
         instanceUrl = null;
         instanceToken = null;
       }
@@ -123,7 +126,13 @@ export async function autoProvisionWhatsApp(): Promise<{
         headers,
         body: JSON.stringify({ chatbot_ignoreGroups: true }),
       });
-      if (!chatbotRes.ok) console.warn("[WhatsApp] Chatbot settings failed (non-critical)");
+      if (!chatbotRes.ok) {
+        console.warn("[WhatsApp] chatbot settings failed (non-critical)", {
+          organization_id: orgId,
+          action: "whatsapp_provision",
+          status: chatbotRes.status,
+        });
+      }
 
       // 3. POST /instance/updateDelaySettings — typing delay (non-critical)
       const delayRes = await fetch(`${UAZAPI_SERVER}/instance/updateDelaySettings`, {
@@ -131,7 +140,13 @@ export async function autoProvisionWhatsApp(): Promise<{
         headers,
         body: JSON.stringify({ msg_delay_min: 1, msg_delay_max: 3 }),
       });
-      if (!delayRes.ok) console.warn("[WhatsApp] Delay settings failed (non-critical)");
+      if (!delayRes.ok) {
+        console.warn("[WhatsApp] delay settings failed (non-critical)", {
+          organization_id: orgId,
+          action: "whatsapp_provision",
+          status: delayRes.status,
+        });
+      }
 
       // 4. POST /instance/presence — set available (non-critical)
       await fetch(`${UAZAPI_SERVER}/instance/presence`, {
@@ -170,7 +185,11 @@ export async function autoProvisionWhatsApp(): Promise<{
 
     return { status: "error", error: "Não foi possível gerar o QR Code" };
   } catch (e: unknown) {
-    console.error("[WhatsApp] Auto-provision error:", e instanceof Error ? e.message : String(e));
+    console.error("[WhatsApp] auto-provision error", {
+      organization_id: auditCtx?.orgId ?? null,
+      action: "whatsapp_provision",
+      error: e instanceof Error ? e.message : String(e),
+    });
     if (auditCtx) {
       await auditFailure({
         userId: auditCtx.userId,
@@ -217,11 +236,18 @@ export async function connectWhatsAppAdmin(): Promise<{
       }
 
       // connect() returned error (token invalid, instance gone) — re-provision
-      console.warn("[WhatsApp] Connect error, re-provisioning:", result.error);
+      console.warn("[WhatsApp] connect error, re-provisioning", {
+        organization_id: ctx.orgId,
+        action: "whatsapp_connect",
+        error: result.error ?? null,
+      });
       return autoProvisionWhatsApp();
     } catch {
       // Instance unreachable (network/5xx) — re-provision
-      console.warn("[WhatsApp] Connect threw, re-provisioning.");
+      console.warn("[WhatsApp] connect threw, re-provisioning", {
+        organization_id: ctx.orgId,
+        action: "whatsapp_connect",
+      });
       return autoProvisionWhatsApp();
     }
   } catch (e: unknown) {
@@ -289,7 +315,10 @@ export async function disconnectWhatsAppAdmin(): Promise<{ error?: string }> {
     try {
       await provider.logout();
     } catch {
-      console.warn("[WhatsApp Admin] Provider logout failed, marking as disconnected in database");
+      console.warn("[WhatsApp Admin] provider logout failed, marking as disconnected in database", {
+        organization_id: ctx.orgId,
+        action: "whatsapp_disconnect",
+      });
     }
 
     // Always update database regardless of provider response
@@ -303,7 +332,11 @@ export async function disconnectWhatsAppAdmin(): Promise<{ error?: string }> {
 
     return {};
   } catch (e: unknown) {
-    console.error("[WhatsApp Admin] Disconnect error:", e instanceof Error ? e.message : String(e));
+    console.error("[WhatsApp Admin] disconnect error", {
+      organization_id: auditCtx?.orgId ?? null,
+      action: "whatsapp_disconnect",
+      error: e instanceof Error ? e.message : String(e),
+    });
     if (auditCtx) {
       await auditFailure({
         userId: auditCtx.userId,
@@ -421,7 +454,13 @@ export async function connectMetaCloudWhatsApp(input: MetaConnectInput): Promise
       displayPhoneNumber: health.phone,
     };
   } catch (e: unknown) {
-    console.error("[WhatsApp Admin] Meta connect error:", e instanceof Error ? e.message : String(e));
+    console.error("[WhatsApp Admin] Meta connect error", {
+      organization_id: auditCtx?.orgId ?? null,
+      action: "whatsapp_connect_meta",
+      phone_number_id: input.phone_number_id,
+      waba_id: input.waba_id,
+      error: e instanceof Error ? e.message : String(e),
+    });
     if (auditCtx) {
       await auditFailure({
         userId: auditCtx.userId,

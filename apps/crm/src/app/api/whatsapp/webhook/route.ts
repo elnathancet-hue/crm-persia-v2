@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     if (signature.configured && signature.mode !== "off" && !signature.valid) {
       const log = signature.mode === "enforce" ? console.warn : console.info;
       log("[UAZAPI webhook] signature check failed", {
+        organization_id: null,
         mode: signature.mode,
         present: signature.present,
         headerName: signature.headerName,
@@ -80,9 +81,21 @@ export async function POST(request: NextRequest) {
       return true;
     });
 
-    logUazapiWebhookDiagnostics({ body, headers: request.headers, matchedBy });
+    logUazapiWebhookDiagnostics({
+      body,
+      headers: request.headers,
+      matchedBy,
+      organizationId: matchedConn?.organization_id ?? null,
+    });
 
     if (!matchedConn) {
+      console.warn("[UAZAPI webhook] unknown instance", {
+        organization_id: null,
+        matched_by: matchedBy,
+        has_owner_phone: Boolean(ownerPhone),
+        has_webhook_token: Boolean(webhookToken),
+        owner_phone_fallback: allowOwnerPhoneFallback,
+      });
       // Return 200 to stop UAZAPI retries but do not echo owner back
       return NextResponse.json({ ok: true, skipped: "unknown instance" });
     }
@@ -91,6 +104,12 @@ export async function POST(request: NextRequest) {
     const provider = createProvider(matchedConn);
     const msg = provider.parseWebhook(body.message || body);
     if (!msg) {
+      console.info("[UAZAPI webhook] skipped payload", {
+        organization_id: matchedConn.organization_id,
+        provider: provider.name,
+        matched_by: matchedBy,
+        skipped: "no processable message",
+      });
       return NextResponse.json({ ok: true, skipped: "no processable message" });
     }
 
@@ -109,8 +128,13 @@ export async function POST(request: NextRequest) {
         if (isAudio && download.transcription) msg.text = download.transcription;
       } catch (err: unknown) {
         console.error(
-          "[UAZAPI webhook] Media download error:",
-          err instanceof Error ? err.message : String(err),
+          "[UAZAPI webhook] media download failed",
+          {
+            organization_id: matchedConn.organization_id,
+            provider: provider.name,
+            message_type: msg.type,
+            error: err instanceof Error ? err.message : String(err),
+          },
         );
       }
     }
@@ -123,11 +147,25 @@ export async function POST(request: NextRequest) {
       msg,
     });
 
+    console.info("[UAZAPI webhook] processed message", {
+      organization_id: matchedConn.organization_id,
+      provider: provider.name,
+      matched_by: matchedBy,
+      ok: result.ok,
+      skipped: result.skipped ?? null,
+      handled_by: result.handledBy ?? null,
+      lead_id: result.leadId ?? null,
+      conversation_id: result.conversationId ?? null,
+    });
+
     return NextResponse.json(result);
   } catch (error: unknown) {
     // Log internally; do not expose internals to the caller
     const message = error instanceof Error ? error.message : String(error);
-    console.error("[UAZAPI webhook] error:", message);
+    console.error("[UAZAPI webhook] error", {
+      organization_id: null,
+      error: message,
+    });
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 }

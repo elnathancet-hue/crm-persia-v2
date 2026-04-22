@@ -14,6 +14,7 @@ interface DiagnosticHeaders {
 }
 
 export interface UazapiWebhookDiagnostics {
+  organization_id: string | null;
   eventType: string | null;
   matchedBy: UazapiMatchMethod;
   hasBodyToken: boolean;
@@ -109,6 +110,7 @@ export function getUazapiWebhookDiagnostics(params: {
   body: unknown;
   headers: Headers;
   matchedBy: UazapiMatchMethod;
+  organizationId?: string | null;
 }): UazapiWebhookDiagnostics {
   const root = asRecord(params.body);
   const message = asRecord(root?.message);
@@ -116,6 +118,7 @@ export function getUazapiWebhookDiagnostics(params: {
   const owner = root?.owner || message?.owner;
 
   return {
+    organization_id: params.organizationId ?? null,
     eventType: extractEventType(params.body),
     matchedBy: params.matchedBy,
     hasBodyToken: Boolean(safeString(root?.token)),
@@ -140,6 +143,7 @@ export function logUazapiWebhookDiagnostics(params: {
   body: unknown;
   headers: Headers;
   matchedBy: UazapiMatchMethod;
+  organizationId?: string | null;
 }): void {
   const verbose = process.env.UAZAPI_WEBHOOK_DIAGNOSTICS === "verbose";
   if (!verbose && params.matchedBy !== "owner_phone_legacy") return;

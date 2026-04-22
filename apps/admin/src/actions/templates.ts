@@ -41,8 +41,10 @@ export interface SyncResult {
 
 /** Sincroniza templates da Meta para a conexao meta_cloud da org no contexto. */
 export async function syncTemplates(): Promise<SyncResult> {
+  let orgIdForLog: string | null = null;
   try {
     const { admin, orgId, userId } = await requireSuperadminForOrg();
+    orgIdForLog = orgId;
 
     const { data: conn } = await admin
       .from("whatsapp_connections")
@@ -75,7 +77,11 @@ export async function syncTemplates(): Promise<SyncResult> {
 
     return { ok: true, synced };
   } catch (e: unknown) {
-    console.error("[templates] syncTemplates error:", e instanceof Error ? e.message : String(e));
+    console.error("[templates] syncTemplates error", {
+      organization_id: orgIdForLog,
+      action: "whatsapp_sync_templates",
+      error: e instanceof Error ? e.message : String(e),
+    });
     return { ok: false, error: e instanceof Error ? e.message : "Erro ao sincronizar" };
   }
 }
@@ -98,7 +104,11 @@ export async function listTemplates(filter: TemplateListFilter = {}): Promise<Te
 
   const { data, error } = await query;
   if (error) {
-    console.error("[templates] listTemplates error:", error.message);
+    console.error("[templates] listTemplates error", {
+      organization_id: orgId,
+      action: "list_templates",
+      error: error.message,
+    });
     return [];
   }
   return (data ?? []) as unknown as TemplateRow[];
@@ -178,7 +188,12 @@ async function upsertTemplates(
     .upsert(rows as never, { onConflict: "connection_id,name,language" });
 
   if (error) {
-    console.error("[templates] upsert error:", error.message);
+    console.error("[templates] upsert error", {
+      organization_id: orgId,
+      action: "upsert_templates",
+      connection_id: connectionId,
+      error: error.message,
+    });
     throw new Error(error.message);
   }
   return rows.length;

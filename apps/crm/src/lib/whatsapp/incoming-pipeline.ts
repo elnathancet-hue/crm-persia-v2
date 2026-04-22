@@ -42,6 +42,11 @@ export interface IncomingResult {
 
 export async function processIncomingMessage(ctx: IncomingContext): Promise<IncomingResult> {
   const { supabase, orgId, provider, msg } = ctx;
+  const baseLogContext = {
+    organization_id: orgId,
+    provider: provider.name,
+    message_type: msg.type,
+  };
 
   // 1) Dedup
   if (msg.messageId) {
@@ -104,7 +109,11 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     try {
       await onNewLead(orgId, lead.id);
     } catch (err: unknown) {
-      console.error("[pipeline] onNewLead error:", err instanceof Error ? err.message : String(err));
+      console.error("[pipeline] onNewLead error", {
+        ...baseLogContext,
+        lead_id: lead.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -113,7 +122,11 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   try {
     keywordFlowTriggered = await onKeyword(orgId, lead.id, msg.text || "");
   } catch (err: unknown) {
-    console.error("[pipeline] onKeyword error:", err instanceof Error ? err.message : String(err));
+    console.error("[pipeline] onKeyword error", {
+      ...baseLogContext,
+      lead_id: lead.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // 5) Find or create conversation
@@ -384,14 +397,25 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
           };
         }
       } else {
+        const responseText = await n8nResponse.text().catch(() => "");
         console.error(
-          "[pipeline] n8n error:",
-          n8nResponse.status,
-          await n8nResponse.text().catch(() => ""),
+          "[pipeline] n8n error",
+          {
+            ...baseLogContext,
+            lead_id: lead.id,
+            conversation_id: conversation.id,
+            status: n8nResponse.status,
+            response_body_length: responseText.length,
+          },
         );
       }
     } catch (err: unknown) {
-      console.error("[pipeline] n8n call failed:", err instanceof Error ? err.message : String(err));
+      console.error("[pipeline] n8n call failed", {
+        ...baseLogContext,
+        lead_id: lead.id,
+        conversation_id: conversation.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -458,7 +482,12 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         handledBy: "ai_openai",
       };
     } catch (err: unknown) {
-      console.error("[pipeline] OpenAI error:", err instanceof Error ? err.message : String(err));
+      console.error("[pipeline] OpenAI error", {
+        ...baseLogContext,
+        lead_id: lead.id,
+        conversation_id: conversation.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

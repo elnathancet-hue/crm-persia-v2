@@ -63,6 +63,10 @@ export async function POST(
 
   const conn = await loadMetaConnection(phone_number_id);
   if (!conn) {
+    console.warn("[Meta webhook] unknown phone_number_id", {
+      organization_id: null,
+      phone_number_id,
+    });
     // 200 for unknown numbers — avoids Meta retries.
     return NextResponse.json({ ok: true, skipped: "unknown phone_number_id" });
   }
@@ -70,7 +74,10 @@ export async function POST(
   // HMAC: Meta signs with the App Secret (same for every number under one App).
   const appSecret = process.env.META_APP_SECRET;
   if (!appSecret) {
-    console.error("[Meta webhook] META_APP_SECRET not set — rejecting.");
+    console.error("[Meta webhook] META_APP_SECRET not set", {
+      organization_id: conn.organization_id,
+      phone_number_id,
+    });
     return new NextResponse("Server misconfigured", { status: 500 });
   }
   const signatureOk = validateMetaSignature(
@@ -79,6 +86,10 @@ export async function POST(
     appSecret,
   );
   if (!signatureOk) {
+    console.warn("[Meta webhook] invalid signature", {
+      organization_id: conn.organization_id,
+      phone_number_id,
+    });
     return new NextResponse("Invalid signature", { status: 401 });
   }
 
@@ -127,13 +138,29 @@ export async function POST(
             if (media.mimetype) msg.mediaMimeType = media.mimetype;
           } catch (err) {
             console.error(
-              "[Meta webhook] downloadMedia failed:",
-              err instanceof Error ? err.message : String(err),
+              "[Meta webhook] media download failed",
+              {
+                organization_id: orgId,
+                provider: provider.name,
+                phone_number_id,
+                message_type: msg.type,
+                error: err instanceof Error ? err.message : String(err),
+              },
             );
           }
         }
 
-        await processIncomingMessage({ supabase, orgId, provider, msg });
+        const result = await processIncomingMessage({ supabase, orgId, provider, msg });
+        console.info("[Meta webhook] processed message", {
+          organization_id: orgId,
+          provider: provider.name,
+          phone_number_id,
+          ok: result.ok,
+          skipped: result.skipped ?? null,
+          handled_by: result.handledBy ?? null,
+          lead_id: result.leadId ?? null,
+          conversation_id: result.conversationId ?? null,
+        });
       }
 
       // --- delivery / read / failed statuses ---

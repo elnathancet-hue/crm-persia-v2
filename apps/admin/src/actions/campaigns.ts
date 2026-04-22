@@ -59,7 +59,19 @@ export async function createCampaign(data: {
     send_interval_seconds: data.send_interval_seconds ?? 30,
   } as never).select().single();
 
-  if (error) return { data: null, error: error.message };
+  if (error) {
+    console.error("[campaigns] create failed", {
+      organization_id: orgId,
+      action: "create_campaign",
+      error: error.message,
+    });
+    return { data: null, error: error.message };
+  }
+  console.info("[campaigns] created", {
+    organization_id: orgId,
+    action: "create_campaign",
+    campaign_id: campaign?.id ?? null,
+  });
   revalidatePath("/campaigns");
   return { data: campaign, error: null };
 }
@@ -88,7 +100,22 @@ export async function updateCampaignStatus(campaignId: string, status: string) {
   }
 
   const { error } = await admin.from("campaigns").update({ status }).eq("id", campaignId).eq("organization_id", orgId);
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[campaigns] update status failed", {
+      organization_id: orgId,
+      action: "update_campaign_status",
+      campaign_id: campaignId,
+      status,
+      error: error.message,
+    });
+    return { error: error.message };
+  }
+  console.info("[campaigns] status updated", {
+    organization_id: orgId,
+    action: "update_campaign_status",
+    campaign_id: campaignId,
+    status,
+  });
   revalidatePath("/campaigns");
   return { error: null };
 }
@@ -96,6 +123,11 @@ export async function updateCampaignStatus(campaignId: string, status: string) {
 export async function deleteCampaign(campaignId: string) {
   const { admin, orgId } = await requireSuperadminForOrg();
   await admin.from("campaigns").delete().eq("id", campaignId).eq("organization_id", orgId);
+  console.info("[campaigns] deleted", {
+    organization_id: orgId,
+    action: "delete_campaign",
+    campaign_id: campaignId,
+  });
   revalidatePath("/campaigns");
 }
 
@@ -176,9 +208,24 @@ async function sendUazapiCampaign(
 
     await auditLog({ userId, orgId, action: "execute_campaign", entityType: "campaign", entityId: campaign.id as string, metadata: { sent: phones.length, kind: "uazapi" } });
 
+    console.info("[campaigns] UAZAPI campaign submitted", {
+      organization_id: orgId,
+      action: "execute_campaign",
+      campaign_id: campaign.id as string,
+      kind: "uazapi",
+      sent: phones.length,
+    });
+
     revalidatePath("/campaigns");
     return { sent: phones.length };
   } catch (e: unknown) {
+    console.error("[campaigns] UAZAPI campaign failed", {
+      organization_id: orgId,
+      action: "execute_campaign",
+      campaign_id: campaign.id as string,
+      kind: "uazapi",
+      error: e instanceof Error ? e.message : String(e),
+    });
     await auditFailure({
       userId,
       orgId,
@@ -228,6 +275,14 @@ async function enqueueTemplateCampaign(
 
   const { error } = await admin.from("wa_template_sends").insert(rows as never);
   if (error) {
+    console.error("[campaigns] template campaign enqueue failed", {
+      organization_id: orgId,
+      action: "execute_campaign",
+      campaign_id: campaign.id as string,
+      kind: "meta_template",
+      queued: rows.length,
+      error: error.message,
+    });
     await auditFailure({
       userId,
       orgId,
@@ -255,6 +310,14 @@ async function enqueueTemplateCampaign(
     entityType: "campaign",
     entityId: campaign.id as string,
     metadata: { queued: rows.length, kind: "meta_template" },
+  });
+
+  console.info("[campaigns] template campaign enqueued", {
+    organization_id: orgId,
+    action: "execute_campaign",
+    campaign_id: campaign.id as string,
+    kind: "meta_template",
+    queued: rows.length,
   });
 
   revalidatePath("/campaigns");

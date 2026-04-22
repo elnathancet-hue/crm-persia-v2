@@ -95,7 +95,11 @@ export async function syncLeadToUazapi(orgId: string, leadId: string): Promise<v
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] syncLeadToUazapi error:", message);
+    console.error("[CRM Sync] syncLeadToUazapi error", {
+      organization_id: orgId,
+      lead_id: leadId,
+      error: message,
+    });
   }
 }
 
@@ -116,7 +120,10 @@ export async function disableChatbotForLead(
     await provider.disableChatbotFor(phone, minutes);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] disableChatbotForLead error:", message);
+    console.error("[CRM Sync] disableChatbotForLead error", {
+      organization_id: orgId,
+      error: message,
+    });
   }
 }
 
@@ -132,7 +139,10 @@ export async function enableChatbotForLead(orgId: string, phone: string): Promis
     await provider.enableChatbot(phone);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] enableChatbotForLead error:", message);
+    console.error("[CRM Sync] enableChatbotForLead error", {
+      organization_id: orgId,
+      error: message,
+    });
   }
 }
 
@@ -156,7 +166,12 @@ export async function syncTicketStatusToUazapi(
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] syncTicketStatusToUazapi error:", message);
+    console.error("[CRM Sync] syncTicketStatusToUazapi error", {
+      organization_id: orgId,
+      ticket_open: isOpen,
+      assigned: Boolean(assignedTo),
+      error: message,
+    });
   }
 }
 

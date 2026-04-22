@@ -100,9 +100,11 @@ describe("uazapi webhook diagnostics", () => {
       body,
       headers,
       matchedBy: "instance_token",
+      organizationId: "org-123",
     });
 
     expect(diagnostics).toEqual({
+      organization_id: "org-123",
       eventType: "messages",
       matchedBy: "instance_token",
       hasBodyToken: true,

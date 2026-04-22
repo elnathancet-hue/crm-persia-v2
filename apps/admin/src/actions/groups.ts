@@ -57,7 +57,11 @@ export async function syncGroups() {
     revalidatePath("/groups");
     return { count: groups.length, error: null };
   } catch (err) {
-    console.error("Erro ao sincronizar grupos:", err);
+    console.error("[groups] sync failed", {
+      organization_id: orgId,
+      action: "sync_groups",
+      error: err instanceof Error ? err.message : String(err),
+    });
     return { error: "Erro ao sincronizar" };
   }
 }
