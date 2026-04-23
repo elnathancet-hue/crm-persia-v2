@@ -1,12 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Wrench } from "lucide-react";
+import { toast } from "sonner";
 import type {
   AgentStage,
+  AgentStageTool,
+  AgentTool,
   CreateStageInput,
+  NativeToolPreset,
   UpdateStageInput,
 } from "@persia/shared/ai-agent";
+import { getPreset } from "@persia/shared/ai-agent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,17 +25,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { listStageTools, setStageTool } from "@/actions/ai-agent/tools";
+import { renderToolIcon } from "@/features/ai-agent/icon-map";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   stage?: AgentStage;
+  tools: AgentTool[];
   isPending: boolean;
   onSubmit: (input: CreateStageInput | UpdateStageInput) => void;
 }
 
-export function StageSheet({ open, onOpenChange, mode, stage, isPending, onSubmit }: Props) {
+export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, onSubmit }: Props) {
   const [situation, setSituation] = React.useState("");
   const [instruction, setInstruction] = React.useState("");
   const [transitionHint, setTransitionHint] = React.useState("");
@@ -66,57 +74,65 @@ export function StageSheet({ open, onOpenChange, mode, stage, isPending, onSubmi
             A etapa descreve uma situacao especifica da conversa. O agente segue a instrucao ate detectar a transicao.
           </SheetDescription>
         </SheetHeader>
-        <form onSubmit={handleSave} className="flex-1 overflow-y-auto space-y-4 px-4" id="stage-form">
-          <div className="space-y-2">
-            <Label htmlFor="situation">Situacao</Label>
-            <Input
-              id="situation"
-              value={situation}
-              onChange={(e) => setSituation(e.target.value)}
-              placeholder="Ex: Boas-vindas, Qualificacao, Apresentacao da oferta"
-              required
-              autoFocus
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="instruction">Instrucao do agente</Label>
-            <Textarea
-              id="instruction"
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder="O que o agente deve fazer nesta etapa? Ex: Cumprimente o cliente pelo nome, se apresente brevemente, pergunte como pode ajudar."
-              rows={8}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="transition_hint">Dica de transicao</Label>
-            <Textarea
-              id="transition_hint"
-              value={transitionHint}
-              onChange={(e) => setTransitionHint(e.target.value)}
-              placeholder="Quando avancar para a proxima etapa? Ex: Apos o cliente responder o primeiro cumprimento."
-              rows={3}
-            />
-            <p className="text-xs text-muted-foreground">
-              Opcional. Ajuda o agente a decidir quando avancar no fluxo.
-            </p>
-          </div>
-          <div className="flex items-start justify-between gap-3 pt-2 border-t">
-            <div className="flex-1 min-w-0">
-              <Label htmlFor="rag_enabled" className="cursor-pointer">
-                Consultar base de conhecimento
-              </Label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Injeta FAQ e documentos relevantes antes de cada resposta nesta etapa. Requer Fase RAG (PR6).
+        <div className="flex-1 overflow-y-auto">
+          <form onSubmit={handleSave} className="space-y-4 px-4" id="stage-form">
+            <div className="space-y-2">
+              <Label htmlFor="situation">Situacao</Label>
+              <Input
+                id="situation"
+                value={situation}
+                onChange={(e) => setSituation(e.target.value)}
+                placeholder="Ex: Boas-vindas, Qualificacao, Apresentacao da oferta"
+                required
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="instruction">Instrucao do agente</Label>
+              <Textarea
+                id="instruction"
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="O que o agente deve fazer nesta etapa? Ex: Cumprimente o cliente pelo nome, se apresente brevemente, pergunte como pode ajudar."
+                rows={8}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="transition_hint">Dica de transicao</Label>
+              <Textarea
+                id="transition_hint"
+                value={transitionHint}
+                onChange={(e) => setTransitionHint(e.target.value)}
+                placeholder="Quando avancar para a proxima etapa? Ex: Apos o cliente responder o primeiro cumprimento."
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Opcional. Ajuda o agente a decidir quando avancar no fluxo.
               </p>
             </div>
-            <Switch
-              id="rag_enabled"
-              checked={ragEnabled}
-              onCheckedChange={(v) => setRagEnabled(Boolean(v))}
-            />
-          </div>
-        </form>
+            <div className="flex items-start justify-between gap-3 pt-2 border-t">
+              <div className="flex-1 min-w-0">
+                <Label htmlFor="rag_enabled" className="cursor-pointer">
+                  Consultar base de conhecimento
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Injeta FAQ e documentos relevantes antes de cada resposta nesta etapa. Requer Fase RAG (PR6).
+                </p>
+              </div>
+              <Switch
+                id="rag_enabled"
+                checked={ragEnabled}
+                onCheckedChange={(v) => setRagEnabled(Boolean(v))}
+              />
+            </div>
+          </form>
+
+          {mode === "edit" && stage ? (
+            <div className="px-4 pt-4 mt-4 border-t">
+              <StageToolsAllowlist stageId={stage.id} tools={tools} />
+            </div>
+          ) : null}
+        </div>
         <SheetFooter className="flex-row justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancelar
@@ -128,5 +144,122 @@ export function StageSheet({ open, onOpenChange, mode, stage, isPending, onSubmi
         </SheetFooter>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function StageToolsAllowlist({ stageId, tools }: { stageId: string; tools: AgentTool[] }) {
+  const [allowlist, setAllowlist] = React.useState<Map<string, boolean>>(new Map());
+  const [loading, setLoading] = React.useState(true);
+  const [pendingToolId, setPendingToolId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    listStageTools(stageId)
+      .then((rows: AgentStageTool[]) => {
+        if (cancelled) return;
+        const map = new Map<string, boolean>();
+        for (const row of rows) {
+          map.set(row.tool_id, row.is_enabled);
+        }
+        setAllowlist(map);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(err instanceof Error ? err.message : "Falha ao carregar ferramentas");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stageId]);
+
+  const handleToggle = (toolId: string, nextEnabled: boolean) => {
+    setPendingToolId(toolId);
+    setStageTool({ stage_id: stageId, tool_id: toolId, is_enabled: nextEnabled })
+      .then(() => {
+        setAllowlist((prev) => new Map(prev).set(toolId, nextEnabled));
+      })
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Falha ao salvar permissao");
+      })
+      .finally(() => {
+        setPendingToolId(null);
+      });
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <Wrench className="size-4 text-muted-foreground" />
+        <Label className="font-medium">Ferramentas permitidas nesta etapa</Label>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        O agente so chama decisoes que voce habilitar aqui.
+      </p>
+
+      {tools.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic py-4 text-center border rounded-md border-dashed">
+          Nenhuma ferramenta configurada no agente. Adicione em <strong>Ferramentas</strong> primeiro.
+        </p>
+      ) : loading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+          <Loader2 className="size-3 animate-spin" />
+          Carregando...
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {tools.map((tool) => (
+            <StageToolRow
+              key={tool.id}
+              tool={tool}
+              enabled={allowlist.get(tool.id) ?? false}
+              pending={pendingToolId === tool.id}
+              onToggle={(v) => handleToggle(tool.id, v)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StageToolRow({
+  tool,
+  enabled,
+  pending,
+  onToggle,
+}: {
+  tool: AgentTool;
+  enabled: boolean;
+  pending: boolean;
+  onToggle: (v: boolean) => void;
+}) {
+  const preset: NativeToolPreset | undefined = tool.native_handler
+    ? getPreset(tool.native_handler)
+    : undefined;
+
+  return (
+    <div className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-muted/40">
+      <div className="size-7 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+        {renderToolIcon(preset?.icon_name ?? "HelpCircle", { className: "size-3.5" })}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">
+          {preset?.display_name ?? tool.name}
+        </p>
+      </div>
+      {pending ? (
+        <Loader2 className="size-3 animate-spin text-muted-foreground" />
+      ) : null}
+      <Switch
+        checked={enabled}
+        onCheckedChange={(v) => onToggle(Boolean(v))}
+        disabled={pending || !tool.is_enabled}
+        aria-label={`Permitir ${preset?.display_name ?? tool.name} nesta etapa`}
+      />
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   FileText,
   FlaskConical,
   HelpCircle,
+  History,
   Library,
   ListOrdered,
   Loader2,
@@ -16,7 +17,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { AgentConfig, AgentStage, AgentStatus } from "@persia/shared/ai-agent";
+import type {
+  AgentConfig,
+  AgentStage,
+  AgentStatus,
+  AgentTool,
+} from "@persia/shared/ai-agent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,6 +36,8 @@ import {
 import { AgentStatusBadge } from "@/features/ai-agent/components/AgentStatusBadge";
 import { RulesTab } from "@/features/ai-agent/components/RulesTab";
 import { StagesTab } from "@/features/ai-agent/components/StagesTab";
+import { ToolsTab } from "@/features/ai-agent/components/ToolsTab";
+import { AuditTab } from "@/features/ai-agent/components/AuditTab";
 import { PlaceholderTab } from "@/features/ai-agent/components/PlaceholderTab";
 import { TesterSheet } from "@/features/ai-agent/components/TesterSheet";
 import { updateAgent } from "@/actions/ai-agent/configs";
@@ -37,11 +45,17 @@ import { updateAgent } from "@/actions/ai-agent/configs";
 interface Props {
   initialAgent: AgentConfig;
   initialStages: AgentStage[];
+  initialTools: AgentTool[];
 }
 
-export function AgentEditorClient({ initialAgent, initialStages }: Props) {
+export function AgentEditorClient({
+  initialAgent,
+  initialStages,
+  initialTools,
+}: Props) {
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
+  const [tools, setTools] = React.useState(initialTools);
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
@@ -151,6 +165,10 @@ export function AgentEditorClient({ initialAgent, initialStages }: Props) {
             <Calendar className="size-4" />
             Agendamento
           </TabsTrigger>
+          <TabsTrigger value="audit" className="gap-2">
+            <History className="size-4" />
+            Execucoes
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="rules">
@@ -160,6 +178,7 @@ export function AgentEditorClient({ initialAgent, initialStages }: Props) {
           <StagesTab
             configId={agent.id}
             stages={stages}
+            tools={tools}
             onChange={setStages}
           />
         </TabsContent>
@@ -180,11 +199,11 @@ export function AgentEditorClient({ initialAgent, initialStages }: Props) {
           />
         </TabsContent>
         <TabsContent value="tools">
-          <PlaceholderTab
-            icon={Wrench}
-            title="Ferramentas do agente"
-            description="Ative transferencias, tags, rodizio, notificacoes e webhooks customizados (SSRF-hardened)."
-            phase="PR3 / PR5"
+          <ToolsTab
+            configId={agent.id}
+            tools={tools}
+            stages={stages}
+            onChange={setTools}
           />
         </TabsContent>
         <TabsContent value="notifications">
@@ -202,6 +221,9 @@ export function AgentEditorClient({ initialAgent, initialStages }: Props) {
             description="Conecte Google Calendar e permita que o agente marque reunioes direto na conversa."
             phase="PR7"
           />
+        </TabsContent>
+        <TabsContent value="audit">
+          <AuditTab configId={agent.id} />
         </TabsContent>
       </Tabs>
 
