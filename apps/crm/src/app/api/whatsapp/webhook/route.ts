@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
+import { tryNativeAgent } from "@/lib/ai-agent/executor";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
 import {
   extractUazapiOwnerPhone,
@@ -149,7 +150,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
+    // 4. Native AI Agent router. Any miss or failure falls through to legacy.
+    const nativeOutcome = await tryNativeAgent({
+      supabase,
+      orgId: matchedConn.organization_id,
+      provider,
+      msg,
+      requestId,
+    });
+
+    if (nativeOutcome.handled) {
+      logInfo("uazapi_webhook_processed_message", {
+        organization_id: matchedConn.organization_id,
+        request_id: requestId,
+        provider: provider.name,
+        route: "/api/whatsapp/webhook",
+        matched_by: matchedBy,
+        ok: nativeOutcome.response.ok ?? true,
+        skipped: nativeOutcome.response.skipped ?? null,
+        handled_by: nativeOutcome.response.handledBy ?? "ai_native",
+        lead_id: nativeOutcome.response.leadId ?? null,
+        conversation_id: nativeOutcome.response.conversationId ?? null,
+        native_status: nativeOutcome.response.status ?? null,
+        run_id: nativeOutcome.response.runId ?? null,
+      });
+      return NextResponse.json(nativeOutcome.response);
+    }
+
+    // 5. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
     const result = await processIncomingMessage({
       supabase,
       orgId: matchedConn.organization_id,

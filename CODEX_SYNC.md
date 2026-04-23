@@ -233,3 +233,30 @@ To unblock `codex/ai-agent-runtime-spike` after this PR merges:
 
 - [ ] Should `stop_agent` handoff set a TTL or be manually re-enabled? (Claude UI needs to know if there's a "Reativar bot" button.)
 - [ ] Which column on `agent_conversations` carries the handoff flag? (Codex decides in migration; log the name here.)
+
+---
+
+## 2026-04-22 22:45 — Codex — Runtime migration handoff fields
+
+Branch: `codex/ai-agent-runtime-spike`.
+
+Migration `017_ai_agent_core.sql` uses these runtime handoff columns:
+
+- `agent_conversations.human_handoff_at TIMESTAMPTZ`
+- `agent_conversations.human_handoff_reason TEXT`
+
+Spike behavior for `stop_agent`:
+
+- `dry_run=true`: no mutation; tool output describes the handoff that would be set.
+- `dry_run=false`: sets `human_handoff_at=now()` and stores the optional reason.
+- Re-enable/TTL is not automatic in PR1. UI should treat any non-null
+  `human_handoff_at` as "bot paused for this conversation" until a future
+  action clears it.
+
+Tester synthetic conversations:
+
+- The DB column `agent_conversations.crm_conversation_id` is nullable so
+  `testAgent()` can insert a real synthetic runtime row without a CRM chat.
+- Webhook/runtime executions always fill `crm_conversation_id`.
+  This is intentionally narrower than the shared `AgentConversation` UI type,
+  because the UI does not list synthetic tester conversations as CRM records.
