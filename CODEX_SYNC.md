@@ -448,3 +448,172 @@ Other runtime tweaks included opportunistically:
   of the old `/dashboard/agents` path from the spike.
 - `getDefaultStopAgentTool()` is now a thin wrapper over the shared preset
   catalog, so presets are the single source of truth.
+
+---
+
+## 2026-04-23 — Claude — PR4 contract additions
+
+Branch: `claude/ai-agent-pr4-contracts` (this PR).
+
+Additive only — zero changes to PR1/PR2/PR3 types. Runtime code from #7
+continues to compile unchanged.
+
+### Files shipped
+
+- `packages/shared/src/ai-agent/limits.ts` — new
+  - `CostLimitScope`: `run | agent_daily | org_daily | org_monthly`
+  - `AgentCostLimit` row type + `SetCostLimitInput` DTO
+  - `UsageStats` + `UsagePoint` + `UsagePointTotals` + `ActiveCostLimits`
+    + `CostLimitSnapshot`
+  - `RateLimitConfig` + `DEFAULT_RATE_LIMITS` (6 runs/min per conversation,
+    20 concurrent runs per org)
+  - `GuardrailTripReason` enum
+- `packages/shared/src/ai-agent/index.ts` re-exports `limits`
+
+### Runtime scope for Codex (PR4)
+
+**Migration `018_ai_agent_cost_limits.sql`**:
+
+```sql
+CREATE TABLE agent_cost_limits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  scope TEXT NOT NULL CHECK (scope IN ('run','agent_daily','org_daily','org_monthly')),
+  subject_id UUID,                 -- agent_config_id when scope='agent_daily', null otherwise
+  max_tokens INTEGER CHECK (max_tokens >= 0),
+  max_usd_cents INTEGER CHECK (max_usd_cents >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- one row per (org, scope, subject). subject_id is part of the uniqueness so
+  -- agent_daily can have per-config rows alongside org_daily (subject null).
+  UNIQUE (organization_id, scope, subject_id)
+);
+
+CREATE INDEX idx_agent_cost_limits_org_scope
+  ON agent_cost_limits (organization_id, scope);
+
+ALTER TABLE agent_cost_limits ENABLE ROW LEVEL SECURITY;
+-- select: org members; write: admin+owner (mirror agent_configs pattern).
+
+-- View aggregating agent_runs for the usage dashboards.
+CREATE OR REPLACE VIEW agent_usage_daily AS
+SELECT
+  r.organization_id,
+  c.config_id,
+  date_trunc('day', r.created_at AT TIME ZONE 'UTC')::date AS day,
+  count(*) AS run_count,
+  count(*) FILTER (WHERE r.status = 'succeeded') AS succeeded_count,
+  count(*) FILTER (WHERE r.status = 'failed') AS failed_count,
+  count(*) FILTER (WHERE r.status = 'fallback') AS fallback_count,
+  coalesce(sum(r.tokens_input), 0) AS tokens_input,
+  coalesce(sum(r.tokens_output), 0) AS tokens_output,
+  coalesce(sum(r.cost_usd_cents), 0) AS cost_usd_cents,
+  coalesce(avg(r.duration_ms)::int, 0) AS avg_duration_ms
+FROM agent_runs r
+JOIN agent_conversations c ON c.id = r.agent_conversation_id
+GROUP BY r.organization_id, c.config_id, day;
+```
+
+Materialized version optional — a plain view should perform fine up to
+hundreds of thousands of runs. If that becomes a bottleneck later, promote
+it with `CONCURRENTLY` refresh.
+
+**Enforcement helper `apps/crm/src/lib/ai-agent/cost-limits.ts`**:
+
+```ts
+export async function assertWithinCostLimits(params: {
+  db: AgentDb;
+  orgId: string;
+  configId: string;
+  agentConversationId: string;
+  tokensSoFarRun: number;
+  costSoFarRunUsdCents: number;
+}): Promise<void>;  // throws GuardrailError with a GuardrailTripReason
+```
+
+Order of checks (cheapest first):
+
+1. Per-run `tokensSoFarRun` against per-agent `AgentGuardrails.cost_ceiling_tokens`
+   and against `agent_cost_limits` row where `scope='run'` (fleet default).
+2. `agent_daily` tokens + USD using `agent_usage_daily` view filtered by
+   `config_id` and `day = today UTC`.
+3. `org_daily` tokens + USD similarly (no config filter).
+4. `org_monthly` tokens + USD using `month_to_date` window.
+
+Cache per-request: one query per scope per run, not per LLM iteration. In
+practice the executor calls this helper twice — once before the first LLM
+call, once after the final LLM iteration — so daily aggregates read twice
+per run.
+
+**Rate limit helper `apps/crm/src/lib/ai-agent/rate-limits.ts`**:
+
+```ts
+export async function assertWithinRateLimits(params: {
+  db: AgentDb;
+  orgId: string;
+  agentConversationId: string;
+}): Promise<void>;  // throws GuardrailError
+```
+
+Implementation: count `agent_runs` in the last 60s filtered by
+`agent_conversation_id`. Separate query counts `status='running'` runs per
+org. If either exceeds the default, throw `rate_limit_conversation` or
+`rate_limit_org_concurrent`.
+
+**Executor integration**:
+
+- Call `assertWithinRateLimits` as the first step of `tryNativeAgent`,
+  before creating the run. If it trips, return
+  `{ handled: true, response: { ok: true, skipped: "rate_limited" } }` so
+  the caller backs off quietly without spinning up another run row.
+- Call `assertWithinCostLimits` before `client.messages.create` on each
+  iteration. If it trips, mark the run as `fallback`, insert a guardrail
+  step with the `GuardrailTripReason`, and send the handoff reply.
+
+**Server actions — Codex implements in `apps/crm/src/actions/ai-agent/`**:
+
+```ts
+// limits.ts
+listCostLimits(): Promise<AgentCostLimit[]>;                         // org-wide
+setCostLimit(input: SetCostLimitInput): Promise<AgentCostLimit>;      // upsert
+deleteCostLimit(id: string): Promise<void>;
+
+// usage.ts
+getUsageStats(input: UsageStatsInput): Promise<UsageStats>;
+```
+
+Rules:
+
+- All mutations require `admin` role.
+- `getUsageStats` requires `admin` (usage numbers are sensitive — reveal
+  customer activity shape).
+- Range resolution server-side: `today` = current UTC day,
+  `last_7_days` = 7 rolling UTC days including today, etc.
+- `UsageStats.limits` is filled by reading `agent_cost_limits` + the
+  view's sums in one join, so the UI renders progress bars without a
+  round trip.
+
+**Tests Codex should add**:
+
+- cost limit trips: each scope (run / agent_daily / org_daily / org_monthly)
+  and each gauge (tokens / USD).
+- rate limit trips: conversation rolling window + org concurrent.
+- `getUsageStats` org scoping, range resolution, totals math.
+- migration: table + view create; RLS blocks cross-org read.
+- idempotency: `setCostLimit` upserts, `deleteCostLimit` removes.
+
+### UI scope for Claude (PR4 follow-up)
+
+- New tab **Limites e Uso** on the agent detail page:
+  - Cost limits editor (3 scopes × 2 gauges) + save/clear per row.
+  - Stats: last 30 days chart (run_count + cost_usd_cents), totals
+    cards (runs, success rate, fallback rate, avg duration), active
+    limit progress bars.
+- Top-level org page (future): aggregate across all agents.
+
+### Out of scope (still)
+
+- Custom webhook tool (PR5 — SSRF hardening).
+- RAG (PR6).
+- Notifications + Agendamento (PR7).
+- Meta-IA builders (PR8).
