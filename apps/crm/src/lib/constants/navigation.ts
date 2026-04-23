@@ -64,6 +64,7 @@ export const navigation: NavItem[] = [
     icon: Zap,
     minRole: "admin",
     children: [
+      { label: "Agente IA Nativo", href: "/automations/agents" },
       { label: "Assistentes IA", href: "/automations/assistant" },
       { label: "Webhook IA", href: "/automations/webhook" },
       { label: "Tools", href: "/automations/tools" },
