@@ -29,6 +29,10 @@
     "./template-parser": {
       "types": "./src/template-parser.ts",
       "default": "./src/template-parser.ts"
+    },
+    "./ai-agent": {
+      "types": "./src/ai-agent/index.ts",
+      "default": "./src/ai-agent/index.ts"
     }
   },
   "scripts": {
