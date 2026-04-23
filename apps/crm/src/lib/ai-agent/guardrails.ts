@@ -1,5 +1,6 @@
 import {
   DEFAULT_GUARDRAILS,
+  type GuardrailTripReason,
   type AgentGuardrails,
 } from "@persia/shared/ai-agent";
 import { asRecord } from "./db";
@@ -28,7 +29,7 @@ export function positiveInt(value: unknown, fallback: number): number {
 export function assertWithinDeadline(startedAt: number, guardrails: AgentGuardrails): void {
   const elapsedMs = Date.now() - startedAt;
   if (elapsedMs > guardrails.timeout_seconds * 1000) {
-    throw new GuardrailError("timeout", "AI agent execution timed out");
+    throw new GuardrailError("run_cost_timeout", "AI agent execution timed out");
   }
 }
 
@@ -38,13 +39,13 @@ export function assertWithinCostCeiling(
   guardrails: AgentGuardrails,
 ): void {
   if (tokensInput + tokensOutput > guardrails.cost_ceiling_tokens) {
-    throw new GuardrailError("cost_limit", "AI agent token ceiling reached");
+    throw new GuardrailError("run_cost_tokens", "AI agent token ceiling reached");
   }
 }
 
 export class GuardrailError extends Error {
   constructor(
-    public readonly reason: "timeout" | "cost_limit" | "max_iterations",
+    public readonly reason: GuardrailTripReason,
     message: string,
   ) {
     super(message);

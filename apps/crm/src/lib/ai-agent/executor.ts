@@ -24,13 +24,14 @@ import {
   resolveAgentContext,
   updateConversationUsage,
 } from "./context";
+import { assertWithinCostLimits, type CostLimitCache } from "./cost-limits";
 import {
-  assertWithinCostCeiling,
   assertWithinDeadline,
   GuardrailError,
   normalizeGuardrails,
 } from "./guardrails";
 import { isNativeAgentEnabled } from "./feature-flag";
+import { assertWithinRateLimits } from "./rate-limits";
 import { isImplementedNativeHandler, nativeHandlers } from "./tools/registry";
 
 type AnthropicMessage = {
@@ -103,6 +104,28 @@ export async function tryNativeAgent(params: TryNativeAgentParams): Promise<Nati
       };
     }
 
+    try {
+      await assertWithinRateLimits({
+        db,
+        orgId: params.orgId,
+        agentConversationId: resolved.agentConversation.id,
+      });
+    } catch (error) {
+      if (error instanceof GuardrailError) {
+        return {
+          handled: true,
+          response: {
+            ok: true,
+            skipped: "rate_limited",
+            handledBy: "ai_native",
+            leadId: resolved.crm.leadId,
+            conversationId: resolved.crm.crmConversationId,
+          },
+        };
+      }
+      throw error;
+    }
+
     const result = await executeAgent({
       db,
       orgId: params.orgId,
@@ -152,6 +175,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
   let tokensOutput = 0;
   let orderIndex = 0;
   let assistantReply = "";
+  const costLimitCache: CostLimitCache = {};
   const messages: AnthropicMessage[] = [
     {
       role: "user",
@@ -176,7 +200,16 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
 
     for (let iteration = 0; iteration < guardrails.max_iterations; iteration++) {
       assertWithinDeadline(startedAt, guardrails);
-      assertWithinCostCeiling(tokensInput, tokensOutput, guardrails);
+      await assertWithinCostLimits({
+        db: params.db,
+        orgId: params.orgId,
+        configId: params.config.id,
+        agentConversationId: params.agentConversation.id,
+        tokensSoFarRun: tokensInput + tokensOutput,
+        costSoFarRunUsdCents: calculateCostUsdCents(params.config.model, tokensInput, tokensOutput),
+        guardrailsTokens: guardrails.cost_ceiling_tokens,
+        cache: costLimitCache,
+      });
 
       const response = await withTimeout(
         client.messages.create({
@@ -205,7 +238,16 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         durationMs: Date.now() - startedAt,
       });
 
-      assertWithinCostCeiling(tokensInput, tokensOutput, guardrails);
+      await assertWithinCostLimits({
+        db: params.db,
+        orgId: params.orgId,
+        configId: params.config.id,
+        agentConversationId: params.agentConversation.id,
+        tokensSoFarRun: tokensInput + tokensOutput,
+        costSoFarRunUsdCents: calculateCostUsdCents(params.config.model, tokensInput, tokensOutput),
+        guardrailsTokens: guardrails.cost_ceiling_tokens,
+        cache: costLimitCache,
+      });
 
       const toolCalls = extractToolCalls(response);
       if (response.stop_reason !== "tool_use" || toolCalls.length === 0) {
@@ -244,7 +286,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       messages.push({ role: "user", content: toolResults });
     }
 
-    throw new GuardrailError("max_iterations", "AI agent max iterations reached");
+    throw new GuardrailError("run_iterations", "AI agent max iterations reached");
   } catch (error) {
     if (error instanceof GuardrailError) {
       if (!params.dryRun && params.provider) {
@@ -567,7 +609,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
       promise,
       new Promise<T>((_, reject) => {
         timer = setTimeout(
-          () => reject(new GuardrailError("timeout", "AI agent execution timed out")),
+          () => reject(new GuardrailError("run_cost_timeout", "AI agent execution timed out")),
           timeoutMs,
         );
       }),

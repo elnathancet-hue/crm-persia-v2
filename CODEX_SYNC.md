@@ -617,3 +617,47 @@ Rules:
 - RAG (PR6).
 - Notifications + Agendamento (PR7).
 - Meta-IA builders (PR8).
+
+---
+
+## 2026-04-23 20:50 — Codex — PR4 runtime implementation notes
+
+Branch: `codex/ai-agent-pr4-runtime`.
+
+Runtime pieces shipped in this branch:
+
+- `apps/crm/supabase/migrations/018_ai_agent_cost_limits.sql`
+  - `agent_cost_limits` table with org-scoped RLS.
+  - `agent_usage_daily` view with `security_invoker = true` so authenticated
+    reads stay under caller permissions while service_role can still aggregate
+    for webhook/runtime use.
+- `apps/crm/src/lib/ai-agent/cost-limits.ts`
+  - Per-run + daily/monthly limit enforcement.
+  - Shared helpers for usage aggregation, totals math and active limit
+    snapshots so runtime and UI-backed actions read the same shapes.
+- `apps/crm/src/lib/ai-agent/rate-limits.ts`
+  - Conversation rolling-window guard (`6 / minute`) and org concurrent run
+    guard (`20 running`).
+- Executor integration
+  - `tryNativeAgent()` rate-checks before creating a run and returns
+    `{ handled: true, skipped: "rate_limited" }` on trip.
+  - `executeAgent()` checks cost limits before and after each LLM iteration.
+  - Guardrail step reasons now use the PR4 shared enum
+    (`run_cost_timeout`, `org_daily_usd`, etc.).
+- Server actions
+  - `apps/crm/src/actions/ai-agent/limits.ts`
+    - `listCostLimits()`
+    - `setCostLimit()` (app-level upsert by org+scope+subject)
+    - `deleteCostLimit()`
+  - `apps/crm/src/actions/ai-agent/usage.ts`
+    - `getUsageStats()` with UTC range resolution and zero-filled daily points
+
+Validation from this branch:
+
+- `pnpm --filter @persia/crm build` passes.
+- `pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr4-runtime.test.ts`
+  passes.
+- `pnpm --filter @persia/crm typecheck` is still blocked by a pre-existing
+  `.next/types` mismatch in this repo (missing generated route files referenced
+  by `apps/crm/tsconfig.json`). This branch does not introduce a new TS error;
+  the Next build's own type check passes.
