@@ -1,9 +1,17 @@
 export const metadata = { title: "Automações" };
-import { Bot, Scissors, Webhook, FolderOpen } from "lucide-react";
+import { Bot, Scissors, Webhook, FolderOpen, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 const automationLinks = [
+  {
+    title: "Agente IA Nativo",
+    description: "Configure etapas, regras e ferramentas nativas para automatizar conversas sem webhooks externos",
+    href: "/automations/agents",
+    icon: Sparkles,
+    badge: "Novo",
+  },
   {
     title: "Assistentes IA",
     description: "Crie assistentes especializados para apoiar agentes no atendimento",
@@ -50,8 +58,15 @@ export default function AutomationsPage() {
                   <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                     <Icon className="size-5 text-primary" />
                   </div>
-                  <div>
-                    <p className="font-medium">{link.title}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium">{link.title}</p>
+                      {link.badge ? (
+                        <Badge variant="secondary" className="text-xs">
+                          {link.badge}
+                        </Badge>
+                      ) : null}
+                    </div>
                     <p className="text-sm text-muted-foreground mt-0.5">{link.description}</p>
                   </div>
                 </CardContent>
