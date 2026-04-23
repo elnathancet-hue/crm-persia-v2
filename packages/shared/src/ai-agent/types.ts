@@ -291,6 +291,61 @@ export interface ReorderStagesInput {
   stage_ids: string[]; // in desired order
 }
 
+// --- PR3 additions: tool CRUD + stage-tool allowlist management ---
+
+export interface CreateToolInput {
+  config_id: string;
+  name: string;
+  description: string;
+  input_schema: JSONSchemaObject;
+  execution_mode: ToolExecutionMode;
+  native_handler?: NativeHandlerName;
+  webhook_url?: string;
+  webhook_secret?: string;
+  is_enabled?: boolean;
+}
+
+export interface UpdateToolInput {
+  name?: string;
+  description?: string;
+  input_schema?: JSONSchemaObject;
+  execution_mode?: ToolExecutionMode;
+  native_handler?: NativeHandlerName | null;
+  webhook_url?: string | null;
+  webhook_secret?: string | null;
+  is_enabled?: boolean;
+}
+
+// Convenience input for creating a native tool from a preset. The runtime
+// action materializes the preset into a full CreateToolInput server-side, so
+// the UI does not need to duplicate schema wiring.
+export interface CreateToolFromPresetInput {
+  config_id: string;
+  handler: NativeHandlerName;
+}
+
+export interface SetStageToolInput {
+  stage_id: string;
+  tool_id: string;
+  is_enabled: boolean;
+}
+
+// --- PR3 additions: audit queries for agent runs / steps ---
+
+export interface ListRunsInput {
+  config_id?: string;
+  agent_conversation_id?: string;
+  lead_id?: string;
+  limit?: number;  // default 20, max 100
+  since?: string;  // ISO-8601 datetime; only runs created after this
+}
+
+// Audit shape returned to the UI. Steps are included so the audit drawer can
+// render without an extra round trip for typical list sizes (<=100 runs).
+export interface AgentRunWithSteps extends AgentRun {
+  steps: AgentStep[];
+}
+
 // ============================================================================
 // JSON Schema shape (Anthropic tool-use compatible subset)
 // Intentionally narrow — we do not support the full JSON Schema spec.

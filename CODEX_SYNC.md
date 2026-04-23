@@ -260,3 +260,151 @@ Tester synthetic conversations:
 - Webhook/runtime executions always fill `crm_conversation_id`.
   This is intentionally narrower than the shared `AgentConversation` UI type,
   because the UI does not list synthetic tester conversations as CRM records.
+
+---
+
+## 2026-04-23 — Claude — PR3 contract additions
+
+Branch: `claude/ai-agent-pr3-contracts` (this PR).
+
+Builds on #3 / #4 / #5. **Additive only** — no existing types changed. PR4
+runtime code continues to typecheck without edits.
+
+### Files shipped
+
+- `packages/shared/src/ai-agent/tool-presets.ts` — new
+  - `NativeToolPreset` type (handler, name, display_name, description,
+    ui_description, icon_name, category, input_schema, shipped_in_pr)
+  - `NATIVE_TOOL_PRESETS` constant — canonical catalog covering all 13
+    handlers. `shipped_in_pr` tags what is runtime-ready vs placeholder.
+  - `getPreset(handler)` + `getPresetsShippedInOrBefore(pr)` helpers
+- `packages/shared/src/ai-agent/types.ts` — additions only
+  - `CreateToolInput`, `UpdateToolInput`, `CreateToolFromPresetInput`,
+    `SetStageToolInput`
+  - `ListRunsInput`, `AgentRunWithSteps`
+- `packages/shared/src/ai-agent/index.ts` — re-exports `tool-presets`
+
+### Tool presets — source of truth
+
+Codex and UI both consume `NATIVE_TOOL_PRESETS`:
+
+- **UI (Claude)**: Decision Intelligence modal renders one card per preset.
+  Cards for `shipped_in_pr` > PR3 are visible but disabled with a
+  "Disponivel em <PR>" tooltip so the roadmap is legible in-product.
+- **Runtime (Codex)**: `createToolFromPreset({ config_id, handler })` looks
+  up the preset and materializes an `agent_tools` row using
+  preset.name/description/input_schema/execution_mode=native/native_handler.
+  Replaces the ad-hoc `getDefaultStopAgentTool` from #4 — keep the old
+  function exported as a thin wrapper until all callers migrate.
+
+The preset's `input_schema` is the **contract** for the handler. When Codex
+writes a handler, his Zod input schema must produce a JSON Schema that is
+structurally equivalent to the preset's schema (same required fields, same
+property types and formats). Any divergence = update the preset in a future
+contract-change PR, not the handler in isolation.
+
+### PR3 native handlers — scope for Codex
+
+Four new handlers land in `apps/crm/src/lib/ai-agent/tools/`:
+
+| Handler | File | Effect (non-dry-run) |
+|---|---|---|
+| `transfer_to_user` | `transfer-to-user.ts` | `UPDATE leads SET assigned_to = $user_id WHERE id = $lead_id AND organization_id = $org_id`. Verify `organization_members` has the user. Insert an audit note into the CRM conversation ("Lead transferido para @alice pelo agente: <reason>"). |
+| `transfer_to_stage` | `transfer-to-stage.ts` | `UPDATE agent_conversations SET current_stage_id = $stage_id WHERE id = $agent_conv_id AND organization_id = $org_id`. Verify stage belongs to the same `config_id`. Return `{ old_stage_id, new_stage_id }`. |
+| `transfer_to_agent` | `transfer-to-agent.ts` | Move the agent_conversation to a different `config_id` (same org, target config must be `status='active'`). Reset `current_stage_id` to the first stage of the new config. Preserve `variables` and `history_summary`. |
+| `add_tag` | `add-tag.ts` | Find-or-create `tags` row (scoped by `organization_id`, `name` lowercased+trimmed) → upsert into `lead_tags(lead_id, tag_id)`. Return `{ tag_id, tag_name, created: boolean }`. |
+
+Hard rules reminder (from `tool-schema.ts`):
+
+1. Every handler re-validates input against its Zod schema before touching
+   the DB. The preset JSON Schema is advisory for the LLM, not enforcement.
+2. Every DB write includes `eq("organization_id", context.organization_id)`.
+3. `dry_run === true` returns the would-be effect in `output` with
+   `side_effects: ["would <verb> <subject>"]` and NO writes.
+4. Errors go in `NativeHandlerResult.error` with `success: false`. Do not
+   throw unless the runtime itself is corrupt.
+
+### Registry update
+
+`nativeHandlers` in `apps/crm/src/lib/ai-agent/tools/registry.ts` goes from
+1 entry to 5:
+
+```ts
+export const nativeHandlers: NativeHandlerRegistry = {
+  stop_agent: stopAgentHandler,
+  transfer_to_user: transferToUserHandler,
+  transfer_to_stage: transferToStageHandler,
+  transfer_to_agent: transferToAgentHandler,
+  add_tag: addTagHandler,
+};
+```
+
+Unimplemented handlers (assign_*, round_robin_*, send_audio,
+trigger_notification, schedule_event) still return "handler not implemented
+in this release" — UI will show their cards as disabled.
+
+### Tool CRUD — server actions Codex implements
+
+Location: `apps/crm/src/actions/ai-agent/tools.ts` (new file).
+
+```ts
+listToolsForAgent(configId: string): Promise<AgentTool[]>;
+createToolFromPreset(input: CreateToolFromPresetInput): Promise<AgentTool>;
+createCustomTool(input: CreateToolInput): Promise<AgentTool>; // defer n8n_webhook to PR5
+updateTool(toolId: string, input: UpdateToolInput): Promise<AgentTool>;
+deleteTool(toolId: string): Promise<void>;
+setStageTool(input: SetStageToolInput): Promise<AgentStageTool>;
+listStageTools(stageId: string): Promise<AgentStageTool[]>;
+```
+
+Rules:
+
+- All actions resolve `organization_id` server-side via `getOrgId()`.
+- `createCustomTool` rejects `execution_mode === 'n8n_webhook'` with a clear
+  error in PR3 — that mode ships with SSRF hardening in PR5. UI also hides
+  the "Custom webhook" card until PR5.
+- `setStageTool` is upsert: if the junction row exists, update
+  `is_enabled`; otherwise insert. Verify stage and tool share the same
+  `config_id` and the same `organization_id`.
+
+### Audit — server actions Codex implements
+
+Location: `apps/crm/src/actions/ai-agent/audit.ts` (new file).
+
+```ts
+listRuns(input: ListRunsInput): Promise<AgentRunWithSteps[]>;
+getRun(runId: string): Promise<AgentRunWithSteps | null>;
+```
+
+Rules:
+
+- Default `limit = 20`, max `100`. Results ordered by `created_at DESC`.
+- Requires `admin` role (same as writes — audit is sensitive).
+- Steps are fetched in one round trip (single join or two queries, whichever
+  the Supabase client does best) and attached to each run.
+- Scoped by `organization_id` in every filter.
+
+### UI — what Claude will build in the follow-up PR
+
+- Ferramentas tab: real implementation.
+  - Shows current tools for the agent (list + edit/remove).
+  - "Adicionar decisao inteligente" button opens the Decision Intelligence
+    modal.
+  - Modal grid of `NATIVE_TOOL_PRESETS` cards. Cards where
+    `shipped_in_pr > "PR3"` render disabled.
+- StageCard: footer with "Ferramentas permitidas: N" + per-stage toggle
+  panel in the StageSheet to flip `agent_stage_tools.is_enabled`.
+- Audit tab: paginated list of runs (via `listRuns({ config_id })`), each
+  row expandable to show step timeline (icon + duration + tool name +
+  compact output preview).
+
+No UI PR is blocked by this contracts PR — everything builds once the
+runtime PR from Codex merges.
+
+### Out of scope (still)
+
+- Custom webhook tools (PR5 — SSRF hardening).
+- RAG (PR6).
+- Notification templates (PR7).
+- Calendar integration (PR7).
+- Construtor de Prompt IA / Gerador guiado (PR8).
