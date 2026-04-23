@@ -6,6 +6,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { errorMessage, logError } from "@/lib/observability";
 import { createProvider } from "./providers";
 
 function getSupabase() {
@@ -94,11 +95,11 @@ export async function syncLeadToUazapi(orgId: string, leadId: string): Promise<v
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] syncLeadToUazapi error", {
+    logError("crm_sync_lead_to_whatsapp_failed", {
       organization_id: orgId,
       lead_id: leadId,
-      error: message,
+      provider: "whatsapp",
+      error: errorMessage(err),
     });
   }
 }
@@ -119,10 +120,10 @@ export async function disableChatbotForLead(
     const provider = createProvider(conn);
     await provider.disableChatbotFor(phone, minutes);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] disableChatbotForLead error", {
+    logError("crm_sync_disable_chatbot_failed", {
       organization_id: orgId,
-      error: message,
+      provider: "whatsapp",
+      error: errorMessage(err),
     });
   }
 }
@@ -138,10 +139,10 @@ export async function enableChatbotForLead(orgId: string, phone: string): Promis
     const provider = createProvider(conn);
     await provider.enableChatbot(phone);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] enableChatbotForLead error", {
+    logError("crm_sync_enable_chatbot_failed", {
       organization_id: orgId,
-      error: message,
+      provider: "whatsapp",
+      error: errorMessage(err),
     });
   }
 }
@@ -165,12 +166,12 @@ export async function syncTicketStatusToUazapi(
       assignedTo: assignedTo || undefined,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] syncTicketStatusToUazapi error", {
+    logError("crm_sync_ticket_status_failed", {
       organization_id: orgId,
+      provider: "whatsapp",
       ticket_open: isOpen,
       assigned: Boolean(assignedTo),
-      error: message,
+      error: errorMessage(err),
     });
   }
 }
@@ -205,7 +206,10 @@ export async function setupFieldsMap(instanceUrl: string, instanceToken: string)
       }),
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[CRM Sync] setupFieldsMap error:", message);
+    logError("crm_sync_setup_fields_map_failed", {
+      organization_id: null,
+      provider: "uazapi",
+      error: errorMessage(err),
+    });
   }
 }

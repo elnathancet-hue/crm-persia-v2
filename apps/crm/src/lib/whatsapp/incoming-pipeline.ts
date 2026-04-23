@@ -23,12 +23,14 @@ import type { IncomingMessage, WhatsAppProvider } from "@/lib/whatsapp/provider"
 import { onKeyword, onNewLead } from "@/lib/flows/triggers";
 import { parseSplitConfig, splitMessage } from "@/lib/ai/message-splitter";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
+import { errorMessage, logError } from "@/lib/observability";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
   orgId: string;
   provider: WhatsAppProvider;
   msg: IncomingMessage;
+  requestId?: string;
 }
 
 export interface IncomingResult {
@@ -41,9 +43,10 @@ export interface IncomingResult {
 }
 
 export async function processIncomingMessage(ctx: IncomingContext): Promise<IncomingResult> {
-  const { supabase, orgId, provider, msg } = ctx;
+  const { supabase, orgId, provider, msg, requestId } = ctx;
   const baseLogContext = {
     organization_id: orgId,
+    request_id: requestId ?? null,
     provider: provider.name,
     message_type: msg.type,
   };
@@ -109,10 +112,10 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     try {
       await onNewLead(orgId, lead.id);
     } catch (err: unknown) {
-      console.error("[pipeline] onNewLead error", {
+      logError("incoming_pipeline_on_new_lead_failed", {
         ...baseLogContext,
         lead_id: lead.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       });
     }
   }
@@ -122,10 +125,10 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   try {
     keywordFlowTriggered = await onKeyword(orgId, lead.id, msg.text || "");
   } catch (err: unknown) {
-    console.error("[pipeline] onKeyword error", {
+    logError("incoming_pipeline_on_keyword_failed", {
       ...baseLogContext,
       lead_id: lead.id,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage(err),
     });
   }
 
@@ -398,23 +401,20 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         }
       } else {
         const responseText = await n8nResponse.text().catch(() => "");
-        console.error(
-          "[pipeline] n8n error",
-          {
-            ...baseLogContext,
-            lead_id: lead.id,
-            conversation_id: conversation.id,
-            status: n8nResponse.status,
-            response_body_length: responseText.length,
-          },
-        );
+        logError("incoming_pipeline_n8n_http_error", {
+          ...baseLogContext,
+          lead_id: lead.id,
+          conversation_id: conversation.id,
+          status: n8nResponse.status,
+          response_body_length: responseText.length,
+        });
       }
     } catch (err: unknown) {
-      console.error("[pipeline] n8n call failed", {
+      logError("incoming_pipeline_n8n_call_failed", {
         ...baseLogContext,
         lead_id: lead.id,
         conversation_id: conversation.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       });
     }
   }
@@ -482,11 +482,11 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         handledBy: "ai_openai",
       };
     } catch (err: unknown) {
-      console.error("[pipeline] OpenAI error", {
+      logError("incoming_pipeline_openai_failed", {
         ...baseLogContext,
         lead_id: lead.id,
         conversation_id: conversation.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage(err),
       });
     }
   }

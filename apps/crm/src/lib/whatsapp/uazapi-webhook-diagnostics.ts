@@ -1,3 +1,5 @@
+import { logInfo, logWarn } from "@/lib/observability";
+
 type JsonRecord = Record<string, unknown>;
 
 export type UazapiMatchMethod = "instance_token" | "owner_phone_legacy" | "none";
@@ -15,6 +17,7 @@ interface DiagnosticHeaders {
 
 export interface UazapiWebhookDiagnostics {
   organization_id: string | null;
+  request_id: string | null;
   eventType: string | null;
   matchedBy: UazapiMatchMethod;
   hasBodyToken: boolean;
@@ -111,6 +114,7 @@ export function getUazapiWebhookDiagnostics(params: {
   headers: Headers;
   matchedBy: UazapiMatchMethod;
   organizationId?: string | null;
+  requestId?: string | null;
 }): UazapiWebhookDiagnostics {
   const root = asRecord(params.body);
   const message = asRecord(root?.message);
@@ -119,6 +123,7 @@ export function getUazapiWebhookDiagnostics(params: {
 
   return {
     organization_id: params.organizationId ?? null,
+    request_id: params.requestId ?? null,
     eventType: extractEventType(params.body),
     matchedBy: params.matchedBy,
     hasBodyToken: Boolean(safeString(root?.token)),
@@ -144,14 +149,15 @@ export function logUazapiWebhookDiagnostics(params: {
   headers: Headers;
   matchedBy: UazapiMatchMethod;
   organizationId?: string | null;
+  requestId?: string | null;
 }): void {
   const verbose = process.env.UAZAPI_WEBHOOK_DIAGNOSTICS === "verbose";
   if (!verbose && params.matchedBy !== "owner_phone_legacy") return;
 
   const diagnostics = getUazapiWebhookDiagnostics(params);
   if (params.matchedBy === "owner_phone_legacy") {
-    console.warn("[UAZAPI webhook] diagnostics", diagnostics);
+    logWarn("uazapi_webhook_diagnostics", { ...diagnostics });
   } else {
-    console.info("[UAZAPI webhook] diagnostics", diagnostics);
+    logInfo("uazapi_webhook_diagnostics", { ...diagnostics });
   }
 }

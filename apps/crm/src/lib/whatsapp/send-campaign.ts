@@ -5,6 +5,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { errorMessage, logError, logInfo } from "@/lib/observability";
 import { createProvider } from "./providers";
 
 function getSupabase() {
@@ -43,6 +44,11 @@ export async function executeCampaign(job: CampaignJob): Promise<{
     .single();
 
   if (!connection) {
+    logError("campaign_execute_missing_connection", {
+      organization_id: job.orgId,
+      campaign_id: job.campaignId,
+      provider: "whatsapp",
+    });
     throw new Error("WhatsApp nao conectado");
   }
 
@@ -70,6 +76,11 @@ export async function executeCampaign(job: CampaignJob): Promise<{
 
   const { data: leads } = await query;
   if (!leads || leads.length === 0) {
+    logInfo("campaign_execute_no_leads", {
+      organization_id: job.orgId,
+      campaign_id: job.campaignId,
+      target_tags_count: job.targetTags.length,
+    });
     return { totalSent: 0, totalFailed: 0, errors: ["Nenhum lead encontrado"] };
   }
 
@@ -93,6 +104,11 @@ export async function executeCampaign(job: CampaignJob): Promise<{
   }
 
   if (numbers.length === 0) {
+    logInfo("campaign_execute_no_valid_numbers", {
+      organization_id: job.orgId,
+      campaign_id: job.campaignId,
+      lead_count: leads.length,
+    });
     return { totalSent: 0, totalFailed: 0, errors: ["Nenhum telefone valido"] };
   }
 
@@ -141,9 +157,17 @@ export async function executeCampaign(job: CampaignJob): Promise<{
       })
       .eq("id", job.campaignId);
 
+    logInfo("campaign_execute_queued", {
+      organization_id: job.orgId,
+      campaign_id: job.campaignId,
+      provider: connection.provider,
+      total_queued: numbers.length,
+      scheduled: Boolean(job.scheduledFor),
+    });
+
     return { totalSent: numbers.length, totalFailed: 0, errors: [] };
   } catch (e: unknown) {
-    const errorMsg = e instanceof Error ? e.message : String(e);
+    const errorMsg = errorMessage(e);
 
     // Update campaign as failed
     await supabase
@@ -153,6 +177,14 @@ export async function executeCampaign(job: CampaignJob): Promise<{
         updated_at: new Date().toISOString(),
       })
       .eq("id", job.campaignId);
+
+    logError("campaign_execute_failed", {
+      organization_id: job.orgId,
+      campaign_id: job.campaignId,
+      provider: connection.provider,
+      target_count: numbers.length,
+      error: errorMsg,
+    });
 
     return { totalSent: 0, totalFailed: numbers.length, errors: [errorMsg] };
   }
@@ -174,7 +206,14 @@ export async function sendFollowUp(
     .eq("status", "connected")
     .single();
 
-  if (!connection) return false;
+  if (!connection) {
+    logError("followup_send_missing_connection", {
+      organization_id: orgId,
+      lead_id: leadId,
+      provider: "whatsapp",
+    });
+    return false;
+  }
 
   const { data: lead } = await supabase
     .from("leads")
@@ -182,7 +221,13 @@ export async function sendFollowUp(
     .eq("id", leadId)
     .single();
 
-  if (!lead?.phone) return false;
+  if (!lead?.phone) {
+    logInfo("followup_send_missing_phone", {
+      organization_id: orgId,
+      lead_id: leadId,
+    });
+    return false;
+  }
 
   const provider = createProvider(connection);
   const personalizedMsg = message
@@ -201,7 +246,13 @@ export async function sendFollowUp(
     });
 
     return true;
-  } catch {
+  } catch (err: unknown) {
+    logError("followup_send_failed", {
+      organization_id: orgId,
+      lead_id: leadId,
+      provider: connection.provider,
+      error: errorMessage(err),
+    });
     return false;
   }
 }
@@ -222,14 +273,25 @@ export async function sendWhatsAppMessage(
     .eq("status", "connected")
     .single();
 
-  if (!connection) return { success: false };
+  if (!connection) {
+    logError("whatsapp_direct_send_missing_connection", {
+      organization_id: orgId,
+      provider: "whatsapp",
+    });
+    return { success: false };
+  }
 
   const provider = createProvider(connection);
 
   try {
     const result = await provider.sendText({ phone, message });
     return { success: true, messageId: result.messageId };
-  } catch {
+  } catch (err: unknown) {
+    logError("whatsapp_direct_send_failed", {
+      organization_id: orgId,
+      provider: connection.provider,
+      error: errorMessage(err),
+    });
     return { success: false };
   }
 }

@@ -105,6 +105,7 @@ describe("uazapi webhook diagnostics", () => {
 
     expect(diagnostics).toEqual({
       organization_id: "org-123",
+      request_id: null,
       eventType: "messages",
       matchedBy: "instance_token",
       hasBodyToken: true,

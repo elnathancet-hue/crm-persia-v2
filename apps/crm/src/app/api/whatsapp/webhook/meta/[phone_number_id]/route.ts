@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
 import { validateMetaChallenge, validateMetaSignature } from "@/lib/whatsapp/webhook-verifier";
@@ -59,12 +60,16 @@ export async function POST(
   { params }: { params: Promise<{ phone_number_id: string }> },
 ) {
   const { phone_number_id } = await params;
+  const requestId = getRequestId(req.headers);
   const rawBody = await req.text();
 
   const conn = await loadMetaConnection(phone_number_id);
   if (!conn) {
-    console.warn("[Meta webhook] unknown phone_number_id", {
+    logWarn("meta_webhook_unknown_phone_number", {
       organization_id: null,
+      request_id: requestId,
+      provider: "meta_cloud",
+      route: "/api/whatsapp/webhook/meta/[phone_number_id]",
       phone_number_id,
     });
     // 200 for unknown numbers — avoids Meta retries.
@@ -74,8 +79,11 @@ export async function POST(
   // HMAC: Meta signs with the App Secret (same for every number under one App).
   const appSecret = process.env.META_APP_SECRET;
   if (!appSecret) {
-    console.error("[Meta webhook] META_APP_SECRET not set", {
+    logError("meta_webhook_missing_app_secret", {
       organization_id: conn.organization_id,
+      request_id: requestId,
+      provider: "meta_cloud",
+      route: "/api/whatsapp/webhook/meta/[phone_number_id]",
       phone_number_id,
     });
     return new NextResponse("Server misconfigured", { status: 500 });
@@ -86,8 +94,11 @@ export async function POST(
     appSecret,
   );
   if (!signatureOk) {
-    console.warn("[Meta webhook] invalid signature", {
+    logWarn("meta_webhook_invalid_signature", {
       organization_id: conn.organization_id,
+      request_id: requestId,
+      provider: "meta_cloud",
+      route: "/api/whatsapp/webhook/meta/[phone_number_id]",
       phone_number_id,
     });
     return new NextResponse("Invalid signature", { status: 401 });
@@ -137,23 +148,24 @@ export async function POST(
             if (media.fileURL) msg.mediaUrl = media.fileURL;
             if (media.mimetype) msg.mediaMimeType = media.mimetype;
           } catch (err) {
-            console.error(
-              "[Meta webhook] media download failed",
-              {
-                organization_id: orgId,
-                provider: provider.name,
-                phone_number_id,
-                message_type: msg.type,
-                error: err instanceof Error ? err.message : String(err),
-              },
-            );
+            logError("meta_webhook_media_download_failed", {
+              organization_id: orgId,
+              request_id: requestId,
+              provider: provider.name,
+              route: "/api/whatsapp/webhook/meta/[phone_number_id]",
+              phone_number_id,
+              message_type: msg.type,
+              error: errorMessage(err),
+            });
           }
         }
 
-        const result = await processIncomingMessage({ supabase, orgId, provider, msg });
-        console.info("[Meta webhook] processed message", {
+        const result = await processIncomingMessage({ supabase, orgId, provider, msg, requestId });
+        logInfo("meta_webhook_processed_message", {
           organization_id: orgId,
+          request_id: requestId,
           provider: provider.name,
+          route: "/api/whatsapp/webhook/meta/[phone_number_id]",
           phone_number_id,
           ok: result.ok,
           skipped: result.skipped ?? null,

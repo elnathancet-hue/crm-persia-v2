@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
 import {
@@ -29,6 +30,7 @@ function getSupabase() {
  * here is the media download (UAZAPI does not include fileURL in the payload).
  */
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request.headers);
   try {
     const supabase = getSupabase();
     const rawBody = await request.text();
@@ -40,9 +42,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (signature.configured && signature.mode !== "off" && !signature.valid) {
-      const log = signature.mode === "enforce" ? console.warn : console.info;
-      log("[UAZAPI webhook] signature check failed", {
+      const log = signature.mode === "enforce" ? logWarn : logInfo;
+      log("uazapi_webhook_signature_failed", {
         organization_id: null,
+        request_id: requestId,
+        provider: "uazapi",
+        route: "/api/whatsapp/webhook",
         mode: signature.mode,
         present: signature.present,
         headerName: signature.headerName,
@@ -86,11 +91,15 @@ export async function POST(request: NextRequest) {
       headers: request.headers,
       matchedBy,
       organizationId: matchedConn?.organization_id ?? null,
+      requestId,
     });
 
     if (!matchedConn) {
-      console.warn("[UAZAPI webhook] unknown instance", {
+      logWarn("uazapi_webhook_unknown_instance", {
         organization_id: null,
+        request_id: requestId,
+        provider: "uazapi",
+        route: "/api/whatsapp/webhook",
         matched_by: matchedBy,
         has_owner_phone: Boolean(ownerPhone),
         has_webhook_token: Boolean(webhookToken),
@@ -104,9 +113,11 @@ export async function POST(request: NextRequest) {
     const provider = createProvider(matchedConn);
     const msg = provider.parseWebhook(body.message || body);
     if (!msg) {
-      console.info("[UAZAPI webhook] skipped payload", {
+      logInfo("uazapi_webhook_skipped_payload", {
         organization_id: matchedConn.organization_id,
+        request_id: requestId,
         provider: provider.name,
+        route: "/api/whatsapp/webhook",
         matched_by: matchedBy,
         skipped: "no processable message",
       });
@@ -127,15 +138,14 @@ export async function POST(request: NextRequest) {
         if (download.mimetype) msg.mediaMimeType = download.mimetype;
         if (isAudio && download.transcription) msg.text = download.transcription;
       } catch (err: unknown) {
-        console.error(
-          "[UAZAPI webhook] media download failed",
-          {
-            organization_id: matchedConn.organization_id,
-            provider: provider.name,
-            message_type: msg.type,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        );
+        logError("uazapi_webhook_media_download_failed", {
+          organization_id: matchedConn.organization_id,
+          request_id: requestId,
+          provider: provider.name,
+          route: "/api/whatsapp/webhook",
+          message_type: msg.type,
+          error: errorMessage(err),
+        });
       }
     }
 
@@ -145,11 +155,14 @@ export async function POST(request: NextRequest) {
       orgId: matchedConn.organization_id,
       provider,
       msg,
+      requestId,
     });
 
-    console.info("[UAZAPI webhook] processed message", {
+    logInfo("uazapi_webhook_processed_message", {
       organization_id: matchedConn.organization_id,
+      request_id: requestId,
       provider: provider.name,
+      route: "/api/whatsapp/webhook",
       matched_by: matchedBy,
       ok: result.ok,
       skipped: result.skipped ?? null,
@@ -161,10 +174,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error: unknown) {
     // Log internally; do not expose internals to the caller
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[UAZAPI webhook] error", {
+    logError("uazapi_webhook_error", {
       organization_id: null,
-      error: message,
+      request_id: requestId,
+      provider: "uazapi",
+      route: "/api/whatsapp/webhook",
+      error: errorMessage(error),
     });
     return NextResponse.json({ ok: false }, { status: 500 });
   }
