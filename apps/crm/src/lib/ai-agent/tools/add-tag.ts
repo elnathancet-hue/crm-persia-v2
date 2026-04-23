@@ -23,9 +23,6 @@ export const addTagHandler: NativeHandler = async (context, input) => {
 
   const tagName = normalizeTagName(parsed.data.tag_name);
 
-  let created = false;
-  let tagId: string | null = null;
-
   const { data: existingTag, error: tagLookupError } = await db
     .from("tags")
     .select("id, name")
@@ -34,6 +31,24 @@ export const addTagHandler: NativeHandler = async (context, input) => {
     .maybeSingle();
 
   if (tagLookupError) return failureResult(tagLookupError.message);
+
+  if (context.dry_run) {
+    return successResult(
+      {
+        tag_id: existingTag?.id ?? null,
+        tag_name: tagName,
+        created: !existingTag,
+      },
+      [
+        existingTag
+          ? `would attach tag ${tagName} to lead`
+          : `would create tag ${tagName} and attach to lead`,
+      ],
+    );
+  }
+
+  let created = false;
+  let tagId: string;
 
   if (existingTag?.id) {
     tagId = existingTag.id as string;
@@ -54,17 +69,6 @@ export const addTagHandler: NativeHandler = async (context, input) => {
 
     created = true;
     tagId = createdTag.id as string;
-  }
-
-  if (context.dry_run) {
-    return successResult(
-      {
-        tag_id: tagId,
-        tag_name: tagName,
-        created,
-      },
-      [`would attach tag ${tagName} to lead`],
-    );
   }
 
   const { error: leadTagError } = await db

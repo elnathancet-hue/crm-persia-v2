@@ -358,4 +358,64 @@ describe("ai-agent PR3 runtime", () => {
       tag_id: "tag-a",
     });
   });
+
+  it("addTagHandler dry-run does not write to tags or lead_tags when tag is new", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("tags", { data: null, error: null });
+
+    const result = await addTagHandler(
+      {
+        organization_id: ORG_A,
+        lead_id: "lead-a",
+        crm_conversation_id: "conv-a",
+        agent_conversation_id: "agent-conv-a",
+        run_id: "run-a",
+        dry_run: true,
+        db: supabase as never,
+      } as never,
+      { tag_name: "novo segmento" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toMatchObject({
+      tag_name: "novo segmento",
+      created: true,
+      tag_id: null,
+    });
+    expect(result.side_effects).toEqual([
+      "would create tag novo segmento and attach to lead",
+    ]);
+    expect(supabase.inserts.tags).toBeUndefined();
+    expect(supabase.inserts.lead_tags).toBeUndefined();
+  });
+
+  it("addTagHandler dry-run does not write to lead_tags when tag already exists", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("tags", {
+      data: { id: "tag-existing", name: "vip" },
+      error: null,
+    });
+
+    const result = await addTagHandler(
+      {
+        organization_id: ORG_A,
+        lead_id: "lead-a",
+        crm_conversation_id: "conv-a",
+        agent_conversation_id: "agent-conv-a",
+        run_id: "run-a",
+        dry_run: true,
+        db: supabase as never,
+      } as never,
+      { tag_name: "VIP" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.output).toMatchObject({
+      tag_name: "vip",
+      created: false,
+      tag_id: "tag-existing",
+    });
+    expect(supabase.inserts.tags).toBeUndefined();
+    expect(supabase.inserts.lead_tags).toBeUndefined();
+  });
 });
