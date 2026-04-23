@@ -3,7 +3,12 @@
 import * as React from "react";
 import { GripVertical, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
-import type { AgentStage, CreateStageInput, UpdateStageInput } from "@persia/shared/ai-agent";
+import type {
+  AgentStage,
+  AgentTool,
+  CreateStageInput,
+  UpdateStageInput,
+} from "@persia/shared/ai-agent";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -22,10 +27,11 @@ import { StageSheet } from "./StageSheet";
 interface Props {
   configId: string;
   stages: AgentStage[];
+  tools: AgentTool[];
   onChange: (next: AgentStage[]) => void;
 }
 
-export function StagesTab({ configId, stages, onChange }: Props) {
+export function StagesTab({ configId, stages, tools, onChange }: Props) {
   const [editing, setEditing] = React.useState<AgentStage | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<AgentStage | null>(null);
@@ -117,6 +123,7 @@ export function StagesTab({ configId, stages, onChange }: Props) {
         open={creating}
         onOpenChange={setCreating}
         mode="create"
+        tools={tools}
         isPending={isPending}
         onSubmit={(input) => handleCreate(input as CreateStageInput)}
       />
@@ -125,6 +132,7 @@ export function StagesTab({ configId, stages, onChange }: Props) {
         onOpenChange={(open) => !open && setEditing(null)}
         mode="edit"
         stage={editing ?? undefined}
+        tools={tools}
         isPending={isPending}
         onSubmit={(input) => editing && handleUpdate(editing.id, input)}
       />
