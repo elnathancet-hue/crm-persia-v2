@@ -408,3 +408,43 @@ runtime PR from Codex merges.
 - Notification templates (PR7).
 - Calendar integration (PR7).
 - Construtor de Prompt IA / Gerador guiado (PR8).
+
+---
+
+## 2026-04-23 16:20 — Codex — PR3 runtime implementation notes
+
+Branch: `codex/ai-agent-pr3-runtime`.
+
+Runtime choices shipped in this branch:
+
+- `apps/crm/src/actions/ai-agent/tools.ts`
+  - `createToolFromPreset()` materializes `NATIVE_TOOL_PRESETS` and rejects
+    presets whose `shipped_in_pr` is later than PR3.
+  - `createCustomTool()` rejects `execution_mode='n8n_webhook'` with a PR5
+    error, per contract.
+  - `setStageTool()` is the junction upsert for `agent_stage_tools`.
+- `apps/crm/src/actions/ai-agent/audit.ts`
+  - `listRuns()` + `getRun()` return `AgentRunWithSteps` with step arrays
+    attached server-side.
+- Native handler registry now includes:
+  - `stop_agent`
+  - `transfer_to_user`
+  - `transfer_to_stage`
+  - `transfer_to_agent`
+  - `add_tag`
+
+Important implementation detail for UI/ops:
+
+- There is still no dedicated "conversation internal notes" table in CRM.
+  To avoid injecting fake chat messages into the live transcript, both
+  `stop_agent` and `transfer_to_user` write their internal audit note into
+  `lead_activities` with `metadata.source='ai_agent'` and
+  `metadata.conversation_id=<crm_conversation_id>`.
+  UI can surface that as an internal timeline event if needed.
+
+Other runtime tweaks included opportunistically:
+
+- AI agent server actions now revalidate `/automations/agents` paths instead
+  of the old `/dashboard/agents` path from the spike.
+- `getDefaultStopAgentTool()` is now a thin wrapper over the shared preset
+  catalog, so presets are the single source of truth.

@@ -1,30 +1,22 @@
 import type { NativeHandler } from "@persia/shared/ai-agent";
-import { asAgentDb, nowIso } from "../db";
+import { nowIso } from "../db";
+import { failureResult, getHandlerDb, insertLeadActivity, successResult, trimReason } from "./shared";
 
 export const stopAgentHandler: NativeHandler = async (context, input) => {
-  const reason = typeof input.reason === "string" && input.reason.trim()
-    ? input.reason.trim().slice(0, 500)
-    : "agent_requested_handoff";
+  const reason = trimReason(input.reason, "agent_requested_handoff");
 
   if (context.dry_run) {
-    return {
-      success: true,
-      output: {
+    return successResult(
+      {
         human_handoff_at: "[dry_run]",
         reason,
       },
-      side_effects: ["would pause native agent for this conversation"],
-    };
+      ["would pause native agent for this conversation"],
+    );
   }
 
-  const db = asAgentDb((context as unknown as { db?: unknown }).db as never);
-  if (!db?.from) {
-    return {
-      success: false,
-      output: {},
-      error: "database context missing",
-    };
-  }
+  const db = getHandlerDb(context);
+  if (!db) return failureResult("database context missing");
 
   const { error } = await db
     .from("agent_conversations")
@@ -37,15 +29,27 @@ export const stopAgentHandler: NativeHandler = async (context, input) => {
     .eq("organization_id", context.organization_id);
 
   if (error) {
-    return { success: false, output: {}, error: error.message };
+    return failureResult(error.message);
   }
 
-  return {
-    success: true,
-    output: {
+  await insertLeadActivity({
+    db,
+    organizationId: context.organization_id,
+    leadId: context.lead_id,
+    type: "agent_handoff",
+    description: `Nota interna do agente: atendimento pausado para humano. Motivo: ${reason}`,
+    metadata: {
+      conversation_id: context.crm_conversation_id,
+      agent_conversation_id: context.agent_conversation_id,
+      run_id: context.run_id,
+    },
+  });
+
+  return successResult(
+    {
       human_handoff_at: "now",
       reason,
     },
-    side_effects: ["paused native agent for this conversation"],
-  };
+    ["paused native agent for this conversation", "added internal lead activity note"],
+  );
 };

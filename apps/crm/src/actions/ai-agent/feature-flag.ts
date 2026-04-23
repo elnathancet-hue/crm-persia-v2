@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isNativeAgentEnabled as readNativeAgentEnabled } from "@/lib/ai-agent/feature-flag";
 import { mergeJsonObject } from "@/lib/ai-agent/db";
-import { requireAgentRole } from "./utils";
+import { agentPaths, requireAgentRole } from "./utils";
 
 export async function isNativeAgentEnabled(): Promise<boolean> {
   const { db, orgId } = await requireAgentRole("agent");
@@ -42,7 +42,7 @@ export async function setNativeAgentEnabled(enabled: boolean): Promise<boolean> 
     .eq("id", orgId);
 
   if (error) throw new Error(error.message);
-  revalidatePath("/dashboard/agents");
+  for (const path of agentPaths()) revalidatePath(path);
   return enabled;
 }
 

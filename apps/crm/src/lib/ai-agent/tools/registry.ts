@@ -1,13 +1,22 @@
 import type {
   AgentTool,
+  NativeToolPreset,
   NativeHandlerName,
   NativeHandlerRegistry,
 } from "@persia/shared/ai-agent";
+import { getPreset } from "@persia/shared/ai-agent";
+import { addTagHandler } from "./add-tag";
 import { stopAgentHandler } from "./stop-agent";
-import { stopAgentInputSchema } from "./schemas";
+import { transferToAgentHandler } from "./transfer-to-agent";
+import { transferToStageHandler } from "./transfer-to-stage";
+import { transferToUserHandler } from "./transfer-to-user";
 
 export const nativeHandlers: NativeHandlerRegistry = {
   stop_agent: stopAgentHandler,
+  transfer_to_user: transferToUserHandler,
+  transfer_to_stage: transferToStageHandler,
+  transfer_to_agent: transferToAgentHandler,
+  add_tag: addTagHandler,
 };
 
 export function isImplementedNativeHandler(
@@ -20,17 +29,36 @@ export function getDefaultStopAgentTool(params: {
   configId: string;
   organizationId: string;
 }): Omit<AgentTool, "id" | "created_at" | "updated_at"> {
+  return materializePresetTool({
+    configId: params.configId,
+    organizationId: params.organizationId,
+    preset: requirePreset("stop_agent"),
+  });
+}
+
+export function materializePresetTool(params: {
+  configId: string;
+  organizationId: string;
+  preset: NativeToolPreset;
+}): Omit<AgentTool, "id" | "created_at" | "updated_at"> {
   return {
     config_id: params.configId,
     organization_id: params.organizationId,
-    name: "stop_agent",
-    description:
-      "Pause the native agent for this conversation and hand the next reply to a human.",
-    input_schema: stopAgentInputSchema,
+    name: params.preset.name,
+    description: params.preset.description,
+    input_schema: params.preset.input_schema,
     execution_mode: "native",
-    native_handler: "stop_agent",
+    native_handler: params.preset.handler,
     webhook_url: null,
     webhook_secret: null,
     is_enabled: true,
   };
+}
+
+function requirePreset(handler: NativeHandlerName): NativeToolPreset {
+  const preset = getPreset(handler);
+  if (!preset) {
+    throw new Error(`Missing native tool preset for ${handler}`);
+  }
+  return preset;
 }

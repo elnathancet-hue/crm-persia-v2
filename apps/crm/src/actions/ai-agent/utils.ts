@@ -1,10 +1,12 @@
 import {
   DEFAULT_GUARDRAILS,
   DEFAULT_MODEL,
+  type AgentStageTool,
   isKnownModel,
   type AgentConfig,
   type AgentGuardrails,
   type AgentStage,
+  type AgentTool,
   type AgentStatus,
   type CreateAgentInput,
   type CreateStageInput,
@@ -161,6 +163,43 @@ export async function assertStageBelongsToOrg(
   return data as AgentStage;
 }
 
+export async function assertToolBelongsToOrg(
+  db: AgentDb,
+  orgId: string,
+  toolId: string,
+): Promise<AgentTool> {
+  const { data, error } = await db
+    .from("agent_tools")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("id", toolId)
+    .maybeSingle();
+  if (error || !data) throw new Error("Ferramenta nao encontrada");
+  return data as AgentTool;
+}
+
+export async function upsertStageToolRow(
+  db: AgentDb,
+  orgId: string,
+  stageId: string,
+  toolId: string,
+  isEnabled: boolean,
+): Promise<AgentStageTool> {
+  const { data, error } = await db
+    .from("agent_stage_tools")
+    .upsert({
+      organization_id: orgId,
+      stage_id: stageId,
+      tool_id: toolId,
+      is_enabled: isEnabled,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Erro ao salvar permissao da ferramenta");
+  return data as AgentStageTool;
+}
+
 export function validateReorder(input: ReorderStagesInput): ReorderStagesInput {
   if (!input.config_id) throw new Error("config_id e obrigatorio");
   if (!Array.isArray(input.stage_ids) || input.stage_ids.length === 0) {
@@ -177,4 +216,10 @@ export function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48) || "stage";
+}
+
+export function agentPaths(configId?: string): string[] {
+  const paths = ["/automations/agents"];
+  if (configId) paths.push(`/automations/agents/${configId}`);
+  return paths;
 }

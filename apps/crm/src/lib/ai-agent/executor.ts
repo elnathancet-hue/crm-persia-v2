@@ -14,7 +14,7 @@ import {
 } from "@persia/shared/ai-agent";
 import type { IncomingMessage, WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { errorMessage, logError, logInfo } from "@/lib/observability";
-import { asAgentDb, nowIso, type AgentDb } from "./db";
+import { asAgentDb, type AgentDb } from "./db";
 import {
   createSyntheticAgentConversation,
   loadActiveAgentConfig,
