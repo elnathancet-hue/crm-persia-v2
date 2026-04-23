@@ -91,3 +91,8 @@ export {
   needsChatMediaSigning,
   toChatMediaRef,
 } from "./chat-media";
+
+// AI Agent — domain types, tool-use contracts, cost calc.
+// Prefer the subpath import `@persia/shared/ai-agent` for locality; this
+// re-export exists for convenience on top-level imports.
+export * from "./ai-agent";
