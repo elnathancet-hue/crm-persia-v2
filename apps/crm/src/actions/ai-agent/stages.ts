@@ -9,6 +9,7 @@ import type {
 import { revalidatePath } from "next/cache";
 import type { AgentDb } from "@/lib/ai-agent/db";
 import {
+  agentPaths,
   assertConfigBelongsToOrg,
   assertStageBelongsToOrg,
   normalizeStageInput,
@@ -63,7 +64,7 @@ export async function createStage(
   const stage = data as AgentStage;
   await enableDefaultStopTool(db, orgId, configId, stage.id);
 
-  revalidatePath(`/dashboard/agents/${configId}`);
+  for (const path of agentPaths(configId)) revalidatePath(path);
   return stage;
 }
 
@@ -93,7 +94,7 @@ export async function updateStage(
     .single();
 
   if (error || !data) throw new Error(error?.message || "Erro ao atualizar etapa");
-  revalidatePath(`/dashboard/agents/${existing.config_id}`);
+  for (const path of agentPaths(existing.config_id)) revalidatePath(path);
   return data as AgentStage;
 }
 
@@ -108,7 +109,7 @@ export async function deleteStage(stageId: string): Promise<void> {
     .eq("id", stageId);
 
   if (error) throw new Error(error.message);
-  revalidatePath(`/dashboard/agents/${existing.config_id}`);
+  for (const path of agentPaths(existing.config_id)) revalidatePath(path);
 }
 
 export async function reorderStages(input: ReorderStagesInput): Promise<void> {
@@ -143,7 +144,7 @@ export async function reorderStages(input: ReorderStagesInput): Promise<void> {
     ),
   );
 
-  revalidatePath(`/dashboard/agents/${normalized.config_id}`);
+  for (const path of agentPaths(normalized.config_id)) revalidatePath(path);
 }
 
 async function nextStageOrderIndex(

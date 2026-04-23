@@ -11,6 +11,7 @@ import { getDefaultStopAgentTool } from "@/lib/ai-agent/tools/registry";
 import {
   assertAgentStatus,
   assertConfigBelongsToOrg,
+  agentPaths,
   mergeGuardrails,
   normalizeAgentInput,
   normalizeAgentPatch,
@@ -73,7 +74,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
   const { error: toolError } = await db.from("agent_tools").insert(defaultTool);
   if (toolError) throw new Error(toolError.message);
 
-  revalidatePath("/dashboard/agents");
+  for (const path of agentPaths()) revalidatePath(path);
   return config;
 }
 
@@ -107,8 +108,7 @@ export async function updateAgent(
     .single();
 
   if (error || !data) throw new Error(error?.message || "Erro ao atualizar agente");
-  revalidatePath("/dashboard/agents");
-  revalidatePath(`/dashboard/agents/${configId}`);
+  for (const path of agentPaths(configId)) revalidatePath(path);
   return data as AgentConfig;
 }
 
@@ -123,6 +123,6 @@ export async function deleteAgent(configId: string): Promise<void> {
     .eq("id", configId);
 
   if (error) throw new Error(error.message);
-  revalidatePath("/dashboard/agents");
+  for (const path of agentPaths()) revalidatePath(path);
 }
 
