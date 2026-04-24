@@ -8,6 +8,7 @@ import {
   Calendar,
   FileText,
   FlaskConical,
+  Gauge,
   HelpCircle,
   History,
   Library,
@@ -19,6 +20,7 @@ import {
 import { toast } from "sonner";
 import type {
   AgentConfig,
+  AgentCostLimit,
   AgentStage,
   AgentStatus,
   AgentTool,
@@ -38,6 +40,7 @@ import { RulesTab } from "@/features/ai-agent/components/RulesTab";
 import { StagesTab } from "@/features/ai-agent/components/StagesTab";
 import { ToolsTab } from "@/features/ai-agent/components/ToolsTab";
 import { AuditTab } from "@/features/ai-agent/components/AuditTab";
+import { LimitsUsageTab } from "@/features/ai-agent/components/LimitsUsageTab";
 import { PlaceholderTab } from "@/features/ai-agent/components/PlaceholderTab";
 import { TesterSheet } from "@/features/ai-agent/components/TesterSheet";
 import { updateAgent } from "@/actions/ai-agent/configs";
@@ -46,12 +49,14 @@ interface Props {
   initialAgent: AgentConfig;
   initialStages: AgentStage[];
   initialTools: AgentTool[];
+  initialLimits: AgentCostLimit[];
 }
 
 export function AgentEditorClient({
   initialAgent,
   initialStages,
   initialTools,
+  initialLimits,
 }: Props) {
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
@@ -165,6 +170,10 @@ export function AgentEditorClient({
             <Calendar className="size-4" />
             Agendamento
           </TabsTrigger>
+          <TabsTrigger value="limits" className="gap-2">
+            <Gauge className="size-4" />
+            Limites e Uso
+          </TabsTrigger>
           <TabsTrigger value="audit" className="gap-2">
             <History className="size-4" />
             Execucoes
@@ -221,6 +230,9 @@ export function AgentEditorClient({
             description="Conecte Google Calendar e permita que o agente marque reunioes direto na conversa."
             phase="PR7"
           />
+        </TabsContent>
+        <TabsContent value="limits">
+          <LimitsUsageTab configId={agent.id} initialLimits={initialLimits} />
         </TabsContent>
         <TabsContent value="audit">
           <AuditTab configId={agent.id} />
