@@ -77,11 +77,15 @@ describe("ai-agent PR3 runtime", () => {
     expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith("/automations/agents/config-a");
   });
 
-  it("createCustomTool rejects n8n_webhook until PR5", async () => {
+  it("createCustomTool rejects non-HTTPS custom webhook tools", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
     supabase.queue("agent_configs", {
       data: { id: "config-a", organization_id: ORG_A },
+      error: null,
+    });
+    supabase.queue("organizations", {
+      data: { settings: { webhook_allowlist: { domains: ["hooks.example.com"] } } },
       error: null,
     });
 
@@ -89,11 +93,13 @@ describe("ai-agent PR3 runtime", () => {
       createCustomTool({
         config_id: "config-a",
         name: "custom_webhook",
-        description: "future",
+        description: "webhook",
         input_schema: { type: "object", properties: {} },
         execution_mode: "n8n_webhook",
+        webhook_url: "http://hooks.example.com/flow",
+        webhook_secret: "12345678901234567890123456789012",
       }),
-    ).rejects.toThrow(/PR5/i);
+    ).rejects.toThrow(/HTTPS/i);
     expect(supabase.inserts.agent_tools).toBeUndefined();
   });
 

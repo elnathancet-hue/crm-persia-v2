@@ -843,3 +843,13 @@ Rules:
 - RAG (PR6).
 - Notifications + Agendamento (PR7).
 - Meta-IA builders (PR8).
+## 2026-04-23 22:15 - Codex - PR5 runtime handoff
+
+- Runtime PR5 branch: `codex/ai-agent-pr5-runtime`
+- Implementado `apps/crm/src/lib/ai-agent/webhook-caller.ts` com 9 gates de SSRF:
+  HTTPS only, hostname exato na allowlist, DNS resolve A/AAAA, bloqueio de IPs privados/reservados, porta 443, timeout, no redirects, cap de resposta e HMAC `X-Persia-Signature`.
+- Liberado `createCustomWebhookTool` e `updateTool` para `execution_mode='n8n_webhook'`, com validacao de allowlist e `WEBHOOK_SECRET_MIN_LENGTH`.
+- Adicionadas actions `listAllowedDomains`, `addAllowedDomain`, `removeAllowedDomain` em `apps/crm/src/actions/ai-agent/webhook-allowlist.ts`.
+- Executor agora roteia tools `n8n_webhook` via `invokeCustomWebhook()` e persiste em `agent_steps.output` apenas o resumo auditavel (`http_status`, `duration_ms`, `url_host`, `body_sha256`, `response_size_bytes`, `response_sha256`, `error/code` quando houver).
+- Nenhum corpo bruto de request/response e salvo no audit step.
+- Testes adicionados em `apps/crm/src/__tests__/ai-agent-pr5-runtime.test.ts`; o teste legado da PR3 foi atualizado para o comportamento novo.
