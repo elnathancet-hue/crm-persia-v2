@@ -63,6 +63,10 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       context_summary_turn_threshold: normalized.context_summary_turn_threshold,
       context_summary_token_threshold: normalized.context_summary_token_threshold,
       context_summary_recent_messages: normalized.context_summary_recent_messages,
+      handoff_notification_enabled: normalized.handoff_notification_enabled ?? false,
+      handoff_notification_target_type: normalized.handoff_notification_target_type ?? null,
+      handoff_notification_target_address: normalized.handoff_notification_target_address ?? null,
+      handoff_notification_template: normalized.handoff_notification_template ?? null,
       status: "draft",
     })
     .select("*")
@@ -88,7 +92,7 @@ export async function updateAgent(
 ): Promise<AgentConfig> {
   const { db, orgId } = await requireAgentRole("admin");
   const existing = await assertConfigBelongsToOrg(db, orgId, configId);
-  const patch = normalizeAgentPatch(input);
+  const patch = normalizeAgentPatch(input, existing);
   assertAgentStatus(patch.status);
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -112,6 +116,18 @@ export async function updateAgent(
   }
   if (patch.context_summary_recent_messages !== undefined) {
     updates.context_summary_recent_messages = patch.context_summary_recent_messages;
+  }
+  if (patch.handoff_notification_enabled !== undefined) {
+    updates.handoff_notification_enabled = patch.handoff_notification_enabled;
+  }
+  if (patch.handoff_notification_target_type !== undefined) {
+    updates.handoff_notification_target_type = patch.handoff_notification_target_type;
+  }
+  if (patch.handoff_notification_target_address !== undefined) {
+    updates.handoff_notification_target_address = patch.handoff_notification_target_address;
+  }
+  if (patch.handoff_notification_template !== undefined) {
+    updates.handoff_notification_template = patch.handoff_notification_template;
   }
   if (patch.status !== undefined) updates.status = patch.status;
 

@@ -21,6 +21,11 @@ import {
 import type { OrgRole } from "@/lib/auth";
 import { requireRole } from "@/lib/auth";
 import { asAgentDb, type AgentDb } from "@/lib/ai-agent/db";
+import {
+  normalizeHandoffTargetAddress,
+  normalizeHandoffTargetType,
+  normalizeHandoffTemplate,
+} from "@/lib/ai-agent/handoff-notification";
 
 export type AgentActionContext = Awaited<ReturnType<typeof requireRole>> & {
   db: AgentDb;
@@ -46,6 +51,13 @@ export function normalizeAgentInput(input: CreateAgentInput): CreateAgentInput {
   const systemPrompt = input.system_prompt?.trim();
   if (!systemPrompt) throw new Error("Prompt do agente e obrigatorio");
 
+  const handoff = normalizeHandoffConfig({
+    enabled: input.handoff_notification_enabled,
+    target_type: input.handoff_notification_target_type,
+    target_address: input.handoff_notification_target_address,
+    template: input.handoff_notification_template,
+  });
+
   return {
     name,
     description: input.description?.trim() || undefined,
@@ -58,10 +70,23 @@ export function normalizeAgentInput(input: CreateAgentInput): CreateAgentInput {
     context_summary_turn_threshold: clampTurnThreshold(input.context_summary_turn_threshold),
     context_summary_token_threshold: clampTokenThreshold(input.context_summary_token_threshold),
     context_summary_recent_messages: clampRecentMessagesCount(input.context_summary_recent_messages),
+    handoff_notification_enabled: handoff.enabled,
+    handoff_notification_target_type: handoff.target_type,
+    handoff_notification_target_address: handoff.target_address,
+    handoff_notification_template: handoff.template,
   };
 }
 
-export function normalizeAgentPatch(input: UpdateAgentInput): UpdateAgentInput {
+export function normalizeAgentPatch(
+  input: UpdateAgentInput,
+  current?: Pick<
+    AgentConfig,
+    | "handoff_notification_enabled"
+    | "handoff_notification_target_type"
+    | "handoff_notification_target_address"
+    | "handoff_notification_template"
+  >,
+): UpdateAgentInput {
   const patch: UpdateAgentInput = {};
   if (input.name !== undefined) {
     const name = input.name.trim();
@@ -92,6 +117,19 @@ export function normalizeAgentPatch(input: UpdateAgentInput): UpdateAgentInput {
   }
   if (input.context_summary_recent_messages !== undefined) {
     patch.context_summary_recent_messages = clampRecentMessagesCount(input.context_summary_recent_messages);
+  }
+  const handoffPatch = normalizeHandoffPatch(input, current);
+  if (handoffPatch.handoff_notification_enabled !== undefined) {
+    patch.handoff_notification_enabled = handoffPatch.handoff_notification_enabled;
+  }
+  if (handoffPatch.handoff_notification_target_type !== undefined) {
+    patch.handoff_notification_target_type = handoffPatch.handoff_notification_target_type;
+  }
+  if (handoffPatch.handoff_notification_target_address !== undefined) {
+    patch.handoff_notification_target_address = handoffPatch.handoff_notification_target_address;
+  }
+  if (handoffPatch.handoff_notification_template !== undefined) {
+    patch.handoff_notification_template = handoffPatch.handoff_notification_template;
   }
   if (input.status !== undefined) patch.status = input.status;
   return patch;
@@ -242,4 +280,97 @@ export function agentPaths(configId?: string): string[] {
   const paths = ["/automations/agents"];
   if (configId) paths.push(`/automations/agents/${configId}`);
   return paths;
+}
+
+function normalizeHandoffConfig(input: {
+  enabled: unknown;
+  target_type: unknown;
+  target_address: unknown;
+  template: unknown;
+}): {
+  enabled: boolean;
+  target_type: "phone" | "group" | null;
+  target_address: string | null;
+  template: string | null;
+} {
+  const enabled = Boolean(input.enabled);
+  const targetType = normalizeHandoffTargetType(input.target_type) ?? null;
+  const rawAddress =
+    typeof input.target_address === "string" ? input.target_address.trim() : "";
+  const template = normalizeHandoffTemplate(input.template) ?? null;
+
+  if (!enabled) {
+    return {
+      enabled: false,
+      target_type: null,
+      target_address: null,
+      template,
+    };
+  }
+
+  if (!targetType || !rawAddress) {
+    throw new Error("Configure o destino da notificacao antes de ativar");
+  }
+
+  return {
+    enabled: true,
+    target_type: targetType,
+    target_address: normalizeHandoffTargetAddress(targetType, rawAddress),
+    template,
+  };
+}
+
+function normalizeHandoffPatch(
+  input: UpdateAgentInput,
+  current?: Pick<
+    AgentConfig,
+    | "handoff_notification_enabled"
+    | "handoff_notification_target_type"
+    | "handoff_notification_target_address"
+    | "handoff_notification_template"
+  >,
+): Partial<UpdateAgentInput> {
+  const hasRelevantField =
+    input.handoff_notification_enabled !== undefined ||
+    input.handoff_notification_target_type !== undefined ||
+    input.handoff_notification_target_address !== undefined ||
+    input.handoff_notification_template !== undefined;
+
+  if (!hasRelevantField) return {};
+
+  const effective = normalizeHandoffConfig({
+    enabled:
+      input.handoff_notification_enabled ??
+      current?.handoff_notification_enabled ??
+      false,
+    target_type:
+      input.handoff_notification_target_type !== undefined
+        ? input.handoff_notification_target_type
+        : current?.handoff_notification_target_type ?? null,
+    target_address:
+      input.handoff_notification_target_address !== undefined
+        ? input.handoff_notification_target_address
+        : current?.handoff_notification_target_address ?? null,
+    template:
+      input.handoff_notification_template !== undefined
+        ? input.handoff_notification_template
+        : current?.handoff_notification_template ?? null,
+  });
+
+  return {
+    handoff_notification_enabled:
+      current?.handoff_notification_enabled === effective.enabled ? undefined : effective.enabled,
+    handoff_notification_target_type:
+      current?.handoff_notification_target_type === effective.target_type
+        ? undefined
+        : effective.target_type,
+    handoff_notification_target_address:
+      current?.handoff_notification_target_address === effective.target_address
+        ? undefined
+        : effective.target_address,
+    handoff_notification_template:
+      (current?.handoff_notification_template ?? null) === (effective.template ?? null)
+        ? undefined
+        : effective.template,
+  };
 }

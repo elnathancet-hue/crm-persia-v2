@@ -1823,3 +1823,36 @@ path rather than modifying the existing ones.
 
 - PR5.8 reactivate bot (last piece of Fase 1).
 - PR6+ unchanged roadmap.
+
+## 2026-04-24 00:02 - Codex - PR5.6 runtime handoff
+
+- Branch: `codex/ai-agent-pr5.6-runtime`
+- Runtime delivered:
+  - `021_ai_agent_handoff_notification.sql`
+  - helper `apps/crm/src/lib/ai-agent/handoff-notification.ts`
+  - `stop_agent` now performs fail-soft handoff notification after the
+    existing pause + `lead_activities` write
+  - dry-run keeps the notification simulated-only
+  - config actions now persist / validate:
+    - `handoff_notification_enabled`
+    - `handoff_notification_target_type`
+    - `handoff_notification_target_address`
+    - `handoff_notification_template`
+- Runtime choices:
+  - summary source = `history_summary.slice(0, 500)` first, otherwise a
+    one-shot Claude summary in 2 frases / 200 tokens, otherwise fixed
+    plain fallback
+  - audit in `agent_steps.output` stores hashes + metadata only
+    (`target_address_sha256`, `message_sha256`, `summary_source`, etc.)
+    and never the raw outbound message body
+  - phone targets are normalized to digits-only `10..15`; group targets
+    are passed through as-is
+- Validation on this branch:
+  - `pnpm --filter @persia/crm build` ✅
+  - `pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr5.6-runtime.test.ts` ✅
+    - Vitest ran the whole CRM suite here: `18 files / 187 tests` green
+  - `pnpm -r typecheck` ⚠️ still failing due the pre-existing
+    `apps/crm/tsconfig.json` include on missing `.next/types/**/*.ts`
+    files; unrelated to the PR5.6 runtime changes, and the Next build
+    type validation itself passed
+- Claude UI follow-up is unblocked for the new RulesTab handoff card.

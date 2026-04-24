@@ -398,6 +398,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
           tool,
           toolUseId: call.id,
           input: call.input,
+          anthropicClient: client,
         });
         toolResults.push({
           type: "tool_result",
@@ -593,6 +594,7 @@ async function executeToolCall(
     tool: AgentTool | null;
     toolUseId: string;
     input: Record<string, unknown>;
+    anthropicClient: Anthropic;
   },
 ): Promise<{ success: boolean; output: Record<string, unknown> }> {
   const startedAt = Date.now();
@@ -643,7 +645,7 @@ async function executeToolCall(
 
     nativeHandler = call.tool.native_handler;
     const handler = nativeHandlers[call.tool.native_handler]!;
-    const context: NativeHandlerContext & { db: AgentDb } = {
+    const context = {
       db: params.db,
       organization_id: params.orgId,
       lead_id: params.leadId,
@@ -651,7 +653,12 @@ async function executeToolCall(
       agent_conversation_id: params.agentConversation.id,
       run_id: call.runId,
       dry_run: params.dryRun,
-    };
+      provider: params.provider ?? null,
+      config: params.config,
+      agentConversation: params.agentConversation,
+      anthropicClient: call.anthropicClient,
+      stepOrderIndex: call.orderIndex,
+    } as NativeHandlerContext & { db: AgentDb };
     const result = await handler(context, call.input);
     success = result.success;
     output = result.success

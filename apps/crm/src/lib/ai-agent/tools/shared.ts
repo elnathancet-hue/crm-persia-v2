@@ -1,14 +1,47 @@
-import type { NativeHandlerContext, NativeHandlerResult } from "@persia/shared/ai-agent";
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  AgentConfig,
+  AgentConversation,
+  NativeHandlerContext,
+  NativeHandlerResult,
+} from "@persia/shared/ai-agent";
+import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { asAgentDb, nowIso, type AgentDb } from "../db";
 
 export interface HandlerContextWithDb extends NativeHandlerContext {
   db?: AgentDb;
+  provider?: WhatsAppProvider | null;
+  config?: AgentConfig;
+  agentConversation?: AgentConversation;
+  anthropicClient?: Anthropic | null;
+  stepOrderIndex?: number;
 }
 
 export function getHandlerDb(context: NativeHandlerContext): AgentDb | null {
   const candidate = (context as HandlerContextWithDb).db;
   if (!candidate || typeof candidate !== "object") return null;
   return asAgentDb(candidate);
+}
+
+export function getHandlerProvider(context: NativeHandlerContext): WhatsAppProvider | null {
+  return (context as HandlerContextWithDb).provider ?? null;
+}
+
+export function getHandlerConfig(context: NativeHandlerContext): AgentConfig | null {
+  return (context as HandlerContextWithDb).config ?? null;
+}
+
+export function getHandlerConversation(context: NativeHandlerContext): AgentConversation | null {
+  return (context as HandlerContextWithDb).agentConversation ?? null;
+}
+
+export function getHandlerAnthropicClient(context: NativeHandlerContext): Anthropic | null {
+  return (context as HandlerContextWithDb).anthropicClient ?? null;
+}
+
+export function getHandlerStepOrderIndex(context: NativeHandlerContext): number | null {
+  const value = (context as HandlerContextWithDb).stepOrderIndex;
+  return typeof value === "number" ? value : null;
 }
 
 export function successResult(
