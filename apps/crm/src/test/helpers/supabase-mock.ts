@@ -31,6 +31,14 @@ export interface MockSupabase {
   storage: {
     from: ReturnType<typeof vi.fn>;
   };
+  queueStorageDownload: (
+    bucket: string,
+    path: string,
+    result: {
+      data: Blob | { arrayBuffer(): Promise<ArrayBuffer> } | null;
+      error: { message: string; code?: string } | null;
+    },
+  ) => void;
   /** Push a result that will be returned by the next call on `from(table)`. */
   queue: (table: string, result: QueryResult) => void;
   /** Inspect calls for assertions. */
@@ -59,6 +67,13 @@ export function createSupabaseMock(opts?: {
   const selects: Record<string, unknown[]> = {};
   const filters: Record<string, { eq: Array<[string, unknown]>; in: Array<[string, unknown[]]> }> = {};
   const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const storageDownloads = new Map<
+    string,
+    Array<{
+      data: Blob | { arrayBuffer(): Promise<ArrayBuffer> } | null;
+      error: { message: string; code?: string } | null;
+    }>
+  >();
 
   const nextResult = (table: string): QueryResult => {
     const q = queues.get(table);
@@ -156,10 +171,27 @@ export function createSupabaseMock(opts?: {
       })),
     },
     storage: {
-      from: vi.fn(() => ({
+      from: vi.fn((bucket: string) => ({
         upload: vi.fn(async () => ({ data: { path: "x" }, error: null })),
+        download: vi.fn(async (path: string) => {
+          const key = `${bucket}:${path}`;
+          const queue = storageDownloads.get(key) ?? [];
+          if (queue.length === 0) {
+            return {
+              data: null,
+              error: { message: `missing mock download for ${key}` },
+            };
+          }
+          return queue.shift()!;
+        }),
         getPublicUrl: vi.fn(() => ({ data: { publicUrl: "https://pub/x" } })),
       })),
+    },
+    queueStorageDownload: (bucket, path, result) => {
+      const key = `${bucket}:${path}`;
+      const queue = storageDownloads.get(key) ?? [];
+      queue.push(result);
+      storageDownloads.set(key, queue);
     },
     queue: (table, result) => {
       const q = queues.get(table) ?? [];
@@ -180,6 +212,7 @@ export function createSupabaseMock(opts?: {
       for (const k of Object.keys(selects)) delete selects[k];
       for (const k of Object.keys(filters)) delete filters[k];
       rpcCalls.length = 0;
+      storageDownloads.clear();
     },
   };
 

@@ -5,7 +5,11 @@ import {
   DEBOUNCE_WINDOW_MS_DEFAULT,
   DEFAULT_MODEL,
   INTERNAL_MODEL,
+  RAG_CONTEXT_INSTRUCTIONS,
+  RAG_CONTEXT_PREFIX,
+  RAG_DISTANCE_CEILING,
   calculateCostUsdCents,
+  clampRagTopK,
   isKnownModel,
   shouldTriggerSummarization,
   toOpenAITool,
@@ -17,6 +21,9 @@ import {
   type AgentStepType,
   type AgentTool,
   type NativeHandlerContext,
+  type RetrievalHit,
+  type RetrievalStepInput,
+  type RetrievalStepOutput,
 } from "@persia/shared/ai-agent";
 import type { IncomingMessage, WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { createProvider } from "@/lib/whatsapp/providers";
@@ -51,6 +58,7 @@ import {
   normalizeContextSummarizationConfig,
   SUMMARIZATION_SYSTEM_PROMPT,
 } from "./summarization";
+import { retrieveWithAttempt } from "./rag/retriever";
 import {
   getWebhookAllowlistDomains,
   invokeCustomWebhook,
@@ -335,7 +343,27 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       });
     }
     const tools = params.tools.map(toOpenAITool);
-    const system = buildSystemPrompt(params.config, params.stage);
+    const retrieval = params.stage.rag_enabled
+      ? await maybeRetrieveKnowledge({
+          db: params.db,
+          orgId: params.orgId,
+          runId: run.id,
+          orderIndex: orderIndex,
+          config: params.config,
+          stage: params.stage,
+          historyMessages,
+          inboundText: params.msg.text || "[incoming media message]",
+          audit: !params.dryRun,
+        })
+      : null;
+    if (retrieval) {
+      orderIndex += retrieval.insertedStep ? 1 : 0;
+    }
+    const system = buildSystemPromptWithRag(
+      params.config,
+      params.stage,
+      retrieval?.hits?.length ? buildRagContextBlock(retrieval.hits) : null,
+    );
 
     await updateRunStatus(params.db, run.id, params.orgId, "running");
 
@@ -979,8 +1007,13 @@ async function loadWebhookAllowlist(db: AgentDb, orgId: string): Promise<string[
   return getWebhookAllowlistDomains((data as { settings?: unknown }).settings);
 }
 
-function buildSystemPrompt(config: AgentConfig, stage: AgentStage): string {
+function buildSystemPromptWithRag(
+  config: AgentConfig,
+  stage: AgentStage,
+  ragContext: string | null,
+): string {
   return [
+    ragContext,
     config.system_prompt,
     "",
     `Etapa atual: ${stage.situation}`,
@@ -988,6 +1021,96 @@ function buildSystemPrompt(config: AgentConfig, stage: AgentStage): string {
     stage.transition_hint ? `Dica de transicao: ${stage.transition_hint}` : "",
     "Responda ao cliente em portugues brasileiro, de forma objetiva e util.",
     "Use ferramentas apenas quando a acao for necessaria e permitida.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+async function maybeRetrieveKnowledge(params: {
+  db: AgentDb;
+  orgId: string;
+  runId: string;
+  orderIndex: number;
+  config: AgentConfig;
+  stage: AgentStage;
+  historyMessages: OpenAIMessage[];
+  inboundText: string;
+  audit: boolean;
+}): Promise<{
+  hits: RetrievalHit[];
+  insertedStep: boolean;
+}> {
+  const topK = clampRagTopK(params.stage.rag_top_k);
+  const input: RetrievalStepInput = {
+    query_text: buildRetrievalQueryText(params.inboundText, params.historyMessages),
+    top_k_requested: topK,
+    distance_ceiling: RAG_DISTANCE_CEILING,
+  };
+  const attempt = await retrieveWithAttempt({
+    config_id: params.config.id,
+    organization_id: params.orgId,
+    query_text: input.query_text,
+    top_k: topK,
+    audit: params.audit,
+  }, params.db);
+
+  if (params.audit) {
+    const output: RetrievalStepOutput & { phase: "retrieval" } = {
+      phase: "retrieval",
+      success: attempt.success,
+      hits_returned: attempt.hits.length,
+      tokens_embedded: attempt.tokensEmbedded,
+      duration_ms: attempt.durationMs,
+      ...(attempt.error ? { error: attempt.error } : {}),
+      ...(attempt.hits.length > 0
+        ? {
+            hits: attempt.hits.map((hit) => ({
+              source_id: hit.source_id,
+              source_title: hit.source_title,
+              distance: hit.distance,
+            })),
+          }
+        : {}),
+    };
+
+    await insertStep(params.db, {
+      orgId: params.orgId,
+      runId: params.runId,
+      orderIndex: params.orderIndex,
+      stepType: "llm",
+      input: input as unknown as Record<string, unknown>,
+      output: output as unknown as Record<string, unknown>,
+      durationMs: attempt.durationMs,
+    });
+  }
+
+  return {
+    hits: attempt.hits,
+    insertedStep: params.audit,
+  };
+}
+
+function buildRetrievalQueryText(inboundText: string, historyMessages: OpenAIMessage[]): string {
+  const historySummary = historyMessages.find(
+    (message) =>
+      message.role === "user" &&
+      typeof message.content === "string" &&
+      message.content.startsWith("Contexto consolidado da conversa ate aqui:"),
+  )?.content;
+
+  return historySummary
+    ? `${historySummary.replace(/^Contexto consolidado da conversa ate aqui:\n\n/, "")}\n\nMensagem atual do cliente:\n${inboundText}`
+    : inboundText;
+}
+
+function buildRagContextBlock(hits: RetrievalHit[]): string {
+  return [
+    RAG_CONTEXT_PREFIX,
+    RAG_CONTEXT_INSTRUCTIONS,
+    "",
+    ...hits.map(
+      (hit, index) => `[${index + 1}] (from "${hit.source_title}") ${hit.content}`,
+    ),
   ]
     .filter(Boolean)
     .join("\n");

@@ -2562,3 +2562,14 @@ Same harness as PR5.x runtime tests. Cover:
 - Hybrid search (BM25 + vector). pure cosine for now.
 - Per-agent embedding cost ceiling. Voyage is cheap enough that we can
   defer.
+
+## 2026-04-24 17:45 - Codex - PR6.2 runtime handoff
+- Implemented RAG runtime on codex/ai-agent-pr6.2-rag-runtime: migration 022 finalized with claim/complete/fail/match RPC functions plus pg_cron tick for /api/ai-agent/indexer/tick.
+- Added pps/crm/src/lib/ai-agent/rag/*: Voyage client, chunker, TXT/PDF/DOCX parsers, retriever, indexer, and indexer tick route.
+- Executor now runs retrieval before the LLM loop when stage.rag_enabled=true, injects RAG_CONTEXT_PREFIX block into the system prompt when hits exist, and persists a dedicated retrieval audit step (step_type='llm', output.phase='retrieval') on non-dry runs.
+- Retrieval is fail-soft: missing VOYAGE_API_KEY or any Voyage/pgvector error leaves the prompt unchanged and records success=false in the retrieval step.
+- Added deps mammoth and pdf-parse, mock storage downloads in supabase-mock, local pdf-parse declaration, and test suite pps/crm/src/__tests__/ai-agent-pr6.2-rag-runtime.test.ts.
+- Validation: pnpm -r typecheck ?, pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr6.2-rag-runtime.test.ts ? (suite ran 20 files / 200 tests total), pnpm --filter @persia/crm build ?, pnpm --filter @persia/admin build ?.
+- Note: CRM build still reports the pre-existing cn warnings from @/lib/utils; not introduced by PR6.2.
+- Deploy/runtime follow-up after merge: set VOYAGE_API_KEY, set PERSIA_INDEXER_SECRET, and configure DB settings pp.settings.indexer_tick_url + pp.settings.indexer_tick_secret before applying migration 022 outside local/dev.
+
