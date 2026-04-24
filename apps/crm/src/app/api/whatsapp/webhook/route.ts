@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
-import { tryNativeAgent } from "@/lib/ai-agent/executor";
+import { tryEnqueueForNativeAgent } from "@/lib/ai-agent/executor";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
 import {
   extractUazapiOwnerPhone,
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 4. Native AI Agent router. Any miss or failure falls through to legacy.
-    const nativeOutcome = await tryNativeAgent({
+    const nativeOutcome = await tryEnqueueForNativeAgent({
       supabase,
       orgId: matchedConn.organization_id,
       provider,

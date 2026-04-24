@@ -4,6 +4,7 @@ import type {
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
+import { clampDebounceWindowMs } from "@persia/shared/ai-agent";
 import type { IncomingMessage } from "@/lib/whatsapp/provider";
 import { asRecord, mergeJsonObject, nowIso, type AgentDb } from "./db";
 import { normalizeGuardrails } from "./guardrails";
@@ -334,6 +335,9 @@ function normalizeConfig(row: Record<string, unknown>): AgentConfig {
   return {
     ...(row as unknown as AgentConfig),
     guardrails: normalizeGuardrails(row.guardrails),
+    debounce_window_ms: clampDebounceWindowMs(
+      typeof row.debounce_window_ms === "number" ? row.debounce_window_ms : undefined,
+    ),
   };
 }
 

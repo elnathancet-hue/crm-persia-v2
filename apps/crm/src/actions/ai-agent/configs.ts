@@ -59,6 +59,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       model: normalized.model,
       system_prompt: normalized.system_prompt,
       guardrails,
+      debounce_window_ms: normalized.debounce_window_ms,
       status: "draft",
     })
     .select("*")
@@ -96,6 +97,9 @@ export async function updateAgent(
   if (patch.system_prompt !== undefined) updates.system_prompt = patch.system_prompt;
   if (patch.guardrails !== undefined) {
     updates.guardrails = mergeGuardrails(existing.guardrails, patch.guardrails);
+  }
+  if (patch.debounce_window_ms !== undefined) {
+    updates.debounce_window_ms = patch.debounce_window_ms;
   }
   if (patch.status !== undefined) updates.status = patch.status;
 

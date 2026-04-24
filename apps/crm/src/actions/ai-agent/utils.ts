@@ -1,4 +1,5 @@
 import {
+  clampDebounceWindowMs,
   DEFAULT_GUARDRAILS,
   DEFAULT_MODEL,
   type AgentStageTool,
@@ -50,6 +51,7 @@ export function normalizeAgentInput(input: CreateAgentInput): CreateAgentInput {
     model,
     system_prompt: systemPrompt,
     guardrails: input.guardrails,
+    debounce_window_ms: clampDebounceWindowMs(input.debounce_window_ms),
   };
 }
 
@@ -73,6 +75,9 @@ export function normalizeAgentPatch(input: UpdateAgentInput): UpdateAgentInput {
     patch.system_prompt = systemPrompt;
   }
   if (input.guardrails !== undefined) patch.guardrails = input.guardrails;
+  if (input.debounce_window_ms !== undefined) {
+    patch.debounce_window_ms = clampDebounceWindowMs(input.debounce_window_ms);
+  }
   if (input.status !== undefined) patch.status = input.status;
   return patch;
 }
