@@ -83,6 +83,13 @@ export interface AgentConfig {
   model: string;                 // e.g. "claude-sonnet-4-6"
   system_prompt: string;
   guardrails: AgentGuardrails;
+  // PR5.5: per-agent debounce window for inbound message aggregation.
+  // Optional at the TS level so existing runtime code and test fixtures
+  // keep compiling during rollout. Migration 019 sets the DB column to
+  // NOT NULL DEFAULT 10000, so real rows always have a value — runtime
+  // still guards with `config.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT`
+  // for the transition window. Range enforced by `clampDebounceWindowMs`.
+  debounce_window_ms?: number;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -279,6 +286,9 @@ export interface CreateAgentInput {
   model: string;
   system_prompt: string;
   guardrails?: Partial<AgentGuardrails>;
+  // PR5.5: optional. Runtime defaults to DEBOUNCE_WINDOW_MS_DEFAULT when
+  // omitted and clamps to [DEBOUNCE_WINDOW_MS_MIN, DEBOUNCE_WINDOW_MS_MAX].
+  debounce_window_ms?: number;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
