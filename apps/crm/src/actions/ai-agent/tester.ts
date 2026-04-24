@@ -22,6 +22,15 @@ interface StepRow {
 
 export async function testAgent(req: TesterRequest): Promise<TesterResponse> {
   const { db, orgId } = await requireAgentRole("admin");
+  return testAgentForOrg(orgId, req, db);
+}
+
+export async function testAgentForOrg(
+  orgId: string,
+  req: TesterRequest,
+  dbOverride?: AgentDb,
+): Promise<TesterResponse> {
+  const db = dbOverride ?? (await requireAgentRole("admin")).db;
   if (!req.config_id) throw new Error("config_id e obrigatorio");
   if (!req.message?.trim()) throw new Error("Mensagem de teste e obrigatoria");
 

@@ -2,6 +2,7 @@
 
 /* Pick up Tailwind class names used inside the shared @persia/ui package. */
 @source "../../../../packages/ui/src";
+@source "../../../../packages/ai-agent-ui/src";
 
 @theme inline {
   --color-background: var(--background);
