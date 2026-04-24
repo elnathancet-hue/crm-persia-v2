@@ -166,7 +166,7 @@ export function AgentEditorClient({
           </TabsTrigger>
           <TabsTrigger value="notifications" className="gap-2">
             <Bell className="size-4" />
-            Notificacoes
+            Notificações
           </TabsTrigger>
           <TabsTrigger value="calendar" className="gap-2">
             <Calendar className="size-4" />
@@ -178,7 +178,7 @@ export function AgentEditorClient({
           </TabsTrigger>
           <TabsTrigger value="audit" className="gap-2">
             <History className="size-4" />
-            Execucoes
+            Execuções
           </TabsTrigger>
         </TabsList>
 
@@ -197,7 +197,7 @@ export function AgentEditorClient({
           <PlaceholderTab
             icon={HelpCircle}
             title="FAQ — Perguntas frequentes"
-            description="Adicione perguntas e respostas que o agente sempre precisa saber. Sera indexado em base vetorial quando a Fase RAG (PR6) chegar."
+            description="Adicione perguntas e respostas que o agente sempre precisa saber. Será indexado em base vetorial quando a Fase RAG (PR6) chegar."
             phase="PR6"
           />
         </TabsContent>
@@ -205,7 +205,7 @@ export function AgentEditorClient({
           <PlaceholderTab
             icon={FileText}
             title="Documentos da base de conhecimento"
-            description="Upload de PDFs, DOCX e TXT para alimentar o contexto do agente. Indexacao automatica em chunks com embedding."
+            description="Upload de PDFs, DOCX e TXT para alimentar o contexto do agente. Indexação automática em chunks com embedding."
             phase="PR6"
           />
         </TabsContent>
@@ -221,8 +221,8 @@ export function AgentEditorClient({
         <TabsContent value="notifications">
           <PlaceholderTab
             icon={Bell}
-            title="Notificacoes automaticas"
-            description="Templates WhatsApp enviados quando o agente toma decisoes (ex: lead qualificado)."
+            title="Notificações automáticas"
+            description="Templates WhatsApp enviados quando o agente toma decisões (ex: lead qualificado)."
             phase="PR7"
           />
         </TabsContent>

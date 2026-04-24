@@ -9,8 +9,8 @@ interface Props {
 export function ActiveLimitsProgress({ limits }: Props) {
   const rows: Array<{ label: string; snapshot: CostLimitSnapshot | null }> = [
     { label: "Agente (hoje)", snapshot: limits.agent_daily },
-    { label: "Organizacao (hoje)", snapshot: limits.org_daily },
-    { label: "Organizacao (mes)", snapshot: limits.org_monthly },
+    { label: "Organização (hoje)", snapshot: limits.org_daily },
+    { label: "Organização (mes)", snapshot: limits.org_monthly },
   ];
 
   const hasAny = rows.some((r) => r.snapshot !== null);
@@ -44,7 +44,7 @@ function LimitRow({
     return (
       <div className="text-xs flex items-center justify-between gap-2 py-1.5 border-b last:border-0">
         <span className="text-muted-foreground">{label}</span>
-        <span className="text-muted-foreground/60 italic">Nao configurado</span>
+        <span className="text-muted-foreground/60 italic">Não configurado</span>
       </div>
     );
   }
@@ -88,7 +88,7 @@ function LimitRow({
         </div>
       ) : null}
       {over ? (
-        <p className="text-[10px] text-destructive">Limite excedido — novas execucoes caem em handoff.</p>
+        <p className="text-[10px] text-destructive">Limite excedido — novas execuções caem em handoff.</p>
       ) : warn ? (
         <p className="text-[10px] text-amber-600 dark:text-amber-400">Acima de 80% do limite.</p>
       ) : null}

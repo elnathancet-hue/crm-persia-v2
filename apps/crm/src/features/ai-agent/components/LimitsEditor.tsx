@@ -34,18 +34,18 @@ export function LimitsEditor({ configId, initialLimits, onChange }: Props) {
         scope: "agent_daily",
         subject_id: configId,
         label: "Por agente · dia",
-        help: "Soma das execucoes deste agente em janela rolante de 24h.",
+        help: "Soma das execuções deste agente em janela rolante de 24h.",
       },
       {
         scope: "org_daily",
         subject_id: null,
-        label: "Por organizacao · dia",
-        help: "Soma de todas as execucoes da organizacao em janela rolante de 24h.",
+        label: "Por organização · dia",
+        help: "Soma de todas as execuções da organização em janela rolante de 24h.",
       },
       {
         scope: "org_monthly",
         subject_id: null,
-        label: "Por organizacao · mes",
+        label: "Por organização · mes",
         help: "Mes corrente em UTC.",
       },
     ],
@@ -57,7 +57,7 @@ export function LimitsEditor({ configId, initialLimits, onChange }: Props) {
       <CardHeader>
         <CardTitle className="text-base">Limites de custo</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Quando qualquer limite e atingido, novas execucoes caem para handoff humano em vez de consumir mais tokens.
+          Quando qualquer limite é atingido, novas execuções caem para handoff humano em vez de consumir mais tokens.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -112,7 +112,7 @@ function LimitRowEditor({
 
   const handleSave = () => {
     if (invalidTokens || invalidUsd) {
-      toast.error("Valores invalidos");
+      toast.error("Valores inválidos");
       return;
     }
     const input: SetCostLimitInput = {

@@ -9,7 +9,7 @@ interface Props {
 export function UsageStatsCards({ totals }: Props) {
   const cards = [
     {
-      label: "Execucoes",
+      label: "Execuções",
       value: totals.run_count.toLocaleString("pt-BR"),
       sub: `${totals.succeeded_count} sucesso / ${totals.failed_count} falha`,
       icon: Activity,
@@ -32,7 +32,7 @@ export function UsageStatsCards({ totals }: Props) {
     {
       label: "Tempo medio",
       value: totals.run_count === 0 ? "—" : `${(totals.avg_duration_ms / 1000).toFixed(1)}s`,
-      sub: "por execucao",
+      sub: "por execução",
       icon: Clock,
       color: "text-muted-foreground",
     },

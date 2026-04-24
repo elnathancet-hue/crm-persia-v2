@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
 const PREVIEW_VARIABLES = {
   lead_name: "Maria Silva",
   lead_phone: "+55 11 99999-0000",
-  summary: "Lead interessado em plano anual. Pediu demonstracao ao vivo.",
+  summary: "Lead interessado em plano anual. Pediu demonstração ao vivo.",
   wa_link: "https://crm.funilpersia.top/chat/abc123",
-  agent_name: "Recepcao",
+  agent_name: "Recepção",
   handoff_reason: "cliente pediu falar com humano",
 } as const;
 
@@ -74,7 +74,7 @@ export function HandoffNotificationCard({
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <BellRing className="size-4 text-primary" />
-          Notificacao de handoff
+          Notificação de handoff
         </CardTitle>
         <p className="text-xs text-muted-foreground">
           Quando o agente transferir a conversa pra humano (`stop_agent`), dispara uma mensagem WhatsApp pra equipe via a mesma conexao que recebeu o lead.
@@ -84,10 +84,10 @@ export function HandoffNotificationCard({
         <div className="flex items-start justify-between gap-3 pb-3 border-b">
           <div className="flex-1 min-w-0">
             <Label htmlFor="handoff_enabled" className="cursor-pointer">
-              Ativar notificacao
+              Ativar notificação
             </Label>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Quando desligado, o agente ainda pausa, mas ninguem e avisado automaticamente.
+              Quando desligado, o agente ainda pausa, mas ninguém é avisado automaticamente.
             </p>
           </div>
           <Switch
@@ -119,7 +119,7 @@ export function HandoffNotificationCard({
 
             <div className="space-y-2">
               <Label htmlFor="handoff_address">
-                {draftTargetType === "group" ? "JID do grupo" : "Numero de telefone"}
+                {draftTargetType === "group" ? "JID do grupo" : "Número de telefone"}
               </Label>
               <Input
                 id="handoff_address"
@@ -134,7 +134,7 @@ export function HandoffNotificationCard({
               />
               {draftTargetType === "phone" ? (
                 <p className="text-xs text-muted-foreground">
-                  Digite o numero completo com codigo do pais e DDD. {HANDOFF_PHONE_MIN_DIGITS}–{HANDOFF_PHONE_MAX_DIGITS} digitos.
+                  Digite o número completo com código do país e DDD. {HANDOFF_PHONE_MIN_DIGITS}–{HANDOFF_PHONE_MAX_DIGITS} dígitos.
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
@@ -142,11 +142,11 @@ export function HandoffNotificationCard({
                 </p>
               )}
               {addressMissing ? (
-                <p className="text-xs text-destructive">Destino e obrigatorio quando a notificacao esta ativa.</p>
+                <p className="text-xs text-destructive">Destino é obrigatório quando a notificação está ativa.</p>
               ) : null}
               {phoneInvalid ? (
                 <p className="text-xs text-destructive">
-                  Telefone deve ter entre {HANDOFF_PHONE_MIN_DIGITS} e {HANDOFF_PHONE_MAX_DIGITS} digitos.
+                  Telefone deve ter entre {HANDOFF_PHONE_MIN_DIGITS} e {HANDOFF_PHONE_MAX_DIGITS} dígitos.
                 </p>
               ) : null}
             </div>
@@ -162,7 +162,7 @@ export function HandoffNotificationCard({
                   className="h-7"
                 >
                   <RotateCcw className="size-3" />
-                  Usar template padrao
+                  Usar template padrão
                 </Button>
               </div>
               <Textarea
@@ -174,7 +174,7 @@ export function HandoffNotificationCard({
                 className="font-mono text-xs"
               />
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground mr-1">Variaveis disponiveis:</span>
+                <span className="text-[11px] text-muted-foreground mr-1">Variaveis disponíveis:</span>
                 {HANDOFF_TEMPLATE_VARIABLES.map((variable) => (
                   <VariableChip
                     key={variable}
@@ -187,7 +187,7 @@ export function HandoffNotificationCard({
               {unknownPlaceholders.length > 0 ? (
                 <p className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
                   <Info className="size-3.5 shrink-0 mt-0.5" />
-                  Placeholders desconhecidos serao renderizados vazios:{" "}
+                  Placeholders desconhecidos serão renderizados vazios:{" "}
                   {unknownPlaceholders.map((p) => `{{${p}}}`).join(", ")}
                 </p>
               ) : null}
@@ -204,7 +204,7 @@ export function HandoffNotificationCard({
             <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center gap-2">
                 <Eye className="size-3.5 text-muted-foreground" />
-                <Label className="text-xs font-medium">Pre-visualizacao com dados de exemplo</Label>
+                <Label className="text-xs font-medium">Pré-visualização com dados de exemplo</Label>
               </div>
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="flex items-start gap-2">
@@ -215,7 +215,7 @@ export function HandoffNotificationCard({
                     <p className="text-[11px] text-muted-foreground mb-1">
                       Para:{" "}
                       <span className="font-mono">
-                        {draftTargetAddress || "(destino nao configurado)"}
+                        {draftTargetAddress || "(destino não configurado)"}
                       </span>
                     </p>
                     <pre className="text-xs whitespace-pre-wrap font-sans text-foreground leading-relaxed">

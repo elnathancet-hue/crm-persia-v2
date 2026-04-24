@@ -71,24 +71,24 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
         <SheetHeader>
           <SheetTitle>{mode === "create" ? "Nova etapa" : "Editar etapa"}</SheetTitle>
           <SheetDescription>
-            A etapa descreve uma situacao especifica da conversa. O agente segue a instrucao ate detectar a transicao.
+            A etapa descreve uma situação específica da conversa. O agente segue a instrução ate detectar a transição.
           </SheetDescription>
         </SheetHeader>
         <div className="flex-1 overflow-y-auto">
           <form onSubmit={handleSave} className="space-y-4 px-4" id="stage-form">
             <div className="space-y-2">
-              <Label htmlFor="situation">Situacao</Label>
+              <Label htmlFor="situation">Situação</Label>
               <Input
                 id="situation"
                 value={situation}
                 onChange={(e) => setSituation(e.target.value)}
-                placeholder="Ex: Boas-vindas, Qualificacao, Apresentacao da oferta"
+                placeholder="Ex: Boas-vindas, Qualificação, Apresentação da oferta"
                 required
                 autoFocus
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="instruction">Instrucao do agente</Label>
+              <Label htmlFor="instruction">Instrução do agente</Label>
               <Textarea
                 id="instruction"
                 value={instruction}
@@ -98,16 +98,16 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="transition_hint">Dica de transicao</Label>
+              <Label htmlFor="transition_hint">Dica de transição</Label>
               <Textarea
                 id="transition_hint"
                 value={transitionHint}
                 onChange={(e) => setTransitionHint(e.target.value)}
-                placeholder="Quando avancar para a proxima etapa? Ex: Apos o cliente responder o primeiro cumprimento."
+                placeholder="Quando avançar para a próxima etapa? Ex: Após o cliente responder o primeiro cumprimento."
                 rows={3}
               />
               <p className="text-xs text-muted-foreground">
-                Opcional. Ajuda o agente a decidir quando avancar no fluxo.
+                Opcional. Ajuda o agente a decidir quando avançar no fluxo.
               </p>
             </div>
             <div className="flex items-start justify-between gap-3 pt-2 border-t">
@@ -183,7 +183,7 @@ function StageToolsAllowlist({ stageId, tools }: { stageId: string; tools: Agent
         setAllowlist((prev) => new Map(prev).set(toolId, nextEnabled));
       })
       .catch((err) => {
-        toast.error(err instanceof Error ? err.message : "Falha ao salvar permissao");
+        toast.error(err instanceof Error ? err.message : "Falha ao salvar permissão");
       })
       .finally(() => {
         setPendingToolId(null);
@@ -197,7 +197,7 @@ function StageToolsAllowlist({ stageId, tools }: { stageId: string; tools: Agent
         <Label className="font-medium">Ferramentas permitidas nesta etapa</Label>
       </div>
       <p className="text-xs text-muted-foreground mb-3">
-        O agente so chama decisoes que voce habilitar aqui.
+        O agente so chama decisões que você habilitar aqui.
       </p>
 
       {tools.length === 0 ? (
