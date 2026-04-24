@@ -18,6 +18,7 @@ import {
   type UpdateFAQInput,
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "@/lib/ai-agent/db";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   agentPaths,
   assertConfigBelongsToOrg,
@@ -185,7 +186,7 @@ export async function uploadDocument(
   configId: string,
   formData: FormData,
 ): Promise<AgentKnowledgeSource> {
-  const { db, orgId, supabase } = await requireAgentRole("admin");
+  const { db, orgId } = await requireAgentRole("admin");
   await assertConfigBelongsToOrg(db, orgId, configId);
 
   const file = formData.get("file");
@@ -210,7 +211,10 @@ export async function uploadDocument(
   const storagePath = `${orgId}/${configId}/${randomUUID()}-${sanitizedName}`;
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error: uploadError } = await supabase.storage
+  // Bucket eh privado, sem policies — so service_role consegue escrever.
+  // O role do user ja foi verificado pelo requireAgentRole acima.
+  const adminClient = createAdminClient();
+  const { error: uploadError } = await adminClient.storage
     .from(KNOWLEDGE_STORAGE_BUCKET)
     .upload(storagePath, bytes, {
       contentType: file.type,
@@ -236,7 +240,7 @@ export async function uploadDocument(
 // ============================================================================
 
 export async function deleteKnowledgeSource(sourceId: string): Promise<void> {
-  const { db, orgId, supabase } = await requireAgentRole("admin");
+  const { db, orgId } = await requireAgentRole("admin");
   const existing = await assertSourceBelongsToOrg(db, orgId, sourceId);
 
   // Best-effort storage cleanup for documents. If it fails, we still drop
@@ -246,8 +250,8 @@ export async function deleteKnowledgeSource(sourceId: string): Promise<void> {
       KnowledgeSourceMetadata,
       { storage_path: string }
     >;
-    await supabase.storage
-      .from(KNOWLEDGE_STORAGE_BUCKET)
+    await createAdminClient()
+      .storage.from(KNOWLEDGE_STORAGE_BUCKET)
       .remove([meta.storage_path]);
   }
 
