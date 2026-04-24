@@ -11,7 +11,13 @@ import type {
   NativeToolPreset,
   UpdateStageInput,
 } from "@persia/shared/ai-agent";
-import { getPreset } from "@persia/shared/ai-agent";
+import {
+  clampRagTopK,
+  getPreset,
+  RAG_TOP_K_DEFAULT,
+  RAG_TOP_K_MAX,
+  RAG_TOP_K_MIN,
+} from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -43,6 +49,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
   const [instruction, setInstruction] = React.useState("");
   const [transitionHint, setTransitionHint] = React.useState("");
   const [ragEnabled, setRagEnabled] = React.useState(false);
+  const [ragTopK, setRagTopK] = React.useState<number>(RAG_TOP_K_DEFAULT);
 
   React.useEffect(() => {
     if (open) {
@@ -50,6 +57,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
       setInstruction(stage?.instruction ?? "");
       setTransitionHint(stage?.transition_hint ?? "");
       setRagEnabled(stage?.rag_enabled ?? false);
+      setRagTopK(clampRagTopK(stage?.rag_top_k));
     }
   }, [open, stage]);
 
@@ -62,6 +70,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
       instruction: instruction.trim(),
       transition_hint: transitionHint.trim() || undefined,
       rag_enabled: ragEnabled,
+      rag_top_k: ragTopK,
     });
   };
 
@@ -110,20 +119,50 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
                 Opcional. Ajuda o agente a decidir quando avançar no fluxo.
               </p>
             </div>
-            <div className="flex items-start justify-between gap-3 pt-2 border-t">
-              <div className="flex-1 min-w-0">
-                <Label htmlFor="rag_enabled" className="cursor-pointer">
-                  Consultar base de conhecimento
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Injeta FAQ e documentos relevantes antes de cada resposta nesta etapa. Requer Fase RAG (PR6).
-                </p>
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <Label htmlFor="rag_enabled" className="cursor-pointer">
+                    Consultar base de conhecimento
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Injeta FAQ e documentos relevantes antes de cada resposta nesta etapa. Configure o conteudo nas abas FAQ e Documentos.
+                  </p>
+                </div>
+                <Switch
+                  id="rag_enabled"
+                  checked={ragEnabled}
+                  onCheckedChange={(v) => setRagEnabled(Boolean(v))}
+                />
               </div>
-              <Switch
-                id="rag_enabled"
-                checked={ragEnabled}
-                onCheckedChange={(v) => setRagEnabled(Boolean(v))}
-              />
+              {ragEnabled ? (
+                <div className="space-y-1.5 pl-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="rag_top_k">Trechos recuperados</Label>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {ragTopK}
+                    </span>
+                  </div>
+                  <input
+                    id="rag_top_k"
+                    type="range"
+                    min={RAG_TOP_K_MIN}
+                    max={RAG_TOP_K_MAX}
+                    step={1}
+                    value={ragTopK}
+                    onChange={(e) => setRagTopK(clampRagTopK(Number(e.target.value)))}
+                    className="w-full accent-primary"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground/70 tabular-nums">
+                    <span>{RAG_TOP_K_MIN}</span>
+                    <span>Padrao {RAG_TOP_K_DEFAULT}</span>
+                    <span>{RAG_TOP_K_MAX}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Quantos trechos mais relevantes injetar no prompt. Valores altos adicionam contexto, mas custam mais tokens.
+                  </p>
+                </div>
+              ) : null}
             </div>
           </form>
 

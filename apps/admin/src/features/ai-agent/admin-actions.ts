@@ -25,6 +25,14 @@ import { testAgent } from "@/actions/ai-agent/tester";
 import { listRuns } from "@/actions/ai-agent/audit";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
 import { getUsageStats } from "@/actions/ai-agent/usage";
+import {
+  createFAQ,
+  deleteKnowledgeSource,
+  listKnowledgeSources,
+  reindexKnowledgeSource,
+  updateFAQ,
+  uploadDocument,
+} from "@/actions/ai-agent/knowledge";
 
 export function createAdminAgentActions(orgId: string): AgentActions {
   return {
@@ -49,5 +57,11 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     setCostLimit: (input) => setCostLimit(orgId, input),
     deleteCostLimit: (id) => deleteCostLimit(orgId, id),
     getUsageStats: (input) => getUsageStats(orgId, input),
+    listKnowledgeSources: (configId) => listKnowledgeSources(orgId, configId),
+    createFAQ: (input) => createFAQ(orgId, input),
+    updateFAQ: (sourceId, input) => updateFAQ(orgId, sourceId, input),
+    uploadDocument: (configId, formData) => uploadDocument(orgId, configId, formData),
+    deleteKnowledgeSource: (sourceId) => deleteKnowledgeSource(orgId, sourceId),
+    reindexKnowledgeSource: (sourceId) => reindexKnowledgeSource(orgId, sourceId),
   };
 }

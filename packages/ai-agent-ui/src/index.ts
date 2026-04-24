@@ -23,6 +23,8 @@ export { StagesTab } from "./components/StagesTab";
 export { ToolsTab } from "./components/ToolsTab";
 export { AuditTab } from "./components/AuditTab";
 export { LimitsUsageTab } from "./components/LimitsUsageTab";
+export { FAQTab } from "./components/FAQTab";
+export { DocumentsTab } from "./components/DocumentsTab";
 export { PlaceholderTab } from "./components/PlaceholderTab";
 
 // Leaf components (pra uso direto fora dos tabs padrao)
