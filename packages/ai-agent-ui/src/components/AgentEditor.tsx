@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Bell,
   Calendar,
-  FileText,
   FlaskConical,
   Gauge,
   HelpCircle,
@@ -21,6 +20,7 @@ import { toast } from "sonner";
 import type {
   AgentConfig,
   AgentCostLimit,
+  AgentKnowledgeSource,
   AgentStage,
   AgentStatus,
   AgentTool,
@@ -41,6 +41,8 @@ import { StagesTab } from "./StagesTab";
 import { ToolsTab } from "./ToolsTab";
 import { AuditTab } from "./AuditTab";
 import { LimitsUsageTab } from "./LimitsUsageTab";
+import { FAQTab } from "./FAQTab";
+import { DocumentsTab } from "./DocumentsTab";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
@@ -52,6 +54,7 @@ interface Props {
   initialTools: AgentTool[];
   initialLimits: AgentCostLimit[];
   initialAllowedDomains: string[];
+  initialKnowledgeSources?: AgentKnowledgeSource[];
 }
 
 export function AgentEditor({
@@ -60,14 +63,35 @@ export function AgentEditor({
   initialTools,
   initialLimits,
   initialAllowedDomains,
+  initialKnowledgeSources = [],
 }: Props) {
-  const { updateAgent } = useAgentActions();
+  const { updateAgent, listKnowledgeSources } = useAgentActions();
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
   const [tools, setTools] = React.useState(initialTools);
+  const [knowledgeSources, setKnowledgeSources] = React.useState<
+    AgentKnowledgeSource[]
+  >(initialKnowledgeSources);
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
+
+  const refreshKnowledgeSources = React.useCallback(async () => {
+    try {
+      const next = await listKnowledgeSources(agent.id);
+      setKnowledgeSources(next);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao carregar base de conhecimento");
+    }
+  }, [agent.id, listKnowledgeSources]);
+
+  // Lazy first-fetch when no SSR-provided sources were passed in.
+  React.useEffect(() => {
+    if (initialKnowledgeSources.length === 0) {
+      void refreshKnowledgeSources();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const persistAgent = React.useCallback(
     (patch: Parameters<AgentActions["updateAgent"]>[1], successMsg?: string) => {
@@ -196,19 +220,19 @@ export function AgentEditor({
           />
         </TabsContent>
         <TabsContent value="faq">
-          <PlaceholderTab
-            icon={HelpCircle}
-            title="FAQ — Perguntas frequentes"
-            description="Adicione perguntas e respostas que o agente sempre precisa saber. Será indexado em base vetorial quando a Fase RAG (PR6) chegar."
-            phase="PR6"
+          <FAQTab
+            configId={agent.id}
+            sources={knowledgeSources}
+            onChange={setKnowledgeSources}
+            onRefresh={refreshKnowledgeSources}
           />
         </TabsContent>
         <TabsContent value="docs">
-          <PlaceholderTab
-            icon={FileText}
-            title="Documentos da base de conhecimento"
-            description="Upload de PDFs, DOCX e TXT para alimentar o contexto do agente. Indexação automática em chunks com embedding."
-            phase="PR6"
+          <DocumentsTab
+            configId={agent.id}
+            sources={knowledgeSources}
+            onChange={setKnowledgeSources}
+            onRefresh={refreshKnowledgeSources}
           />
         </TabsContent>
         <TabsContent value="tools">

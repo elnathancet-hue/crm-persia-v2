@@ -4,6 +4,7 @@ import { listStages } from "@/actions/ai-agent/stages";
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listCostLimits } from "@/actions/ai-agent/limits";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
+import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
 import { AgentEditorClient } from "./agent-editor-client";
 
 interface PageProps {
@@ -15,12 +16,14 @@ export default async function AgentDetailPage({ params }: PageProps) {
   const agent = await getAgent(id);
   if (!agent) notFound();
 
-  const [stages, tools, limits, allowedDomains] = await Promise.all([
-    listStages(id),
-    listToolsForAgent(id),
-    listCostLimits(),
-    listAllowedDomains(),
-  ]);
+  const [stages, tools, limits, allowedDomains, knowledgeSources] =
+    await Promise.all([
+      listStages(id),
+      listToolsForAgent(id),
+      listCostLimits(),
+      listAllowedDomains(),
+      listKnowledgeSources(id),
+    ]);
 
   return (
     <AgentEditorClient
@@ -29,6 +32,7 @@ export default async function AgentDetailPage({ params }: PageProps) {
       initialTools={tools}
       initialLimits={limits}
       initialAllowedDomains={allowedDomains}
+      initialKnowledgeSources={knowledgeSources}
     />
   );
 }

@@ -57,6 +57,7 @@ export async function createStage(
         instruction: normalized.instruction,
         transition_hint: normalized.transition_hint ?? null,
         rag_enabled: normalized.rag_enabled ?? false,
+        ...(normalized.rag_top_k !== undefined ? { rag_top_k: normalized.rag_top_k } : {}),
       })
       .select("*")
       .single();
@@ -106,6 +107,7 @@ export async function updateStage(
     if (patch.instruction !== undefined) updates.instruction = patch.instruction;
     if (patch.transition_hint !== undefined) updates.transition_hint = patch.transition_hint || null;
     if (patch.rag_enabled !== undefined) updates.rag_enabled = patch.rag_enabled;
+    if (patch.rag_top_k !== undefined) updates.rag_top_k = patch.rag_top_k;
     if (patch.order_index !== undefined) updates.order_index = patch.order_index;
     if (patch.slug !== undefined) updates.slug = patch.slug;
 

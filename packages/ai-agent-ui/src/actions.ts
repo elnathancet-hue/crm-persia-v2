@@ -12,12 +12,14 @@ import type {
   AddAllowedDomainInput,
   AgentConfig,
   AgentCostLimit,
+  AgentKnowledgeSource,
   AgentRunWithSteps,
   AgentStage,
   AgentStageTool,
   AgentTool,
   CreateAgentInput,
   CreateCustomWebhookToolInput,
+  CreateFAQInput,
   CreateStageInput,
   CreateToolFromPresetInput,
   ListRunsInput,
@@ -27,6 +29,7 @@ import type {
   TesterRequest,
   TesterResponse,
   UpdateAgentInput,
+  UpdateFAQInput,
   UpdateStageInput,
   UpdateToolInput,
   UsageStats,
@@ -72,4 +75,12 @@ export interface AgentActions {
 
   // Usage
   getUsageStats: (input: UsageStatsInput) => Promise<UsageStats>;
+
+  // Knowledge base (PR6 RAG)
+  listKnowledgeSources: (configId: string) => Promise<AgentKnowledgeSource[]>;
+  createFAQ: (input: CreateFAQInput) => Promise<AgentKnowledgeSource>;
+  updateFAQ: (sourceId: string, input: UpdateFAQInput) => Promise<AgentKnowledgeSource>;
+  uploadDocument: (configId: string, formData: FormData) => Promise<AgentKnowledgeSource>;
+  deleteKnowledgeSource: (sourceId: string) => Promise<void>;
+  reindexKnowledgeSource: (sourceId: string) => Promise<AgentKnowledgeSource>;
 }

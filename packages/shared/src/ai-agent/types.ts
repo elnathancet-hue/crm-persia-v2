@@ -339,6 +339,8 @@ export interface CreateStageInput {
   instruction: string;
   transition_hint?: string;
   rag_enabled?: boolean;
+  // PR6: optional. Runtime clamps via clampRagTopK (1..10, default 3).
+  rag_top_k?: number;
   order_index?: number;
   slug?: string;
 }

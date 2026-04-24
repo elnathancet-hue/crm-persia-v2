@@ -6,6 +6,7 @@ import { AgentActionsProvider, AgentEditor } from "@persia/ai-agent-ui";
 import type {
   AgentConfig,
   AgentCostLimit,
+  AgentKnowledgeSource,
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
@@ -16,6 +17,7 @@ import { listCostLimits } from "@/actions/ai-agent/limits";
 import { listStages } from "@/actions/ai-agent/stages";
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
+import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
 import { createAdminAgentActions } from "@/features/ai-agent/admin-actions";
 import { useActiveOrg } from "@/lib/stores/client-store";
 
@@ -34,6 +36,9 @@ export function AgentEditorClient({ agentId }: Props) {
   const [tools, setTools] = React.useState<AgentTool[]>([]);
   const [limits, setLimits] = React.useState<AgentCostLimit[]>([]);
   const [allowedDomains, setAllowedDomains] = React.useState<string[]>([]);
+  const [knowledgeSources, setKnowledgeSources] = React.useState<
+    AgentKnowledgeSource[]
+  >([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -46,6 +51,7 @@ export function AgentEditorClient({ agentId }: Props) {
         setTools([]);
         setLimits([]);
         setAllowedDomains([]);
+        setKnowledgeSources([]);
         setLoading(false);
         return;
       }
@@ -60,15 +66,23 @@ export function AgentEditorClient({ agentId }: Props) {
             setTools([]);
             setLimits([]);
             setAllowedDomains([]);
+            setKnowledgeSources([]);
           }
           return;
         }
 
-        const [nextStages, nextTools, nextLimits, nextAllowedDomains] = await Promise.all([
+        const [
+          nextStages,
+          nextTools,
+          nextLimits,
+          nextAllowedDomains,
+          nextKnowledgeSources,
+        ] = await Promise.all([
           listStages(activeOrgId, agentId),
           listToolsForAgent(activeOrgId, agentId),
           listCostLimits(activeOrgId),
           listAllowedDomains(activeOrgId),
+          listKnowledgeSources(activeOrgId, agentId),
         ]);
 
         if (!cancelled) {
@@ -77,6 +91,7 @@ export function AgentEditorClient({ agentId }: Props) {
           setTools(nextTools);
           setLimits(nextLimits);
           setAllowedDomains(nextAllowedDomains);
+          setKnowledgeSources(nextKnowledgeSources);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -126,6 +141,7 @@ export function AgentEditorClient({ agentId }: Props) {
             initialTools={tools}
             initialLimits={limits}
             initialAllowedDomains={allowedDomains}
+            initialKnowledgeSources={knowledgeSources}
           />
         </AgentActionsProvider>
       )}

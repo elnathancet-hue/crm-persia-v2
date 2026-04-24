@@ -1,4 +1,5 @@
 import {
+  clampRagTopK,
   clampRecentMessagesCount,
   clampDebounceWindowMs,
   clampTokenThreshold,
@@ -147,6 +148,7 @@ export function normalizeStageInput(input: CreateStageInput): CreateStageInput {
     instruction,
     transition_hint: input.transition_hint?.trim() || undefined,
     rag_enabled: input.rag_enabled ?? false,
+    rag_top_k: input.rag_top_k !== undefined ? clampRagTopK(input.rag_top_k) : undefined,
     order_index: input.order_index,
     slug: input.slug?.trim() || slugify(situation),
   };
@@ -168,6 +170,7 @@ export function normalizeStagePatch(input: UpdateStageInput): UpdateStageInput {
     patch.transition_hint = input.transition_hint.trim() || undefined;
   }
   if (input.rag_enabled !== undefined) patch.rag_enabled = input.rag_enabled;
+  if (input.rag_top_k !== undefined) patch.rag_top_k = clampRagTopK(input.rag_top_k);
   if (input.order_index !== undefined) patch.order_index = input.order_index;
   if (input.slug !== undefined) patch.slug = input.slug.trim() || undefined;
   return patch;

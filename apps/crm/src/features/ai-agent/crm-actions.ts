@@ -29,6 +29,14 @@ import { testAgent } from "@/actions/ai-agent/tester";
 import { listRuns } from "@/actions/ai-agent/audit";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
 import { getUsageStats } from "@/actions/ai-agent/usage";
+import {
+  createFAQ,
+  deleteKnowledgeSource,
+  listKnowledgeSources,
+  reindexKnowledgeSource,
+  updateFAQ,
+  uploadDocument,
+} from "@/actions/ai-agent/knowledge";
 
 export const crmAgentActions: AgentActions = {
   createAgent,
@@ -52,4 +60,10 @@ export const crmAgentActions: AgentActions = {
   setCostLimit,
   deleteCostLimit,
   getUsageStats,
+  listKnowledgeSources,
+  createFAQ,
+  updateFAQ,
+  uploadDocument,
+  deleteKnowledgeSource,
+  reindexKnowledgeSource,
 };
