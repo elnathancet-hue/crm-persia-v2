@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@persia/ui/card";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
+import { Badge } from "@persia/ui/badge";
 import {
   Building2,
   Bot,

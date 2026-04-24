@@ -13,11 +13,11 @@ import {
   Power,
   PowerOff,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@persia/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Button } from "@persia/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -26,20 +26,20 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@persia/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -47,7 +47,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@persia/ui/table";
 import { createTeamMember, updateMemberRole, toggleMemberActive } from "@/actions/team";
 import { toast } from "sonner";
 

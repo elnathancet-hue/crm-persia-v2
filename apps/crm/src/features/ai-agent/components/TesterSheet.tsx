@@ -8,17 +8,17 @@ import type {
   TesterResponse,
   TesterStepSummary,
 } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -26,7 +26,7 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@persia/ui/sheet";
 import { testAgent } from "@/actions/ai-agent/tester";
 
 interface Props {

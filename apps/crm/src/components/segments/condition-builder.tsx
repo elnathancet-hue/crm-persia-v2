@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@persia/ui/select";
 import { Plus, X } from "lucide-react";
 
 interface Condition {

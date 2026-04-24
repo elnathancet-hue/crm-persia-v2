@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import { Save, Loader2, Bot } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
 import { updateOrgSettings } from "@/actions/organization";
 import { toast } from "sonner";
 

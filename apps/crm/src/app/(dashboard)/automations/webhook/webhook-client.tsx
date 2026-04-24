@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { Loader2, Save, Webhook, ExternalLink, Info, CheckCircle2, XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
 import { updateOrgSettings } from "@/actions/organization";
 
 interface WebhookClientProps {

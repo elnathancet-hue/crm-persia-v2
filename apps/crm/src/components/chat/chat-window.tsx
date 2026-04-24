@@ -7,9 +7,9 @@ import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
 import { getMessages, resendMessage, resolveMessageMediaUrl, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@persia/ui/avatar";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -18,14 +18,14 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+} from "@persia/ui/dropdown-menu";
 import {
   AlertCircle,
   ArrowLeft,

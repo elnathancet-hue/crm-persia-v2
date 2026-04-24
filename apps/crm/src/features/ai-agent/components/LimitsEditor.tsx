@@ -8,10 +8,10 @@ import type {
   CostLimitScope,
   SetCostLimitInput,
 } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
 
 interface Props {

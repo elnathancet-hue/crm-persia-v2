@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
 import { MessageSquare, Users, Bot, Send, BarChart3 } from "lucide-react";
 
 export default async function ReportsPage() {

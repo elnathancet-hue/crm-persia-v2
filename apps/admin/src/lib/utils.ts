@@ -1,9 +1,6 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+// `cn` lives in @persia/ui so admin + crm share the same implementation.
+// Re-exported here so existing `import { cn } from "@/lib/utils"` keeps working.
+export { cn } from "@persia/ui/utils";
 
 // Avatar utilities (shared across chat, sidebar, etc.)
 export const AVATAR_COLORS = [

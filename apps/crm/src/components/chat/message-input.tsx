@@ -4,12 +4,12 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { sendMessageViaWhatsApp, sendMediaViaWhatsApp, type Message } from "@/actions/messages";
 import { generateAgentResponse } from "@/actions/conversations";
 import { getAssistants } from "@/actions/ai";
-import { Button } from "@/components/ui/button";
+import { Button } from "@persia/ui/button";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "@/components/ui/popover";
+} from "@persia/ui/popover";
 import {
   Send,
   Paperclip,

@@ -13,11 +13,11 @@ import {
   MoreHorizontal,
   Trash2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Badge } from "@persia/ui/badge";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Card, CardContent } from "@persia/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -26,20 +26,20 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@persia/ui/dropdown-menu";
 import { createGroup, syncGroups, deleteGroup } from "@/actions/groups";
 import { toast } from "sonner";
 

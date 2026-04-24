@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
 import { AlertCircle, RefreshCw } from "lucide-react";
 
 export default function DashboardError({

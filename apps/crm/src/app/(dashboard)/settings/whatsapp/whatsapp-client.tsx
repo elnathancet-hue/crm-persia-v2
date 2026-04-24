@@ -13,9 +13,9 @@ import {
   Wifi,
   X,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { getWhatsAppStatus, connectWhatsApp, getQRCode, disconnectWhatsApp } from "@/actions/whatsapp-status";
 import { toast } from "sonner";
 

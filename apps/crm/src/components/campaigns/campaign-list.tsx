@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@persia/ui/dialog";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@persia/ui/table";
 import { Plus, Send, Trash2, Megaphone } from "lucide-react";
 import { createCampaign, deleteCampaign, updateCampaignStatus } from "@/actions/campaigns";
 

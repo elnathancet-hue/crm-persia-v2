@@ -17,13 +17,13 @@ import {
   Power,
   PowerOff,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
+import { Switch } from "@persia/ui/switch";
+import { Badge } from "@persia/ui/badge";
+import { Card, CardContent } from "@persia/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -32,20 +32,20 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@persia/ui/dropdown-menu";
 import { ToneSelector } from "@/components/ai/tone-selector";
 import { createAssistant, updateAssistant, deleteAssistant, testAssistant } from "@/actions/ai";
 import { toast } from "sonner";

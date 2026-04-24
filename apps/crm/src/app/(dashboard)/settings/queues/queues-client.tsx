@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { Plus, Pencil, Trash2, Users, ListFilter } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Badge } from "@persia/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -12,17 +12,17 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+} from "@persia/ui/dialog";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   Table,
   TableBody,
@@ -30,8 +30,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
+} from "@persia/ui/table";
+import { Card, CardContent } from "@persia/ui/card";
 import { createQueue, updateQueue, deleteQueue } from "@/actions/queues";
 
 interface Queue {

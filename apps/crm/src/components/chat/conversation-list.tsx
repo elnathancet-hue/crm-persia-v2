@@ -8,16 +8,16 @@ import {
   type ConversationWithLead,
 } from "@/actions/conversations";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@persia/ui/input";
+import { Avatar, AvatarFallback } from "@persia/ui/avatar";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@persia/ui/tabs";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from "@/components/ui/popover";
+} from "@persia/ui/popover";
 import { Search, MessageSquare, SlidersHorizontal, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 

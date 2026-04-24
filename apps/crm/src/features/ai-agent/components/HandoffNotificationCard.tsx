@@ -13,13 +13,13 @@ import {
   listTemplatePlaceholders,
   renderHandoffTemplate,
 } from "@persia/shared/ai-agent";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Switch } from "@persia/ui/switch";
+import { Textarea } from "@persia/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const PREVIEW_VARIABLES = {

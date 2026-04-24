@@ -2,9 +2,9 @@
 
 import { useTransition, useState } from "react";
 import { signIn } from "@/actions/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import { Loader2, Mail, Lock, MessageCircle } from "lucide-react";
 
 const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_PERSIA_WHATSAPP || "5511930413221";

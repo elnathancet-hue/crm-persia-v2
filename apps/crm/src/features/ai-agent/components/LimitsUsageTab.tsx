@@ -8,15 +8,15 @@ import type {
   UsageStats,
   UsageStatsInput,
 } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import { getUsageStats } from "@/actions/ai-agent/usage";
 import { LimitsEditor } from "./LimitsEditor";
 import { ActiveLimitsProgress } from "./ActiveLimitsProgress";

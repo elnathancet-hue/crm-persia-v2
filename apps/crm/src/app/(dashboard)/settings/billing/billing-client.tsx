@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { Check, Crown, Zap, Rocket, Building2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 
 interface PlanInfo {
   id: string;

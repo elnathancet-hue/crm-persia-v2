@@ -3,12 +3,12 @@
 import * as React from "react";
 import { Plus } from "lucide-react";
 import { TagBadge } from "./tag-badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@persia/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@persia/ui/popover";
 import {
   Command,
   CommandInput,
@@ -16,7 +16,7 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
-} from "@/components/ui/command";
+} from "@persia/ui/command";
 import { getTags, createTag, addTagToLead, removeTagFromLead } from "@/actions/tags";
 
 interface Tag {

@@ -25,16 +25,16 @@ import type {
   AgentStatus,
   AgentTool,
 } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@persia/ui/tabs";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import { AgentStatusBadge } from "@/features/ai-agent/components/AgentStatusBadge";
 import { RulesTab } from "@/features/ai-agent/components/RulesTab";
 import { StagesTab } from "@/features/ai-agent/components/StagesTab";
