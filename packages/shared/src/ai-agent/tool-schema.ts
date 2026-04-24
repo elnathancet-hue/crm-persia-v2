@@ -1,8 +1,9 @@
 // AI Agent — tool-use contracts.
 //
-// Anthropic-compatible tool definitions + handler contracts. No Zod here;
-// runtime (apps/crm) may use Zod internally and emit JSONSchemaObject via
-// zod-to-json-schema when creating tools.
+// OpenAI Chat Completions tool-use format. JSON schema stays compatible
+// with Anthropic's (same `input_schema` shape), but the wire wrapper and
+// response payload differ. Runtime (apps/crm) may use Zod internally and
+// emit JSONSchemaObject via zod-to-json-schema when creating tools.
 
 import type {
   AgentTool,
@@ -11,15 +12,47 @@ import type {
 } from "./types";
 
 // ============================================================================
-// Anthropic tool-use wire format (what we send to messages.create)
+// OpenAI Chat Completions tool wire format
+// Sent to openai.chat.completions.create({ tools: [...] }).
 // ============================================================================
 
+export interface OpenAITool {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: JSONSchemaObject;
+  };
+}
+
+export function toOpenAITool(tool: AgentTool): OpenAITool {
+  return {
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  };
+}
+
+// ============================================================================
+// DEPRECATED — Anthropic tool wire format.
+//
+// Kept alongside the OpenAI types during the full-swap migration so the
+// current runtime (still wired to @anthropic-ai/sdk) keeps compiling
+// between this contracts PR and the Codex runtime PR. Will be removed in
+// the runtime PR.
+// ============================================================================
+
+/** @deprecated Use OpenAITool. Removed after runtime migration. */
 export interface AnthropicTool {
   name: string;
   description: string;
   input_schema: JSONSchemaObject;
 }
 
+/** @deprecated Use toOpenAITool. Removed after runtime migration. */
 export function toAnthropicTool(tool: AgentTool): AnthropicTool {
   return {
     name: tool.name,
@@ -29,17 +62,25 @@ export function toAnthropicTool(tool: AgentTool): AnthropicTool {
 }
 
 // ============================================================================
-// Tool call / tool result — shapes the executor exchanges with the LLM
+// Tool call / tool result — normalized shapes the executor exchanges with
+// the runtime handlers. The runtime translates OpenAI's wire payload
+// (`choices[0].message.tool_calls[]` with stringified `function.arguments`)
+// into these normalized shapes before invoking handlers.
 // ============================================================================
 
 export interface ToolCall {
-  id: string;                        // Anthropic tool_use_id
-  name: string;                      // must match tool.name
-  input: Record<string, unknown>;
+  id: string;                        // OpenAI tool_call id ("call_abc123");
+                                     // was Anthropic tool_use_id on the legacy runtime
+  name: string;                      // must match tool.function.name
+  input: Record<string, unknown>;    // parsed from OpenAI's JSON-string arguments
 }
 
 export interface ToolResult {
-  tool_use_id: string;
+  // Legacy field name kept for the current Anthropic-based runtime until
+  // the Codex OpenAI-runtime PR lands. New code should set `tool_call_id`.
+  // Runtime will deprecate `tool_use_id` after the swap.
+  tool_use_id?: string;
+  tool_call_id?: string;
   content: string | Record<string, unknown>;
   is_error: boolean;
 }

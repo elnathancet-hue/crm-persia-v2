@@ -2055,3 +2055,256 @@ motivo — revertido com `git checkout`, refeito com o encoding explicito.
 - This closes the Phase 1 gap left after PR5.5 / PR5.6 / PR5.7 and also
   completes the admin+CRM AI Agent unification sequence started in PRs
   #24, #26, #27 and #28.
+
+---
+
+## 2026-04-24 — Claude — Anthropic → OpenAI swap (contracts)
+
+Branch: `claude/ai-agent-openai-contracts` (this PR).
+
+Usuário decidiu migrar toda a stack LLM de Anthropic pra OpenAI. Sem
+fallback, sem dual-provider — full swap. `OPENAI_API_KEY` já está em prod,
+`ANTHROPIC_API_KEY` nunca foi configurada ali. Feature flag segue off em
+todas as orgs até o runtime estar migrado, então podemos trocar sem medo
+de quebrar conversas ativas.
+
+### Split entre modelos
+
+| Uso | Modelo | Onde |
+|---|---|---|
+| Agente conversando com lead | `gpt-5-mini` (default, admin troca no RulesTab) | `agent_configs.model`, usado pelo executor principal |
+| Meta-IA interna (summarization, handoff brief, futuro Construtor de Prompt) | `gpt-4o-mini` (fixo) | `INTERNAL_MODEL` constant em `@persia/shared/ai-agent` |
+
+Motivo: gpt-5-mini é mais forte em conversa de qualidade (cliente vê).
+gpt-4o-mini é 10x mais barato, bom o suficiente pra prose curta que roda
+toda conversa longa. Custo total de produção cai vs manter tudo num
+modelo premium.
+
+### Files shipped nesta PR de contracts
+
+- `packages/shared/src/ai-agent/cost.ts` — troca do `MODEL_PRICING` pros
+  4 modelos OpenAI (gpt-5, gpt-5-mini, gpt-4o, gpt-4o-mini), troca
+  `DEFAULT_MODEL` pra `"gpt-5-mini"`, novo `INTERNAL_MODEL = "gpt-4o-mini"`
+  constant.
+- `packages/shared/src/ai-agent/tool-schema.ts`:
+  - `AnthropicTool` → `OpenAITool` (wrapper `{ type: "function", function: { name, description, parameters } }`)
+  - `toAnthropicTool` → `toOpenAITool`
+  - `ToolCall` agora doc: `id` é OpenAI `call_...` format (era `tool_use_id`)
+  - `ToolResult.tool_use_id` → `ToolResult.tool_call_id`
+  - `ToolResult.content` continua podendo ser string ou object; runtime
+    serializa pra string antes de enviar ao OpenAI
+  - `is_error` continua no tipo — runtime encoda prefixo no content
+    quando serializa (OpenAI não tem flag nativa)
+
+Contratos que NÃO mudam: `NativeHandlerContext`, `NativeHandlerResult`,
+`NativeHandler`, `NativeHandlerRegistry`, `CustomWebhookInvocation`,
+`CustomWebhookResult`, `CUSTOM_WEBHOOK_LIMITS`. Os handlers de tool
+(stop_agent, transfer_to_user, add_tag, etc) funcionam identicos — só a
+camada entre executor e LLM muda.
+
+### Runtime scope pro Codex (próxima PR)
+
+**1. Deps (`apps/crm/package.json`)**
+
+```json
+"dependencies": {
+  // remove: "@anthropic-ai/sdk": "^0.90.0"
+  // add:
+  "openai": "^4.x.x"  // verificar última compatível com Node 20+
+}
+```
+
+**2. Executor (`apps/crm/src/lib/ai-agent/executor.ts`)**
+
+Trocar `new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })` por
+`new OpenAI({ apiKey: process.env.OPENAI_API_KEY })`.
+
+Loop principal muda:
+
+```ts
+// Antes (Anthropic)
+const response = await client.messages.create({
+  model: config.model,
+  max_tokens: 1024,
+  system,
+  tools: tools as never,
+  messages: messages as never,
+});
+if (response.stop_reason === "tool_use") { ... }
+
+// Depois (OpenAI)
+const response = await client.chat.completions.create({
+  model: config.model,
+  max_completion_tokens: 1024,  // gpt-5-* usa max_completion_tokens
+  messages: [
+    { role: "system", content: system },
+    ...messages,
+  ],
+  tools: tools,  // já OpenAITool[] via toOpenAITool
+  tool_choice: "auto",
+});
+const choice = response.choices[0];
+if (choice.finish_reason === "tool_calls") {
+  for (const call of choice.message.tool_calls ?? []) {
+    const toolCall: ToolCall = {
+      id: call.id,
+      name: call.function.name,
+      input: JSON.parse(call.function.arguments),  // sempre string em OpenAI
+    };
+    // ... executa, depois envia tool result:
+    messages.push({
+      role: "assistant",
+      content: choice.message.content,
+      tool_calls: choice.message.tool_calls,
+    });
+    messages.push({
+      role: "tool",
+      tool_call_id: call.id,
+      content: typeof result.output === "string" ? result.output : JSON.stringify(result.output),
+    });
+  }
+}
+```
+
+Usage tracking muda:
+
+```ts
+// Antes: response.usage.input_tokens, response.usage.output_tokens
+// Depois: response.usage.prompt_tokens, response.usage.completion_tokens
+```
+
+**3. Handoff notification (`apps/crm/src/lib/ai-agent/handoff-notification.ts`)**
+
+Summary generation Claude → OpenAI, mas usando **`INTERNAL_MODEL`**
+(`"gpt-4o-mini"`) em vez de `config.model`:
+
+```ts
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const response = await client.chat.completions.create({
+  model: INTERNAL_MODEL,  // import from @persia/shared/ai-agent
+  max_completion_tokens: 200,
+  messages: [
+    { role: "system", content: HANDOFF_SUMMARY_PROMPT },
+    { role: "user", content: transcriptText },
+  ],
+});
+const summary = response.choices[0].message.content?.trim() ?? "";
+```
+
+Mesma lógica fail-soft: erro OpenAI → fallback plain text.
+
+**4. Context summarization (dentro do `executor.ts`, função `maybeRunConversationSummarization`)**
+
+Mesma troca: usa **`INTERNAL_MODEL`** em vez de `config.model`. Reduz
+custo de summarization em ~10x vs antes.
+
+```ts
+const response = await withTimeout(
+  client.chat.completions.create({
+    model: INTERNAL_MODEL,
+    max_completion_tokens: 1200,
+    messages: [
+      { role: "system", content: SUMMARIZATION_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
+  }),
+  timeoutMs,
+);
+```
+
+**5. Tester (`apps/crm/src/app/api/ai-agent/tester/route.ts` + action)**
+
+Nenhuma mudança — tester chama o executor, executor já foi migrado.
+
+**6. Env vars**
+
+- Remove do EasyPanel: `ANTHROPIC_API_KEY` (se estiver setado em algum ambiente)
+- Mantém: `OPENAI_API_KEY` (já está)
+- PR de contracts não toca env — só Codex runtime PR mexe no que app precisa ler
+
+**7. Defensive default pra agent_configs existentes**
+
+No momento, toda `agent_configs.model` tem valor `claude-*`. Depois do
+swap, OpenAI rejeita esses model IDs. Runtime defense:
+
+```ts
+function resolveModel(config: AgentConfig): string {
+  return isKnownModel(config.model) ? config.model : DEFAULT_MODEL;
+}
+```
+
+Chamar em cada site que usa `config.model`. Sem precisar de migration SQL
+(flag off em todas orgs, zero conversa ativa).
+
+### Tests que Codex precisa migrar
+
+Suíte CRM tem 190 testes. Desses, ~30 mockam `Anthropic.messages.create`.
+Migrar pra mock do `openai.chat.completions.create`:
+
+- `apps/crm/src/__tests__/ai-agent-runtime.test.ts`
+- `apps/crm/src/__tests__/ai-agent-pr3-runtime.test.ts` (tests de handlers
+  não precisam — mockam DB, não LLM)
+- `apps/crm/src/__tests__/ai-agent-pr5.5-runtime.test.ts` (debounce — alguns
+  mockam executor end-to-end)
+- `apps/crm/src/__tests__/ai-agent-pr5.6-runtime.test.ts` (handoff summary)
+- `apps/crm/src/__tests__/ai-agent-pr5.7-runtime.test.ts` (context summary)
+
+Factory helper recomendada:
+
+```ts
+const openaiMock = vi.hoisted(() => ({
+  chat: { completions: { create: vi.fn() } },
+}));
+vi.mock("openai", () => ({
+  default: vi.fn(() => openaiMock),
+}));
+```
+
+Response shape mockado deve bater OpenAI:
+
+```ts
+openaiMock.chat.completions.create.mockResolvedValueOnce({
+  choices: [{
+    finish_reason: "tool_calls",
+    message: {
+      content: null,
+      tool_calls: [{
+        id: "call_123",
+        type: "function",
+        function: { name: "stop_agent", arguments: JSON.stringify({ reason: "x" }) },
+      }],
+    },
+  }],
+  usage: { prompt_tokens: 20, completion_tokens: 10 },
+});
+```
+
+### UI scope (última PR deste swap, Claude faz)
+
+- `packages/ai-agent-ui/src/components/RulesTab.tsx` — Model selector
+  options troca pras OpenAI:
+  - `gpt-5-mini` (default — "Rápido e bom, recomendado")
+  - `gpt-4o-mini` (descrição: "Mais barato, qualidade ok")
+  - `gpt-4o` (descrição: "Versão anterior, custo médio")
+  - `gpt-5` (descrição: "Raciocínio avançado, mais caro")
+
+O `createAgent` no AgentsList também usa o novo default via
+`DEFAULT_MODEL` export — sem mudança adicional ali.
+
+### Validação
+
+- `pnpm --filter @persia/shared typecheck` ✅
+- `pnpm --filter @persia/crm typecheck` ✅ (runtime ainda usa
+  `@anthropic-ai/sdk` — não quebra até Codex migrar, mas `toAnthropicTool`
+  vai dar undefined se algum código importar o nome antigo. Greped zero
+  callers fora do runtime que o Codex vai reescrever).
+- `pnpm --filter @persia/admin typecheck` ✅
+
+### Out of scope
+
+- Migration SQL pra backfillar `agent_configs.model` de `claude-*` →
+  `gpt-5-mini`. Feature flag off em todas orgs, runtime fallback cobre.
+  Se quiser opcionalmente numa PR posterior, é one-liner.
+- Prompt caching (OpenAI tem automático pra prompts >1024 tokens, sem
+  configuração).
+- Reasoning effort config pra gpt-5 models (roadmap).
