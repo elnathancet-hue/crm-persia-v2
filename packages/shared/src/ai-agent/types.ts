@@ -250,12 +250,22 @@ export interface OrganizationAgentFeatures {
   native_agent_enabled?: boolean;
 }
 
+// PR5: optional webhook domain allowlist. When present, the webhook caller
+// only accepts outbound calls whose resolved hostname matches (case-insensitive)
+// one of these entries. When absent or empty, the caller rejects ALL custom
+// webhook invocations — opt-in by org, no silent fleet-wide allow.
+export interface OrganizationWebhookAllowlist {
+  domains?: string[]; // lowercased hostnames, e.g. ["n8n.example.com"]
+}
+
 export interface OrganizationSettings {
   features?: OrganizationAgentFeatures;
+  webhook_allowlist?: OrganizationWebhookAllowlist;
   [key: string]: unknown;
 }
 
 export const NATIVE_AGENT_FEATURE_FLAG = "native_agent_enabled" as const;
+export const WEBHOOK_ALLOWLIST_KEY = "webhook_allowlist" as const;
 
 // ============================================================================
 // Server action input DTOs (consumed by UI, implemented by Codex)
@@ -324,11 +334,39 @@ export interface CreateToolFromPresetInput {
   handler: NativeHandlerName;
 }
 
+// PR5: focused DTO for creating a custom webhook tool. The runtime action
+// maps this to CreateToolInput with execution_mode='n8n_webhook' and runs
+// the SSRF + allowlist validation.
+export interface CreateCustomWebhookToolInput {
+  config_id: string;
+  name: string;                   // tool.name, exposed to LLM
+  description: string;            // LLM-facing description
+  input_schema: JSONSchemaObject;
+  webhook_url: string;            // HTTPS only, hostname must match allowlist
+  webhook_secret: string;         // min 32 chars (HMAC key). Runtime validates length.
+}
+
+export interface UpdateCustomWebhookToolInput {
+  name?: string;
+  description?: string;
+  input_schema?: JSONSchemaObject;
+  webhook_url?: string;
+  webhook_secret?: string;        // undefined = keep, "" = clear (runtime rejects)
+  is_enabled?: boolean;
+}
+
 export interface SetStageToolInput {
   stage_id: string;
   tool_id: string;
   is_enabled: boolean;
 }
+
+// PR5: org-level webhook allowlist management.
+export interface AddAllowedDomainInput {
+  domain: string; // normalized server-side (lowercase, stripped of scheme/path/port)
+}
+
+export const WEBHOOK_SECRET_MIN_LENGTH = 32 as const;
 
 // --- PR3 additions: audit queries for agent runs / steps ---
 

@@ -661,3 +661,185 @@ Validation from this branch:
   `.next/types` mismatch in this repo (missing generated route files referenced
   by `apps/crm/tsconfig.json`). This branch does not introduce a new TS error;
   the Next build's own type check passes.
+
+---
+
+## 2026-04-23 — Claude — PR5 contract additions
+
+Branch: `claude/ai-agent-pr5-contracts` (this PR).
+
+Additive only. Enables `execution_mode='n8n_webhook'` end-to-end — the one
+tool path deliberately held back on every prior PR. After PR5 merges, the
+platform ships n8n (and any HTTPS webhook endpoint) as an optional provider
+alongside native handlers, without loosening the security posture that made
+the deferral worth it.
+
+### Files shipped
+
+- `packages/shared/src/ai-agent/types.ts` — additive only
+  - `OrganizationWebhookAllowlist` shape, added to `OrganizationSettings`
+    under key `webhook_allowlist`.
+  - `CreateCustomWebhookToolInput`, `UpdateCustomWebhookToolInput`
+  - `AddAllowedDomainInput`
+  - `WEBHOOK_ALLOWLIST_KEY`, `WEBHOOK_SECRET_MIN_LENGTH` constants
+
+The PR1 types `CustomWebhookInvocation`, `CustomWebhookResult`, and
+`CUSTOM_WEBHOOK_LIMITS` (in `tool-schema.ts`) are the runtime-side
+contract for the invoker and remain unchanged.
+
+### Storage decision
+
+Allowlist lives in `public.organizations.settings.webhook_allowlist.domains`
+(JSONB). No new table — same reasoning as the native_agent_enabled flag in
+PR1. Upgrade to a table with per-entry audit if we ever need "who added
+this and when", but the simple case is one dropdown for the admin.
+
+### SSRF hardening — mandatory checks for `webhook-caller.ts`
+
+Every check is an independent gate; the caller is rejected if ANY fails. In
+order:
+
+1. **Scheme**: only `https:`. Reject `http:`, `file:`, `ftp:`, `javascript:`, etc.
+2. **Hostname parsing**: URL must parse cleanly; no IPv6 literals in
+   brackets that bypass hostname comparison.
+3. **Allowlist match**: `hostname.toLowerCase()` must be present in
+   `organizations.settings.webhook_allowlist.domains`. **Empty/absent
+   allowlist = reject all calls.** No fleet-wide default.
+4. **DNS resolve**: resolve hostname to IPs (both A and AAAA). If resolution
+   fails, reject. Cache the resolved IPs for the duration of the single
+   fetch — this is what prevents DNS rebinding (the fetch connects to the
+   already-resolved IP, not re-resolving).
+5. **Private IP block**: every resolved IP must fall outside:
+   - IPv4: `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
+     `169.254.0.0/16` (link-local), `0.0.0.0/8`, `224.0.0.0/4` (multicast),
+     `240.0.0.0/4` (reserved), `100.64.0.0/10` (CGNAT).
+   - IPv6: `::1/128`, `fc00::/7` (ULA), `fe80::/10` (link-local),
+     `::ffff:0:0/96` (IPv4-mapped — re-check underlying IPv4),
+     `2001:db8::/32` (doc), `ff00::/8` (multicast).
+6. **Port**: only 443 (implicit with `https:`). No custom ports — keeps
+   local proxies out even if the hostname passes DNS.
+7. **Body cap**: response reader aborts when total bytes exceed
+   `CUSTOM_WEBHOOK_LIMITS.max_response_bytes` (256 KB). Stream-check,
+   don't buffer to memory first.
+8. **Timeout**: total deadline `CUSTOM_WEBHOOK_LIMITS.timeout_ms` (10 s).
+   Connection + read combined; use `AbortController`.
+9. **Redirects**: disallow. `redirect: "manual"`. A 3xx response is a
+   hard error — prevents the allowlist bypass where a listed host
+   redirects to an internal one.
+
+### HMAC
+
+Outgoing request carries:
+
+- Header `X-Persia-Signature: sha256=<hex>` where `<hex>` is the HMAC of
+  the request body using `agent_tools.webhook_secret` as the key.
+- Header `X-Persia-Timestamp: <unix_ms>` — include in signed payload.
+- Signed payload = `timestamp + "." + body`.
+
+Webhook secret minimum length: 32 chars (see `WEBHOOK_SECRET_MIN_LENGTH`).
+Runtime rejects `createCustomTool` / `updateTool` with shorter secrets.
+
+### Audit
+
+`agent_steps.output` for a custom webhook call stores:
+
+```json
+{
+  "http_status": 200,
+  "duration_ms": 1823,
+  "url_host": "n8n.example.com",
+  "body_sha256": "<hex>",           // of request body
+  "response_size_bytes": 1453,
+  "response_sha256": "<hex>"         // of response body
+}
+```
+
+No raw request or response body in the step. If customers need content,
+they read it from n8n's own audit.
+
+### Runtime scope for Codex (PR5)
+
+1. **`apps/crm/src/lib/ai-agent/webhook-caller.ts`** — new, implements all
+   checks above. Pure function plus the `CustomWebhookInvocation` input.
+   Returns `CustomWebhookResult`. Does NOT access the DB — caller
+   upstream resolves the tool row and allowlist.
+
+2. **Executor** (`apps/crm/src/lib/ai-agent/executor.ts`): in
+   `executeToolCall`, when `tool.execution_mode === 'n8n_webhook'`:
+   - Resolve allowlist for the org.
+   - Call `invokeCustomWebhook({ tool, payload, context, allowlist })`.
+   - Write the step output as spec'd above.
+   - Map `success === false` into the existing tool-result channel the
+     LLM reads. Treat timeout / SSRF rejection / non-2xx identically
+     from the LLM's perspective: "tool failed, you can react".
+
+3. **`apps/crm/src/actions/ai-agent/tools.ts`**:
+   - Remove the PR5 rejection from `createCustomTool`. Now accepts
+     `execution_mode === 'n8n_webhook'` iff:
+     - `webhook_url` passes URL parse + HTTPS + allowlist match.
+     - `webhook_secret.length >= 32`.
+     - `native_handler` is null.
+   - Add `createCustomWebhookTool(input: CreateCustomWebhookToolInput)`
+     as a focused helper that the UI calls, internally forwarding to
+     `createCustomTool` after validation.
+   - `updateTool` keeps working for `is_enabled` toggles and schema
+     edits; when `execution_mode` or `webhook_url` change, re-run the
+     allowlist + HTTPS validation.
+
+4. **`apps/crm/src/actions/ai-agent/webhook-allowlist.ts`** (new):
+
+```ts
+listAllowedDomains(): Promise<string[]>;
+addAllowedDomain(input: AddAllowedDomainInput): Promise<string[]>;
+removeAllowedDomain(domain: string): Promise<string[]>;
+```
+
+Rules:
+- admin/owner only.
+- `addAllowedDomain` normalizes: `new URL("https://" + input).hostname.toLowerCase()`.
+  Reject any normalized hostname that resolves to a private IP right now
+  (same checks as the webhook caller) — stops admins from adding
+  `localhost` or similar by accident.
+- All three read/write `organizations.settings.webhook_allowlist.domains`.
+
+### Tests Codex must add
+
+- `webhook-caller.ts`:
+  - Rejects `http://`, `file://`, `ftp://`.
+  - Rejects hostname not in allowlist.
+  - Rejects resolved IP in every private range above (parameterize).
+  - Rejects DNS rebind (allowed host resolves to internal IP).
+  - Rejects 3xx redirect to internal host.
+  - Aborts read after body cap.
+  - Aborts after timeout.
+  - Happy path: HTTPS 2xx with HMAC header structured correctly.
+- `tools.ts`:
+  - `createCustomTool(n8n_webhook)` rejects non-HTTPS url.
+  - Rejects domain not in allowlist.
+  - Rejects secret shorter than 32 chars.
+  - Happy path creates the row with `native_handler=null`.
+- `webhook-allowlist.ts`:
+  - Normalizes input to bare hostname.
+  - Rejects private-IP-resolving hostnames.
+  - Admin gate.
+
+### UI scope for Claude (PR5 follow-up)
+
+- **ToolsTab**: "+ Webhook customizado" button alongside the Decision
+  Intelligence modal. Opens a new sheet with URL, secret, schema JSON
+  editor. Separate card style in the tools list (webhook icon + URL
+  host badge).
+- **DecisionIntelligenceModal**: unchanged — only native presets.
+- **Settings**: new page (or section in the existing settings page) for
+  `webhook_allowlist.domains` management (list + add + remove).
+  Suggested location: `/settings/integrations` or a subsection of
+  `/automations/agents` for now.
+- **Flag**: when `webhook_allowlist.domains` is empty, the "+ Webhook
+  customizado" button renders disabled with a link to the settings
+  page — makes the "allowlist first" rule discoverable.
+
+### Out of scope (still)
+
+- RAG (PR6).
+- Notifications + Agendamento (PR7).
+- Meta-IA builders (PR8).
