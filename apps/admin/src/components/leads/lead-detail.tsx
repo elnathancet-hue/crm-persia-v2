@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ReactivateAgentButton } from "@persia/ai-agent-ui";
 import { getLeadDetail, updateLead, getLeadActivities } from "@/actions/leads";
+import {
+  getLeadAgentHandoffState,
+  reactivateAgent as reactivateLeadAgent,
+} from "@/actions/ai-agent/reactivate";
 import { getTags, addTagToLead, removeTagFromLead } from "@/actions/tags";
 import { createDeal, getPipelines } from "@/actions/pipelines";
 import { ArrowLeft, Loader2, Save, Tag, X } from "lucide-react";
 import { toast } from "sonner";
+import { useActiveOrg } from "@/lib/stores/client-store";
 
 const STATUS_OPTIONS = [
   { value: "new", label: "Novo" },
@@ -21,8 +27,20 @@ interface Props {
 }
 
 export function LeadDetail({ leadId, onBack }: Props) {
+  const { activeOrgId } = useActiveOrg();
   const [lead, setLead] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
+  const [handoffState, setHandoffState] = useState<{
+    isPaused: boolean;
+    pausedAt: string | null;
+    reason: string | null;
+    pausedConversationCount: number;
+  }>({
+    isPaused: false,
+    pausedAt: null,
+    reason: null,
+    pausedConversationCount: 0,
+  });
   const [allTags, setAllTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,11 +63,14 @@ export function LeadDetail({ leadId, onBack }: Props) {
   function clearFieldError(field: string) { setErrors(prev => { const n = { ...prev }; delete n[field]; return n; }); }
 
   useEffect(() => {
+    if (!activeOrgId) return;
+
     Promise.all([
       getLeadDetail(leadId),
       getLeadActivities(leadId),
       getTags(),
-    ]).then(([leadResult, actResult, tagsResult]) => {
+      getLeadAgentHandoffState(activeOrgId, leadId),
+    ]).then(([leadResult, actResult, tagsResult, nextHandoffState]) => {
       if (leadResult.data) {
         setLead(leadResult.data);
         setName(leadResult.data.name || "");
@@ -59,9 +80,10 @@ export function LeadDetail({ leadId, onBack }: Props) {
       }
       setActivities(actResult.data || []);
       setAllTags(tagsResult);
+      setHandoffState(nextHandoffState);
       setLoading(false);
     });
-  }, [leadId]);
+  }, [activeOrgId, leadId]);
 
   useEffect(() => {
     if (!showCreateDeal) return;
@@ -166,11 +188,31 @@ export function LeadDetail({ leadId, onBack }: Props) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} aria-label="Voltar" className="text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-5" />
-        </button>
-        <h1 className="text-xl font-bold text-foreground">{lead.name || "Lead"}</h1>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} aria-label="Voltar" className="text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="size-5" />
+          </button>
+          <h1 className="text-xl font-bold text-foreground">{lead.name || "Lead"}</h1>
+        </div>
+        {activeOrgId && handoffState.isPaused ? (
+          <ReactivateAgentButton
+            pausedAt={handoffState.pausedAt}
+            reason={handoffState.reason}
+            pausedConversationCount={handoffState.pausedConversationCount}
+            onReactivate={() => reactivateLeadAgent(activeOrgId, leadId)}
+            onSuccess={async () => {
+              const [leadResult, actResult, nextHandoffState] = await Promise.all([
+                getLeadDetail(leadId),
+                getLeadActivities(leadId),
+                getLeadAgentHandoffState(activeOrgId, leadId),
+              ]);
+              if (leadResult.data) setLead(leadResult.data);
+              setActivities(actResult.data || []);
+              setHandoffState(nextHandoffState);
+            }}
+          />
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

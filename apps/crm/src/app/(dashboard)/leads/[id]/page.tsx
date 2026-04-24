@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import { getLead, getOrgTags } from "@/actions/leads";
+import { getLeadAgentHandoffState } from "@/actions/ai-agent/reactivate";
 import { LeadDetailClient } from "@/components/leads/lead-detail-client";
 
 type Props = {
@@ -20,9 +21,10 @@ export default async function LeadDetailPage({ params }: Props) {
   }
 
   try {
-    const [leadData, orgTags] = await Promise.all([
+    const [leadData, orgTags, handoffState] = await Promise.all([
       getLead(id),
       getOrgTags(),
+      getLeadAgentHandoffState(id),
     ]);
 
     return (
@@ -31,6 +33,7 @@ export default async function LeadDetailPage({ params }: Props) {
           lead={leadData.lead}
           activities={leadData.activities}
           orgTags={orgTags}
+          agentHandoff={handoffState}
         />
       </div>
     );
