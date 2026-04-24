@@ -1,15 +1,22 @@
 "use server";
 
+import { WEBHOOK_SECRET_MIN_LENGTH, getPreset } from "@persia/shared/ai-agent";
 import type {
   AgentStageTool,
   AgentTool,
+  CreateCustomWebhookToolInput,
   CreateToolFromPresetInput,
   CreateToolInput,
   SetStageToolInput,
   UpdateToolInput,
 } from "@persia/shared/ai-agent";
-import { getPreset } from "@persia/shared/ai-agent";
 import { revalidatePath } from "next/cache";
+import {
+  assertHostnameAllowed,
+  getWebhookAllowlistDomains,
+  parseAndValidateWebhookUrl,
+  resolvePublicIps,
+} from "@/lib/ai-agent/webhook-caller";
 import { materializePresetTool } from "@/lib/ai-agent/tools/registry";
 import {
   agentPaths,
@@ -21,6 +28,28 @@ import {
 } from "./utils";
 
 const ENABLED_PRESET_PRS = new Set(["PR1", "PR3"]);
+
+type ValidatedToolPayload =
+  | {
+      execution_mode: "native";
+      name: string;
+      description: string;
+      input_schema: CreateToolInput["input_schema"];
+      native_handler: NonNullable<CreateToolInput["native_handler"]>;
+      webhook_url: null;
+      webhook_secret: null;
+      is_enabled: boolean;
+    }
+  | {
+      execution_mode: "n8n_webhook";
+      name: string;
+      description: string;
+      input_schema: CreateToolInput["input_schema"];
+      native_handler: null;
+      webhook_url: string;
+      webhook_secret: string;
+      is_enabled: boolean;
+    };
 
 export async function listToolsForAgent(configId: string): Promise<AgentTool[]> {
   const { db, orgId } = await requireAgentRole("agent");
@@ -81,26 +110,14 @@ export async function createCustomTool(input: CreateToolInput): Promise<AgentToo
   const { db, orgId } = await requireAgentRole("admin");
   await assertConfigBelongsToOrg(db, orgId, input.config_id);
 
-  if (input.execution_mode === "n8n_webhook") {
-    throw new Error("Custom webhook tools ficam disponiveis apenas na PR5");
-  }
-  if (input.execution_mode === "native" && !input.native_handler) {
-    throw new Error("native_handler e obrigatorio para tools nativos");
-  }
+  const validated = await validateToolPayload(db, orgId, input);
 
   const { data, error } = await db
     .from("agent_tools")
     .insert({
       organization_id: orgId,
       config_id: input.config_id,
-      name: input.name.trim(),
-      description: input.description.trim(),
-      input_schema: input.input_schema,
-      execution_mode: input.execution_mode,
-      native_handler: input.native_handler ?? null,
-      webhook_url: null,
-      webhook_secret: null,
-      is_enabled: input.is_enabled ?? true,
+      ...validated,
     })
     .select("*")
     .single();
@@ -110,23 +127,45 @@ export async function createCustomTool(input: CreateToolInput): Promise<AgentToo
   return data as AgentTool;
 }
 
+export async function createCustomWebhookTool(
+  input: CreateCustomWebhookToolInput,
+): Promise<AgentTool> {
+  return createCustomTool({
+    ...input,
+    execution_mode: "n8n_webhook",
+  });
+}
+
 export async function updateTool(toolId: string, input: UpdateToolInput): Promise<AgentTool> {
   const { db, orgId } = await requireAgentRole("admin");
   const existing = await assertToolBelongsToOrg(db, orgId, toolId);
 
-  if (input.execution_mode === "n8n_webhook") {
-    throw new Error("Custom webhook tools ficam disponiveis apenas na PR5");
-  }
+  const nextState: CreateToolInput = {
+    config_id: existing.config_id,
+    name: input.name ?? existing.name,
+    description: input.description ?? existing.description,
+    input_schema: input.input_schema ?? existing.input_schema,
+    execution_mode: input.execution_mode ?? existing.execution_mode,
+    native_handler:
+      input.native_handler !== undefined
+        ? input.native_handler ?? undefined
+        : existing.native_handler ?? undefined,
+    webhook_url:
+      input.webhook_url !== undefined
+        ? input.webhook_url ?? undefined
+        : existing.webhook_url ?? undefined,
+    webhook_secret:
+      input.webhook_secret !== undefined
+        ? input.webhook_secret ?? undefined
+        : existing.webhook_secret ?? undefined,
+    is_enabled: input.is_enabled ?? existing.is_enabled,
+  };
+  const validated = await validateToolPayload(db, orgId, nextState);
 
   const updates: Record<string, unknown> = {
+    ...validated,
     updated_at: new Date().toISOString(),
   };
-  if (input.name !== undefined) updates.name = input.name.trim();
-  if (input.description !== undefined) updates.description = input.description.trim();
-  if (input.input_schema !== undefined) updates.input_schema = input.input_schema;
-  if (input.execution_mode !== undefined) updates.execution_mode = input.execution_mode;
-  if (input.native_handler !== undefined) updates.native_handler = input.native_handler;
-  if (input.is_enabled !== undefined) updates.is_enabled = input.is_enabled;
 
   const { data, error } = await db
     .from("agent_tools")
@@ -182,4 +221,69 @@ export async function listStageTools(stageId: string): Promise<AgentStageTool[]>
 
   if (error) throw new Error(error.message);
   return (data ?? []) as AgentStageTool[];
+}
+
+async function validateToolPayload(
+  db: Awaited<ReturnType<typeof requireAgentRole>>["db"],
+  orgId: string,
+  input: CreateToolInput,
+): Promise<ValidatedToolPayload> {
+  const name = input.name.trim();
+  if (!name) throw new Error("Nome da ferramenta e obrigatorio");
+
+  const description = input.description.trim();
+  if (!description) throw new Error("Descricao da ferramenta e obrigatoria");
+
+  if (input.execution_mode === "native") {
+    if (!input.native_handler) {
+      throw new Error("native_handler e obrigatorio para tools nativos");
+    }
+
+    return {
+      execution_mode: "native",
+      name,
+      description,
+      input_schema: input.input_schema,
+      native_handler: input.native_handler,
+      webhook_url: null,
+      webhook_secret: null,
+      is_enabled: input.is_enabled ?? true,
+    };
+  }
+
+  const webhookUrl = input.webhook_url?.trim() ?? "";
+  const webhookSecret = input.webhook_secret?.trim() ?? "";
+  if (webhookSecret.length < WEBHOOK_SECRET_MIN_LENGTH) {
+    throw new Error(`webhook_secret precisa ter ao menos ${WEBHOOK_SECRET_MIN_LENGTH} caracteres`);
+  }
+
+  const parsedUrl = parseAndValidateWebhookUrl(webhookUrl);
+  const allowlist = await loadWebhookAllowlist(db, orgId);
+  assertHostnameAllowed(parsedUrl.hostname, allowlist);
+  await resolvePublicIps(parsedUrl.hostname);
+
+  return {
+    execution_mode: "n8n_webhook",
+    name,
+    description,
+    input_schema: input.input_schema,
+    native_handler: null,
+    webhook_url: parsedUrl.toString(),
+    webhook_secret: webhookSecret,
+    is_enabled: input.is_enabled ?? true,
+  };
+}
+
+async function loadWebhookAllowlist(
+  db: Awaited<ReturnType<typeof requireAgentRole>>["db"],
+  orgId: string,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("organizations")
+    .select("settings")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return getWebhookAllowlistDomains(data?.settings);
 }

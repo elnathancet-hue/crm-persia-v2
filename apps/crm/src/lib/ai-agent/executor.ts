@@ -32,6 +32,10 @@ import {
 } from "./guardrails";
 import { isNativeAgentEnabled } from "./feature-flag";
 import { assertWithinRateLimits } from "./rate-limits";
+import {
+  getWebhookAllowlistDomains,
+  invokeCustomWebhook,
+} from "./webhook-caller";
 import { isImplementedNativeHandler, nativeHandlers } from "./tools/registry";
 
 type AnthropicMessage = {
@@ -403,6 +407,7 @@ async function executeToolCall(
   const startedAt = Date.now();
   let success = false;
   let output: Record<string, unknown> = {};
+  let stepOutput: Record<string, unknown> | null = null;
   let nativeHandler = call.tool?.native_handler ?? null;
 
   try {
@@ -410,7 +415,37 @@ async function executeToolCall(
       output = { error: "tool not allowed in current stage" };
       return { success, output };
     }
-    if (call.tool.execution_mode !== "native" || !isImplementedNativeHandler(call.tool.native_handler)) {
+    if (call.tool.execution_mode === "n8n_webhook") {
+      if (!call.tool.webhook_url || !call.tool.webhook_secret) {
+        output = { error: "webhook tool is not fully configured" };
+        stepOutput = { success, ...output };
+        return { success, output };
+      }
+
+      const allowlist = await loadWebhookAllowlist(params.db, params.orgId);
+      const result = await invokeCustomWebhook({
+        tool_id: call.tool.id,
+        webhook_url: call.tool.webhook_url,
+        webhook_secret: call.tool.webhook_secret,
+        payload: call.input,
+        context: {
+          organization_id: params.orgId,
+          lead_id: params.leadId,
+          crm_conversation_id: params.crmConversationId,
+          agent_conversation_id: params.agentConversation.id,
+          run_id: call.runId,
+          dry_run: params.dryRun,
+        },
+        allowlist,
+      });
+
+      success = result.success;
+      output = result.output;
+      stepOutput = { success, ...result.audit_output };
+      return { success, output };
+    }
+
+    if (!isImplementedNativeHandler(call.tool.native_handler)) {
       output = { error: "handler not implemented in this release" };
       return { success, output };
     }
@@ -431,6 +466,7 @@ async function executeToolCall(
     output = result.success
       ? { ...result.output, side_effects: result.side_effects ?? [] }
       : { ...result.output, error: result.error ?? "tool failed" };
+    stepOutput = { success, ...output };
     return { success, output };
   } finally {
     await insertStep(params.db, {
@@ -441,7 +477,7 @@ async function executeToolCall(
       toolId: call.tool?.id ?? null,
       nativeHandler,
       input: call.input,
-      output: { success, ...output },
+      output: stepOutput ?? { success, ...output },
       durationMs: Date.now() - startedAt,
     });
   }
@@ -557,6 +593,17 @@ async function insertStep(
     output: step.output,
     duration_ms: step.durationMs,
   });
+}
+
+async function loadWebhookAllowlist(db: AgentDb, orgId: string): Promise<string[]> {
+  const { data, error } = await db
+    .from("organizations")
+    .select("settings")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (error || !data) return [];
+  return getWebhookAllowlistDomains((data as { settings?: unknown }).settings);
 }
 
 function buildSystemPrompt(config: AgentConfig, stage: AgentStage): string {
