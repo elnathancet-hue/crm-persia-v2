@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Power, Trash2 } from "lucide-react";
+import { Globe, Loader2, Plus, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AgentStage, AgentTool, NativeToolPreset } from "@persia/shared/ai-agent";
 import { getPreset } from "@persia/shared/ai-agent";
@@ -22,19 +22,32 @@ import {
 import { deleteTool, updateTool } from "@/actions/ai-agent/tools";
 import { renderToolIcon } from "@/features/ai-agent/icon-map";
 import { DecisionIntelligenceModal } from "./DecisionIntelligenceModal";
+import { CustomWebhookToolSheet } from "./CustomWebhookToolSheet";
+import { WebhookAllowlistSettings } from "./WebhookAllowlistSettings";
 
 interface Props {
   configId: string;
   tools: AgentTool[];
   stages: AgentStage[];
+  allowedDomains: string[];
   onChange: (next: AgentTool[]) => void;
 }
 
-export function ToolsTab({ configId, tools, stages, onChange }: Props) {
+export function ToolsTab({
+  configId,
+  tools,
+  stages,
+  allowedDomains: initialAllowedDomains,
+  onChange,
+}: Props) {
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [webhookOpen, setWebhookOpen] = React.useState(false);
+  const [allowedDomains, setAllowedDomains] = React.useState(initialAllowedDomains);
   const [deleteTarget, setDeleteTarget] = React.useState<AgentTool | null>(null);
   const [pendingToolId, setPendingToolId] = React.useState<string | null>(null);
   const [, startTransition] = React.useTransition();
+
+  const hasAllowlist = allowedDomains.length > 0;
 
   const handleToggle = (tool: AgentTool, nextEnabled: boolean) => {
     setPendingToolId(tool.id);
@@ -70,15 +83,30 @@ export function ToolsTab({ configId, tools, stages, onChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground max-w-2xl">
           Cada ferramenta vira uma decisao que o agente pode tomar. Controle por etapa em{" "}
           <strong>Etapas</strong> (Ferramentas permitidas).
         </p>
-        <Button onClick={() => setModalOpen(true)} className="shrink-0">
-          <Plus className="size-4" />
-          Adicionar Decisao Inteligente
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => setWebhookOpen(true)}
+            disabled={!hasAllowlist}
+            title={
+              hasAllowlist
+                ? "Adicionar webhook customizado"
+                : "Cadastre um dominio na allowlist abaixo antes"
+            }
+          >
+            <Globe className="size-4" />
+            Webhook customizado
+          </Button>
+          <Button onClick={() => setModalOpen(true)}>
+            <Plus className="size-4" />
+            Adicionar Decisao Inteligente
+          </Button>
+        </div>
       </div>
 
       {tools.length === 0 ? (
@@ -98,11 +126,23 @@ export function ToolsTab({ configId, tools, stages, onChange }: Props) {
         </div>
       )}
 
+      <WebhookAllowlistSettings
+        initialDomains={initialAllowedDomains}
+        onChange={setAllowedDomains}
+      />
+
       <DecisionIntelligenceModal
         configId={configId}
         existingTools={tools}
         open={modalOpen}
         onOpenChange={setModalOpen}
+        onCreated={(created) => onChange([...tools, created])}
+      />
+      <CustomWebhookToolSheet
+        configId={configId}
+        allowedDomains={allowedDomains}
+        open={webhookOpen}
+        onOpenChange={setWebhookOpen}
         onCreated={(created) => onChange([...tools, created])}
       />
 
@@ -132,6 +172,15 @@ export function ToolsTab({ configId, tools, stages, onChange }: Props) {
   );
 }
 
+function extractHost(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 function ToolCard({
   tool,
   stagesTotal,
@@ -148,20 +197,32 @@ function ToolCard({
   const preset: NativeToolPreset | undefined = tool.native_handler
     ? getPreset(tool.native_handler)
     : undefined;
+  const isWebhook = tool.execution_mode === "n8n_webhook";
+  const host = isWebhook ? extractHost(tool.webhook_url) : null;
 
   return (
-    <Card>
+    <Card className={isWebhook ? "border-purple-500/30" : undefined}>
       <CardContent className="p-4 flex items-start gap-3">
-        <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-          {renderToolIcon(preset?.icon_name ?? "HelpCircle", { className: "size-5" })}
+        <div
+          className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${
+            isWebhook
+              ? "bg-gradient-to-br from-purple-500 to-blue-500 text-white"
+              : "bg-primary/10 text-primary"
+          }`}
+        >
+          {isWebhook ? (
+            <Globe className="size-5" />
+          ) : (
+            renderToolIcon(preset?.icon_name ?? "HelpCircle", { className: "size-5" })
+          )}
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-medium text-sm truncate">
               {preset?.display_name ?? tool.name}
             </p>
-            {tool.execution_mode === "n8n_webhook" ? (
-              <Badge variant="outline" className="text-[10px]">
+            {isWebhook ? (
+              <Badge variant="outline" className="text-[10px] border-purple-500/40 text-purple-700 dark:text-purple-400">
                 Webhook
               </Badge>
             ) : null}
@@ -169,9 +230,15 @@ function ToolCard({
           <p className="text-xs text-muted-foreground line-clamp-2">
             {preset?.ui_description ?? tool.description}
           </p>
-          <p className="text-[11px] text-muted-foreground/70 pt-1">
-            Habilite em Etapas para o agente usar ({stagesTotal} etapa{stagesTotal === 1 ? "" : "s"})
-          </p>
+          {host ? (
+            <p className="text-[11px] text-muted-foreground/70 font-mono pt-0.5 truncate">
+              {host}
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground/70 pt-1">
+              Habilite em Etapas para o agente usar ({stagesTotal} etapa{stagesTotal === 1 ? "" : "s"})
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <div className="flex items-center gap-1.5 mr-1">

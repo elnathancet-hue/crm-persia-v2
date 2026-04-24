@@ -50,6 +50,7 @@ interface Props {
   initialStages: AgentStage[];
   initialTools: AgentTool[];
   initialLimits: AgentCostLimit[];
+  initialAllowedDomains: string[];
 }
 
 export function AgentEditorClient({
@@ -57,6 +58,7 @@ export function AgentEditorClient({
   initialStages,
   initialTools,
   initialLimits,
+  initialAllowedDomains,
 }: Props) {
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
@@ -212,6 +214,7 @@ export function AgentEditorClient({
             configId={agent.id}
             tools={tools}
             stages={stages}
+            allowedDomains={initialAllowedDomains}
             onChange={setTools}
           />
         </TabsContent>
