@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Pick up Tailwind class names used inside the shared @persia/ui package. */
+@source "../../../../packages/ui/src";
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

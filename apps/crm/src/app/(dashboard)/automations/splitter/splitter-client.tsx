@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { Loader2, Save, Scissors, Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Switch } from "@persia/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
 import { updateAssistant } from "@/actions/ai";
 
 interface MessageSplitting {

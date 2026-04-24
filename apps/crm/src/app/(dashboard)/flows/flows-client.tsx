@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, Copy, Power, PowerOff, Workflow, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Badge } from "@persia/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -13,16 +13,16 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@persia/ui/dialog";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   Table,
   TableBody,
@@ -30,8 +30,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
+} from "@persia/ui/table";
+import { Card, CardContent } from "@persia/ui/card";
 import { createFlow, deleteFlow, duplicateFlow, updateFlow } from "@/actions/flows";
 
 interface Flow {

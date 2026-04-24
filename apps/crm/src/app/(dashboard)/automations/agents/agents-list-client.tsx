@@ -12,11 +12,11 @@ import {
 import { toast } from "sonner";
 import type { AgentConfig } from "@persia/shared/ai-agent";
 import { DEFAULT_MODEL } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,14 +34,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@persia/ui/alert-dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import { AgentStatusBadge } from "@/features/ai-agent/components/AgentStatusBadge";
 import { createAgent, deleteAgent } from "@/actions/ai-agent/configs";
 import { setNativeAgentEnabled } from "@/actions/ai-agent/feature-flag";

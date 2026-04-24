@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@persia/ui/badge";
 import type { AgentStatus } from "@persia/shared/ai-agent";
 import { cn } from "@/lib/utils";
 

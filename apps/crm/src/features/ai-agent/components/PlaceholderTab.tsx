@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
 
 interface Props {
   icon: LucideIcon;

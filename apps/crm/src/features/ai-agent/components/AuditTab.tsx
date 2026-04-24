@@ -20,9 +20,9 @@ import type {
   AgentRunWithSteps,
   AgentStep,
 } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
 import { cn } from "@/lib/utils";
 import { listRuns } from "@/actions/ai-agent/audit";
 

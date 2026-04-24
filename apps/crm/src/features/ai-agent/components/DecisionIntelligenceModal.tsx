@@ -11,8 +11,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+} from "@persia/ui/dialog";
+import { Badge } from "@persia/ui/badge";
 import { cn } from "@/lib/utils";
 import { createToolFromPreset } from "@/actions/ai-agent/tools";
 import { renderToolIcon } from "@/features/ai-agent/icon-map";

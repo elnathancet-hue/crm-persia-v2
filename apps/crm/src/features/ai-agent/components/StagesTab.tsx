@@ -9,8 +9,8 @@ import type {
   CreateStageInput,
   UpdateStageInput,
 } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +20,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@persia/ui/alert-dialog";
 import { createStage, deleteStage, updateStage } from "@/actions/ai-agent/stages";
 import { StageSheet } from "./StageSheet";
 

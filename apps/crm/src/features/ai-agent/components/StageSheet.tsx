@@ -12,11 +12,11 @@ import type {
   UpdateStageInput,
 } from "@persia/shared/ai-agent";
 import { getPreset } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
+import { Switch } from "@persia/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -24,7 +24,7 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@persia/ui/sheet";
 import { listStageTools, setStageTool } from "@/actions/ai-agent/tools";
 import { renderToolIcon } from "@/features/ai-agent/icon-map";
 

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { MessageSquare, Users, Bot, Clock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 
 export default async function DashboardPage() {
   const supabase = await createClient();

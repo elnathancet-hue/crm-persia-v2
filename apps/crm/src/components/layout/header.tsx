@@ -3,16 +3,16 @@
 import { signOut } from "@/actions/auth";
 import { useUser } from "@/lib/hooks/use-user";
 import { useOrganization } from "@/lib/hooks/use-organization";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@persia/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@persia/ui/dropdown-menu";
 import { Bell, LogOut, Settings, User, Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@persia/ui/button";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 

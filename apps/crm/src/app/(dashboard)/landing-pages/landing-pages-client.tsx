@@ -10,9 +10,9 @@ import {
   MousePointerClick,
   FileText,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Badge } from "@persia/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,17 +21,17 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+} from "@persia/ui/dialog";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   createLandingPage,
   deleteLandingPage,

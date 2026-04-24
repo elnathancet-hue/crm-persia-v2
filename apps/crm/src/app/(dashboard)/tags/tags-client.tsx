@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@persia/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -11,9 +11,9 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+} from "@persia/ui/dialog";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import { TagBadge } from "@/components/tags/tag-badge";
 import { createTag, updateTag, deleteTag } from "@/actions/tags";
 import { useRole } from "@/lib/hooks/use-role";

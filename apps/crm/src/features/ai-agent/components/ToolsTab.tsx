@@ -5,10 +5,10 @@ import { Globe, Loader2, Plus, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AgentStage, AgentTool, NativeToolPreset } from "@persia/shared/ai-agent";
 import { getPreset } from "@persia/shared/ai-agent";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Card, CardContent } from "@persia/ui/card";
+import { Switch } from "@persia/ui/switch";
+import { Badge } from "@persia/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +18,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+} from "@persia/ui/alert-dialog";
 import { deleteTool, updateTool } from "@/actions/ai-agent/tools";
 import { renderToolIcon } from "@/features/ai-agent/icon-map";
 import { DecisionIntelligenceModal } from "./DecisionIntelligenceModal";

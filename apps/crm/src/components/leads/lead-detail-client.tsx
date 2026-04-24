@@ -8,19 +8,19 @@ import {
   CardHeader,
   CardTitle,
   CardAction,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+} from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Separator } from "@persia/ui/separator";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,14 +31,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@persia/ui/alert-dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import { LeadForm } from "@/components/leads/lead-form";
 import {
   updateLead,
@@ -64,7 +64,7 @@ import {
   User,
   Activity,
 } from "lucide-react";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner } from "@persia/ui/spinner";
 import { useRole } from "@/lib/hooks/use-role";
 import { toast } from "sonner";
 

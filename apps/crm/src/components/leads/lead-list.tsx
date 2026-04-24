@@ -2,31 +2,31 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Card } from "@persia/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import {
   Empty,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
   EmptyDescription,
-} from "@/components/ui/empty";
+} from "@persia/ui/empty";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { LeadForm } from "@/components/leads/lead-form";
 import {
@@ -50,7 +50,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@persia/ui/dropdown-menu";
 import {
   Pagination,
   PaginationContent,
@@ -58,7 +58,7 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from "@/components/ui/pagination";
+} from "@persia/ui/pagination";
 
 const STATUS_MAP: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   new: { label: "Novo", variant: "default" },

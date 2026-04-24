@@ -3,20 +3,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, Save, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Badge } from "@persia/ui/badge";
+import { Switch } from "@persia/ui/switch";
+import { Textarea } from "@persia/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import { updateFlow } from "@/actions/flows";
 
 interface Flow {

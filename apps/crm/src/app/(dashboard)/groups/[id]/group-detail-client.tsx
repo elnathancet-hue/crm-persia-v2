@@ -13,20 +13,20 @@ import {
   Users,
   Link2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@persia/ui/button";
+import { Badge } from "@persia/ui/badge";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
+import { Switch } from "@persia/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@persia/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -35,7 +35,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog";
+} from "@persia/ui/dialog";
 import { updateGroup, getInviteLink, sendInviteToLead, sendMessageToGroup } from "@/actions/groups";
 import { toast } from "sonner";
 

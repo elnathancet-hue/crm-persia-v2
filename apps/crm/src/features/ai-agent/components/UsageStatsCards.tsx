@@ -1,6 +1,6 @@
 import { Activity, CheckCircle2, Clock, TriangleAlert } from "lucide-react";
 import type { UsagePointTotals } from "@persia/shared/ai-agent";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@persia/ui/card";
 
 interface Props {
   totals: UsagePointTotals;

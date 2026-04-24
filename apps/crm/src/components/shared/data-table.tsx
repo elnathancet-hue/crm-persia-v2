@@ -8,8 +8,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
+} from "@persia/ui/table";
+import { Button } from "@persia/ui/button";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 export type ColumnDef<T> = {
