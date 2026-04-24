@@ -60,6 +60,9 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       system_prompt: normalized.system_prompt,
       guardrails,
       debounce_window_ms: normalized.debounce_window_ms,
+      context_summary_turn_threshold: normalized.context_summary_turn_threshold,
+      context_summary_token_threshold: normalized.context_summary_token_threshold,
+      context_summary_recent_messages: normalized.context_summary_recent_messages,
       status: "draft",
     })
     .select("*")
@@ -100,6 +103,15 @@ export async function updateAgent(
   }
   if (patch.debounce_window_ms !== undefined) {
     updates.debounce_window_ms = patch.debounce_window_ms;
+  }
+  if (patch.context_summary_turn_threshold !== undefined) {
+    updates.context_summary_turn_threshold = patch.context_summary_turn_threshold;
+  }
+  if (patch.context_summary_token_threshold !== undefined) {
+    updates.context_summary_token_threshold = patch.context_summary_token_threshold;
+  }
+  if (patch.context_summary_recent_messages !== undefined) {
+    updates.context_summary_recent_messages = patch.context_summary_recent_messages;
   }
   if (patch.status !== undefined) updates.status = patch.status;
 

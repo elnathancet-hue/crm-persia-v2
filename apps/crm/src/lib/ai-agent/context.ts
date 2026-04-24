@@ -4,7 +4,12 @@ import type {
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
-import { clampDebounceWindowMs } from "@persia/shared/ai-agent";
+import {
+  clampDebounceWindowMs,
+  clampRecentMessagesCount,
+  clampTokenThreshold,
+  clampTurnThreshold,
+} from "@persia/shared/ai-agent";
 import type { IncomingMessage } from "@/lib/whatsapp/provider";
 import { asRecord, mergeJsonObject, nowIso, type AgentDb } from "./db";
 import { normalizeGuardrails } from "./guardrails";
@@ -331,12 +336,78 @@ export async function updateConversationUsage(params: {
     .eq("organization_id", params.orgId);
 }
 
+export async function incrementConversationSummaryCounters(params: {
+  db: AgentDb;
+  orgId: string;
+  conversation: AgentConversation;
+  tokensInput: number;
+  tokensOutput: number;
+}): Promise<AgentConversation> {
+  const nextConversation = normalizeConversation({
+    ...params.conversation,
+    history_summary_run_count: Number(params.conversation.history_summary_run_count ?? 0) + 1,
+    history_summary_token_count:
+      Number(params.conversation.history_summary_token_count ?? 0) +
+      params.tokensInput +
+      params.tokensOutput,
+    updated_at: nowIso(),
+  });
+
+  await params.db
+    .from("agent_conversations")
+    .update({
+      history_summary_run_count: nextConversation.history_summary_run_count,
+      history_summary_token_count: nextConversation.history_summary_token_count,
+      updated_at: nextConversation.updated_at,
+    })
+    .eq("id", params.conversation.id)
+    .eq("organization_id", params.orgId);
+
+  return nextConversation;
+}
+
+export async function persistConversationSummary(params: {
+  db: AgentDb;
+  orgId: string;
+  conversationId: string;
+  historySummary: string;
+  updatedAt?: string;
+}): Promise<void> {
+  const updatedAt = params.updatedAt ?? nowIso();
+  await params.db
+    .from("agent_conversations")
+    .update({
+      history_summary: params.historySummary,
+      history_summary_updated_at: updatedAt,
+      history_summary_run_count: 0,
+      history_summary_token_count: 0,
+      updated_at: updatedAt,
+    })
+    .eq("id", params.conversationId)
+    .eq("organization_id", params.orgId);
+}
+
 function normalizeConfig(row: Record<string, unknown>): AgentConfig {
   return {
     ...(row as unknown as AgentConfig),
     guardrails: normalizeGuardrails(row.guardrails),
     debounce_window_ms: clampDebounceWindowMs(
       typeof row.debounce_window_ms === "number" ? row.debounce_window_ms : undefined,
+    ),
+    context_summary_turn_threshold: clampTurnThreshold(
+      typeof row.context_summary_turn_threshold === "number"
+        ? row.context_summary_turn_threshold
+        : undefined,
+    ),
+    context_summary_token_threshold: clampTokenThreshold(
+      typeof row.context_summary_token_threshold === "number"
+        ? row.context_summary_token_threshold
+        : undefined,
+    ),
+    context_summary_recent_messages: clampRecentMessagesCount(
+      typeof row.context_summary_recent_messages === "number"
+        ? row.context_summary_recent_messages
+        : undefined,
     ),
   };
 }
@@ -352,6 +423,10 @@ function normalizeTool(row: Record<string, unknown>): AgentTool {
 function normalizeConversation(row: Record<string, unknown>): AgentConversation {
   return {
     ...(row as unknown as AgentConversation),
+    history_summary_updated_at:
+      typeof row.history_summary_updated_at === "string" ? row.history_summary_updated_at : null,
+    history_summary_run_count: Number(row.history_summary_run_count ?? 0),
+    history_summary_token_count: Number(row.history_summary_token_count ?? 0),
     variables: asRecord(row.variables),
   };
 }

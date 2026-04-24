@@ -1,5 +1,8 @@
 import {
+  clampRecentMessagesCount,
   clampDebounceWindowMs,
+  clampTokenThreshold,
+  clampTurnThreshold,
   DEFAULT_GUARDRAILS,
   DEFAULT_MODEL,
   type AgentStageTool,
@@ -52,6 +55,9 @@ export function normalizeAgentInput(input: CreateAgentInput): CreateAgentInput {
     system_prompt: systemPrompt,
     guardrails: input.guardrails,
     debounce_window_ms: clampDebounceWindowMs(input.debounce_window_ms),
+    context_summary_turn_threshold: clampTurnThreshold(input.context_summary_turn_threshold),
+    context_summary_token_threshold: clampTokenThreshold(input.context_summary_token_threshold),
+    context_summary_recent_messages: clampRecentMessagesCount(input.context_summary_recent_messages),
   };
 }
 
@@ -77,6 +83,15 @@ export function normalizeAgentPatch(input: UpdateAgentInput): UpdateAgentInput {
   if (input.guardrails !== undefined) patch.guardrails = input.guardrails;
   if (input.debounce_window_ms !== undefined) {
     patch.debounce_window_ms = clampDebounceWindowMs(input.debounce_window_ms);
+  }
+  if (input.context_summary_turn_threshold !== undefined) {
+    patch.context_summary_turn_threshold = clampTurnThreshold(input.context_summary_turn_threshold);
+  }
+  if (input.context_summary_token_threshold !== undefined) {
+    patch.context_summary_token_threshold = clampTokenThreshold(input.context_summary_token_threshold);
+  }
+  if (input.context_summary_recent_messages !== undefined) {
+    patch.context_summary_recent_messages = clampRecentMessagesCount(input.context_summary_recent_messages);
   }
   if (input.status !== undefined) patch.status = input.status;
   return patch;

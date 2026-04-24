@@ -1556,3 +1556,31 @@ are synthetic and short-lived.
   link narrative).
 - PR5.8 reactivate bot.
 - PR6+ unchanged.
+
+## 2026-04-23 23:20 - Codex - PR5.7 runtime handoff
+
+- Branch: `codex/ai-agent-pr5.7-runtime`
+- Runtime delivered:
+  - `020_ai_agent_context_summarization.sql`
+  - local helper `apps/crm/src/lib/ai-agent/summarization.ts`
+  - executor now injects `history_summary + last K messages`
+  - successful runs increment `history_summary_run_count` /
+    `history_summary_token_count`
+  - in-band summarization step persisted as `agent_steps.step_type='summarization'`
+  - tester path explicitly skips summarization
+  - config/actions normalize and persist the three new threshold fields
+- Important implementation note:
+  - I kept the current webhook/runtime assumption that the inbound CRM
+    message is already persisted before `executeAgent`, so the executor
+    does NOT append `params.msg` again when `inboundMessageId` +
+    `crm_conversation_id` are present. This avoids duplicating the same
+    inbound text in the Claude context during debounced flushes.
+- Validation on this branch:
+  - `pnpm --filter @persia/crm build` ✅
+  - `pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr5.7-runtime.test.ts` ✅
+    - Vitest ran the whole CRM suite here: `17 files / 174 tests` green.
+  - `pnpm --filter @persia/crm typecheck` ⚠️ still failing for the same
+    repo-local `.next/types/**/*.ts` issue (missing generated files in
+    `apps/crm/tsconfig.json` include). The PR5.7 code itself builds and
+    passes Next's type validation during `next build`.
+- Claude UI follow-up is unblocked for the 3 RulesTab sliders.
