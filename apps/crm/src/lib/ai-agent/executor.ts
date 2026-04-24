@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   DEBOUNCE_WINDOW_MS_DEFAULT,
   calculateCostUsdCents,
+  shouldTriggerSummarization,
   toAnthropicTool,
   type DebounceFlushBatch,
   type AgentConfig,
@@ -21,10 +22,12 @@ import { asAgentDb, type AgentDb } from "./db";
 import { enqueueDebounced } from "./debounce";
 import {
   createSyntheticAgentConversation,
+  incrementConversationSummaryCounters,
   loadActiveAgentConfig,
   loadAgentConfigById,
   loadAllowedTools,
   loadStage,
+  persistConversationSummary,
   resolveAgentContext,
   updateConversationUsage,
 } from "./context";
@@ -36,6 +39,15 @@ import {
 } from "./guardrails";
 import { isNativeAgentEnabled } from "./feature-flag";
 import { assertWithinRateLimits } from "./rate-limits";
+import {
+  buildConversationLlmMessages,
+  buildSummarizationUserPrompt,
+  formatMessagesForSummarization,
+  getConversationSummaryCounters,
+  loadMessagesForSummarization,
+  normalizeContextSummarizationConfig,
+  SUMMARIZATION_SYSTEM_PROMPT,
+} from "./summarization";
 import {
   getWebhookAllowlistDomains,
   invokeCustomWebhook,
@@ -75,6 +87,7 @@ export interface ExecuteAgentParams {
   inboundMessageId: string | null;
   leadId: string;
   crmConversationId: string;
+  allowSummarization?: boolean;
 }
 
 export interface ExecuteAgentResult {
@@ -250,12 +263,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
   let orderIndex = 0;
   let assistantReply = "";
   const costLimitCache: CostLimitCache = {};
-  const messages: AnthropicMessage[] = [
-    {
-      role: "user",
-      content: params.msg.text || "[incoming media message]",
-    },
-  ];
+  const messages: AnthropicMessage[] = [];
 
   try {
     if (!params.stage) {
@@ -267,6 +275,25 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     }
 
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const historyMessages = await buildConversationLlmMessages({
+      db: params.db,
+      orgId: params.orgId,
+      agentConversation: params.agentConversation,
+      config: params.config,
+    });
+    messages.push(...historyMessages);
+    if (!params.inboundMessageId || !params.agentConversation.crm_conversation_id) {
+      messages.push({
+        role: "user",
+        content: params.msg.text || "[incoming media message]",
+      });
+    }
+    if (messages.length === 0) {
+      messages.push({
+        role: "user",
+        content: params.msg.text || "[incoming media message]",
+      });
+    }
     const tools = params.tools.map(toAnthropicTool);
     const system = buildSystemPrompt(params.config, params.stage);
 
@@ -328,6 +355,28 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         assistantReply = extractText(response) || HANDOFF_REPLY;
         if (!params.dryRun && params.provider) {
           await params.provider.sendText({ phone: params.msg.phone, message: assistantReply });
+        }
+        if (params.allowSummarization !== false && params.agentConversation.crm_conversation_id) {
+          const updatedConversation = await incrementConversationSummaryCounters({
+            db: params.db,
+            orgId: params.orgId,
+            conversation: params.agentConversation,
+            tokensInput,
+            tokensOutput,
+          });
+          const summaryResult = await maybeRunConversationSummarization({
+            client,
+            db: params.db,
+            orgId: params.orgId,
+            runId: run.id,
+            orderIndex: orderIndex++,
+            config: params.config,
+            conversation: updatedConversation,
+            requestId: params.requestId,
+            timeoutMs: Math.max(1, guardrails.timeout_seconds) * 1000,
+          });
+          tokensInput += summaryResult.tokensInput;
+          tokensOutput += summaryResult.tokensOutput;
         }
         const final = await finishRun(params, {
           runId: run.id,
@@ -461,6 +510,7 @@ export async function executeTesterAgent(params: {
     inboundMessageId: null,
     leadId: "tester",
     crmConversationId: "tester",
+    allowSummarization: false,
   });
 }
 
@@ -734,6 +784,129 @@ async function insertStep(
     output: step.output,
     duration_ms: step.durationMs,
   });
+}
+
+async function maybeRunConversationSummarization(params: {
+  client: Anthropic;
+  db: AgentDb;
+  orgId: string;
+  runId: string;
+  orderIndex: number;
+  config: AgentConfig;
+  conversation: AgentConversation;
+  requestId?: string;
+  timeoutMs: number;
+}): Promise<{ tokensInput: number; tokensOutput: number }> {
+  const counters = getConversationSummaryCounters(params.conversation);
+  const summaryConfig = normalizeContextSummarizationConfig(params.config);
+  if (!shouldTriggerSummarization(counters, summaryConfig)) {
+    return { tokensInput: 0, tokensOutput: 0 };
+  }
+
+  const triggerReason =
+    counters.history_summary_run_count >= summaryConfig.turn_threshold
+      ? "turn_threshold"
+      : "token_threshold";
+  const summarizationStartedAt = Date.now();
+  let messageCountSinceLast = 0;
+
+  try {
+    const messages = await loadMessagesForSummarization({
+      db: params.db,
+      orgId: params.orgId,
+      conversation: params.conversation,
+    });
+    messageCountSinceLast = messages.length;
+
+    const response = await withTimeout(
+      params.client.messages.create({
+        model: params.config.model,
+        max_tokens: 1200,
+        system: SUMMARIZATION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: buildSummarizationUserPrompt({
+              previousSummary: params.conversation.history_summary ?? null,
+              formattedMessages: formatMessagesForSummarization(messages),
+            }),
+          },
+        ] as never,
+      } as never),
+      params.timeoutMs,
+    ) as any;
+
+    const usage = readUsage(response);
+    const newSummary = extractText(response).trim();
+    if (!newSummary) {
+      throw new Error("summarization returned empty text");
+    }
+
+    await persistConversationSummary({
+      db: params.db,
+      orgId: params.orgId,
+      conversationId: params.conversation.id,
+      historySummary: newSummary,
+    });
+
+    await insertStep(params.db, {
+      orgId: params.orgId,
+      runId: params.runId,
+      orderIndex: params.orderIndex,
+      stepType: "summarization",
+      input: {
+        previous_summary_length: params.conversation.history_summary?.length ?? 0,
+        message_count_since_last: messageCountSinceLast,
+        tokens_since_last: counters.history_summary_token_count,
+        trigger_reason: triggerReason,
+      },
+      output: {
+        success: true,
+        new_summary_length: newSummary.length,
+        tokens_input: usage.input,
+        tokens_output: usage.output,
+        duration_ms: Date.now() - summarizationStartedAt,
+        model: params.config.model,
+      },
+      durationMs: Date.now() - summarizationStartedAt,
+    });
+
+    return {
+      tokensInput: usage.input,
+      tokensOutput: usage.output,
+    };
+  } catch (error) {
+    await insertStep(params.db, {
+      orgId: params.orgId,
+      runId: params.runId,
+      orderIndex: params.orderIndex,
+      stepType: "summarization",
+      input: {
+        previous_summary_length: params.conversation.history_summary?.length ?? 0,
+        message_count_since_last: messageCountSinceLast,
+        tokens_since_last: counters.history_summary_token_count,
+        trigger_reason: triggerReason,
+      },
+      output: {
+        success: false,
+        new_summary_length: 0,
+        tokens_input: 0,
+        tokens_output: 0,
+        duration_ms: Date.now() - summarizationStartedAt,
+        model: params.config.model,
+        error: errorMessage(error),
+      },
+      durationMs: Date.now() - summarizationStartedAt,
+    });
+    logError("native_agent_summarization_failed", {
+      organization_id: params.orgId,
+      request_id: params.requestId ?? null,
+      run_id: params.runId,
+      agent_conversation_id: params.conversation.id,
+      error: errorMessage(error),
+    });
+    return { tokensInput: 0, tokensOutput: 0 };
+  }
 }
 
 async function loadWebhookAllowlist(db: AgentDb, orgId: string): Promise<string[]> {

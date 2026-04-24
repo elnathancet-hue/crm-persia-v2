@@ -2,6 +2,7 @@ import type { AdminClient } from "@/lib/supabase/admin";
 
 export type AgentDb = {
   from: (table: string) => any;
+  rpc?: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
 export function asAgentDb(client: AdminClient | { from: (table: string) => any }): AgentDb {
