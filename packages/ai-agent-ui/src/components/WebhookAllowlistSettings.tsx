@@ -7,10 +7,7 @@ import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
-import {
-  addAllowedDomain,
-  removeAllowedDomain,
-} from "@/actions/ai-agent/webhook-allowlist";
+import { useAgentActions } from "../context";
 
 interface Props {
   initialDomains: string[];
@@ -18,6 +15,7 @@ interface Props {
 }
 
 export function WebhookAllowlistSettings({ initialDomains, onChange }: Props) {
+  const { addAllowedDomain, removeAllowedDomain } = useAgentActions();
   const [domains, setDomains] = React.useState(initialDomains);
   const [draft, setDraft] = React.useState("");
   const [isPending, startTransition] = React.useTransition();

@@ -20,7 +20,7 @@ import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Switch } from "@persia/ui/switch";
 import { Textarea } from "@persia/ui/textarea";
-import { cn } from "@/lib/utils";
+import { cn } from "@persia/ui/utils";
 
 const PREVIEW_VARIABLES = {
   lead_name: "Maria Silva",

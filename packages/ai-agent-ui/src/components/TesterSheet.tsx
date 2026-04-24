@@ -27,7 +27,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@persia/ui/sheet";
-import { testAgent } from "@/actions/ai-agent/tester";
+import { useAgentActions } from "../context";
 
 interface Props {
   configId: string;
@@ -45,6 +45,7 @@ interface ChatTurn {
 }
 
 export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
+  const { testAgent } = useAgentActions();
   const [message, setMessage] = React.useState("");
   const [selectedStageId, setSelectedStageId] = React.useState<string | undefined>();
   const [turns, setTurns] = React.useState<ChatTurn[]>([]);

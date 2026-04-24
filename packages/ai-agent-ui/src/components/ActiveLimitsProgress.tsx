@@ -1,6 +1,6 @@
 import type { ActiveCostLimits, CostLimitSnapshot } from "@persia/shared/ai-agent";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
-import { cn } from "@/lib/utils";
+import { cn } from "@persia/ui/utils";
 
 interface Props {
   limits: ActiveCostLimits;

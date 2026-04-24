@@ -23,14 +23,15 @@ import type {
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import { Badge } from "@persia/ui/badge";
-import { cn } from "@/lib/utils";
-import { listRuns } from "@/actions/ai-agent/audit";
+import { cn } from "@persia/ui/utils";
+import { useAgentActions } from "../context";
 
 interface Props {
   configId: string;
 }
 
 export function AuditTab({ configId }: Props) {
+  const { listRuns } = useAgentActions();
   const [runs, setRuns] = React.useState<AgentRunWithSteps[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
@@ -41,7 +42,7 @@ export function AuditTab({ configId }: Props) {
       .then((data) => setRuns(data))
       .catch((err) => toast.error(err instanceof Error ? err.message : "Falha ao carregar execuções"))
       .finally(() => setLoading(false));
-  }, [configId]);
+  }, [configId, listRuns]);
 
   React.useEffect(() => {
     load();

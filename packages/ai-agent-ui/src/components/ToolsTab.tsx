@@ -19,8 +19,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
-import { deleteTool, updateTool } from "@/actions/ai-agent/tools";
-import { renderToolIcon } from "@/features/ai-agent/icon-map";
+import { useAgentActions } from "../context";
+import { renderToolIcon } from "../icon-map";
 import { DecisionIntelligenceModal } from "./DecisionIntelligenceModal";
 import { CustomWebhookToolSheet } from "./CustomWebhookToolSheet";
 import { WebhookAllowlistSettings } from "./WebhookAllowlistSettings";
@@ -40,6 +40,7 @@ export function ToolsTab({
   allowedDomains: initialAllowedDomains,
   onChange,
 }: Props) {
+  const { deleteTool, updateTool } = useAgentActions();
   const [modalOpen, setModalOpen] = React.useState(false);
   const [webhookOpen, setWebhookOpen] = React.useState(false);
   const [allowedDomains, setAllowedDomains] = React.useState(initialAllowedDomains);

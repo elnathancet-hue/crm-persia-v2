@@ -21,7 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
-import { createStage, deleteStage, updateStage } from "@/actions/ai-agent/stages";
+import { useAgentActions } from "../context";
 import { StageSheet } from "./StageSheet";
 
 interface Props {
@@ -32,6 +32,7 @@ interface Props {
 }
 
 export function StagesTab({ configId, stages, tools, onChange }: Props) {
+  const { createStage, updateStage, deleteStage } = useAgentActions();
   const [editing, setEditing] = React.useState<AgentStage | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<AgentStage | null>(null);

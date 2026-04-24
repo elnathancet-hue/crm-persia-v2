@@ -13,9 +13,9 @@ import {
   DialogTitle,
 } from "@persia/ui/dialog";
 import { Badge } from "@persia/ui/badge";
-import { cn } from "@/lib/utils";
-import { createToolFromPreset } from "@/actions/ai-agent/tools";
-import { renderToolIcon } from "@/features/ai-agent/icon-map";
+import { cn } from "@persia/ui/utils";
+import { useAgentActions } from "../context";
+import { renderToolIcon } from "../icon-map";
 
 interface Props {
   configId: string;
@@ -34,6 +34,7 @@ export function DecisionIntelligenceModal({
   onOpenChange,
   onCreated,
 }: Props) {
+  const { createToolFromPreset } = useAgentActions();
   const [isPending, startTransition] = React.useTransition();
   const [pendingHandler, setPendingHandler] = React.useState<string | null>(null);
 

@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
-import { getUsageStats } from "@/actions/ai-agent/usage";
+import { useAgentActions } from "../context";
 import { LimitsEditor } from "./LimitsEditor";
 import { ActiveLimitsProgress } from "./ActiveLimitsProgress";
 import { UsageStatsCards } from "./UsageStatsCards";
@@ -38,6 +38,7 @@ const RANGE_LABELS: Record<Range, string> = {
 };
 
 export function LimitsUsageTab({ configId, initialLimits }: Props) {
+  const { getUsageStats } = useAgentActions();
   const [limits, setLimits] = React.useState(initialLimits);
   const [range, setRange] = React.useState<Range>("last_30_days");
   const [stats, setStats] = React.useState<UsageStats | null>(null);
@@ -51,7 +52,7 @@ export function LimitsUsageTab({ configId, initialLimits }: Props) {
         .catch((err) => toast.error(err instanceof Error ? err.message : "Falha ao carregar uso"))
         .finally(() => setLoading(false));
     },
-    [configId],
+    [configId, getUsageStats],
   );
 
   React.useEffect(() => {
