@@ -10,6 +10,8 @@
 //   - apps/crm/src/app/(dashboard)/agents  (UI — Claude)
 //   - apps/crm/src/features/ai-agent/*     (components — Claude)
 
+import type { HandoffNotificationTargetType } from "./handoff";
+
 // ============================================================================
 // Native handler registry (enum) — MUST match DB check constraint in
 // apps/crm/supabase/migrations/017_ai_agent_core.sql
@@ -97,6 +99,13 @@ export interface AgentConfig {
   context_summary_turn_threshold?: number;
   context_summary_token_threshold?: number;
   context_summary_recent_messages?: number;
+  // PR5.6: handoff notification config. Migration 021 adds the columns with
+  // enabled DEFAULT false, target fields NULL, template NULL (runtime falls
+  // back to HANDOFF_DEFAULT_TEMPLATE when NULL or empty).
+  handoff_notification_enabled?: boolean;
+  handoff_notification_target_type?: HandoffNotificationTargetType | null;
+  handoff_notification_target_address?: string | null;
+  handoff_notification_template?: string | null;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -308,6 +317,13 @@ export interface CreateAgentInput {
   context_summary_turn_threshold?: number;
   context_summary_token_threshold?: number;
   context_summary_recent_messages?: number;
+  // PR5.6: optional. Runtime validates: target address when enabled, phone
+  // digit count within [HANDOFF_PHONE_MIN_DIGITS, HANDOFF_PHONE_MAX_DIGITS],
+  // template length <= HANDOFF_TEMPLATE_MAX_LENGTH.
+  handoff_notification_enabled?: boolean;
+  handoff_notification_target_type?: HandoffNotificationTargetType | null;
+  handoff_notification_target_address?: string | null;
+  handoff_notification_template?: string | null;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
