@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import type Anthropic from "@anthropic-ai/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig, AgentConversation } from "@persia/shared/ai-agent";
+import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
 import {
   HANDOFF_DEFAULT_TEMPLATE,
   renderHandoffTemplate,
@@ -147,8 +149,8 @@ describe("ai-agent PR5.6 runtime", () => {
       data: { name: "Maria", phone: "5511999999999" },
       error: null,
     });
-    const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as never;
-    const anthropicClient = { messages: { create: vi.fn() } } as never;
+    const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as unknown as WhatsAppProvider;
+    const anthropicClient = { messages: { create: vi.fn() } } as unknown as Anthropic;
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -192,14 +194,14 @@ describe("ai-agent PR5.6 runtime", () => {
       ],
       error: null,
     });
-    const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as never;
+    const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as unknown as WhatsAppProvider;
     const anthropicClient = {
       messages: {
         create: vi.fn(async () => ({
           content: [{ type: "text", text: "Lead com urgencia e contexto resumido." }],
         })),
       },
-    } as never;
+    } as unknown as Anthropic;
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -236,14 +238,14 @@ describe("ai-agent PR5.6 runtime", () => {
       data: [{ sender: "lead", content: "Oi", media_url: null }],
       error: null,
     });
-    const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as never;
+    const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as unknown as WhatsAppProvider;
     const anthropicClient = {
       messages: {
         create: vi.fn(async () => {
           throw new Error("claude down");
         }),
       },
-    } as never;
+    } as unknown as Anthropic;
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -282,7 +284,7 @@ describe("ai-agent PR5.6 runtime", () => {
       sendText: vi.fn(async () => {
         throw new Error("provider down");
       }),
-    } as never;
+    } as unknown as WhatsAppProvider;
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -392,7 +394,7 @@ describe("ai-agent PR5.6 runtime", () => {
     const provider = {
       name: "uazapi",
       sendText: vi.fn(async () => ({ success: true })),
-    } as never;
+    } as unknown as WhatsAppProvider;
 
     const result = await stopAgentHandler(
       {
