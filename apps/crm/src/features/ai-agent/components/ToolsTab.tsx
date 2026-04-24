@@ -85,7 +85,7 @@ export function ToolsTab({
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Cada ferramenta vira uma decisao que o agente pode tomar. Controle por etapa em{" "}
+          Cada ferramenta vira uma decisão que o agente pode tomar. Controle por etapa em{" "}
           <strong>Etapas</strong> (Ferramentas permitidas).
         </p>
         <div className="flex items-center gap-2 shrink-0">
@@ -96,7 +96,7 @@ export function ToolsTab({
             title={
               hasAllowlist
                 ? "Adicionar webhook customizado"
-                : "Cadastre um dominio na allowlist abaixo antes"
+                : "Cadastre um domínio na allowlist abaixo antes"
             }
           >
             <Globe className="size-4" />
@@ -104,7 +104,7 @@ export function ToolsTab({
           </Button>
           <Button onClick={() => setModalOpen(true)}>
             <Plus className="size-4" />
-            Adicionar Decisao Inteligente
+            Adicionar Decisão Inteligente
           </Button>
         </div>
       </div>
@@ -154,7 +154,7 @@ export function ToolsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>Remover ferramenta?</AlertDialogTitle>
             <AlertDialogDescription>
-              O agente perde acesso a essa decisao em todas as etapas. As permissoes por etapa tambem sao removidas.
+              O agente perde acesso a essa decisão em todas as etapas. As permissões por etapa também sao removidas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -282,12 +282,12 @@ function EmptyTools({ onCreate }: { onCreate: () => void }) {
         <div className="space-y-1 max-w-md">
           <h3 className="font-semibold">Nenhuma ferramenta adicionada</h3>
           <p className="text-sm text-muted-foreground">
-            Decisoes inteligentes deixam o agente transferir conversa, aplicar tags, encerrar atendimento e mais — sem precisar de webhook externo.
+            Decisões inteligentes deixam o agente transferir conversa, aplicar tags, encerrar atendimento e mais — sem precisar de webhook externo.
           </p>
         </div>
         <Button onClick={onCreate}>
           <Plus className="size-4" />
-          Adicionar primeira decisao
+          Adicionar primeira decisão
         </Button>
       </CardContent>
     </Card>

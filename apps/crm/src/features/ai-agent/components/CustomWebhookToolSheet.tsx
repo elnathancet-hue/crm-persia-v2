@@ -85,7 +85,7 @@ export function CustomWebhookToolSheet({
       schema = parsed as JSONSchemaObject;
       setSchemaError(null);
     } catch (err) {
-      setSchemaError(err instanceof Error ? err.message : "JSON invalido");
+      setSchemaError(err instanceof Error ? err.message : "JSON inválido");
       return;
     }
 
@@ -127,7 +127,7 @@ export function CustomWebhookToolSheet({
             <SheetTitle>Webhook customizado</SheetTitle>
           </div>
           <SheetDescription>
-            Integra o agente com um endpoint HTTPS externo (n8n, Make, API propria). A requisicao leva HMAC sha256 + timestamp; respostas sao limitadas a 256 KB.
+            Integra o agente com um endpoint HTTPS externo (n8n, Make, API própria). A requisição leva HMAC sha256 + timestamp; respostas sao limitadas a 256 KB.
           </SheetDescription>
         </SheetHeader>
 
@@ -146,12 +146,12 @@ export function CustomWebhookToolSheet({
               required
             />
             <p className="text-xs text-muted-foreground">
-              Este e o nome que o agente enxerga pra decidir chamar a ferramenta. Use snake_case.
+              Este é o nome que o agente enxerga pra decidir chamar a ferramenta. Use snake_case.
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Descricao (pra o agente)</Label>
+            <Label htmlFor="description">Descrição (pra o agente)</Label>
             <Textarea
               id="description"
               value={description}
@@ -175,11 +175,11 @@ export function CustomWebhookToolSheet({
             />
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
               <ShieldCheck className="size-3.5 shrink-0 mt-0.5 text-emerald-600" />
-              O hostname precisa estar na allowlist da organizacao. Apenas HTTPS porta 443.
+              O hostname precisa estar na allowlist da organização. Apenas HTTPS porta 443.
             </p>
             {allowedDomains.length > 0 ? (
               <div className="text-[11px] text-muted-foreground">
-                Dominios liberados:{" "}
+                Domínios liberados:{" "}
                 <span className="font-mono">{allowedDomains.join(", ")}</span>
               </div>
             ) : null}
@@ -191,12 +191,12 @@ export function CustomWebhookToolSheet({
               id="secret"
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
-              placeholder={`No minimo ${WEBHOOK_SECRET_MIN_LENGTH} caracteres`}
+              placeholder={`No mínimo ${WEBHOOK_SECRET_MIN_LENGTH} caracteres`}
               required
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground">
-              Cada requisicao leva <code className="font-mono">X-Persia-Signature: sha256=...</code> calculado com este secret + timestamp. Configure o mesmo no receptor pra validar.
+              Cada requisição leva <code className="font-mono">X-Persia-Signature: sha256=...</code> calculado com este secret + timestamp. Configure o mesmo no receptor pra validar.
             </p>
             {secret.length > 0 && secret.length < WEBHOOK_SECRET_MIN_LENGTH ? (
               <p className="text-xs text-destructive">

@@ -39,7 +39,7 @@ export function AuditTab({ configId }: Props) {
     setLoading(true);
     listRuns({ config_id: configId, limit: 50 })
       .then((data) => setRuns(data))
-      .catch((err) => toast.error(err instanceof Error ? err.message : "Falha ao carregar execucoes"))
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Falha ao carregar execuções"))
       .finally(() => setLoading(false));
   }, [configId]);
 
@@ -61,7 +61,7 @@ export function AuditTab({ configId }: Props) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
-            Ultimas execucoes do agente — mostra as chamadas reais ao LLM, ferramentas usadas e duracao. Limitado a 50 mais recentes.
+            Últimas execuções do agente — mostra as chamadas reais ao LLM, ferramentas usadas e duração. Limitado a 50 mais recentes.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -74,7 +74,7 @@ export function AuditTab({ configId }: Props) {
         <Card>
           <CardContent className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Carregando execucoes...
+            Carregando execuções...
           </CardContent>
         </Card>
       ) : runs.length === 0 ? (
@@ -103,9 +103,9 @@ function EmptyAudit() {
           <CircleDashed className="size-6 text-muted-foreground" />
         </div>
         <div className="space-y-1 max-w-md">
-          <h3 className="font-semibold">Nenhuma execucao registrada</h3>
+          <h3 className="font-semibold">Nenhuma execução registrada</h3>
           <p className="text-sm text-muted-foreground">
-            Assim que o agente responder uma conversa ou voce usar o testador, as execucoes aparecem aqui.
+            Assim que o agente responder uma conversa ou você usar o testador, as execuções aparecem aqui.
           </p>
         </div>
       </CardContent>

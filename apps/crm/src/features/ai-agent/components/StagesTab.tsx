@@ -88,11 +88,11 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-muted-foreground">
-            O agente avanca pelas etapas conforme a conversa evolui. Cada etapa tem uma situacao, instrucao e dica de transicao.
+            O agente avança pelas etapas conforme a conversa evolui. Cada etapa tem uma situação, instrução e dica de transição.
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <Button variant="outline" size="sm" disabled title="Disponivel na PR8">
+          <Button variant="outline" size="sm" disabled title="Disponível na PR8">
             <Wand2 className="size-4" />
             Gerar etapas com IA
           </Button>
@@ -141,7 +141,7 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover etapa?</AlertDialogTitle>
             <AlertDialogDescription>
-              O agente nao vai mais passar por <strong>{deleteTarget?.situation}</strong>. Esta acao nao pode ser desfeita.
+              O agente não vai mais passar por <strong>{deleteTarget?.situation}</strong>. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -194,11 +194,11 @@ function StageCard({
               {stage.instruction}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground/60 italic">Sem instrucao</p>
+            <p className="text-sm text-muted-foreground/60 italic">Sem instrução</p>
           )}
           {stage.transition_hint ? (
             <p className="text-xs text-muted-foreground mt-1.5">
-              <span className="font-medium">Transicao:</span> {stage.transition_hint}
+              <span className="font-medium">Transição:</span> {stage.transition_hint}
             </p>
           ) : null}
         </div>

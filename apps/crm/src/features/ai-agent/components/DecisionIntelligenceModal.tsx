@@ -74,10 +74,10 @@ export function DecisionIntelligenceModal({
             <div className="size-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
               <Sparkles className="size-4 text-white" />
             </div>
-            <DialogTitle>Adicionar Decisao Inteligente</DialogTitle>
+            <DialogTitle>Adicionar Decisão Inteligente</DialogTitle>
           </div>
           <DialogDescription>
-            Cada decisao vira uma ferramenta que o agente pode chamar quando a situacao pedir. Depois voce controla em quais etapas ela esta disponivel.
+            Cada decisão vira uma ferramenta que o agente pode chamar quando a situação pedir. Depois você controla em quais etapas ela está disponível.
           </DialogDescription>
         </DialogHeader>
 
@@ -142,7 +142,7 @@ function PresetCard({
           <p className="font-medium text-sm">{preset.display_name}</p>
           {already ? (
             <Badge variant="secondary" className="text-[10px]">
-              Ja adicionada
+              Já adicionada
             </Badge>
           ) : !shipped ? (
             <Badge variant="outline" className="text-[10px]">

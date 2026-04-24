@@ -107,7 +107,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           </div>
           <SheetDescription className="flex items-start gap-1.5">
             <Info className="size-3.5 shrink-0 mt-0.5" />
-            Modo dry-run: toda ferramenta que mudaria dados e simulada. Nenhum WhatsApp e enviado.
+            Modo dry-run: toda ferramenta que mudaria dados é simulada. Nenhum WhatsApp é enviado.
           </SheetDescription>
           <div className="pt-3 space-y-1.5">
             <Label className="text-xs">Iniciar na etapa</Label>
@@ -116,7 +116,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
               onValueChange={(v) => setSelectedStageId(v || undefined)}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Primeira etapa (padrao)" />
+                <SelectValue placeholder="Primeira etapa (padrão)" />
               </SelectTrigger>
               <SelectContent>
                 {stages.length === 0 ? (

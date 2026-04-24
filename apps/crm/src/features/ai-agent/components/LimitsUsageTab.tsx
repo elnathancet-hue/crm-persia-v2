@@ -103,7 +103,7 @@ export function LimitsUsageTab({ configId, initialLimits }: Props) {
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <BarChart3 className="size-4 text-primary" />
-                  Execucoes por dia
+                  Execuções por dia
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -137,7 +137,7 @@ export function LimitsUsageTab({ configId, initialLimits }: Props) {
         <Card>
           <CardContent className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Carregando estatisticas...
+            Carregando estatísticas...
           </CardContent>
         </Card>
       ) : null}

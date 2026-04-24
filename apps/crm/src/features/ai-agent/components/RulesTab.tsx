@@ -192,11 +192,11 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Instrucoes do agente</CardTitle>
+          <CardTitle className="text-base">Instruções do agente</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="description">Descricao</Label>
+            <Label htmlFor="description">Descrição</Label>
             <Textarea
               id="description"
               value={description}
@@ -209,7 +209,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
             <Label htmlFor="prompt">Prompt base</Label>
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
               <Info className="size-3.5 shrink-0 mt-0.5" />
-              Este texto e o contexto geral. Cada etapa adiciona instrucoes especificas por cima.
+              Este texto é o contexto geral. Cada etapa adiciona instruções específicas por cima.
             </p>
             <Textarea
               id="prompt"
@@ -217,7 +217,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
               onChange={(e) => setPrompt(e.target.value)}
               rows={14}
               className="font-mono text-sm"
-              placeholder="Voce e um atendente..."
+              placeholder="Você é um atendente..."
             />
           </div>
         </CardContent>
@@ -249,7 +249,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           <CardContent className="space-y-4">
             <GuardrailField
               id="max_iterations"
-              label="Maximo de iteracoes"
+              label="Máximo de iteracoes"
               help="Quantas vezes o agente pode chamar ferramentas em uma unica mensagem."
               value={guardrails.max_iterations}
               min={1}
@@ -259,7 +259,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
             <GuardrailField
               id="timeout_seconds"
               label="Timeout (seg)"
-              help="Tempo maximo total de resposta por mensagem."
+              help="Tempo máximo total de resposta por mensagem."
               value={guardrails.timeout_seconds}
               min={5}
               max={120}
@@ -285,9 +285,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
               value={debounceMs}
               onChange={(v) => setDebounceMs(clampDebounceWindowMs(v))}
               minLabel={`${DEBOUNCE_WINDOW_MS_MIN / 1000}s`}
-              midLabel={`Padrao ${DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s`}
+              midLabel={`Padrão ${DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s`}
               maxLabel={`${DEBOUNCE_WINDOW_MS_MAX / 1000}s`}
-              help="Espera esse tempo por novas mensagens do mesmo lead antes de responder. Evita respostas fragmentadas quando o lead digita em pedacos curtos."
+              help="Espera esse tempo por novas mensagens do mesmo lead antes de responder. Evita respostas fragmentadas quando o lead digita em pedaços curtos."
             />
             <RangeSlider
               id="context_summary_turn_threshold"
@@ -299,9 +299,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
               value={turnThreshold}
               onChange={(v) => setTurnThreshold(clampTurnThreshold(v))}
               minLabel={`${CONTEXT_SUMMARY_TURN_THRESHOLD_MIN}`}
-              midLabel={`Padrao ${CONTEXT_SUMMARY_TURN_THRESHOLD_DEFAULT}`}
+              midLabel={`Padrão ${CONTEXT_SUMMARY_TURN_THRESHOLD_DEFAULT}`}
               maxLabel={`${CONTEXT_SUMMARY_TURN_THRESHOLD_MAX}`}
-              help="Numero de respostas do agente ate consolidar o historico em um resumo. O que vier primeiro (turnos ou tokens) dispara."
+              help="Número de respostas do agente ate consolidar o histórico em um resumo. O que vier primeiro (turnos ou tokens) dispara."
             />
             <RangeSlider
               id="context_summary_token_threshold"
@@ -313,9 +313,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
               value={tokenThreshold}
               onChange={(v) => setTokenThreshold(clampTokenThreshold(v))}
               minLabel={`${CONTEXT_SUMMARY_TOKEN_THRESHOLD_MIN / 1000}k`}
-              midLabel={`Padrao ${CONTEXT_SUMMARY_TOKEN_THRESHOLD_DEFAULT / 1000}k`}
+              midLabel={`Padrão ${CONTEXT_SUMMARY_TOKEN_THRESHOLD_DEFAULT / 1000}k`}
               maxLabel={`${CONTEXT_SUMMARY_TOKEN_THRESHOLD_MAX / 1000}k`}
-              help="Soma de tokens (input+output) desde o ultimo resumo. Conversa com mensagens longas dispara mesmo sem atingir os turnos."
+              help="Soma de tokens (input+output) desde o último resumo. Conversa com mensagens longas dispara mesmo sem atingir os turnos."
             />
             <RangeSlider
               id="context_summary_recent_messages"
@@ -327,9 +327,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
               value={recentMessages}
               onChange={(v) => setRecentMessages(clampRecentMessagesCount(v))}
               minLabel={`${CONTEXT_SUMMARY_RECENT_MESSAGES_MIN}`}
-              midLabel={`Padrao ${CONTEXT_SUMMARY_RECENT_MESSAGES_DEFAULT}`}
+              midLabel={`Padrão ${CONTEXT_SUMMARY_RECENT_MESSAGES_DEFAULT}`}
               maxLabel={`${CONTEXT_SUMMARY_RECENT_MESSAGES_MAX}`}
-              help="Depois do resumo, o agente ve apenas as ultimas N mensagens cruas. Valores altos mantem mais detalhe; valores baixos economizam tokens."
+              help="Depois do resumo, o agente ve apenas as últimas N mensagens cruas. Valores altos mantem mais detalhe; valores baixos economizam tokens."
             />
             <div className="flex items-start justify-between gap-3 pt-2 border-t">
               <div className="flex-1 min-w-0">

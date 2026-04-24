@@ -41,9 +41,9 @@ export function WebhookAllowlistSettings({ initialDomains, onChange }: Props) {
         const next = await addAllowedDomain({ domain: value });
         updateDomains(next);
         setDraft("");
-        toast.success(`Dominio adicionado`);
+        toast.success(`Domínio adicionado`);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Falha ao adicionar dominio");
+        toast.error(err instanceof Error ? err.message : "Falha ao adicionar domínio");
       } finally {
         setPendingDomain(null);
       }
@@ -56,9 +56,9 @@ export function WebhookAllowlistSettings({ initialDomains, onChange }: Props) {
       try {
         const next = await removeAllowedDomain(domain);
         updateDomains(next);
-        toast.success("Dominio removido");
+        toast.success("Domínio removido");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Falha ao remover dominio");
+        toast.error(err instanceof Error ? err.message : "Falha ao remover domínio");
       } finally {
         setPendingDomain(null);
       }
@@ -73,14 +73,14 @@ export function WebhookAllowlistSettings({ initialDomains, onChange }: Props) {
           Allowlist de webhooks
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Ferramentas de webhook customizado só podem chamar hostnames desta lista. URLs HTTPS, porta 443, sem IP literal, sem redirect. Sem allowlist, nenhum webhook externo e aceito.
+          Ferramentas de webhook customizado só podem chamar hostnames desta lista. URLs HTTPS, porta 443, sem IP literal, sem redirect. Sem allowlist, nenhum webhook externo é aceito.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <form onSubmit={handleAdd} className="flex gap-2">
           <div className="flex-1 space-y-1">
             <Label htmlFor="webhook-domain" className="sr-only">
-              Dominio
+              Domínio
             </Label>
             <Input
               id="webhook-domain"
@@ -104,9 +104,9 @@ export function WebhookAllowlistSettings({ initialDomains, onChange }: Props) {
           <div className="border border-dashed rounded-md p-4 flex items-start gap-3">
             <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-xs space-y-0.5">
-              <p className="font-medium">Nenhum dominio cadastrado</p>
+              <p className="font-medium">Nenhum domínio cadastrado</p>
               <p className="text-muted-foreground">
-                Webhooks customizados ficam indisponiveis ate voce adicionar pelo menos um hostname aqui.
+                Webhooks customizados ficam indisponíveis ate você adicionar pelo menos um hostname aqui.
               </p>
             </div>
           </div>

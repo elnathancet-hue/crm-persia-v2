@@ -46,11 +46,11 @@ import { AgentStatusBadge } from "@/features/ai-agent/components/AgentStatusBadg
 import { createAgent, deleteAgent } from "@/actions/ai-agent/configs";
 import { setNativeAgentEnabled } from "@/actions/ai-agent/feature-flag";
 
-const STARTER_PROMPT = `Voce e um atendente virtual profissional e cordial.
+const STARTER_PROMPT = `Você é um atendente virtual profissional e cordial.
 - Apresente-se de forma breve.
 - Entenda o que o cliente precisa antes de responder.
-- Use linguagem objetiva, com no maximo 3 frases por mensagem.
-- Peca transferencia para um humano se nao souber responder.`;
+- Use linguagem objetiva, com no máximo 3 frases por mensagem.
+- Peça transferência para um humano se não souber responder.`;
 
 interface Props {
   initialAgents: AgentConfig[];
@@ -70,7 +70,7 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
         const next = await setNativeAgentEnabled(!enabled);
         setEnabled(next);
         toast.success(
-          next ? "Agente nativo ativado para esta organizacao" : "Agente nativo desativado",
+          next ? "Agente nativo ativado para esta organização" : "Agente nativo desativado",
         );
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Falha ao atualizar flag");
@@ -83,7 +83,7 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
     const description = String(formData.get("description") || "").trim();
     const model = String(formData.get("model") || DEFAULT_MODEL);
     if (!name) {
-      toast.error("Nome e obrigatorio");
+      toast.error("Nome e obrigatório");
       return;
     }
     startTransition(async () => {
@@ -128,7 +128,7 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">Agente nativo desativado</p>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Voce pode configurar os agentes agora, mas eles so respondem mensagens quando o recurso e ativado para a organizacao.
+                Você pode configurar os agentes agora, mas eles so respondem mensagens quando o recurso e ativado para a organização.
               </p>
             </div>
             <Button
@@ -146,7 +146,7 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
           <CardContent className="p-3 flex items-center gap-3">
             <div className="size-2 rounded-full bg-emerald-500" aria-hidden />
             <p className="text-sm flex-1">
-              Agente nativo ativo. Conversas novas seguirao a configuracao do agente com status <strong>Ativo</strong>.
+              Agente nativo ativo. Conversas novas seguirao a configuração do agente com status <strong>Ativo</strong>.
             </p>
             <Button size="sm" variant="ghost" onClick={handleToggleFlag} disabled={isPending}>
               {isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Desativar"}
@@ -181,7 +181,7 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
           <DialogHeader>
             <DialogTitle>Novo agente</DialogTitle>
             <DialogDescription>
-              Voce podera refinar prompt e etapas depois. Ele comeca como rascunho.
+              Você podera refinar prompt e etapas depois. Ele começa como rascunho.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -191,10 +191,10 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
           >
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
-              <Input id="name" name="name" placeholder="Ex: Recepcao" required />
+              <Input id="name" name="name" placeholder="Ex: Recepção" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Descricao (opcional)</Label>
+              <Label htmlFor="description">Descrição (opcional)</Label>
               <Textarea
                 id="description"
                 name="description"
@@ -210,8 +210,8 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (recomendado)</SelectItem>
-                  <SelectItem value="claude-opus-4-7">Claude Opus 4.7 (mais caro, melhor raciocinio)</SelectItem>
-                  <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5 (mais rapido e barato)</SelectItem>
+                  <SelectItem value="claude-opus-4-7">Claude Opus 4.7 (mais caro, melhor raciocínio)</SelectItem>
+                  <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5 (mais rápido e barato)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -233,7 +233,7 @@ export function AgentsListClient({ initialAgents, nativeEnabled }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover agente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acao remove o agente, suas etapas, ferramentas e historico. Conversas ja processadas nao sao excluidas.
+              Esta ação remove o agente, suas etapas, ferramentas e histórico. Conversas ja processadas não sao excluidas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -306,7 +306,7 @@ function AgentCard({
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground/60 italic mt-0.5">
-                  Sem descricao
+                  Sem descrição
                 </p>
               )}
             </div>
