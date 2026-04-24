@@ -25,7 +25,7 @@ export function ActiveLimitsProgress({ limits }: Props) {
           rows.map((row) => <LimitRow key={row.label} label={row.label} snapshot={row.snapshot} />)
         ) : (
           <p className="text-xs text-muted-foreground italic py-4 text-center">
-            Nenhum limite configurado. Sem limites, o agente pode gastar o teto da conta Anthropic. Considere definir pelo menos um limite mensal.
+            Nenhum limite configurado. Sem limites, o agente pode gastar o teto da conta OpenAI. Considere definir pelo menos um limite mensal.
           </p>
         )}
       </CardContent>

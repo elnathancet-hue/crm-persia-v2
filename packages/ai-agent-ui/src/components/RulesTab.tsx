@@ -234,9 +234,10 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
-                <SelectItem value="claude-opus-4-7">Claude Opus 4.7</SelectItem>
-                <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5</SelectItem>
+                <SelectItem value="gpt-5-mini">GPT-5 mini (padrão)</SelectItem>
+                <SelectItem value="gpt-4o-mini">GPT-4o mini</SelectItem>
+                <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                <SelectItem value="gpt-5">GPT-5</SelectItem>
               </SelectContent>
             </Select>
           </CardContent>

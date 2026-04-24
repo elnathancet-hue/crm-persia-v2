@@ -210,7 +210,7 @@ export function CustomWebhookToolSheet({
             <Label htmlFor="schema">Schema de entrada (JSON)</Label>
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
               <Info className="size-3.5 shrink-0 mt-0.5" />
-              Define os argumentos que o agente passa pro webhook. Compatível com JSON Schema do Anthropic tool-use.
+              Define os argumentos que o agente passa pro webhook. JSON Schema padrão (compatível com tool-use OpenAI e Anthropic).
             </p>
             <Textarea
               id="schema"

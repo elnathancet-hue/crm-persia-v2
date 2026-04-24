@@ -82,7 +82,7 @@ export interface AgentConfig {
   description: string | null;
   scope_type: AgentScopeType;
   scope_id: string | null;      // references department or pipeline; null if global
-  model: string;                 // e.g. "claude-sonnet-4-6"
+  model: string;                 // e.g. "gpt-5-mini" — see MODEL_PRICING in cost.ts
   system_prompt: string;
   guardrails: AgentGuardrails;
   // PR5.5: per-agent debounce window for inbound message aggregation.

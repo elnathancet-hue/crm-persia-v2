@@ -209,9 +209,10 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="claude-sonnet-4-6">Claude Sonnet 4.6 (recomendado)</SelectItem>
-                  <SelectItem value="claude-opus-4-7">Claude Opus 4.7 (mais caro, melhor raciocínio)</SelectItem>
-                  <SelectItem value="claude-haiku-4-5">Claude Haiku 4.5 (mais rápido e barato)</SelectItem>
+                  <SelectItem value="gpt-5-mini">GPT-5 mini (recomendado)</SelectItem>
+                  <SelectItem value="gpt-4o-mini">GPT-4o mini (mais rápido e barato)</SelectItem>
+                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                  <SelectItem value="gpt-5">GPT-5 (mais caro, melhor raciocínio)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
