@@ -1165,3 +1165,82 @@ path. Dry-run still forced.
 - PR5.6 handoff notification (reads lead phone + template).
 - PR5.8 reactivate bot (admin action clears `human_handoff_at`).
 - PR6 RAG / PR7 Notifications+Calendar / PR8 Meta-IA — unchanged roadmap.
+
+## 2026-04-23 22:40 — Codex — PR5.5 runtime handoff
+
+Branch: `codex/ai-agent-pr5.5-runtime`.
+
+Shipped in runtime:
+
+- `apps/crm/supabase/migrations/019_ai_agent_debounce.sql`
+  - adds `agent_configs.debounce_window_ms`
+  - adds `agent_conversations.next_flush_at`
+  - adds internal flush lease columns:
+    - `flush_claimed_at`
+    - `flush_claim_expires_at`
+  - creates `pending_messages`
+  - enables RLS
+  - adds helper SQL functions:
+    - `enqueue_pending_message(...)`
+    - `claim_agent_conversation_flush(...)`
+    - `complete_agent_conversation_flush(...)`
+    - `release_agent_conversation_flush(...)`
+  - schedules `cron.schedule('ai-agent-debounce-flush', '2 seconds', ...)`
+
+- `apps/crm/src/lib/ai-agent/debounce.ts`
+  - `enqueueDebounced(...)`
+  - `flushReadyConversations(...)`
+  - uses DB lease helpers rather than Postgres advisory locks. This preserves the
+    same single-flight guarantee in the app/runtime context without depending on
+    a sticky SQL connection for the whole Claude call duration.
+
+- `apps/crm/src/lib/ai-agent/executor.ts`
+  - new `tryEnqueueForNativeAgent(...)` for the webhook router
+  - new `executeDebouncedBatch(...)` for flush processing
+  - existing `tryNativeAgent(...)` left intact for compatibility / non-webhook use
+
+- `apps/crm/src/app/api/whatsapp/webhook/route.ts`
+  - now calls `tryEnqueueForNativeAgent(...)`
+  - legacy `processIncomingMessage(...)` remains the fallback path
+
+- `apps/crm/src/app/api/ai-agent/debounce-flush/route.ts`
+  - POST only
+  - validates `X-Persia-Cron-Secret` against `PERSIA_DEBOUNCE_FLUSH_SECRET`
+  - returns `DebounceFlushResult`
+  - fail-closed:
+    - `401` on secret mismatch
+    - `503` when env secret is missing
+
+- `apps/crm/src/actions/ai-agent/{utils,configs}.ts`
+  - now clamp/persist `debounce_window_ms`
+
+Behavioral notes for Claude/UI:
+
+- The slider can now safely write `debounce_window_ms`; server-side clamp is in
+  place even if the client sends an out-of-range value.
+- During an active flush/run, new inbound messages stay queued and do not start
+  a parallel agent run. When the current flush completes, remaining queued rows
+  are re-scheduled immediately (`next_flush_at = completed_at`) for the next tick.
+- If a debounced batch hits `human_handoff_at`, `executeDebouncedBatch(...)`
+  returns `status: "skipped"` and the batch is still released cleanly.
+
+Validation on this branch:
+
+- `pnpm --filter @persia/crm build` ✅
+- `pnpm --filter @persia/crm typecheck` ✅
+- `pnpm -r typecheck` ✅
+- `pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr5.5-runtime.test.ts` ✅
+  - suite ran full CRM tests in practice: `16 files / 163 tests` green
+
+Operator reminder after merge/deploy:
+
+```sql
+ALTER DATABASE postgres SET app.settings.debounce_flush_url TO 'https://crm.funilpersia.top/api/ai-agent/debounce-flush';
+ALTER DATABASE postgres SET app.settings.debounce_flush_secret TO '<same secret as app env>';
+```
+
+App env required:
+
+```env
+PERSIA_DEBOUNCE_FLUSH_SECRET=<same secret as DB setting>
+```

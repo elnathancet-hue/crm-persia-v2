@@ -24,6 +24,7 @@ type Queue = Map<string, QueryResult[]>;
 
 export interface MockSupabase {
   from: ReturnType<typeof vi.fn>;
+  rpc: ReturnType<typeof vi.fn>;
   auth: {
     getUser: ReturnType<typeof vi.fn>;
   };
@@ -43,6 +44,7 @@ export interface MockSupabase {
    * contains each `[col, val]` pair passed to `.eq()` on that table.
    */
   filters: Record<string, { eq: Array<[string, unknown]>; in: Array<[string, unknown[]]> }>;
+  rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
   /** Reset state between tests. */
   reset: () => void;
 }
@@ -56,6 +58,7 @@ export function createSupabaseMock(opts?: {
   const deletes: Record<string, unknown> = {};
   const selects: Record<string, unknown[]> = {};
   const filters: Record<string, { eq: Array<[string, unknown]>; in: Array<[string, unknown[]]> }> = {};
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
 
   const nextResult = (table: string): QueryResult => {
     const q = queues.get(table);
@@ -86,6 +89,7 @@ export function createSupabaseMock(opts?: {
       "gt",
       "gte",
       "lte",
+      "is",
       "order",
       "range",
       "limit",
@@ -141,6 +145,10 @@ export function createSupabaseMock(opts?: {
 
   const mock: MockSupabase = {
     from: vi.fn((table: string) => makeBuilder(table)),
+    rpc: vi.fn(async (fn: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ fn, args });
+      return nextResult(`rpc:${fn}`);
+    }),
     auth: {
       getUser: vi.fn(async () => ({
         data: { user: opts?.authUser ?? { id: "user-1" } },
@@ -163,6 +171,7 @@ export function createSupabaseMock(opts?: {
     deletes,
     selects,
     filters,
+    rpcCalls,
     reset: () => {
       queues.clear();
       for (const k of Object.keys(inserts)) delete inserts[k];
@@ -170,6 +179,7 @@ export function createSupabaseMock(opts?: {
       for (const k of Object.keys(deletes)) delete deletes[k];
       for (const k of Object.keys(selects)) delete selects[k];
       for (const k of Object.keys(filters)) delete filters[k];
+      rpcCalls.length = 0;
     },
   };
 

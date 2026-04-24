@@ -2,8 +2,10 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 import {
+  DEBOUNCE_WINDOW_MS_DEFAULT,
   calculateCostUsdCents,
   toAnthropicTool,
+  type DebounceFlushBatch,
   type AgentConfig,
   type AgentConversation,
   type AgentRunStatus,
@@ -13,8 +15,10 @@ import {
   type NativeHandlerContext,
 } from "@persia/shared/ai-agent";
 import type { IncomingMessage, WhatsAppProvider } from "@/lib/whatsapp/provider";
+import { createProvider } from "@/lib/whatsapp/providers";
 import { errorMessage, logError, logInfo } from "@/lib/observability";
 import { asAgentDb, type AgentDb } from "./db";
+import { enqueueDebounced } from "./debounce";
 import {
   createSyntheticAgentConversation,
   loadActiveAgentConfig,
@@ -55,6 +59,8 @@ export interface TryNativeAgentParams {
   requestId?: string;
 }
 
+export type TryEnqueueForNativeAgentParams = TryNativeAgentParams;
+
 export interface ExecuteAgentParams {
   db: AgentDb;
   orgId: string;
@@ -84,6 +90,70 @@ export interface ExecuteAgentResult {
 
 const HANDOFF_REPLY =
   "Vou chamar uma pessoa da equipe para continuar esse atendimento por aqui.";
+
+export async function tryEnqueueForNativeAgent(
+  params: TryEnqueueForNativeAgentParams,
+): Promise<NativeAgentOutcome> {
+  const db = asAgentDb(params.supabase as never);
+  try {
+    const enabled = await isNativeAgentEnabled(params.orgId, db);
+    if (!enabled) return { handled: false, reason: "feature_flag_off" };
+
+    const config = await loadActiveAgentConfig(db, params.orgId);
+    if (!config) return { handled: false, reason: "no_active_config" };
+
+    const resolved = await resolveAgentContext({
+      db,
+      orgId: params.orgId,
+      msg: params.msg,
+      config,
+    });
+
+    if ((resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }).human_handoff_at) {
+      return {
+        handled: true,
+        response: {
+          ok: true,
+          skipped: "native_agent_handoff",
+          handledBy: "ai_native",
+          leadId: resolved.crm.leadId,
+          conversationId: resolved.crm.crmConversationId,
+        },
+      };
+    }
+
+    await enqueueDebounced({
+      db,
+      orgId: params.orgId,
+      agentConversationId: resolved.agentConversation.id,
+      debounceWindowMs: resolved.config.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT,
+      inboundMessageId: resolved.crm.inboundMessageId,
+      text: buildPendingText(params.msg),
+      messageType: normalizePendingMessageType(params.msg.type),
+      mediaRef: params.msg.mediaUrl ?? null,
+      receivedAt: new Date(params.msg.timestamp || Date.now()),
+    });
+
+    return {
+      handled: true,
+      response: {
+        ok: true,
+        skipped: "debounced",
+        enqueued: true,
+        handledBy: "ai_native",
+        leadId: resolved.crm.leadId,
+        conversationId: resolved.crm.crmConversationId,
+      },
+    };
+  } catch (error) {
+    logError("native_agent_enqueue_failed", {
+      organization_id: params.orgId,
+      request_id: params.requestId ?? null,
+      error: errorMessage(error),
+    });
+    return { handled: false, reason: "exception" };
+  }
+}
 
 export async function tryNativeAgent(params: TryNativeAgentParams): Promise<NativeAgentOutcome> {
   const db = asAgentDb(params.supabase as never);
@@ -394,6 +464,77 @@ export async function executeTesterAgent(params: {
   });
 }
 
+export async function executeDebouncedBatch(params: {
+  db: AgentDb;
+  orgId: string;
+  batch: DebounceFlushBatch;
+  requestId?: string;
+}): Promise<{ runId: string | null; status: "succeeded" | "failed" | "fallback" | "skipped" }> {
+  const conversation = await loadAgentConversation(params.db, params.orgId, params.batch.agent_conversation_id);
+  if (!conversation) {
+    return { runId: null, status: "skipped" };
+  }
+
+  if ((conversation as AgentConversation & { human_handoff_at?: string | null }).human_handoff_at) {
+    return { runId: null, status: "skipped" };
+  }
+
+  const config = await loadAgentConfigById(params.db, params.orgId, conversation.config_id);
+  if (!config || config.status !== "active") {
+    return { runId: null, status: "skipped" };
+  }
+
+  const lead = await loadLeadForConversation(params.db, params.orgId, conversation.lead_id);
+  const provider = await loadConnectedProvider(params.db, params.orgId);
+  const stage = await loadStage(params.db, params.orgId, config.id, conversation.current_stage_id);
+  const tools = stage
+    ? await loadAllowedTools(params.db, params.orgId, config.id, stage.id)
+    : [];
+
+  try {
+    await assertWithinRateLimits({
+      db: params.db,
+      orgId: params.orgId,
+      agentConversationId: conversation.id,
+    });
+  } catch (error) {
+    if (error instanceof GuardrailError) {
+      return { runId: null, status: "skipped" };
+    }
+    throw error;
+  }
+
+  const result = await executeAgent({
+    db: params.db,
+    orgId: params.orgId,
+    provider,
+    msg: {
+      messageId: `debounced-${params.batch.latest_inbound_message_id ?? crypto.randomUUID()}`,
+      phone: lead.phone,
+      pushName: lead.name ?? lead.phone,
+      text: params.batch.concatenated_text || "[incoming media message]",
+      type: "text",
+      isGroup: false,
+      isFromMe: false,
+      timestamp: Date.now(),
+    },
+    requestId: params.requestId,
+    dryRun: false,
+    config,
+    stage,
+    agentConversation: conversation,
+    tools,
+    inboundMessageId: params.batch.latest_inbound_message_id,
+    leadId: lead.id,
+    crmConversationId: conversation.crm_conversation_id,
+  });
+
+  return {
+    runId: result.runId,
+    status: result.status === "failed" ? "failed" : result.status === "fallback" ? "fallback" : "succeeded",
+  };
+}
+
 async function executeToolCall(
   params: ExecuteAgentParams,
   call: {
@@ -663,5 +804,92 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+async function loadAgentConversation(
+  db: AgentDb,
+  orgId: string,
+  agentConversationId: string,
+): Promise<AgentConversation | null> {
+  const { data, error } = await db
+    .from("agent_conversations")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("id", agentConversationId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as AgentConversation;
+}
+
+async function loadLeadForConversation(
+  db: AgentDb,
+  orgId: string,
+  leadId: string,
+): Promise<{ id: string; phone: string; name: string | null }> {
+  const { data, error } = await db
+    .from("leads")
+    .select("id, phone, name")
+    .eq("organization_id", orgId)
+    .eq("id", leadId)
+    .maybeSingle();
+
+  if (error || !data) throw new Error("lead not found for agent conversation");
+  return data as { id: string; phone: string; name: string | null };
+}
+
+async function loadConnectedProvider(db: AgentDb, orgId: string): Promise<WhatsAppProvider> {
+  const { data, error } = await db
+    .from("whatsapp_connections")
+    .select("provider, instance_url, instance_token, phone_number, phone_number_id, waba_id, access_token, webhook_verify_token")
+    .eq("organization_id", orgId)
+    .eq("status", "connected")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) throw new Error("connected whatsapp provider not found");
+  return createProvider(data as Record<string, unknown>);
+}
+
+function buildPendingText(msg: IncomingMessage): string {
+  return msg.text?.trim() || defaultPendingTextForType(msg.type);
+}
+
+function normalizePendingMessageType(
+  type: IncomingMessage["type"],
+): "text" | "image" | "audio" | "video" | "document" | "location" | "other" {
+  if (
+    type === "text" ||
+    type === "image" ||
+    type === "audio" ||
+    type === "video" ||
+    type === "document" ||
+    type === "location"
+  ) {
+    return type;
+  }
+  return "other";
+}
+
+function defaultPendingTextForType(type: IncomingMessage["type"]): string {
+  switch (type) {
+    case "image":
+      return "[image received]";
+    case "audio":
+      return "[audio received]";
+    case "video":
+      return "[video received]";
+    case "document":
+      return "[document received]";
+    case "location":
+      return "[location received]";
+    case "contact":
+      return "[contact received]";
+    case "sticker":
+      return "[sticker received]";
+    default:
+      return "[message received]";
   }
 }
