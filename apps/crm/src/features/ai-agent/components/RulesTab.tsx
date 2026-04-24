@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { Info, Save } from "lucide-react";
-import type { AgentConfig, AgentGuardrails, UpdateAgentInput } from "@persia/shared/ai-agent";
+import type {
+  AgentConfig,
+  AgentGuardrails,
+  HandoffNotificationTargetType,
+  UpdateAgentInput,
+} from "@persia/shared/ai-agent";
 import {
   CONTEXT_SUMMARY_RECENT_MESSAGES_DEFAULT,
   CONTEXT_SUMMARY_RECENT_MESSAGES_MAX,
@@ -16,11 +21,15 @@ import {
   DEBOUNCE_WINDOW_MS_DEFAULT,
   DEBOUNCE_WINDOW_MS_MAX,
   DEBOUNCE_WINDOW_MS_MIN,
+  HANDOFF_PHONE_MAX_DIGITS,
+  HANDOFF_PHONE_MIN_DIGITS,
+  HANDOFF_TEMPLATE_MAX_LENGTH,
   clampDebounceWindowMs,
   clampRecentMessagesCount,
   clampTokenThreshold,
   clampTurnThreshold,
 } from "@persia/shared/ai-agent";
+import { HandoffNotificationCard } from "./HandoffNotificationCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -58,6 +67,18 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [recentMessages, setRecentMessages] = React.useState<number>(
     clampRecentMessagesCount(agent.context_summary_recent_messages),
   );
+  const [handoffEnabled, setHandoffEnabled] = React.useState<boolean>(
+    Boolean(agent.handoff_notification_enabled),
+  );
+  const [handoffTargetType, setHandoffTargetType] = React.useState<HandoffNotificationTargetType | null>(
+    agent.handoff_notification_target_type ?? null,
+  );
+  const [handoffTargetAddress, setHandoffTargetAddress] = React.useState<string>(
+    agent.handoff_notification_target_address ?? "",
+  );
+  const [handoffTemplate, setHandoffTemplate] = React.useState<string>(
+    agent.handoff_notification_template ?? "",
+  );
 
   React.useEffect(() => {
     setPrompt(agent.system_prompt);
@@ -68,6 +89,10 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     setTurnThreshold(clampTurnThreshold(agent.context_summary_turn_threshold));
     setTokenThreshold(clampTokenThreshold(agent.context_summary_token_threshold));
     setRecentMessages(clampRecentMessagesCount(agent.context_summary_recent_messages));
+    setHandoffEnabled(Boolean(agent.handoff_notification_enabled));
+    setHandoffTargetType(agent.handoff_notification_target_type ?? null);
+    setHandoffTargetAddress(agent.handoff_notification_target_address ?? "");
+    setHandoffTemplate(agent.handoff_notification_template ?? "");
   }, [
     agent.id,
     agent.system_prompt,
@@ -78,6 +103,10 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     agent.context_summary_turn_threshold,
     agent.context_summary_token_threshold,
     agent.context_summary_recent_messages,
+    agent.handoff_notification_enabled,
+    agent.handoff_notification_target_type,
+    agent.handoff_notification_target_address,
+    agent.handoff_notification_template,
   ]);
 
   const promptDirty = prompt !== agent.system_prompt;
@@ -96,6 +125,36 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     tokenThreshold !== clampTokenThreshold(agent.context_summary_token_threshold);
   const recentMessagesDirty =
     recentMessages !== clampRecentMessagesCount(agent.context_summary_recent_messages);
+  const handoffEnabledDirty =
+    handoffEnabled !== Boolean(agent.handoff_notification_enabled);
+  const handoffTargetTypeDirty =
+    handoffTargetType !== (agent.handoff_notification_target_type ?? null);
+  const handoffAddressDirty =
+    handoffTargetAddress !== (agent.handoff_notification_target_address ?? "");
+  const handoffTemplateDirty =
+    handoffTemplate !== (agent.handoff_notification_template ?? "");
+  const handoffDirty =
+    handoffEnabledDirty ||
+    handoffTargetTypeDirty ||
+    handoffAddressDirty ||
+    handoffTemplateDirty;
+
+  // Client-side validation that mirrors the server (lets the Save button
+  // disable proactively on bad data — server still re-validates).
+  const handoffPhoneDigits = handoffTargetAddress.replace(/\D/g, "");
+  const handoffPhoneInvalid =
+    handoffEnabled &&
+    handoffTargetType === "phone" &&
+    (handoffPhoneDigits.length < HANDOFF_PHONE_MIN_DIGITS ||
+      handoffPhoneDigits.length > HANDOFF_PHONE_MAX_DIGITS);
+  const handoffAddressMissing = handoffEnabled && !handoffTargetAddress.trim();
+  const handoffTargetTypeMissing = handoffEnabled && !handoffTargetType;
+  const handoffTemplateTooLong = handoffTemplate.length > HANDOFF_TEMPLATE_MAX_LENGTH;
+  const handoffInvalid =
+    handoffAddressMissing ||
+    handoffTargetTypeMissing ||
+    handoffPhoneInvalid ||
+    handoffTemplateTooLong;
 
   const dirty =
     promptDirty ||
@@ -105,7 +164,8 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     debounceDirty ||
     turnThresholdDirty ||
     tokenThresholdDirty ||
-    recentMessagesDirty;
+    recentMessagesDirty ||
+    handoffDirty;
 
   const handleSave = () => {
     const patch: UpdateAgentInput = {};
@@ -117,6 +177,14 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     if (turnThresholdDirty) patch.context_summary_turn_threshold = turnThreshold;
     if (tokenThresholdDirty) patch.context_summary_token_threshold = tokenThreshold;
     if (recentMessagesDirty) patch.context_summary_recent_messages = recentMessages;
+    if (handoffEnabledDirty) patch.handoff_notification_enabled = handoffEnabled;
+    if (handoffTargetTypeDirty) patch.handoff_notification_target_type = handoffTargetType;
+    if (handoffAddressDirty) {
+      patch.handoff_notification_target_address = handoffTargetAddress.trim() || null;
+    }
+    if (handoffTemplateDirty) {
+      patch.handoff_notification_template = handoffTemplate.trim() || null;
+    }
     onChange(patch, "Regras salvas");
   };
 
@@ -283,7 +351,22 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           </CardContent>
         </Card>
 
-        <Button onClick={handleSave} disabled={!dirty || isPending} className="w-full">
+        <HandoffNotificationCard
+          draftEnabled={handoffEnabled}
+          draftTargetType={handoffTargetType}
+          draftTargetAddress={handoffTargetAddress}
+          draftTemplate={handoffTemplate}
+          onEnabledChange={setHandoffEnabled}
+          onTargetTypeChange={setHandoffTargetType}
+          onTargetAddressChange={setHandoffTargetAddress}
+          onTemplateChange={setHandoffTemplate}
+        />
+
+        <Button
+          onClick={handleSave}
+          disabled={!dirty || isPending || handoffInvalid}
+          className="w-full"
+        >
           <Save className="size-4" />
           Salvar alteracoes
         </Button>
