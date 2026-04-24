@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { ReactivateAgentButton } from "@persia/ai-agent-ui";
 import {
   Card,
   CardContent,
@@ -48,6 +49,10 @@ import {
   type LeadDetail,
   type LeadActivity,
 } from "@/actions/leads";
+import {
+  type LeadAgentHandoffState,
+  reactivateAgent as reactivateLeadAgent,
+} from "@/actions/ai-agent/reactivate";
 import { createDeal, getPipelines, getStages } from "@/actions/crm";
 import {
   ArrowLeft,
@@ -96,6 +101,7 @@ type LeadDetailClientProps = {
   lead: LeadDetail;
   activities: LeadActivity[];
   orgTags: OrgTag[];
+  agentHandoff: LeadAgentHandoffState;
 };
 
 type Pipeline = {
@@ -112,9 +118,10 @@ export function LeadDetailClient({
   lead,
   activities,
   orgTags,
+  agentHandoff,
 }: LeadDetailClientProps) {
   const router = useRouter();
-  const { isAgent } = useRole(); // agent+ can edit/delete/tag
+  const { isAdmin, isAgent } = useRole(); // agent+ can edit/delete/tag
   const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isCreateDealOpen, setIsCreateDealOpen] = React.useState(false);
   const [isDeleting, startDeleteTransition] = React.useTransition();
@@ -281,6 +288,15 @@ export function LeadDetailClient({
               Chamar no WhatsApp
             </Button>
           )}
+          {isAdmin && agentHandoff.isPaused ? (
+            <ReactivateAgentButton
+              pausedAt={agentHandoff.pausedAt}
+              reason={agentHandoff.reason}
+              pausedConversationCount={agentHandoff.pausedConversationCount}
+              onReactivate={() => reactivateLeadAgent(lead.id)}
+              onSuccess={() => router.refresh()}
+            />
+          ) : null}
           {isAgent && (
             <>
               <Button variant="outline" onClick={() => setIsCreateDealOpen(true)}>

@@ -32,6 +32,7 @@ export { CustomWebhookToolSheet } from "./components/CustomWebhookToolSheet";
 export { DecisionIntelligenceModal } from "./components/DecisionIntelligenceModal";
 export { HandoffNotificationCard } from "./components/HandoffNotificationCard";
 export { LimitsEditor } from "./components/LimitsEditor";
+export { ReactivateAgentButton } from "./components/ReactivateAgentButton";
 export { StageSheet } from "./components/StageSheet";
 export { TesterSheet } from "./components/TesterSheet";
 export { UsageChart } from "./components/UsageChart";

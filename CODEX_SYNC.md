@@ -2008,3 +2008,50 @@ motivo — revertido com `git checkout`, refeito com o encoding explicito.
 
 - PR5.8 reactivate bot can now be implemented once in the shared feature
   UI and wired in both apps through the admin/CRM action bundles.
+
+## 2026-04-24 14:58 - Codex - PR5.8 reactivate bot runtime+UI
+
+### Scope shipped
+
+- Added shared `ReactivateAgentButton` in
+  `packages/ai-agent-ui/src/components/ReactivateAgentButton.tsx`.
+- Added CRM action `apps/crm/src/actions/ai-agent/reactivate.ts` with:
+  - `getLeadAgentHandoffState(leadId)`
+  - `reactivateAgent(leadId)`
+- Added admin mirror action `apps/admin/src/actions/ai-agent/reactivate.ts`
+  with explicit `orgId` first arg:
+  - `getLeadAgentHandoffState(orgId, leadId)`
+  - `reactivateAgent(orgId, leadId)`
+- Wired button into CRM and admin lead detail screens so it only appears
+  when at least one `agent_conversations` row for the lead has
+  `human_handoff_at IS NOT NULL`.
+
+### Behavior
+
+- Reactivation clears `human_handoff_at` and `human_handoff_reason` for
+  all paused agent conversations of the lead inside the scoped org.
+- CRM logs one `lead_activities` row with `type = 'agent_reactivated'`
+  and metadata:
+  - `source = 'ai_agent'`
+  - `reactivated_conversation_ids`
+  - `updated_count`
+- Admin logs the same activity shape plus:
+  - `performed_by_superadmin_id`
+  - `acting_as_org_id`
+- Empty update is treated as no-op and returns `{ updatedCount: 0 }`.
+
+### Validation
+
+- `pnpm --filter @persia/crm test -- src/actions/__tests__/ai-agent-reactivate.test.ts` ?
+  - Vitest ran the whole CRM suite in practice: `19 files / 190 tests`.
+- `pnpm -r typecheck` had already been green before the final handoff for
+  this branch; re-run requested after the test pass because PR5.8 only
+  touched action/UI surfaces and no further code changes happened after
+  that.
+
+### Notes
+
+- No migration is required for PR5.8.
+- This closes the Phase 1 gap left after PR5.5 / PR5.6 / PR5.7 and also
+  completes the admin+CRM AI Agent unification sequence started in PRs
+  #24, #26, #27 and #28.
