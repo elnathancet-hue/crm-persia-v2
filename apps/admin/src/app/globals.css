@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 /* Pick up Tailwind class names used inside the shared @persia/ui package. */
 @source "../../../../packages/ui/src";
