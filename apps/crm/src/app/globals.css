@@ -2,8 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Pick up Tailwind class names used inside the shared @persia/ui package. */
+/* Pick up Tailwind class names used inside shared packages. */
 @source "../../../../packages/ui/src";
+@source "../../../../packages/ai-agent-ui/src";
 
 @custom-variant dark (&:is(.dark *));
 

@@ -1,6 +1,6 @@
 import { Badge } from "@persia/ui/badge";
 import type { AgentStatus } from "@persia/shared/ai-agent";
-import { cn } from "@/lib/utils";
+import { cn } from "@persia/ui/utils";
 
 const STATUS_LABEL: Record<AgentStatus, string> = {
   active: "Ativo",

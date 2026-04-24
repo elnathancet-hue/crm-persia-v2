@@ -25,8 +25,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@persia/ui/sheet";
-import { listStageTools, setStageTool } from "@/actions/ai-agent/tools";
-import { renderToolIcon } from "@/features/ai-agent/icon-map";
+import { useAgentActions } from "../context";
+import { renderToolIcon } from "../icon-map";
 
 interface Props {
   open: boolean;
@@ -148,6 +148,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
 }
 
 function StageToolsAllowlist({ stageId, tools }: { stageId: string; tools: AgentTool[] }) {
+  const { listStageTools, setStageTool } = useAgentActions();
   const [allowlist, setAllowlist] = React.useState<Map<string, boolean>>(new Map());
   const [loading, setLoading] = React.useState(true);
   const [pendingToolId, setPendingToolId] = React.useState<string | null>(null);
@@ -174,7 +175,7 @@ function StageToolsAllowlist({ stageId, tools }: { stageId: string; tools: Agent
     return () => {
       cancelled = true;
     };
-  }, [stageId]);
+  }, [stageId, listStageTools]);
 
   const handleToggle = (toolId: string, nextEnabled: boolean) => {
     setPendingToolId(toolId);

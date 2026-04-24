@@ -21,7 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@persia/ui/sheet";
-import { createCustomWebhookTool } from "@/actions/ai-agent/tools";
+import { useAgentActions } from "../context";
 
 interface Props {
   configId: string;
@@ -48,6 +48,7 @@ export function CustomWebhookToolSheet({
   onOpenChange,
   onCreated,
 }: Props) {
+  const { createCustomWebhookTool } = useAgentActions();
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [url, setUrl] = React.useState("");

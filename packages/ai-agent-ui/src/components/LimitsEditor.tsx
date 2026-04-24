@@ -12,7 +12,7 @@ import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
-import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
+import { useAgentActions } from "../context";
 
 interface Props {
   configId: string;
@@ -86,6 +86,7 @@ function LimitRowEditor({
   onSaved: (saved: AgentCostLimit) => void;
   onCleared: (id: string) => void;
 }) {
+  const { setCostLimit, deleteCostLimit } = useAgentActions();
   const [tokens, setTokens] = React.useState<string>(
     current?.max_tokens?.toString() ?? "",
   );
