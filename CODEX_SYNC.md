@@ -1856,3 +1856,79 @@ path rather than modifying the existing ones.
     files; unrelated to the PR5.6 runtime changes, and the Next build
     type validation itself passed
 - Claude UI follow-up is unblocked for the new RulesTab handoff card.
+
+---
+
+## 2026-04-24 — Claude — UI text conventions (appended after PR #24 accent sweep)
+
+Valid para TODOS os PRs futuros (Claude e Codex). Regra curta.
+
+### Strings user-facing precisam de acentos PT-BR corretos
+
+Aplicavel a qualquer texto que o usuario ve renderizado: titulos, descricoes,
+placeholders, labels de botao, mensagens de toast, tooltips, mensagens de
+erro exibidas ao usuario, preview text, status labels.
+
+**NAO aplicavel** a:
+- Identificadores TS (camelCase / snake_case)
+- Chaves de DB, env vars, rotas
+- Logs estruturados (`logInfo("some_event_name", ...)` — evento fica em ingles por convencao)
+- Mensagens tecnicas de erro internas (ex: `throw new Error("handler not implemented")`)
+
+### Lista dos erros mais comuns (para referencia rapida no code review)
+
+- `Decisao` → `Decisão`
+- `Notificacao` → `Notificação`
+- `Execucao/Execucoes` → `Execução/Execuções`
+- `Organizacao` → `Organização`
+- `Configuracao` → `Configuração`
+- `Automacao` → `Automação`
+- `Descricao` → `Descrição`
+- `Atencao` → `Atenção`
+- `Duracao` → `Duração`
+- `Padrao/Padroes` → `Padrão/Padrões`
+- `Nao` → `Não`
+- `Voce` → `Você`
+- `Tambem` → `Também`
+- `Sera` → `Será`
+- `Apos` → `Após`
+- `Ja` → `Já`
+- `Ultima/Ultimo` → `Última/Último`
+- `Disponivel` → `Disponível`
+- `Obrigatorio` → `Obrigatório`
+- `Necessario` → `Necessário`
+- `Invalido` → `Inválido`
+- `Codigo/Numero/Dominio/Maquina/Midia/Audio/Video/Inicio/Servico/Preco` → com acento
+- `Pais` (country) → `País`
+- `Digitos` → `Dígitos`
+
+### Ambiguidade `e` vs `é`
+
+`e` é conjuncao ("and"), `é` é verbo ser ("is"). Contexto decide. Regra pratica:
+se a frase faz sentido substituindo por "is", é `é`. Se faz sentido como "and",
+é `e`.
+
+- "situação, instrução e dica" → `e` (lista)
+- "Este e o nome que o agente enxerga" → `é` (verbo)
+- "Destino e obrigatório" → `é` (verbo)
+- "Tokens por conversa antes de parar e passar pra humano" → `e` (conjuncao)
+
+### Scripts de texto em massa
+
+Se rodar perl/sed em Windows pra fazer replacements, **sempre** usar:
+```perl
+use open ':std', ':encoding(UTF-8)';
+binmode STDIN,  ':encoding(UTF-8)';
+binmode STDOUT, ':encoding(UTF-8)';
+```
+
+Sem isso o perl default do Git Bash no Windows cai em CP1252 e corrompe
+bytes UTF-8. Primeiro passo do PR #24 corrompeu todos os arquivos por esse
+motivo — revertido com `git checkout`, refeito com o encoding explicito.
+
+### Onde NAO mexer
+
+- `packages/shared/src/ai-agent/tool-presets.ts` — descricoes dos presets
+  ficam em ingles por design (viajam como `description` pro LLM).
+- `types.ts` de shared — comentarios em ingles.
+- Identificadores em runtime logs/audit — snake_case ingles.
