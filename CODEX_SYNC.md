@@ -1584,3 +1584,242 @@ are synthetic and short-lived.
     `apps/crm/tsconfig.json` include). The PR5.7 code itself builds and
     passes Next's type validation during `next build`.
 - Claude UI follow-up is unblocked for the 3 RulesTab sliders.
+
+---
+
+## 2026-04-23 — Claude — PR5.6 contract additions: handoff notification
+
+Branch: `claude/ai-agent-pr5.6-contracts` (this PR).
+
+Fase 1 PR 3/4. When `stop_agent` fires today, `human_handoff_at` is set and
+a `lead_activities` note is written — but the human team has no outbound
+ping. The JSON 03 Encaminhamento workflow sends a WhatsApp message to a
+configured group with lead name, phone, a short summary, and a `wa.me`
+deep link. PR5.6 brings that inside the native agent.
+
+Additive. Existing PR5/PR5.5/PR5.7 behavior unchanged until Codex ships
+the runtime.
+
+### Files shipped
+
+- `packages/shared/src/ai-agent/handoff.ts` — new
+  - `HandoffNotificationTargetType` = `'phone' | 'group'`
+  - `HandoffNotificationTarget`, `HandoffNotificationConfig`
+  - `HandoffNotificationVariables` — the fixed set the renderer fills
+  - `HANDOFF_DEFAULT_TEMPLATE` — sensible PT-BR default with all six vars
+  - `HANDOFF_TEMPLATE_MAX_LENGTH` (1500), `HANDOFF_PHONE_MIN_DIGITS` (10), `HANDOFF_PHONE_MAX_DIGITS` (15)
+  - `renderHandoffTemplate(template, vars)` — `{{var}}` substitution; unknown keys render as empty
+  - `listTemplatePlaceholders` + `isKnownTemplateVariable` helpers for the UI editor
+  - `SetHandoffTargetInput` DTO
+- `packages/shared/src/ai-agent/types.ts` — additive only
+  - `AgentConfig.handoff_notification_enabled?: boolean`
+  - `AgentConfig.handoff_notification_target_type?: HandoffNotificationTargetType | null`
+  - `AgentConfig.handoff_notification_target_address?: string | null`
+  - `AgentConfig.handoff_notification_template?: string | null`
+  - Same four fields on `CreateAgentInput`
+  - Top of file imports `HandoffNotificationTargetType` from `./handoff`
+- `packages/shared/src/ai-agent/index.ts` re-exports `handoff`
+
+### Migration 021 shape — Codex writes this
+
+```sql
+BEGIN;
+
+ALTER TABLE public.agent_configs
+  ADD COLUMN IF NOT EXISTS handoff_notification_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS handoff_notification_target_type TEXT,
+  ADD COLUMN IF NOT EXISTS handoff_notification_target_address TEXT,
+  ADD COLUMN IF NOT EXISTS handoff_notification_template TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_configs_handoff_target_type_check') THEN
+    ALTER TABLE public.agent_configs
+      ADD CONSTRAINT agent_configs_handoff_target_type_check
+      CHECK (handoff_notification_target_type IS NULL
+        OR handoff_notification_target_type IN ('phone','group'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_configs_handoff_target_consistency_check') THEN
+    ALTER TABLE public.agent_configs
+      ADD CONSTRAINT agent_configs_handoff_target_consistency_check
+      CHECK (
+        handoff_notification_enabled = false
+        OR (
+          handoff_notification_target_type IS NOT NULL
+          AND handoff_notification_target_address IS NOT NULL
+        )
+      );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_configs_handoff_template_length_check') THEN
+    ALTER TABLE public.agent_configs
+      ADD CONSTRAINT agent_configs_handoff_template_length_check
+      CHECK (
+        handoff_notification_template IS NULL
+        OR char_length(handoff_notification_template) <= 1500
+      );
+  END IF;
+END
+$$;
+
+COMMIT;
+```
+
+Rollback (manual):
+
+```sql
+BEGIN;
+  ALTER TABLE public.agent_configs
+    DROP CONSTRAINT IF EXISTS agent_configs_handoff_template_length_check,
+    DROP CONSTRAINT IF EXISTS agent_configs_handoff_target_consistency_check,
+    DROP CONSTRAINT IF EXISTS agent_configs_handoff_target_type_check,
+    DROP COLUMN IF EXISTS handoff_notification_template,
+    DROP COLUMN IF EXISTS handoff_notification_target_address,
+    DROP COLUMN IF EXISTS handoff_notification_target_type,
+    DROP COLUMN IF EXISTS handoff_notification_enabled;
+COMMIT;
+```
+
+The consistency CHECK is the important guardrail: an operator cannot flip
+`enabled=true` without providing target fields; avoids silent drops at send
+time.
+
+### Runtime scope for Codex (PR5.6)
+
+#### 1. `apps/crm/src/lib/ai-agent/handoff-notification.ts` — new
+
+```ts
+interface SendHandoffNotificationParams {
+  db: AgentDb;
+  orgId: string;
+  runId: string;
+  stepOrderIndex: number;
+  config: AgentConfig;
+  conversation: AgentConversation;
+  leadId: string;
+  handoffReason: string;
+  provider: WhatsAppProvider | null; // null during executor-initiated handoff before provider is resolved
+  anthropicClient: Anthropic;
+}
+
+// Always fail-soft. Returns whether the notification was attempted + any
+// error. The executor / stop_agent handler logs a step regardless.
+interface SendHandoffNotificationResult {
+  attempted: boolean;
+  sent: boolean;
+  error?: string;
+  audit: Record<string, unknown>; // sanitized (no message body, hashes only)
+}
+
+export async function sendHandoffNotification(
+  params: SendHandoffNotificationParams,
+): Promise<SendHandoffNotificationResult>;
+```
+
+Internal flow:
+
+1. Guard on `config.handoff_notification_enabled === true` AND target fields
+   populated AND `provider != null`. Any miss → `{ attempted: false, sent: false }`.
+2. Load lead (`leads` by id scoped by org) for `name` + `phone`.
+3. Build `summary`:
+   - If `conversation.history_summary` exists, take first 500 chars.
+   - Else, one-shot Claude call to `config.model`, system prompt
+     "Gere em 2 frases, em portugues brasileiro, o que aconteceu nessa
+     conversa pra alguem da equipe assumir." Max tokens 200.
+   - On Claude failure: fall back to the plain text "Lead acionou o agente
+     e pediu atendimento humano." Do not block the notification on this.
+4. Build `wa_link` = `${process.env.PERSIA_APP_URL ?? 'https://crm.funilpersia.top'}/chat/${conversation.crm_conversation_id}`.
+   Env missing → use the hardcoded default.
+5. Build `HandoffNotificationVariables`:
+   - `lead_name` = `lead.name ?? 'cliente'`
+   - `lead_phone` = formatted with `+` prefix for display
+   - `summary` = from step 3
+   - `wa_link` = from step 4
+   - `agent_name` = `config.name`
+   - `handoff_reason` = input (already sanitized by stop_agent handler)
+6. `renderHandoffTemplate(config.handoff_notification_template ?? '', vars)`.
+7. Resolve target JID:
+   - `type='phone'`: strip non-digits, enforce 10–15 digits, send via `provider.sendText({ phone, message })`.
+   - `type='group'`: use address as-is (expected to be a valid JID like `1203@g.us`); UAZAPI's `sendText` accepts group JIDs in the `phone` field.
+8. On send error: log, return `{ attempted: true, sent: false, error }`.
+
+#### 2. `apps/crm/src/lib/ai-agent/tools/stop-agent.ts` — minor extension
+
+After the existing `UPDATE agent_conversations SET human_handoff_at = now()`
+and the `lead_activities` note, call `sendHandoffNotification` when not
+`dry_run`. Aggregate the result into the handler output so `agent_steps`
+shows whether the notification was attempted / sent, without raw body.
+
+Dry-run: skip entirely (template expansion is still simulated in the step
+output for transparency).
+
+#### 3. `apps/crm/src/actions/ai-agent/utils.ts` — validation extension
+
+`normalizeAgentPatch` / `normalizeAgentInput` must validate the four new
+fields:
+
+- `handoff_notification_enabled`: boolean, no trim.
+- `handoff_notification_target_type`: one of `'phone' | 'group'` or null when enabled=false.
+- `handoff_notification_target_address`: trimmed, required iff enabled=true.
+  - Phone: strip non-digits, enforce 10–15 digits.
+  - Group: accept as given; simple length cap 128 chars.
+- `handoff_notification_template`: trimmed, <=1500 chars, null allowed.
+
+If `enabled=true` and any target field missing → throw
+`"Configure o destino da notificacao antes de ativar"`.
+
+#### 4. Existing stop-agent test stays green
+
+The old test asserts stop_agent sets `human_handoff_at` on dry_run=false.
+That still passes — the notification is additive and gated on enabled=true
+which defaults to false. Codex should ADD new tests for the notification
+path rather than modifying the existing ones.
+
+### Tests Codex must add
+
+- `renderHandoffTemplate`:
+  - Replaces all six standard vars.
+  - Unknown placeholder renders as empty.
+  - Empty template falls back to default.
+- `sendHandoffNotification`:
+  - enabled=false → attempted=false, no provider call.
+  - enabled=true, target missing → attempted=false (defense against bad
+    data despite the CHECK).
+  - history_summary present → uses it, no Claude call.
+  - history_summary absent → Claude called; Claude failure falls back to
+    plain text.
+  - provider error → sent=false, logged, does NOT throw.
+  - phone target: digits-only; malformed address rejected.
+  - group target: passed through unchanged.
+- stop-agent handler:
+  - dry_run=true → no notification attempt (expansion simulated only).
+  - dry_run=false + enabled=true → notification attempted; lead_activities
+    still written; agent_steps output includes sanitized audit.
+- migration 021:
+  - idempotent re-run.
+  - consistency check rejects `enabled=true AND target_type=null`.
+  - template length cap rejects 1501 chars.
+- `normalizeAgentPatch`:
+  - enable+missing target → rejected with clear message.
+  - phone digits: "(11) 99999-9999" normalized to "11999999999" (or
+    pre-padded to E.164 at Codex's discretion — contract only requires
+    digits-only and range).
+
+### UI scope for Claude (follow-up)
+
+- **New card in RulesTab** "Notificacao de handoff" with:
+  - Switch for `handoff_notification_enabled`.
+  - Radio/select `handoff_notification_target_type` (Telefone / Grupo).
+  - Input for `handoff_notification_target_address` — format hint changes
+    by type; inline validation (digits only for phone).
+  - Textarea for `handoff_notification_template` with chip hints listing
+    the 6 recognized variables (reuses `HANDOFF_TEMPLATE_VARIABLES`).
+  - "Usar template padrao" button that fills the textarea with
+    `HANDOFF_DEFAULT_TEMPLATE`.
+  - Preview panel: renders the template with placeholder values
+    (e.g. `{{lead_name}}` → "Maria Silva") using
+    `renderHandoffTemplate`.
+
+### Out of scope (still)
+
+- PR5.8 reactivate bot (last piece of Fase 1).
+- PR6+ unchanged roadmap.
