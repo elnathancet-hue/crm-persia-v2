@@ -17,7 +17,7 @@ import {
   type KnowledgeSourceMetadata,
   type UpdateFAQInput,
 } from "@persia/shared/ai-agent";
-import type { AgentDb } from "@/lib/ai-agent/db";
+import { asAgentDb, type AgentDb } from "@/lib/ai-agent/db";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   agentPaths,
@@ -314,11 +314,15 @@ async function assertSourceBelongsToOrg(
 }
 
 async function enqueueIndexingJob(
-  db: AgentDb,
+  _db: AgentDb,
   orgId: string,
   sourceId: string,
 ): Promise<void> {
-  const { error } = await db.from("agent_indexing_jobs").insert({
+  // agent_indexing_jobs has SELECT-only policies for users (writes happen via
+  // service_role during indexing). Bypass RLS by escalating just for this
+  // insert — the user's role was already verified by requireAgentRole earlier.
+  const adminDb = asAgentDb(createAdminClient());
+  const { error } = await adminDb.from("agent_indexing_jobs").insert({
     organization_id: orgId,
     source_id: sourceId,
     status: "pending",
