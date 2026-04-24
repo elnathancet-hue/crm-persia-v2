@@ -853,3 +853,315 @@ Rules:
 - Executor agora roteia tools `n8n_webhook` via `invokeCustomWebhook()` e persiste em `agent_steps.output` apenas o resumo auditavel (`http_status`, `duration_ms`, `url_host`, `body_sha256`, `response_size_bytes`, `response_sha256`, `error/code` quando houver).
 - Nenhum corpo bruto de request/response e salvo no audit step.
 - Testes adicionados em `apps/crm/src/__tests__/ai-agent-pr5-runtime.test.ts`; o teste legado da PR3 foi atualizado para o comportamento novo.
+
+---
+
+## 2026-04-23 — Claude — PR5.5 contract additions: message debouncing
+
+Branch: `claude/ai-agent-pr5.5-contracts` (this PR).
+
+Start of Fase 1 (production-readiness blockers). PR5.5 fixes the #1 bug
+that would hit the moment `native_agent_enabled` goes true on any real org:
+a lead sending "oi" + "tudo bem?" in 2s produces two parallel runs, two
+fragmented replies, and a race on `current_stage_id`.
+
+Additive only. No existing PR1–PR5 behavior is changed until Codex ships
+the runtime.
+
+### Files shipped
+
+- `packages/shared/src/ai-agent/debounce.ts` — new
+  - `PendingMessage` row shape
+  - `DebounceFlushBatch` / `DebounceFlushResult`
+  - Constants: `DEBOUNCE_WINDOW_MS_DEFAULT=10000`, `DEBOUNCE_WINDOW_MS_MIN=3000`, `DEBOUNCE_WINDOW_MS_MAX=30000`
+  - `clampDebounceWindowMs(value)` helper (UI + server both call this)
+- `packages/shared/src/ai-agent/types.ts` — additive
+  - `AgentConfig.debounce_window_ms: number` (non-nullable at the TS level; migration 019 adds column with DEFAULT 10000)
+  - `CreateAgentInput.debounce_window_ms?: number` (optional; runtime applies default + clamp)
+  - `UpdateAgentInput` auto-picks via `Partial<CreateAgentInput>`
+- `packages/shared/src/ai-agent/index.ts` re-exports `debounce`
+
+### Architecture — this is a real change to the webhook flow
+
+**Before PR5.5** (synchronous, current):
+
+```
+UAZAPI webhook -> parse/verify/match -> tryNativeAgent -> executor -> Claude -> UAZAPI send -> 200 OK
+```
+
+Latency from receive to 200 OK: 3–10 seconds.
+
+**After PR5.5** (enqueue + out-of-band flush):
+
+```
+UAZAPI webhook -> parse/verify/match -> enqueueDebounced -> 200 OK       // <200ms
+pg_cron every 2s -> pg_net POST /api/ai-agent/debounce-flush (secret)
+flush endpoint -> finds ready conversations -> executor -> Claude -> UAZAPI send
+```
+
+Webhook returns 200 OK in <200ms regardless of LLM latency. No more
+"UAZAPI webhook timeout" risk when Claude is slow.
+
+### Migration 019 shape — Codex writes this
+
+```sql
+BEGIN;
+
+-- Extensions (safe if already present; Supabase ships pg_cron + pg_net)
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_net  WITH SCHEMA extensions;
+
+-- 1. Debounce config column on agent_configs.
+ALTER TABLE public.agent_configs
+  ADD COLUMN debounce_window_ms INTEGER NOT NULL DEFAULT 10000
+  CHECK (debounce_window_ms >= 3000 AND debounce_window_ms <= 30000);
+
+-- 2. Flush scheduling marker on agent_conversations.
+ALTER TABLE public.agent_conversations
+  ADD COLUMN next_flush_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_agent_conversations_next_flush
+  ON public.agent_conversations (next_flush_at)
+  WHERE next_flush_at IS NOT NULL;
+
+-- 3. pending_messages.
+CREATE TABLE IF NOT EXISTS public.pending_messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  agent_conversation_id UUID NOT NULL REFERENCES public.agent_conversations(id) ON DELETE CASCADE,
+  text TEXT NOT NULL DEFAULT '',
+  message_type TEXT NOT NULL DEFAULT 'text'
+    CHECK (message_type IN ('text','image','audio','video','document','location','other')),
+  media_ref TEXT,
+  inbound_message_id UUID REFERENCES public.messages(id) ON DELETE SET NULL,
+  received_at TIMESTAMPTZ NOT NULL,
+  flushed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Idempotency on webhook retries: unique on non-null inbound_message_id.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pending_messages_inbound_unique
+  ON public.pending_messages (inbound_message_id)
+  WHERE inbound_message_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_pending_messages_conversation_unflushed
+  ON public.pending_messages (agent_conversation_id, received_at)
+  WHERE flushed_at IS NULL;
+
+ALTER TABLE public.pending_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "pending_messages_select" ON public.pending_messages
+  FOR SELECT USING (get_user_org_role(organization_id) IN ('owner','admin'));
+CREATE POLICY "pending_messages_insert" ON public.pending_messages
+  FOR INSERT WITH CHECK (get_user_org_role(organization_id) IN ('owner','admin'));
+CREATE POLICY "pending_messages_update" ON public.pending_messages
+  FOR UPDATE USING (get_user_org_role(organization_id) IN ('owner','admin'))
+  WITH CHECK (get_user_org_role(organization_id) IN ('owner','admin'));
+
+-- 4. pg_cron: every 2s, POST the flush endpoint via pg_net.
+--    Operator must set the two db settings below before the cron does
+--    anything real (see "Operator steps").
+SELECT cron.schedule(
+  'ai-agent-debounce-flush',
+  '2 seconds',
+  'SELECT net.http_post(
+     url     := current_setting(''app.settings.debounce_flush_url'', true),
+     headers := jsonb_build_object(
+       ''Content-Type'', ''application/json'',
+       ''X-Persia-Cron-Secret'', current_setting(''app.settings.debounce_flush_secret'', true)
+     ),
+     body    := ''{}''::jsonb,
+     timeout_milliseconds := 5000
+   );'
+);
+
+COMMIT;
+```
+
+Rollback (manual):
+
+```sql
+BEGIN;
+  SELECT cron.unschedule('ai-agent-debounce-flush');
+  DROP TABLE IF EXISTS public.pending_messages;
+  ALTER TABLE public.agent_conversations DROP COLUMN IF EXISTS next_flush_at;
+  ALTER TABLE public.agent_configs DROP COLUMN IF EXISTS debounce_window_ms;
+COMMIT;
+```
+
+### Operator steps (required post-migration)
+
+```sql
+ALTER DATABASE postgres SET app.settings.debounce_flush_url    TO 'https://crm.funilpersia.top/api/ai-agent/debounce-flush';
+ALTER DATABASE postgres SET app.settings.debounce_flush_secret TO '<random 48 chars>';
+```
+
+Plus set `PERSIA_DEBOUNCE_FLUSH_SECRET=<same>` in the app env (EasyPanel).
+Missing secret or URL = cron runs but `pg_net.http_post` fails silently; no
+messages leak, `next_flush_at` keeps advancing, nothing crashes.
+
+### Runtime scope for Codex (PR5.5)
+
+**1. `apps/crm/src/lib/ai-agent/debounce.ts` — new, server-only**
+
+```ts
+interface EnqueueDebouncedParams {
+  db: AgentDb;
+  orgId: string;
+  agentConversationId: string;
+  debounceWindowMs: number;             // from agent_configs, already clamped
+  inboundMessageId: string | null;
+  text: string;
+  messageType: PendingMessage["message_type"];
+  mediaRef: string | null;
+  receivedAt: Date;
+}
+
+// Insert pending_messages row + set next_flush_at if this is the first
+// unflushed message on the conversation. Idempotent via the unique index
+// on inbound_message_id (ON CONFLICT DO NOTHING).
+export async function enqueueDebounced(p: EnqueueDebouncedParams): Promise<void>;
+
+interface FlushReadyConversationsParams {
+  db: AgentDb;
+  now?: Date;
+  maxConversations?: number;            // default 50
+}
+
+// Pulls up to `maxConversations` where next_flush_at <= now, acquires a
+// per-conversation advisory lock, loads the pending batch, invokes the
+// existing executor path, marks rows flushed, clears next_flush_at in the
+// same transaction. Returns a DebounceFlushResult (counts + per-conv detail
+// capped at 50).
+export async function flushReadyConversations(p: FlushReadyConversationsParams): Promise<DebounceFlushResult>;
+```
+
+**2. Webhook router update (`apps/crm/src/app/api/whatsapp/webhook/route.ts`)**
+
+Replace the current `tryNativeAgent(...)` call with `tryEnqueueForNativeAgent`:
+
+```ts
+if (nativeEnabled) {
+  const enqueued = await tryEnqueueForNativeAgent({
+    supabase, orgId, provider, msg, requestId,
+  });
+  if (enqueued.handled) return NextResponse.json(enqueued.response);
+  // handled:false falls through to processIncomingMessage (legacy)
+}
+```
+
+`tryEnqueueForNativeAgent` lives in `executor.ts` (or a new
+`enqueue.ts`) next to `tryNativeAgent`, same fail-closed rules:
+
+| Outcome | Return |
+|---|---|
+| Feature flag off | `{ handled: false }` |
+| No active agent_config | `{ handled: false }` |
+| Exception during enqueue | `{ handled: false }` + structured log |
+| Happy path | `{ handled: true, response: { ok: true, skipped: "debounced", enqueued: true } }` |
+
+Forbidden changes in the webhook route (still):
+
+- parsing UAZAPI payload
+- signature verification
+- media download
+- `messages` insertion
+
+**3. Flush endpoint `apps/crm/src/app/api/ai-agent/debounce-flush/route.ts` — new**
+
+- POST only. Header `X-Persia-Cron-Secret` must match env
+  `PERSIA_DEBOUNCE_FLUSH_SECRET` via `timingSafeEqual`.
+- Body is ignored.
+- Response: 200 with `DebounceFlushResult` JSON.
+- Secret mismatch: 401 with `{ ok: false }`. No timing hints, no
+  per-conversation data.
+- Without `PERSIA_DEBOUNCE_FLUSH_SECRET` env: 503
+  (`{ ok: false, error: "flush_secret_missing" }`), no work done.
+- Never throws. Any per-conversation failure is counted in
+  `DebounceFlushResult.errors` and logged; other conversations still run.
+- Uses Supabase service-role client (no user session here).
+
+**4. Executor change — `executeAgent` accepts a pre-aggregated inbound**
+
+The webhook path previously passed a single `IncomingMessage`. The flush
+path now passes a synthetic aggregated message:
+
+- `text` = `DebounceFlushBatch.concatenated_text` (received_at ASC, joined with `"\n"`).
+- `messageId` = `DebounceFlushBatch.latest_inbound_message_id`.
+
+Executor internals do not change — the aggregation is done before the
+call. `tryNativeAgent` (sync) stays as-is for compatibility but webhook no
+longer calls it; only tester does.
+
+**5. Tester unchanged**
+
+`testAgent` keeps calling `executeTesterAgent` directly, never the debounce
+path. Dry-run still forced.
+
+### Concurrency guarantees Codex must preserve
+
+1. **Per-conversation single-flight**: when a run is already executing for
+   conversation X, a new inbound inserts into `pending_messages` but does
+   NOT reset `next_flush_at`. The cron tick after the running run completes
+   picks up the new rows. Use advisory lock
+   `pg_try_advisory_xact_lock(hashtext('ai-agent:' || agent_conversation_id))`
+   around the flush per conversation.
+2. **No cross-org interference**: every query in the flush path filters by
+   `organization_id`. The flush endpoint is service-role but still scopes
+   every read/write.
+3. **Idempotent inbound**: the unique index on
+   `pending_messages(inbound_message_id)` (where not null) prevents
+   duplicate runs on webhook retries. Codex enqueue helper uses
+   `ON CONFLICT DO NOTHING`.
+4. **Flush-after-flush window reset**: when the flush completes, set
+   `agent_conversations.next_flush_at = NULL` in the same transaction that
+   marks pending_messages flushed. Next inbound starts a fresh window.
+5. **Timeout during Claude call**: if executor takes longer than the cron
+   interval, a concurrent cron tick tries to lock the same conversation
+   and fails the advisory try-lock — it simply skips that row; the next
+   tick after the running run completes will pick it up naturally.
+
+### Tests Codex must add
+
+- `debounce.ts`:
+  - burst of 5 messages within `debounce_window_ms` → one run, one reply,
+    `pending_messages.flushed_at` set on all 5, one step-sequence in
+    `agent_steps`.
+  - message arriving during a run-in-progress: not flushed in the current
+    cycle; next cycle picks it up.
+  - retry with same `inbound_message_id`: second enqueue is idempotent
+    (unique index violates cleanly, handler returns without error).
+  - per-agent window override honored (agent with `debounce_window_ms=3000`
+    flushes faster than default).
+- webhook route:
+  - flag on + agent_config: returns 200 with
+    `{ skipped: "debounced", enqueued: true }`.
+  - flag off: legacy path unchanged.
+  - exception during enqueue: falls through to legacy, 200 kept.
+- flush endpoint:
+  - secret mismatch → 401.
+  - no secret env → 503.
+  - happy path → `DebounceFlushResult` with correct counts.
+  - per-conversation error doesn't block others.
+  - two concurrent POSTs: advisory lock ensures exactly one executes a
+    given conversation; the other returns that row with `status: "skipped"`.
+
+### UI scope for Claude (follow-up)
+
+- `RulesTab` "Guardrails" card gets a new row: "Agregar mensagens por
+  (segundos)" slider bound to `debounce_window_ms` (range 3–30, default 10).
+- Tooltip: "Espera esse tempo por novas mensagens do mesmo lead antes de
+  responder, pra evitar respostas fragmentadas quando o lead digita em
+  pedaços curtos."
+- Server action `updateAgent` already accepts `debounce_window_ms` via
+  `Partial<CreateAgentInput>` — Codex clamps to range on write.
+- No pending_messages dashboard in this PR. Operators read it via Supabase
+  if needed; a future PR can add "mensagens na fila" count per conversation
+  if support traffic justifies.
+
+### Out of scope (still)
+
+- PR5.7 context summarization (next in Fase 1; consumes the flushed batch).
+- PR5.6 handoff notification (reads lead phone + template).
+- PR5.8 reactivate bot (admin action clears `human_handoff_at`).
+- PR6 RAG / PR7 Notifications+Calendar / PR8 Meta-IA — unchanged roadmap.
