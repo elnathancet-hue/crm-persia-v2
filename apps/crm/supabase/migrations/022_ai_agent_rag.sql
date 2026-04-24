@@ -17,6 +17,8 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 
 -- Parent row: one per FAQ item or uploaded document.
 CREATE TABLE IF NOT EXISTS public.agent_knowledge_sources (
@@ -121,12 +123,222 @@ CREATE POLICY "agent_knowledge_chunks_select" ON public.agent_knowledge_chunks
 CREATE POLICY "agent_indexing_jobs_select" ON public.agent_indexing_jobs
   FOR SELECT USING (get_user_org_role(organization_id) IN ('owner', 'admin'));
 
+CREATE OR REPLACE FUNCTION public.claim_agent_indexing_job(
+  p_now TIMESTAMPTZ DEFAULT now(),
+  p_max_attempts INTEGER DEFAULT 3
+)
+RETURNS SETOF public.agent_indexing_jobs
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE public.agent_indexing_jobs
+  SET
+    status = 'processing',
+    claimed_at = p_now,
+    attempts = attempts + 1,
+    updated_at = p_now
+  WHERE id = (
+    SELECT j.id
+    FROM public.agent_indexing_jobs j
+    WHERE (
+      j.status = 'pending'
+      OR (j.status = 'processing' AND j.claimed_at < p_now - INTERVAL '5 minutes')
+    )
+      AND j.attempts < greatest(coalesce(p_max_attempts, 3), 1)
+    ORDER BY j.created_at ASC
+    LIMIT 1
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING *;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.complete_agent_indexing_job(
+  p_job_id UUID,
+  p_source_id UUID,
+  p_organization_id UUID,
+  p_config_id UUID,
+  p_chunks JSONB,
+  p_completed_at TIMESTAMPTZ DEFAULT now()
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  inserted_count INTEGER := 0;
+BEGIN
+  DELETE FROM public.agent_knowledge_chunks
+  WHERE source_id = p_source_id
+    AND organization_id = p_organization_id;
+
+  INSERT INTO public.agent_knowledge_chunks (
+    source_id,
+    organization_id,
+    config_id,
+    chunk_index,
+    content,
+    token_count,
+    embedding,
+    created_at
+  )
+  SELECT
+    p_source_id,
+    p_organization_id,
+    p_config_id,
+    (chunk_item->>'chunk_index')::INTEGER,
+    chunk_item->>'content',
+    (chunk_item->>'token_count')::INTEGER,
+    (chunk_item->>'embedding')::vector,
+    p_completed_at
+  FROM jsonb_array_elements(coalesce(p_chunks, '[]'::jsonb)) AS chunk_item;
+
+  GET DIAGNOSTICS inserted_count = ROW_COUNT;
+
+  UPDATE public.agent_knowledge_sources
+  SET
+    indexing_status = 'indexed',
+    indexing_error = NULL,
+    indexed_at = p_completed_at,
+    chunk_count = inserted_count,
+    updated_at = p_completed_at
+  WHERE id = p_source_id
+    AND organization_id = p_organization_id;
+
+  UPDATE public.agent_indexing_jobs
+  SET
+    status = 'done',
+    error_message = NULL,
+    updated_at = p_completed_at
+  WHERE id = p_job_id
+    AND organization_id = p_organization_id;
+
+  RETURN inserted_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fail_agent_indexing_job(
+  p_job_id UUID,
+  p_source_id UUID,
+  p_organization_id UUID,
+  p_error_message TEXT,
+  p_failed_at TIMESTAMPTZ DEFAULT now()
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.agent_knowledge_sources
+  SET
+    indexing_status = 'failed',
+    indexing_error = left(coalesce(p_error_message, 'unknown error'), 1000),
+    updated_at = p_failed_at
+  WHERE id = p_source_id
+    AND organization_id = p_organization_id;
+
+  UPDATE public.agent_indexing_jobs
+  SET
+    status = 'failed',
+    error_message = left(coalesce(p_error_message, 'unknown error'), 1000),
+    updated_at = p_failed_at
+  WHERE id = p_job_id
+    AND organization_id = p_organization_id;
+
+  RETURN TRUE;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.match_agent_knowledge_chunks(
+  p_organization_id UUID,
+  p_config_id UUID,
+  p_query_embedding TEXT,
+  p_top_k INTEGER DEFAULT 3
+)
+RETURNS TABLE (
+  chunk_id UUID,
+  source_id UUID,
+  source_type TEXT,
+  source_title TEXT,
+  content TEXT,
+  distance DOUBLE PRECISION
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    c.id AS chunk_id,
+    c.source_id,
+    s.source_type,
+    s.title AS source_title,
+    c.content,
+    (c.embedding <=> (p_query_embedding::vector))::double precision AS distance
+  FROM public.agent_knowledge_chunks c
+  JOIN public.agent_knowledge_sources s ON s.id = c.source_id
+  WHERE c.organization_id = p_organization_id
+    AND c.config_id = p_config_id
+    AND s.status = 'active'
+    AND s.indexing_status = 'indexed'
+    AND c.embedding IS NOT NULL
+  ORDER BY c.embedding <=> (p_query_embedding::vector)
+  LIMIT greatest(1, least(coalesce(p_top_k, 3), 10));
+$$;
+
+REVOKE ALL ON FUNCTION public.claim_agent_indexing_job(TIMESTAMPTZ, INTEGER)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.complete_agent_indexing_job(UUID, UUID, UUID, UUID, JSONB, TIMESTAMPTZ)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.fail_agent_indexing_job(UUID, UUID, UUID, TEXT, TIMESTAMPTZ)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.match_agent_knowledge_chunks(UUID, UUID, TEXT, INTEGER)
+  FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.claim_agent_indexing_job(TIMESTAMPTZ, INTEGER) TO service_role;
+GRANT EXECUTE ON FUNCTION public.complete_agent_indexing_job(UUID, UUID, UUID, UUID, JSONB, TIMESTAMPTZ) TO service_role;
+GRANT EXECUTE ON FUNCTION public.fail_agent_indexing_job(UUID, UUID, UUID, TEXT, TIMESTAMPTZ) TO service_role;
+GRANT EXECUTE ON FUNCTION public.match_agent_knowledge_chunks(UUID, UUID, TEXT, INTEGER) TO service_role;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM cron.job
+    WHERE jobname = 'ai-agent-indexer-tick'
+  ) THEN
+    PERFORM cron.schedule(
+      'ai-agent-indexer-tick',
+      '30 seconds',
+      $cron$SELECT net.http_post(
+           url := current_setting('app.settings.indexer_tick_url', true),
+           headers := jsonb_build_object(
+             'Content-Type', 'application/json',
+             'X-Persia-Indexer-Secret', current_setting('app.settings.indexer_tick_secret', true)
+           ),
+           body := '{}'::jsonb,
+           timeout_milliseconds := 5000
+         );$cron$
+    );
+  END IF;
+END
+$$;
+
 COMMIT;
 
 -- ============================================================
 -- Rollback (manual):
 -- ============================================================
 -- BEGIN;
+--   SELECT cron.unschedule('ai-agent-indexer-tick');
+--   DROP FUNCTION IF EXISTS public.match_agent_knowledge_chunks(UUID, UUID, TEXT, INTEGER);
+--   DROP FUNCTION IF EXISTS public.fail_agent_indexing_job(UUID, UUID, UUID, TEXT, TIMESTAMPTZ);
+--   DROP FUNCTION IF EXISTS public.complete_agent_indexing_job(UUID, UUID, UUID, UUID, JSONB, TIMESTAMPTZ);
+--   DROP FUNCTION IF EXISTS public.claim_agent_indexing_job(TIMESTAMPTZ, INTEGER);
 --   DROP TABLE IF EXISTS public.agent_indexing_jobs;
 --   DROP TABLE IF EXISTS public.agent_knowledge_chunks;
 --   DROP TABLE IF EXISTS public.agent_knowledge_sources;
