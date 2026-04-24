@@ -386,7 +386,7 @@ describe("ai-agent PR5.5 runtime", () => {
     supabase.queue("rpc:release_agent_conversation_flush", { data: false, error: null });
     supabase.queue("rpc:complete_agent_conversation_flush", { data: false, error: null });
     executeDebouncedBatchMock
-      .mockRejectedValueOnce(new Error("anthropic down"))
+      .mockRejectedValueOnce(new Error("openai down"))
       .mockResolvedValueOnce({ runId: "run-b", status: "succeeded" });
 
     const result = await flushReadyConversations({

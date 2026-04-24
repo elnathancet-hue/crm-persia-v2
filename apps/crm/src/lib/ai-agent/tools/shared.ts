@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import type {
   AgentConfig,
   AgentConversation,
@@ -13,7 +13,7 @@ export interface HandlerContextWithDb extends NativeHandlerContext {
   provider?: WhatsAppProvider | null;
   config?: AgentConfig;
   agentConversation?: AgentConversation;
-  anthropicClient?: Anthropic | null;
+  openaiClient?: OpenAI | null;
   stepOrderIndex?: number;
 }
 
@@ -35,8 +35,8 @@ export function getHandlerConversation(context: NativeHandlerContext): AgentConv
   return (context as HandlerContextWithDb).agentConversation ?? null;
 }
 
-export function getHandlerAnthropicClient(context: NativeHandlerContext): Anthropic | null {
-  return (context as HandlerContextWithDb).anthropicClient ?? null;
+export function getHandlerOpenAIClient(context: NativeHandlerContext): OpenAI | null {
+  return (context as HandlerContextWithDb).openaiClient ?? null;
 }
 
 export function getHandlerStepOrderIndex(context: NativeHandlerContext): number | null {
