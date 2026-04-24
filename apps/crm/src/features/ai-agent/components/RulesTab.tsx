@@ -3,6 +3,12 @@
 import * as React from "react";
 import { Info, Save } from "lucide-react";
 import type { AgentConfig, AgentGuardrails, UpdateAgentInput } from "@persia/shared/ai-agent";
+import {
+  DEBOUNCE_WINDOW_MS_DEFAULT,
+  DEBOUNCE_WINDOW_MS_MAX,
+  DEBOUNCE_WINDOW_MS_MIN,
+  clampDebounceWindowMs,
+} from "@persia/shared/ai-agent";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,13 +34,24 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [description, setDescription] = React.useState(agent.description ?? "");
   const [model, setModel] = React.useState(agent.model);
   const [guardrails, setGuardrails] = React.useState<AgentGuardrails>(agent.guardrails);
+  const [debounceMs, setDebounceMs] = React.useState<number>(
+    clampDebounceWindowMs(agent.debounce_window_ms),
+  );
 
   React.useEffect(() => {
     setPrompt(agent.system_prompt);
     setDescription(agent.description ?? "");
     setModel(agent.model);
     setGuardrails(agent.guardrails);
-  }, [agent.id, agent.system_prompt, agent.description, agent.model, agent.guardrails]);
+    setDebounceMs(clampDebounceWindowMs(agent.debounce_window_ms));
+  }, [
+    agent.id,
+    agent.system_prompt,
+    agent.description,
+    agent.model,
+    agent.guardrails,
+    agent.debounce_window_ms,
+  ]);
 
   const promptDirty = prompt !== agent.system_prompt;
   const descriptionDirty = description !== (agent.description ?? "");
@@ -44,8 +61,10 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     guardrails.timeout_seconds !== agent.guardrails.timeout_seconds ||
     guardrails.cost_ceiling_tokens !== agent.guardrails.cost_ceiling_tokens ||
     guardrails.allow_human_handoff !== agent.guardrails.allow_human_handoff;
+  const debounceDirty =
+    debounceMs !== clampDebounceWindowMs(agent.debounce_window_ms);
 
-  const dirty = promptDirty || descriptionDirty || modelDirty || guardrailsDirty;
+  const dirty = promptDirty || descriptionDirty || modelDirty || guardrailsDirty || debounceDirty;
 
   const handleSave = () => {
     const patch: UpdateAgentInput = {};
@@ -53,6 +72,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     if (descriptionDirty) patch.description = description;
     if (modelDirty) patch.model = model;
     if (guardrailsDirty) patch.guardrails = guardrails;
+    if (debounceDirty) patch.debounce_window_ms = debounceMs;
     onChange(patch, "Regras salvas");
   };
 
@@ -143,6 +163,35 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
               step={1000}
               onChange={(v) => setGuardrails((g) => ({ ...g, cost_ceiling_tokens: v }))}
             />
+            <div className="space-y-1.5 pt-2 border-t">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="debounce_window_ms">Agregar mensagens por</Label>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {(debounceMs / 1000).toFixed(0)}s
+                </span>
+              </div>
+              <input
+                id="debounce_window_ms"
+                type="range"
+                min={DEBOUNCE_WINDOW_MS_MIN}
+                max={DEBOUNCE_WINDOW_MS_MAX}
+                step={1000}
+                value={debounceMs}
+                onChange={(e) => setDebounceMs(clampDebounceWindowMs(Number(e.target.value)))}
+                className="w-full accent-primary"
+                aria-valuemin={DEBOUNCE_WINDOW_MS_MIN}
+                aria-valuemax={DEBOUNCE_WINDOW_MS_MAX}
+                aria-valuenow={debounceMs}
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground/70 tabular-nums">
+                <span>{DEBOUNCE_WINDOW_MS_MIN / 1000}s</span>
+                <span>Padrao {DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s</span>
+                <span>{DEBOUNCE_WINDOW_MS_MAX / 1000}s</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Espera esse tempo por novas mensagens do mesmo lead antes de responder. Evita respostas fragmentadas quando o lead digita em pedacos curtos.
+              </p>
+            </div>
             <div className="flex items-start justify-between gap-3 pt-2 border-t">
               <div className="flex-1 min-w-0">
                 <Label htmlFor="allow_human_handoff" className="cursor-pointer">
