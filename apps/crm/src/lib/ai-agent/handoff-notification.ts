@@ -1,12 +1,13 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
+import OpenAI from "openai";
 import {
   HANDOFF_DEFAULT_TEMPLATE,
   HANDOFF_PHONE_MAX_DIGITS,
   HANDOFF_PHONE_MIN_DIGITS,
   HANDOFF_TEMPLATE_MAX_LENGTH,
+  INTERNAL_MODEL,
   renderHandoffTemplate,
   type AgentConfig,
   type AgentConversation,
@@ -33,7 +34,7 @@ export interface SendHandoffNotificationParams {
   leadId: string;
   handoffReason: string;
   provider: WhatsAppProvider | null;
-  anthropicClient: Anthropic | null;
+  openaiClient: OpenAI | null;
 }
 
 export interface SendHandoffNotificationResult {
@@ -215,7 +216,7 @@ async function loadLead(db: AgentDb, orgId: string, leadId: string): Promise<Lea
 
 async function buildHandoffSummary(
   params: SendHandoffNotificationParams,
-): Promise<{ text: string; source: "history_summary" | "claude" | "fallback_plain" }> {
+): Promise<{ text: string; source: "history_summary" | "openai" | "fallback_plain" }> {
   if (params.conversation.history_summary?.trim()) {
     return {
       text: params.conversation.history_summary.trim().slice(0, 500),
@@ -223,7 +224,7 @@ async function buildHandoffSummary(
     };
   }
 
-  if (params.anthropicClient && params.conversation.crm_conversation_id) {
+  if (params.openaiClient && params.conversation.crm_conversation_id) {
     try {
       const transcript = await loadConversationTranscript(
         params.db,
@@ -231,11 +232,14 @@ async function buildHandoffSummary(
         params.conversation.crm_conversation_id,
       );
       if (transcript) {
-        const response = await params.anthropicClient.messages.create({
-          model: params.config.model,
+        const response = await params.openaiClient.chat.completions.create({
+          model: INTERNAL_MODEL,
           max_tokens: 200,
-          system: HANDOFF_SUMMARY_PROMPT,
           messages: [
+            {
+              role: "system",
+              content: HANDOFF_SUMMARY_PROMPT,
+            },
             {
               role: "user",
               content: transcript,
@@ -243,9 +247,9 @@ async function buildHandoffSummary(
           ] as never,
         } as never) as any;
 
-        const summary = extractText(response).trim();
+        const summary = extractText(response.choices?.[0]?.message).trim();
         if (summary) {
-          return { text: summary, source: "claude" };
+          return { text: summary, source: "openai" };
         }
       }
     } catch {
@@ -300,7 +304,7 @@ function buildAudit(params: {
   targetAddress: string;
   waLink: string;
   message: string;
-  summarySource: "history_summary" | "claude" | "fallback_plain";
+  summarySource: "history_summary" | "openai" | "fallback_plain";
 }): Record<string, unknown> {
   const waLinkHost = safeHost(params.waLink);
   return {
@@ -319,12 +323,24 @@ function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function extractText(response: any): string {
-  return (response.content ?? [])
-    .filter((block: any) => block?.type === "text" && typeof block.text === "string")
-    .map((block: any) => block.text)
-    .join("\n")
-    .trim();
+function extractText(message: any): string {
+  if (typeof message?.content === "string") {
+    return message.content.trim();
+  }
+
+  if (Array.isArray(message?.content)) {
+    return message.content
+      .map((block: any) => {
+        if (typeof block?.text === "string") return block.text;
+        if (typeof block?.content === "string") return block.content;
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  return "";
 }
 
 function safeHost(rawUrl: string): string | null {

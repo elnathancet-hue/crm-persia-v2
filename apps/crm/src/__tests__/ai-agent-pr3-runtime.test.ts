@@ -139,7 +139,7 @@ describe("ai-agent PR3 runtime", () => {
           agent_conversation_id: "agent-conv-a",
           inbound_message_id: null,
           status: "succeeded",
-          model: "claude-sonnet-4-6",
+          model: "gpt-5-mini",
           tokens_input: 10,
           tokens_output: 4,
           cost_usd_cents: 1,

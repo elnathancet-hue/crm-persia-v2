@@ -9,16 +9,12 @@ vi.mock("@/lib/observability", () => ({
   logWarn: vi.fn(),
 }));
 
-const anthropicMock = vi.hoisted(() => ({
-  create: vi.fn(),
+const openaiMock = vi.hoisted(() => ({
+  chat: { completions: { create: vi.fn() } },
 }));
 
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: vi.fn(() => ({
-    messages: {
-      create: anthropicMock.create,
-    },
-  })),
+vi.mock("openai", () => ({
+  default: vi.fn(() => openaiMock),
 }));
 
 import type {
@@ -39,7 +35,7 @@ function config(overrides: Partial<AgentConfig> = {}): AgentConfig {
     description: null,
     scope_type: "global",
     scope_id: null,
-    model: "claude-sonnet-4-6",
+    model: "gpt-5-mini",
     system_prompt: "Voce atende clientes.",
     guardrails: {
       max_iterations: 5,
@@ -91,8 +87,8 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 describe("native AI agent runtime", () => {
   beforeEach(() => {
-    anthropicMock.create.mockReset();
-    process.env.ANTHROPIC_API_KEY = "test-key";
+    openaiMock.chat.completions.create.mockReset();
+    process.env.OPENAI_API_KEY = "test-key";
   });
 
   it("reads the native-agent flag from the current organization only", async () => {
@@ -134,23 +130,30 @@ describe("native AI agent runtime", () => {
       data: { tokens_used_total: 0, variables: {} },
       error: null,
     });
-    anthropicMock.create
+    openaiMock.chat.completions.create
       .mockResolvedValueOnce({
-        stop_reason: "tool_use",
-        usage: { input_tokens: 20, output_tokens: 10 },
-        content: [
-          {
-            type: "tool_use",
-            id: "tool-call-a",
-            name: "stop_agent",
-            input: { reason: "cliente pediu humano" },
+        choices: [{
+          finish_reason: "tool_calls",
+          message: {
+            content: null,
+            tool_calls: [{
+              id: "tool-call-a",
+              type: "function",
+              function: {
+                name: "stop_agent",
+                arguments: JSON.stringify({ reason: "cliente pediu humano" }),
+              },
+            }],
           },
-        ],
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 10 },
       })
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 15, output_tokens: 8 },
-        content: [{ type: "text", text: "Certo, vou continuar por aqui." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Certo, vou continuar por aqui." },
+        }],
+        usage: { prompt_tokens: 15, completion_tokens: 8 },
       });
 
     const result = await executeAgent({

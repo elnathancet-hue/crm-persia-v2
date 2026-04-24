@@ -10,16 +10,12 @@ vi.mock("@/lib/observability", () => ({
   logWarn: vi.fn(),
 }));
 
-const anthropicMock = vi.hoisted(() => ({
-  create: vi.fn(),
+const openaiMock = vi.hoisted(() => ({
+  chat: { completions: { create: vi.fn() } },
 }));
 
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: vi.fn(() => ({
-    messages: {
-      create: anthropicMock.create,
-    },
-  })),
+vi.mock("openai", () => ({
+  default: vi.fn(() => openaiMock),
 }));
 
 import type {
@@ -43,7 +39,7 @@ function config(overrides: Partial<AgentConfig> = {}): AgentConfig {
     description: null,
     scope_type: "global",
     scope_id: null,
-    model: "claude-sonnet-4-6",
+    model: "gpt-5-mini",
     system_prompt: "Voce atende clientes.",
     guardrails: {
       max_iterations: 5,
@@ -102,8 +98,8 @@ function conversation(overrides: Partial<AgentConversation> = {}): AgentConversa
 
 describe("ai-agent PR5.7 runtime", () => {
   beforeEach(() => {
-    anthropicMock.create.mockReset();
-    process.env.ANTHROPIC_API_KEY = "test-key";
+    openaiMock.chat.completions.create.mockReset();
+    process.env.OPENAI_API_KEY = "test-key";
   });
 
   it("shouldTriggerConversationSummarization returns true on turn threshold", () => {
@@ -231,16 +227,20 @@ describe("ai-agent PR5.7 runtime", () => {
       error: null,
     });
 
-    anthropicMock.create
+    openaiMock.chat.completions.create
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 40, output_tokens: 20 },
-        content: [{ type: "text", text: "Perfeito, vamos continuar." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Perfeito, vamos continuar." },
+        }],
+        usage: { prompt_tokens: 40, completion_tokens: 20 },
       })
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 15, output_tokens: 10 },
-        content: [{ type: "text", text: "Resumo consolidado da conversa." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Resumo consolidado da conversa." },
+        }],
+        usage: { prompt_tokens: 15, completion_tokens: 10 },
       });
 
     const provider = {
@@ -289,7 +289,7 @@ describe("ai-agent PR5.7 runtime", () => {
         new_summary_length: "Resumo consolidado da conversa.".length,
         tokens_input: 15,
         tokens_output: 10,
-        model: "claude-sonnet-4-6",
+        model: "gpt-4o-mini",
       },
     });
     expect(supabase.updates.agent_conversations).toEqual(
@@ -323,16 +323,20 @@ describe("ai-agent PR5.7 runtime", () => {
       error: null,
     });
 
-    anthropicMock.create
+    openaiMock.chat.completions.create
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 20, output_tokens: 10 },
-        content: [{ type: "text", text: "Tudo certo." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Tudo certo." },
+        }],
+        usage: { prompt_tokens: 20, completion_tokens: 10 },
       })
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 12, output_tokens: 8 },
-        content: [{ type: "text", text: "Resumo por tokens." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Resumo por tokens." },
+        }],
+        usage: { prompt_tokens: 12, completion_tokens: 8 },
       });
 
     const result = await executeAgent({
@@ -393,11 +397,13 @@ describe("ai-agent PR5.7 runtime", () => {
       error: null,
     });
 
-    anthropicMock.create
+    openaiMock.chat.completions.create
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 40, output_tokens: 20 },
-        content: [{ type: "text", text: "Seguimos." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Seguimos." },
+        }],
+        usage: { prompt_tokens: 40, completion_tokens: 20 },
       })
       .mockRejectedValueOnce(new Error("summary down"));
 
@@ -452,7 +458,7 @@ describe("ai-agent PR5.7 runtime", () => {
   });
 
   it("executeAgent does not increment summarization counters on failed runs", async () => {
-    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     const supabase = createSupabaseMock();
     supabase.queue("agent_runs", { data: { id: "run-a" }, error: null });
 

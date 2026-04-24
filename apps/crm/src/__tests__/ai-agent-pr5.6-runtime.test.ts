@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
-import type Anthropic from "@anthropic-ai/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentConfig, AgentConversation } from "@persia/shared/ai-agent";
 import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
 import {
   HANDOFF_DEFAULT_TEMPLATE,
+  INTERNAL_MODEL,
   renderHandoffTemplate,
   type HandoffNotificationVariables,
 } from "@persia/shared/ai-agent";
@@ -33,7 +33,7 @@ function config(overrides: Partial<AgentConfig> = {}): AgentConfig {
     description: null,
     scope_type: "global",
     scope_id: null,
-    model: "claude-sonnet-4-6",
+    model: "gpt-5-mini",
     system_prompt: "Voce atende clientes.",
     guardrails: {
       max_iterations: 5,
@@ -114,7 +114,7 @@ describe("ai-agent PR5.6 runtime", () => {
       leadId: "lead-a",
       handoffReason: "cliente pediu humano",
       provider: null,
-      anthropicClient: null,
+      openaiClient: null,
     });
 
     expect(result).toEqual({
@@ -135,7 +135,7 @@ describe("ai-agent PR5.6 runtime", () => {
       leadId: "lead-a",
       handoffReason: "cliente pediu humano",
       provider: { name: "uazapi", sendText: vi.fn() } as never,
-      anthropicClient: null,
+      openaiClient: null,
     });
 
     expect(result.attempted).toBe(false);
@@ -143,14 +143,14 @@ describe("ai-agent PR5.6 runtime", () => {
     expect(result.audit).toMatchObject({ skipped: "missing_target" });
   });
 
-  it("sendHandoffNotification uses history_summary when present and does not call Claude", async () => {
+  it("sendHandoffNotification uses history_summary when present and does not call OpenAI", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("leads", {
       data: { name: "Maria", phone: "5511999999999" },
       error: null,
     });
     const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as unknown as WhatsAppProvider;
-    const anthropicClient = { messages: { create: vi.fn() } } as unknown as Anthropic;
+    const openaiClient = { chat: { completions: { create: vi.fn() } } };
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -168,7 +168,7 @@ describe("ai-agent PR5.6 runtime", () => {
       leadId: "lead-a",
       handoffReason: "cliente pediu humano",
       provider,
-      anthropicClient,
+      openaiClient: openaiClient as never,
     });
 
     expect(result.sent).toBe(true);
@@ -178,10 +178,10 @@ describe("ai-agent PR5.6 runtime", () => {
         message: expect.stringContaining("Resumo grande que sera reaproveitado."),
       }),
     );
-    expect(anthropicClient.messages.create).not.toHaveBeenCalled();
+    expect(openaiClient.chat.completions.create).not.toHaveBeenCalled();
   });
 
-  it("sendHandoffNotification falls back to Claude summary when history_summary is absent", async () => {
+  it("sendHandoffNotification falls back to OpenAI summary when history_summary is absent", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("leads", {
       data: { name: "Maria", phone: "5511999999999" },
@@ -195,13 +195,18 @@ describe("ai-agent PR5.6 runtime", () => {
       error: null,
     });
     const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as unknown as WhatsAppProvider;
-    const anthropicClient = {
-      messages: {
-        create: vi.fn(async () => ({
-          content: [{ type: "text", text: "Lead com urgencia e contexto resumido." }],
-        })),
+    const openaiClient = {
+      chat: {
+        completions: {
+          create: vi.fn(async () => ({
+            choices: [{
+              finish_reason: "stop",
+              message: { content: "Lead com urgencia e contexto resumido." },
+            }],
+          })),
+        },
       },
-    } as unknown as Anthropic;
+    };
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -217,18 +222,22 @@ describe("ai-agent PR5.6 runtime", () => {
       leadId: "lead-a",
       handoffReason: "cliente pediu humano",
       provider,
-      anthropicClient,
+      openaiClient: openaiClient as never,
     });
 
     expect(result.sent).toBe(true);
-    expect(anthropicClient.messages.create).toHaveBeenCalled();
+    expect(openaiClient.chat.completions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: INTERNAL_MODEL,
+      }),
+    );
     expect(result.audit).toMatchObject({
-      summary_source: "claude",
+      summary_source: "openai",
       target_type: "phone",
     });
   });
 
-  it("sendHandoffNotification falls back to plain text when Claude fails", async () => {
+  it("sendHandoffNotification falls back to plain text when OpenAI fails", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("leads", {
       data: { name: "Maria", phone: "5511999999999" },
@@ -239,13 +248,15 @@ describe("ai-agent PR5.6 runtime", () => {
       error: null,
     });
     const provider = { name: "uazapi", sendText: vi.fn(async () => ({ success: true })) } as unknown as WhatsAppProvider;
-    const anthropicClient = {
-      messages: {
-        create: vi.fn(async () => {
-          throw new Error("claude down");
-        }),
+    const openaiClient = {
+      chat: {
+        completions: {
+          create: vi.fn(async () => {
+            throw new Error("openai down");
+          }),
+        },
       },
-    } as unknown as Anthropic;
+    };
 
     const result = await sendHandoffNotification({
       db: supabase as never,
@@ -261,7 +272,7 @@ describe("ai-agent PR5.6 runtime", () => {
       leadId: "lead-a",
       handoffReason: "cliente pediu humano",
       provider,
-      anthropicClient,
+      openaiClient: openaiClient as never,
     });
 
     expect(result.sent).toBe(true);
@@ -302,7 +313,7 @@ describe("ai-agent PR5.6 runtime", () => {
       leadId: "lead-a",
       handoffReason: "cliente pediu humano",
       provider,
-      anthropicClient: null,
+      openaiClient: null,
     });
 
     expect(result.attempted).toBe(true);
@@ -321,7 +332,7 @@ describe("ai-agent PR5.6 runtime", () => {
       normalizeAgentInput({
         name: "Recepcao",
         scope_type: "global",
-        model: "claude-sonnet-4-6",
+        model: "gpt-5-mini",
         system_prompt: "Prompt",
         handoff_notification_enabled: true,
       }),

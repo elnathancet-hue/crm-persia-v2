@@ -7,10 +7,10 @@ import {
 import { nowIso } from "../db";
 import {
   failureResult,
-  getHandlerAnthropicClient,
   getHandlerConfig,
   getHandlerConversation,
   getHandlerDb,
+  getHandlerOpenAIClient,
   getHandlerProvider,
   getHandlerStepOrderIndex,
   insertLeadActivity,
@@ -95,7 +95,7 @@ export const stopAgentHandler: NativeHandler = async (context, input) => {
       leadId: context.lead_id,
       handoffReason: reason,
       provider: getHandlerProvider(context),
-      anthropicClient: getHandlerAnthropicClient(context),
+      openaiClient: getHandlerOpenAIClient(context),
     });
   }
 

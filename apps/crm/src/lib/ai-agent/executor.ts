@@ -1,11 +1,14 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import {
   DEBOUNCE_WINDOW_MS_DEFAULT,
+  DEFAULT_MODEL,
+  INTERNAL_MODEL,
   calculateCostUsdCents,
+  isKnownModel,
   shouldTriggerSummarization,
-  toAnthropicTool,
+  toOpenAITool,
   type DebounceFlushBatch,
   type AgentConfig,
   type AgentConversation,
@@ -54,9 +57,45 @@ import {
 } from "./webhook-caller";
 import { isImplementedNativeHandler, nativeHandlers } from "./tools/registry";
 
-type AnthropicMessage = {
-  role: "user" | "assistant";
-  content: unknown;
+type OpenAIToolCallWire = {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+};
+
+type OpenAIMessage =
+  | {
+      role: "user";
+      content: string;
+    }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: OpenAIToolCallWire[];
+    }
+  | {
+      role: "tool";
+      tool_call_id: string;
+      content: string;
+    };
+
+type OpenAIChoiceMessage = {
+  content?: unknown;
+  tool_calls?: OpenAIToolCallWire[];
+} | null | undefined;
+
+type OpenAIResponse = {
+  choices?: Array<{
+    finish_reason?: string | null;
+    message?: OpenAIChoiceMessage;
+  }>;
+  usage?: {
+    prompt_tokens?: number | null;
+    completion_tokens?: number | null;
+  } | null;
 };
 
 export type NativeAgentOutcome =
@@ -257,24 +296,25 @@ export async function tryNativeAgent(params: TryNativeAgentParams): Promise<Nati
 export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteAgentResult> {
   const startedAt = Date.now();
   const guardrails = normalizeGuardrails(params.config.guardrails);
-  const run = await createRun(params);
+  const executionModel = resolveModel(params.config.model);
+  const run = await createRun(params, executionModel);
   let tokensInput = 0;
   let tokensOutput = 0;
   let orderIndex = 0;
   let assistantReply = "";
   const costLimitCache: CostLimitCache = {};
-  const messages: AnthropicMessage[] = [];
+  const messages: OpenAIMessage[] = [];
 
   try {
     if (!params.stage) {
       throw new Error("agent has no stages");
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const historyMessages = await buildConversationLlmMessages({
       db: params.db,
       orgId: params.orgId,
@@ -294,7 +334,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         content: params.msg.text || "[incoming media message]",
       });
     }
-    const tools = params.tools.map(toAnthropicTool);
+    const tools = params.tools.map(toOpenAITool);
     const system = buildSystemPrompt(params.config, params.stage);
 
     await updateRunStatus(params.db, run.id, params.orgId, "running");
@@ -307,21 +347,25 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         configId: params.config.id,
         agentConversationId: params.agentConversation.id,
         tokensSoFarRun: tokensInput + tokensOutput,
-        costSoFarRunUsdCents: calculateCostUsdCents(params.config.model, tokensInput, tokensOutput),
+        costSoFarRunUsdCents: calculateCostUsdCents(executionModel, tokensInput, tokensOutput),
         guardrailsTokens: guardrails.cost_ceiling_tokens,
         cache: costLimitCache,
       });
 
       const response = await withTimeout(
-        client.messages.create({
-          model: params.config.model,
-          max_tokens: 1024,
-          system,
+        client.chat.completions.create({
+          model: executionModel,
+          ...buildMaxTokensParam(executionModel, 1024),
+          messages: [
+            { role: "system", content: system },
+            ...messages,
+          ] as never,
           tools: tools as never,
-          messages: messages as never,
+          tool_choice: "auto",
         } as never),
         Math.max(1, guardrails.timeout_seconds) * 1000,
-      ) as any;
+      ) as OpenAIResponse;
+      const choice = response.choices?.[0];
       const usage = readUsage(response);
       tokensInput += usage.input;
       tokensOutput += usage.output;
@@ -332,7 +376,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         stepType: "llm",
         input: { iteration },
         output: {
-          stop_reason: response.stop_reason ?? null,
+          finish_reason: choice?.finish_reason ?? null,
           tokens_input: usage.input,
           tokens_output: usage.output,
         },
@@ -345,14 +389,14 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         configId: params.config.id,
         agentConversationId: params.agentConversation.id,
         tokensSoFarRun: tokensInput + tokensOutput,
-        costSoFarRunUsdCents: calculateCostUsdCents(params.config.model, tokensInput, tokensOutput),
+        costSoFarRunUsdCents: calculateCostUsdCents(executionModel, tokensInput, tokensOutput),
         guardrailsTokens: guardrails.cost_ceiling_tokens,
         cache: costLimitCache,
       });
 
-      const toolCalls = extractToolCalls(response);
-      if (response.stop_reason !== "tool_use" || toolCalls.length === 0) {
-        assistantReply = extractText(response) || HANDOFF_REPLY;
+      const toolCalls = extractToolCalls(choice?.message);
+      if (choice?.finish_reason !== "tool_calls" || toolCalls.length === 0) {
+        assistantReply = extractText(choice?.message) || HANDOFF_REPLY;
         if (!params.dryRun && params.provider) {
           await params.provider.sendText({ phone: params.msg.phone, message: assistantReply });
         }
@@ -384,30 +428,32 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
           startedAt,
           tokensInput,
           tokensOutput,
+          model: executionModel,
         });
         return { ...final, assistantReply, nextStageId: params.stage.id };
       }
 
-      messages.push({ role: "assistant", content: response.content });
-      const toolResults = [];
+      messages.push({
+        role: "assistant",
+        content: typeof choice?.message?.content === "string" ? choice.message.content : null,
+        tool_calls: choice?.message?.tool_calls ?? [],
+      });
       for (const call of toolCalls) {
         const tool = params.tools.find((candidate) => candidate.name === call.name) ?? null;
         const toolResult = await executeToolCall(params, {
           runId: run.id,
           orderIndex: orderIndex++,
           tool,
-          toolUseId: call.id,
+          toolCallId: call.id,
           input: call.input,
-          anthropicClient: client,
+          openaiClient: client,
         });
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: JSON.stringify(toolResult.output),
-          is_error: !toolResult.success,
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: serializeToolResult(toolResult),
         });
       }
-      messages.push({ role: "user", content: toolResults });
     }
 
     throw new GuardrailError("run_iterations", "AI agent max iterations reached");
@@ -431,6 +477,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         startedAt,
         tokensInput,
         tokensOutput,
+        model: executionModel,
         errorMsg: error.message,
       });
       return {
@@ -447,6 +494,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       startedAt,
       tokensInput,
       tokensOutput,
+      model: executionModel,
       errorMsg: errorMessage(error),
     });
     logError("native_agent_execute_failed", {
@@ -461,7 +509,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       assistantReply: "",
       tokensInput,
       tokensOutput,
-      costUsdCents: calculateCostUsdCents(params.config.model, tokensInput, tokensOutput),
+      costUsdCents: calculateCostUsdCents(executionModel, tokensInput, tokensOutput),
       nextStageId: params.stage?.id ?? null,
       error: errorMessage(error),
     };
@@ -592,9 +640,9 @@ async function executeToolCall(
     runId: string;
     orderIndex: number;
     tool: AgentTool | null;
-    toolUseId: string;
+    toolCallId: string;
     input: Record<string, unknown>;
-    anthropicClient: Anthropic;
+    openaiClient: OpenAI;
   },
 ): Promise<{ success: boolean; output: Record<string, unknown> }> {
   const startedAt = Date.now();
@@ -656,7 +704,7 @@ async function executeToolCall(
       provider: params.provider ?? null,
       config: params.config,
       agentConversation: params.agentConversation,
-      anthropicClient: call.anthropicClient,
+      openaiClient: call.openaiClient,
       stepOrderIndex: call.orderIndex,
     } as NativeHandlerContext & { db: AgentDb };
     const result = await handler(context, call.input);
@@ -681,7 +729,7 @@ async function executeToolCall(
   }
 }
 
-async function createRun(params: ExecuteAgentParams) {
+async function createRun(params: ExecuteAgentParams, model: string) {
   const { data, error } = await params.db
     .from("agent_runs")
     .insert({
@@ -689,7 +737,7 @@ async function createRun(params: ExecuteAgentParams) {
       agent_conversation_id: params.agentConversation.id,
       inbound_message_id: params.inboundMessageId,
       status: "pending",
-      model: params.config.model,
+      model,
     })
     .select("*")
     .single();
@@ -718,12 +766,13 @@ async function finishRun(
     startedAt: number;
     tokensInput: number;
     tokensOutput: number;
+    model: string;
     errorMsg?: string;
   },
 ): Promise<Omit<ExecuteAgentResult, "assistantReply" | "nextStageId">> {
   const durationMs = Date.now() - result.startedAt;
   const costUsdCents = calculateCostUsdCents(
-    params.config.model,
+    result.model,
     result.tokensInput,
     result.tokensOutput,
   );
@@ -794,7 +843,7 @@ async function insertStep(
 }
 
 async function maybeRunConversationSummarization(params: {
-  client: Anthropic;
+  client: OpenAI;
   db: AgentDb;
   orgId: string;
   runId: string;
@@ -826,11 +875,14 @@ async function maybeRunConversationSummarization(params: {
     messageCountSinceLast = messages.length;
 
     const response = await withTimeout(
-      params.client.messages.create({
-        model: params.config.model,
-        max_tokens: 1200,
-        system: SUMMARIZATION_SYSTEM_PROMPT,
+      params.client.chat.completions.create({
+        model: INTERNAL_MODEL,
+        ...buildMaxTokensParam(INTERNAL_MODEL, 1200),
         messages: [
+          {
+            role: "system",
+            content: SUMMARIZATION_SYSTEM_PROMPT,
+          },
           {
             role: "user",
             content: buildSummarizationUserPrompt({
@@ -841,10 +893,10 @@ async function maybeRunConversationSummarization(params: {
         ] as never,
       } as never),
       params.timeoutMs,
-    ) as any;
+    ) as OpenAIResponse;
 
     const usage = readUsage(response);
-    const newSummary = extractText(response).trim();
+    const newSummary = extractText(response.choices?.[0]?.message).trim();
     if (!newSummary) {
       throw new Error("summarization returned empty text");
     }
@@ -873,7 +925,7 @@ async function maybeRunConversationSummarization(params: {
         tokens_input: usage.input,
         tokens_output: usage.output,
         duration_ms: Date.now() - summarizationStartedAt,
-        model: params.config.model,
+        model: INTERNAL_MODEL,
       },
       durationMs: Date.now() - summarizationStartedAt,
     });
@@ -900,7 +952,7 @@ async function maybeRunConversationSummarization(params: {
         tokens_input: 0,
         tokens_output: 0,
         duration_ms: Date.now() - summarizationStartedAt,
-        model: params.config.model,
+        model: INTERNAL_MODEL,
         error: errorMessage(error),
       },
       durationMs: Date.now() - summarizationStartedAt,
@@ -941,33 +993,78 @@ function buildSystemPrompt(config: AgentConfig, stage: AgentStage): string {
     .join("\n");
 }
 
-function extractToolCalls(response: any): Array<{
+function extractToolCalls(message: OpenAIChoiceMessage): Array<{
   id: string;
   name: string;
   input: Record<string, unknown>;
 }> {
-  return (response.content ?? [])
-    .filter((block: any) => block?.type === "tool_use")
-    .map((block: any) => ({
-      id: String(block.id),
-      name: String(block.name),
-      input: block.input && typeof block.input === "object" ? block.input : {},
+  return (message?.tool_calls ?? [])
+    .filter((call) => call?.type === "function" && typeof call.function?.name === "string")
+    .map((call) => ({
+      id: String(call.id),
+      name: String(call.function.name),
+      input: parseToolArguments(call.function.arguments),
     }));
 }
 
-function extractText(response: any): string {
-  return (response.content ?? [])
-    .filter((block: any) => block?.type === "text" && typeof block.text === "string")
-    .map((block: any) => block.text)
-    .join("\n")
-    .trim();
+function extractText(message: OpenAIChoiceMessage): string {
+  if (typeof message?.content === "string") {
+    return message.content.trim();
+  }
+
+  if (Array.isArray(message?.content)) {
+    return message.content
+      .map((block: any) => {
+        if (typeof block?.text === "string") return block.text;
+        if (typeof block?.content === "string") return block.content;
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  return "";
 }
 
-function readUsage(response: any): { input: number; output: number } {
+function readUsage(response: OpenAIResponse): { input: number; output: number } {
   return {
-    input: Number(response.usage?.input_tokens ?? 0),
-    output: Number(response.usage?.output_tokens ?? 0),
+    input: Number(response.usage?.prompt_tokens ?? 0),
+    output: Number(response.usage?.completion_tokens ?? 0),
   };
+}
+
+function parseToolArguments(argumentsJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(argumentsJson);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function serializeToolResult(result: {
+  success: boolean;
+  output: Record<string, unknown>;
+}): string {
+  return JSON.stringify({
+    success: result.success,
+    ...result.output,
+  });
+}
+
+function buildMaxTokensParam(model: string, maxTokens: number): {
+  max_completion_tokens?: number;
+  max_tokens?: number;
+} {
+  if (model.startsWith("gpt-5")) {
+    return { max_completion_tokens: maxTokens };
+  }
+  return { max_tokens: maxTokens };
+}
+
+function resolveModel(model: string): string {
+  return isKnownModel(model) ? model : DEFAULT_MODEL;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

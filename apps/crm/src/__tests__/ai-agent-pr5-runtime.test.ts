@@ -16,16 +16,12 @@ vi.mock("@/lib/observability", () => ({
   logWarn: vi.fn(),
 }));
 
-const anthropicMock = vi.hoisted(() => ({
-  create: vi.fn(),
+const openaiMock = vi.hoisted(() => ({
+  chat: { completions: { create: vi.fn() } },
 }));
 
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: vi.fn(() => ({
-    messages: {
-      create: anthropicMock.create,
-    },
-  })),
+vi.mock("openai", () => ({
+  default: vi.fn(() => openaiMock),
 }));
 
 import { CUSTOM_WEBHOOK_LIMITS, type AgentConfig, type AgentConversation, type AgentStage, type AgentTool } from "@persia/shared/ai-agent";
@@ -72,7 +68,7 @@ function config(overrides: Partial<AgentConfig> = {}): AgentConfig {
     description: null,
     scope_type: "global",
     scope_id: null,
-    model: "claude-sonnet-4-6",
+    model: "gpt-5-mini",
     system_prompt: "Voce atende clientes.",
     guardrails: {
       max_iterations: 5,
@@ -126,8 +122,8 @@ describe("ai-agent PR5 runtime", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
-    anthropicMock.create.mockReset();
-    process.env.ANTHROPIC_API_KEY = "test-key";
+    openaiMock.chat.completions.create.mockReset();
+    process.env.OPENAI_API_KEY = "test-key";
   });
 
   it("invokeCustomWebhook rejects bad schemes", async () => {
@@ -587,23 +583,30 @@ describe("ai-agent PR5 runtime", () => {
       error: null,
     });
 
-    anthropicMock.create
+    openaiMock.chat.completions.create
       .mockResolvedValueOnce({
-        stop_reason: "tool_use",
-        usage: { input_tokens: 12, output_tokens: 6 },
-        content: [
-          {
-            type: "tool_use",
-            id: "tool-call-a",
-            name: "custom_webhook",
-            input: { lead_status: "qualified" },
+        choices: [{
+          finish_reason: "tool_calls",
+          message: {
+            content: null,
+            tool_calls: [{
+              id: "tool-call-a",
+              type: "function",
+              function: {
+                name: "custom_webhook",
+                arguments: JSON.stringify({ lead_status: "qualified" }),
+              },
+            }],
           },
-        ],
+        }],
+        usage: { prompt_tokens: 12, completion_tokens: 6 },
       })
       .mockResolvedValueOnce({
-        stop_reason: "end_turn",
-        usage: { input_tokens: 8, output_tokens: 4 },
-        content: [{ type: "text", text: "Webhook executado com sucesso." }],
+        choices: [{
+          finish_reason: "stop",
+          message: { content: "Webhook executado com sucesso." },
+        }],
+        usage: { prompt_tokens: 8, completion_tokens: 4 },
       });
 
     const result = await executeAgent({

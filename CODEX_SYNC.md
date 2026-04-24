@@ -2308,3 +2308,47 @@ O `createAgent` no AgentsList também usa o novo default via
 - Prompt caching (OpenAI tem automático pra prompts >1024 tokens, sem
   configuração).
 - Reasoning effort config pra gpt-5 models (roadmap).
+
+## 2026-04-24 16:08 - Codex - OpenAI runtime migration
+
+### Scope shipped
+
+- Branch: `codex/ai-agent-openai-runtime`
+- Full runtime swap from Anthropic to OpenAI in `apps/crm`.
+- Removed `@anthropic-ai/sdk` from `apps/crm/package.json` and refreshed `pnpm-lock.yaml`.
+- Removed deprecated shared exports `AnthropicTool` and `toAnthropicTool` from
+  `packages/shared/src/ai-agent/tool-schema.ts`.
+
+### Runtime changes
+
+- `apps/crm/src/lib/ai-agent/executor.ts`
+  - uses `new OpenAI({ apiKey: process.env.OPENAI_API_KEY })`
+  - tool loop now uses `chat.completions.create(...)`
+  - tools serialized with `toOpenAITool(...)`
+  - tool calls parsed from `choices[0].message.tool_calls[]`
+  - tool results returned via `role: "tool"` + `tool_call_id`
+  - usage now reads `prompt_tokens` / `completion_tokens`
+  - invalid legacy `claude-*` model ids fail over to `DEFAULT_MODEL`
+- `apps/crm/src/lib/ai-agent/handoff-notification.ts`
+  - summary generation moved to OpenAI
+  - uses `INTERNAL_MODEL` (`gpt-4o-mini`) instead of the per-agent model
+  - summary source audit value is now `openai`
+- `apps/crm/src/lib/ai-agent/executor.ts` summarization path
+  - also uses `INTERNAL_MODEL` for cheaper context consolidation
+- Handler context helper renamed from Anthropic client to OpenAI client:
+  - `getHandlerOpenAIClient(...)`
+  - `stop_agent` now passes `openaiClient` to handoff notification
+
+### Validation
+
+- `pnpm -r typecheck` ?
+- `pnpm --filter @persia/crm test` ? (`19 files / 190 tests`)
+- `pnpm --filter @persia/crm build` ?
+- `pnpm --filter @persia/admin build` ?
+
+### Notes
+
+- CRM build still emits the pre-existing `cn` import warnings unrelated to this PR.
+- No migration SQL required.
+- Claude UI follow-up can now switch the RulesTab model selector to the four
+  OpenAI options without touching runtime code.
