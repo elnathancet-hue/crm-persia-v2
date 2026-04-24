@@ -109,7 +109,7 @@ export async function requireSuperadminWithUser(
  *
  * The orgId comes from the server-side cookie, NEVER from the frontend.
  */
-export async function requireSuperadminForOrg(): Promise<{
+export async function requireSuperadminForOrg(explicitOrgId?: string): Promise<{
   admin: AdminClient;
   userId: string;
   orgId: string;
@@ -127,9 +127,13 @@ export async function requireSuperadminForOrg(): Promise<{
     throw new Error("Contexto invalido — sessao diferente do cookie.");
   }
 
+  if (explicitOrgId && ctx.orgId !== explicitOrgId) {
+    throw new Error("Contexto invalido para a organizacao solicitada.");
+  }
+
   // resolveOrgContext also validates that the org still exists.
   const resolved = await resolveOrgContext({
-    explicit: ctx.orgId,
+    explicit: explicitOrgId ?? ctx.orgId,
     allow: ["explicit"],
     required: true,
   });

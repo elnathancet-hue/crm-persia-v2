@@ -65,6 +65,7 @@ export const clientNavigation: NavItem[] = [
     href: "/automations",
     icon: Zap,
     children: [
+      { label: "Agente IA Nativo", href: "/automations/agents" },
       { label: "Assistentes IA", href: "/automations/assistant" },
       { label: "Webhook IA", href: "/automations/webhook" },
       { label: "Tools", href: "/automations/tools" },
