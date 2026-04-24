@@ -1244,3 +1244,315 @@ App env required:
 ```env
 PERSIA_DEBOUNCE_FLUSH_SECRET=<same secret as DB setting>
 ```
+
+---
+
+## 2026-04-23 — Claude — PR5.7 contract additions: context summarization
+
+Branch: `claude/ai-agent-pr5.7-contracts` (this PR).
+
+Fase 1 PR 2/4. Fixes the third production blocker from the closing plan:
+`agent_conversations.history_summary` exists since PR1 but the executor
+ignores it, so a 15-turn conversation feeds every Claude call with the full
+raw history — tokens grow linearly, `cost_ceiling_tokens` fires early.
+
+Inspired by the `gerarNovoContexto` node in the 03 Console n8n workflow.
+Trigger is hybrid: every N runs OR after N accumulated tokens, whichever
+fires first. Additive contract only; runtime stays unchanged until Codex
+ships the next PR.
+
+### Files shipped
+
+- `packages/shared/src/ai-agent/summarization.ts` — new
+  - Thresholds + constants (`CONTEXT_SUMMARY_TURN_THRESHOLD_DEFAULT=10`,
+    `CONTEXT_SUMMARY_TOKEN_THRESHOLD_DEFAULT=20000`,
+    `CONTEXT_SUMMARY_RECENT_MESSAGES_DEFAULT=6`, each with MIN/MAX)
+  - `ContextSummarizationConfig` shape + `DEFAULT_CONTEXT_SUMMARIZATION`
+  - Clamp helpers: `clampTurnThreshold`, `clampTokenThreshold`, `clampRecentMessagesCount`
+  - `ConversationSummaryCounters` + `shouldTriggerSummarization(counters, config)`
+  - Audit types: `SummarizationStepInput`, `SummarizationStepOutput`
+- `packages/shared/src/ai-agent/types.ts` — additive only
+  - `AgentConfig.context_summary_turn_threshold?: number`
+  - `AgentConfig.context_summary_token_threshold?: number`
+  - `AgentConfig.context_summary_recent_messages?: number`
+  - `AgentConversation.history_summary_updated_at?: string | null`
+  - `AgentConversation.history_summary_run_count?: number`
+  - `AgentConversation.history_summary_token_count?: number`
+  - `CreateAgentInput` picks up the three new optional fields
+  - `AgentStepType` gains `"summarization"` variant
+- `packages/shared/src/ai-agent/index.ts` re-exports `summarization`
+
+### Migration 020 shape — Codex writes this
+
+```sql
+BEGIN;
+
+ALTER TABLE public.agent_configs
+  ADD COLUMN IF NOT EXISTS context_summary_turn_threshold INTEGER NOT NULL DEFAULT 10,
+  ADD COLUMN IF NOT EXISTS context_summary_token_threshold INTEGER NOT NULL DEFAULT 20000,
+  ADD COLUMN IF NOT EXISTS context_summary_recent_messages INTEGER NOT NULL DEFAULT 6;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_configs_turn_threshold_check') THEN
+    ALTER TABLE public.agent_configs
+      ADD CONSTRAINT agent_configs_turn_threshold_check
+      CHECK (context_summary_turn_threshold BETWEEN 3 AND 50);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_configs_token_threshold_check') THEN
+    ALTER TABLE public.agent_configs
+      ADD CONSTRAINT agent_configs_token_threshold_check
+      CHECK (context_summary_token_threshold BETWEEN 5000 AND 100000);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'agent_configs_recent_messages_check') THEN
+    ALTER TABLE public.agent_configs
+      ADD CONSTRAINT agent_configs_recent_messages_check
+      CHECK (context_summary_recent_messages BETWEEN 2 AND 20);
+  END IF;
+END
+$$;
+
+ALTER TABLE public.agent_conversations
+  ADD COLUMN IF NOT EXISTS history_summary_updated_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS history_summary_run_count INTEGER NOT NULL DEFAULT 0
+    CHECK (history_summary_run_count >= 0),
+  ADD COLUMN IF NOT EXISTS history_summary_token_count INTEGER NOT NULL DEFAULT 0
+    CHECK (history_summary_token_count >= 0);
+
+-- Relax agent_steps.step_type check to accept the new 'summarization' value.
+ALTER TABLE public.agent_steps
+  DROP CONSTRAINT IF EXISTS agent_steps_step_type_check;
+
+ALTER TABLE public.agent_steps
+  ADD CONSTRAINT agent_steps_step_type_check
+  CHECK (step_type IN ('llm','tool','guardrail','summarization'));
+
+COMMIT;
+```
+
+Rollback (manual):
+
+```sql
+BEGIN;
+  ALTER TABLE public.agent_steps DROP CONSTRAINT IF EXISTS agent_steps_step_type_check;
+  ALTER TABLE public.agent_steps
+    ADD CONSTRAINT agent_steps_step_type_check
+    CHECK (step_type IN ('llm','tool','guardrail'));
+  ALTER TABLE public.agent_conversations
+    DROP COLUMN IF EXISTS history_summary_token_count,
+    DROP COLUMN IF EXISTS history_summary_run_count,
+    DROP COLUMN IF EXISTS history_summary_updated_at;
+  ALTER TABLE public.agent_configs
+    DROP COLUMN IF EXISTS context_summary_recent_messages,
+    DROP COLUMN IF EXISTS context_summary_token_threshold,
+    DROP COLUMN IF EXISTS context_summary_turn_threshold;
+COMMIT;
+```
+
+### Executor flow changes — Codex implements this
+
+#### 1. Context loader reads summary instead of full history
+
+Today the executor loads every CRM message for the conversation. After
+PR5.7:
+
+```ts
+async function buildLlmMessages(agentConv, config) {
+  const recentLimit = config.context_summary_recent_messages ?? 6;
+  const recentMessages = await loadRecentMessages(agentConv.crm_conversation_id, recentLimit);
+
+  const priorContext = agentConv.history_summary
+    ? [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Contexto consolidado da conversa ate aqui:\n\n${agentConv.history_summary}`,
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Contexto carregado." }],
+        },
+      ]
+    : [];
+
+  return [...priorContext, ...recentMessages];
+}
+```
+
+When `history_summary` is null (new conversation or never summarized yet),
+fall back to the existing behavior (load recent N messages only — not the
+full history, since that is exactly the problem we're fixing). For a
+brand-new conversation recentLimit is fine; for a pre-PR5.7 conversation
+without a summary yet, the next run will cross the threshold and write
+one.
+
+#### 2. Counter maintenance on every successful run
+
+At the end of `executeAgent` after `finishRun(status='succeeded')`:
+
+```sql
+UPDATE agent_conversations
+SET
+  history_summary_run_count = history_summary_run_count + 1,
+  history_summary_token_count = history_summary_token_count + <tokens_input + tokens_output>,
+  updated_at = now()
+WHERE id = $agent_conversation_id AND organization_id = $org_id;
+```
+
+Skip the increment on `failed` / `fallback` runs — they are not real
+conversational turns.
+
+#### 3. Trigger check + summarization step
+
+After the counter increment, read the fresh counters and the config
+thresholds:
+
+```ts
+if (shouldTriggerSummarization(counters, cfg)) {
+  await runSummarization({ db, orgId, agentConv, runId, cfg });
+}
+```
+
+`runSummarization` is in-band (after the assistant reply was already sent
+to UAZAPI, before `executeAgent` returns). It:
+
+1. Loads `history_summary` (previous, may be null) + all messages since
+   `history_summary_updated_at ?? agent_conversation.created_at` ordered
+   by `created_at ASC`.
+2. Calls Claude with the summarization prompt (template below).
+3. On success: writes `history_summary = <new text>`,
+   `history_summary_updated_at = now()`, zeroes
+   `history_summary_run_count` and `history_summary_token_count`.
+   Persists an `agent_steps` row with `step_type='summarization'`,
+   `input` = `SummarizationStepInput`, `output` = `SummarizationStepOutput`.
+4. On failure: logs, inserts a failed `agent_steps` row, does NOT reset
+   the counters (so the next run retries). Never throws out of
+   `executeAgent`.
+
+Model used: `agent.model`. Summarization cost is counted in the
+`agent_runs.tokens_*` of the parent run (keeps org cost tracking in one
+place).
+
+Parent-run attribution: the summarization step points to the run whose
+completion triggered the summarization via `agent_steps.run_id`.
+
+#### 4. Summarization prompt template (Codex copies this verbatim)
+
+System:
+
+```
+Voce e um assistente que consolida o contexto de uma conversa entre um
+agente IA e um lead. Produza um resumo estruturado em prosa cobrindo os
+topicos abaixo, na mesma ordem, sem listas numeradas:
+
+- Perfil do lead: nome, telefone, empresa, cargo (se conhecidos). Escreva
+  "nao informado" nos campos faltantes.
+- Dores e objetivos: principais motivacoes, problemas, metas que apareceram.
+- Etapa do funil: onde esta a conversa no processo de vendas/atendimento.
+- Estado conversacional: nivel de qualificacao do lead, intencao de
+  continuar, tom geral. Use adjetivos concretos.
+- Historico narrativo: em ate 3 paragrafos curtos, conte o que aconteceu
+  desde o ultimo resumo. Preserve decisoes tomadas, promessas do agente,
+  duvidas pendentes. NAO inclua transcricoes literais — isto e um briefing
+  pra o proximo turno do agente.
+
+Responda apenas com o resumo. Sem prefacios, sem JSON, sem markdown.
+Portugues brasileiro, 400 a 800 palavras.
+```
+
+User (with previous summary):
+
+```
+Resumo anterior:
+
+{{previous_summary}}
+
+Mensagens novas desde o ultimo resumo (em ordem cronologica):
+
+{{messages_formatted_as_role_text_pairs}}
+
+Gere o novo resumo consolidado.
+```
+
+User (without previous summary):
+
+```
+Mensagens da conversa (em ordem cronologica):
+
+{{messages_formatted_as_role_text_pairs}}
+
+Gere o resumo consolidado.
+```
+
+Max tokens on the Anthropic call: 1200.
+
+#### 5. Tester untouched
+
+`executeTesterAgent` does NOT trigger summarization. Tester conversations
+are synthetic and short-lived.
+
+### Concurrency guarantees Codex must preserve
+
+1. The summarization runs serially after the main run response is sent.
+   If the same conversation gets a new inbound during summarization, the
+   debounce flush (PR5.5) already gates on the same lease — the new
+   inbound waits for the current flush (including summarization) to
+   complete before the next cycle.
+2. Counter updates are a single UPDATE statement scoped by
+   `organization_id` — no read-then-write race.
+3. If summarization fails, the next successful run WITH the counters
+   still above threshold will retry. Repeated failures never block the
+   main conversation.
+
+### Tests Codex must add
+
+- `shouldTriggerSummarization`:
+  - turn threshold reached — returns true.
+  - token threshold reached — returns true.
+  - neither — returns false.
+  - missing counters — treats as 0.
+- Executor integration:
+  - 10 successful runs on the same conversation trigger one summarization
+    step; `history_summary` populated; counters reset.
+  - tokens-first trigger: single run crossing 20k tokens fires the
+    summarization.
+  - summarization failure: logs, inserts failed step, counters NOT reset,
+    next run retries.
+  - `step_type='summarization'` row persisted with the expected input/
+    output shape.
+  - failed / fallback runs do NOT increment counters.
+- Context loader:
+  - with summary present — injects summary as first message pair, then
+    last K messages.
+  - with summary null — loads only last K messages (not full history).
+  - `context_summary_recent_messages` override honored.
+- Migration:
+  - idempotent re-run.
+  - existing rows get the NOT NULL default values without error.
+  - RLS unchanged on the extended tables.
+
+### UI scope for Claude (follow-up)
+
+- `RulesTab` "Guardrails" card gets three new rows under the existing
+  debounce slider:
+  - `context_summary_turn_threshold` slider 3–50 (default 10).
+  - `context_summary_token_threshold` slider 5k–100k step 1k (default 20k).
+  - `context_summary_recent_messages` slider 2–20 (default 6).
+- Tooltip: "Quando a conversa atingir um desses limites, o agente resume
+  o historico pra manter o custo sob controle. O resumo fica no topo das
+  proximas mensagens."
+- `AuditTab` step inspector already renders any step_type via the output
+  shape — no change needed there beyond showing the new "summarization"
+  label. Codex may want a dedicated color in the audit view; if so,
+  that's a small follow-up.
+
+### Out of scope (still)
+
+- PR5.6 handoff notification (next; depends on summary for the wa.me
+  link narrative).
+- PR5.8 reactivate bot.
+- PR6+ unchanged.

@@ -90,6 +90,13 @@ export interface AgentConfig {
   // still guards with `config.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT`
   // for the transition window. Range enforced by `clampDebounceWindowMs`.
   debounce_window_ms?: number;
+  // PR5.7: per-agent context summarization thresholds. Migration 020 sets
+  // NOT NULL DEFAULT values; optional at the TS level during rollout.
+  // Runtime guards with `?? DEFAULT_CONTEXT_SUMMARIZATION.*` plus clamp
+  // helpers in `summarization.ts`.
+  context_summary_turn_threshold?: number;
+  context_summary_token_threshold?: number;
+  context_summary_recent_messages?: number;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -155,6 +162,12 @@ export interface AgentConversation {
   config_id: string;
   current_stage_id: string | null;
   history_summary: string | null; // rolling summary, compacted periodically
+  // PR5.7: counters since last summary write. Reset to 0 when a fresh
+  // summary is persisted. Optional during rollout; migration 020 adds the
+  // columns with NOT NULL DEFAULT 0 / NULL.
+  history_summary_updated_at?: string | null;
+  history_summary_run_count?: number;
+  history_summary_token_count?: number;
   variables: Record<string, unknown>; // key/value extracted facts (nome, email, etc)
   tokens_used_total: number;      // cumulative, for org-level cost views
   last_interaction_at: string | null;
@@ -193,7 +206,9 @@ export interface AgentRun {
 // Step audit (agent_steps row) — one per LLM call, tool call, or guardrail trip
 // ============================================================================
 
-export type AgentStepType = "llm" | "tool" | "guardrail";
+// PR5.7: added "summarization" for context consolidation steps. Migration 020
+// relaxes the DB check constraint to accept the new value.
+export type AgentStepType = "llm" | "tool" | "guardrail" | "summarization";
 
 export interface AgentStep {
   id: string;
@@ -289,6 +304,10 @@ export interface CreateAgentInput {
   // PR5.5: optional. Runtime defaults to DEBOUNCE_WINDOW_MS_DEFAULT when
   // omitted and clamps to [DEBOUNCE_WINDOW_MS_MIN, DEBOUNCE_WINDOW_MS_MAX].
   debounce_window_ms?: number;
+  // PR5.7: optional. Runtime defaults + clamp via summarization.ts helpers.
+  context_summary_turn_threshold?: number;
+  context_summary_token_threshold?: number;
+  context_summary_recent_messages?: number;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
