@@ -125,6 +125,10 @@ export interface AgentStage {
   instruction: string;            // prompt fragment appended to system on this stage
   transition_hint: string | null; // natural-language hint to LLM about when to move on
   rag_enabled: boolean;           // if true, retrieve FAQ/docs before LLM call
+  // PR6 RAG: per-stage retrieval knob. Migration 022 sets NOT NULL DEFAULT 3.
+  // Optional at the TS level during rollout; runtime guards with
+  // `clampRagTopK(stage.rag_top_k)` from rag.ts.
+  rag_top_k?: number;
   created_at: string;
   updated_at: string;
 }
