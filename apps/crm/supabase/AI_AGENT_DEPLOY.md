@@ -59,13 +59,15 @@ WHERE jobname = 'ai-agent-indexer-tick';
 
 **Migration**: 023
 
-**O que faz**: tabela `agent_notification_templates`. Cada template vira um tool implícito `notify_<slug>` registrado em `agent_tools` (server action mantém em sync).
+**O que faz**:
+- Tabela `agent_notification_templates`. Cada template vira um tool implícito `notify_<slug>` registrado em `agent_tools` (server action mantém em sync)
+- Handler `trigger_notification` resolve template por nome, valida custom vars, renderiza e dispara via mesma WhatsApp connection que recebeu o lead
 
 **Pré-requisitos**: nenhum dado novo.
 
 **Sem env var nova**. Sem cron novo.
 
-**Pré-requisito de runtime**: handler `trigger_notification` precisa estar registrado no `NativeHandlerRegistry`. Se Codex ainda não entregou PR7.1b, criar templates funciona mas o LLM chama o tool e o handler retorna `undefined`.
+**Status do runtime**: ✅ Handler `trigger_notification` registrado desde PR #51 (PR7.1b). Pronto pra deploy.
 
 **Validação pós-deploy**:
 ```sql
@@ -79,7 +81,7 @@ WHERE native_handler = 'trigger_notification';
 
 ---
 
-## Bloco 3 — Scheduler (PR #46, #47, ⏳ #PR7.2b)
+## Bloco 3 — Scheduler (PR #46, #47, #51)
 
 **Migration**: 025
 
@@ -87,6 +89,9 @@ WHERE native_handler = 'trigger_notification';
 - Tabelas `agent_scheduled_jobs` + `agent_scheduled_runs`
 - 3 RPCs (`claim`, `complete`, `fail`)
 - pg_cron `ai-agent-scheduler-tick` cada 1min
+- Endpoint `/api/ai-agent/scheduler/tick` (PR #51) recebe o tick, claim 1 job, resolve leads via `LeadFilter` SQL, dispara templates via WhatsApp provider sem passar pelo executor
+
+**Status do runtime**: ✅ Endpoint + scheduler completos desde PR #51 (PR7.2b)
 
 ### 3.1 — Aplicar migration
 
@@ -129,15 +134,7 @@ CRM_CLIENT_BASE_URL=https://crm.funilpersia.top
 CRM_API_SECRET=<mesmo valor de PERSIA_SCHEDULER_SECRET ou outro>
 ```
 
-### 3.4 — Pré-requisito de runtime
-
-PR7.2b (Codex) precisa criar:
-- `/api/ai-agent/scheduler/tick` endpoint
-- `apps/crm/src/lib/ai-agent/scheduler/` runtime
-
-Sem isso, pg_cron tenta bater no endpoint e recebe 404. Não causa loop infinito (cron só dispara a cada 1min), mas o `next_run_at` dos jobs nunca avança.
-
-### 3.5 — Validação pós-deploy
+### 3.4 — Validação pós-deploy
 
 ```sql
 -- Cron job ativo
