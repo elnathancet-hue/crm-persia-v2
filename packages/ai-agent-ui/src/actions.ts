@@ -15,6 +15,7 @@ import type {
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentRunWithSteps,
+  AgentScheduledJob,
   AgentStage,
   AgentStageTool,
   AgentTool,
@@ -22,6 +23,7 @@ import type {
   CreateCustomWebhookToolInput,
   CreateFAQInput,
   CreateNotificationTemplateInput,
+  CreateScheduledJobInput,
   CreateStageInput,
   CreateToolFromPresetInput,
   ListRunsInput,
@@ -33,6 +35,7 @@ import type {
   UpdateAgentInput,
   UpdateFAQInput,
   UpdateNotificationTemplateInput,
+  UpdateScheduledJobInput,
   UpdateStageInput,
   UpdateToolInput,
   UsageStats,
@@ -97,4 +100,15 @@ export interface AgentActions {
     input: UpdateNotificationTemplateInput,
   ) => Promise<AgentNotificationTemplate>;
   deleteNotificationTemplate: (sourceId: string) => Promise<void>;
+
+  // Scheduled jobs (PR7.2)
+  listScheduledJobs: (configId: string) => Promise<AgentScheduledJob[]>;
+  createScheduledJob: (
+    input: CreateScheduledJobInput,
+  ) => Promise<AgentScheduledJob>;
+  updateScheduledJob: (
+    jobId: string,
+    input: UpdateScheduledJobInput,
+  ) => Promise<AgentScheduledJob>;
+  deleteScheduledJob: (jobId: string) => Promise<void>;
 }

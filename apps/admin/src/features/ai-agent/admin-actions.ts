@@ -39,6 +39,12 @@ import {
   listNotificationTemplates,
   updateNotificationTemplate,
 } from "@/actions/ai-agent/notifications";
+import {
+  createScheduledJob,
+  deleteScheduledJob,
+  listScheduledJobs,
+  updateScheduledJob,
+} from "@/actions/ai-agent/scheduled-jobs";
 
 export function createAdminAgentActions(orgId: string): AgentActions {
   return {
@@ -77,5 +83,10 @@ export function createAdminAgentActions(orgId: string): AgentActions {
       updateNotificationTemplate(orgId, sourceId, input),
     deleteNotificationTemplate: (sourceId) =>
       deleteNotificationTemplate(orgId, sourceId),
+    listScheduledJobs: (configId) => listScheduledJobs(orgId, configId),
+    createScheduledJob: (input) => createScheduledJob(orgId, input),
+    updateScheduledJob: (jobId, input) =>
+      updateScheduledJob(orgId, jobId, input),
+    deleteScheduledJob: (jobId) => deleteScheduledJob(orgId, jobId),
   };
 }

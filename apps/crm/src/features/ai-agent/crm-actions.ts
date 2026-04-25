@@ -43,6 +43,12 @@ import {
   listNotificationTemplates,
   updateNotificationTemplate,
 } from "@/actions/ai-agent/notifications";
+import {
+  createScheduledJob,
+  deleteScheduledJob,
+  listScheduledJobs,
+  updateScheduledJob,
+} from "@/actions/ai-agent/scheduled-jobs";
 
 export const crmAgentActions: AgentActions = {
   createAgent,
@@ -76,4 +82,8 @@ export const crmAgentActions: AgentActions = {
   createNotificationTemplate,
   updateNotificationTemplate,
   deleteNotificationTemplate,
+  listScheduledJobs,
+  createScheduledJob,
+  updateScheduledJob,
+  deleteScheduledJob,
 };
