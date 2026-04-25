@@ -15,6 +15,10 @@ import { chunkText, type Chunk } from "./chunker";
 import { parseDocument } from "./parsers";
 import { embedTexts, VoyageMissingKeyError } from "./voyage-client";
 
+const INDEXING_MAX_ATTEMPTS = 3;
+const INDEXING_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
+const INDEXING_EXHAUSTED_ERROR = "max attempts reached";
+
 interface StorageDownloadClient {
   storage: {
     from(bucket: string): {
@@ -57,6 +61,8 @@ export interface IndexingTickResult {
 export async function runIndexingTick(
   db: AgentDb = asAgentDb(createAdminClient()),
 ): Promise<IndexingTickResult> {
+  await normalizeExhaustedJobs(db);
+
   const job = await claimIndexingJob(db);
   if (!job) {
     return {
@@ -69,6 +75,8 @@ export async function runIndexingTick(
   }
 
   try {
+    await markSourceProcessing(db, job.organization_id, job.source_id);
+
     const source = await loadKnowledgeSource(db, job.organization_id, job.source_id);
     if (!source) {
       throw new Error("knowledge source not found");
@@ -133,12 +141,7 @@ export async function runIndexingTick(
         ? "VOYAGE_API_KEY not set"
         : errorMessage(error);
 
-    await (db as IndexerRpcClient).rpc("fail_agent_indexing_job", {
-      p_job_id: job.id,
-      p_source_id: job.source_id,
-      p_organization_id: job.organization_id,
-      p_error_message: failureMessage,
-    }).catch(() => {});
+    await markJobFailed(db, job, failureMessage);
 
     logError("ai_agent_rag_indexing_failed", {
       organization_id: job.organization_id,
@@ -164,7 +167,7 @@ export async function runIndexingTick(
 
 async function claimIndexingJob(db: AgentDb): Promise<AgentIndexingJob | null> {
   const { data, error } = await (db as IndexerRpcClient).rpc("claim_agent_indexing_job", {
-    p_max_attempts: 3,
+    p_max_attempts: INDEXING_MAX_ATTEMPTS,
   });
 
   if (error) {
@@ -173,6 +176,129 @@ async function claimIndexingJob(db: AgentDb): Promise<AgentIndexingJob | null> {
 
   const row = Array.isArray(data) ? data[0] : data;
   return (row ?? null) as AgentIndexingJob | null;
+}
+
+async function normalizeExhaustedJobs(db: AgentDb): Promise<void> {
+  const { data, error } = await db
+    .from("agent_indexing_jobs")
+    .select("id, organization_id, source_id, status, attempts, claimed_at")
+    .in("status", ["pending", "processing"])
+    .gte("attempts", INDEXING_MAX_ATTEMPTS);
+
+  if (error || !Array.isArray(data) || data.length === 0) {
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const exhausted = data.filter((row) => {
+    if (row.status === "pending") return true;
+    if (row.status !== "processing") return false;
+    if (!row.claimed_at) return true;
+
+    const claimedAt = Date.parse(String(row.claimed_at));
+    if (Number.isNaN(claimedAt)) return true;
+    return Date.now() - claimedAt >= INDEXING_LEASE_TIMEOUT_MS;
+  });
+
+  if (exhausted.length === 0) {
+    return;
+  }
+
+  const jobIds = exhausted.map((row) => String(row.id));
+  const sourceIds = Array.from(new Set(exhausted.map((row) => String(row.source_id))));
+
+  await db
+    .from("agent_indexing_jobs")
+    .update({
+      status: "failed",
+      error_message: INDEXING_EXHAUSTED_ERROR,
+      updated_at: nowIso,
+    })
+    .in("id", jobIds);
+
+  await db
+    .from("agent_knowledge_sources")
+    .update({
+      indexing_status: "failed",
+      indexing_error: INDEXING_EXHAUSTED_ERROR,
+      updated_at: nowIso,
+    })
+    .in("id", sourceIds);
+}
+
+async function markSourceProcessing(
+  db: AgentDb,
+  organizationId: string,
+  sourceId: string,
+): Promise<void> {
+  const { error } = await db
+    .from("agent_knowledge_sources")
+    .update({
+      indexing_status: "processing",
+      indexing_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", organizationId)
+    .eq("id", sourceId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function markJobFailed(
+  db: AgentDb,
+  job: AgentIndexingJob,
+  failureMessage: string,
+): Promise<void> {
+  try {
+    const { error } = await (db as IndexerRpcClient).rpc("fail_agent_indexing_job", {
+      p_job_id: job.id,
+      p_source_id: job.source_id,
+      p_organization_id: job.organization_id,
+      p_error_message: failureMessage,
+    });
+
+    if (!error) {
+      return;
+    }
+
+    logError("ai_agent_rag_indexing_fail_rpc_failed", {
+      organization_id: job.organization_id,
+      source_id: job.source_id,
+      job_id: job.id,
+      error: error.message,
+    });
+  } catch (error) {
+    logError("ai_agent_rag_indexing_fail_rpc_threw", {
+      organization_id: job.organization_id,
+      source_id: job.source_id,
+      job_id: job.id,
+      error: errorMessage(error),
+    });
+  }
+
+  const nowIso = new Date().toISOString();
+
+  await db
+    .from("agent_indexing_jobs")
+    .update({
+      status: "failed",
+      error_message: failureMessage,
+      updated_at: nowIso,
+    })
+    .eq("organization_id", job.organization_id)
+    .eq("id", job.id);
+
+  await db
+    .from("agent_knowledge_sources")
+    .update({
+      indexing_status: "failed",
+      indexing_error: failureMessage,
+      updated_at: nowIso,
+    })
+    .eq("organization_id", job.organization_id)
+    .eq("id", job.source_id);
 }
 
 async function loadKnowledgeSource(

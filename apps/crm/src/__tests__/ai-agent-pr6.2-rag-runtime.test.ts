@@ -239,6 +239,10 @@ describe("ai-agent PR6.2 rag runtime", () => {
       error: null,
     });
     supabase.queue("agent_knowledge_sources", {
+      data: null,
+      error: null,
+    });
+    supabase.queue("agent_knowledge_sources", {
       data: {
         id: "source-a",
         organization_id: "org-a",
@@ -328,6 +332,10 @@ describe("ai-agent PR6.2 rag runtime", () => {
       error: null,
     });
     supabase.queue("agent_knowledge_sources", {
+      data: null,
+      error: null,
+    });
+    supabase.queue("agent_knowledge_sources", {
       data: {
         id: "source-faq",
         organization_id: "org-a",
@@ -364,6 +372,179 @@ describe("ai-agent PR6.2 rag runtime", () => {
             p_job_id: "job-a",
             p_error_message: "VOYAGE_API_KEY not set",
           }),
+        }),
+      ]),
+    );
+  });
+
+  it("runIndexingTick marks the source as processing as soon as a job is claimed", async () => {
+    const supabase = createSupabaseMock();
+    createAdminClientMock.mockReturnValue(supabase as never);
+    supabase.queue("rpc:claim_agent_indexing_job", {
+      data: [{
+        id: "job-processing",
+        organization_id: "org-a",
+        source_id: "source-processing",
+        status: "processing",
+        attempts: 1,
+        claimed_at: "2026-04-24T00:00:00.000Z",
+        error_message: null,
+        created_at: "2026-04-24T00:00:00.000Z",
+        updated_at: "2026-04-24T00:00:00.000Z",
+      }],
+      error: null,
+    });
+    supabase.queue("agent_knowledge_sources", {
+      data: null,
+      error: null,
+    });
+    supabase.queue("agent_knowledge_sources", {
+      data: {
+        id: "source-processing",
+        organization_id: "org-a",
+        config_id: "config-a",
+        source_type: "faq",
+        title: "FAQ",
+        metadata: {
+          question: "Qual horario?",
+          answer: "Das 9h as 18h.",
+        },
+        status: "active",
+        indexing_status: "processing",
+        indexing_error: null,
+        indexed_at: null,
+        chunk_count: 0,
+        created_at: "2026-04-24T00:00:00.000Z",
+        updated_at: "2026-04-24T00:00:00.000Z",
+      },
+      error: null,
+    });
+    supabase.queue("rpc:complete_agent_indexing_job", {
+      data: 1,
+      error: null,
+    });
+    vi.mocked(global.fetch).mockResolvedValue(
+      jsonResponse({
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: { total_tokens: 18 },
+      }),
+    );
+
+    await runIndexingTick(asAgentDb(supabase as never));
+
+    expect(supabase.updates.agent_knowledge_sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          indexing_status: "processing",
+          indexing_error: null,
+        }),
+      ]),
+    );
+  });
+
+  it("runIndexingTick falls back to direct updates when fail RPC returns an error", async () => {
+    delete process.env.VOYAGE_API_KEY;
+    const supabase = createSupabaseMock();
+    createAdminClientMock.mockReturnValue(supabase as never);
+    supabase.queue("rpc:claim_agent_indexing_job", {
+      data: [{
+        id: "job-fail-fallback",
+        organization_id: "org-a",
+        source_id: "source-fail-fallback",
+        status: "processing",
+        attempts: 1,
+        claimed_at: "2026-04-24T00:00:00.000Z",
+        error_message: null,
+        created_at: "2026-04-24T00:00:00.000Z",
+        updated_at: "2026-04-24T00:00:00.000Z",
+      }],
+      error: null,
+    });
+    supabase.queue("agent_knowledge_sources", {
+      data: null,
+      error: null,
+    });
+    supabase.queue("agent_knowledge_sources", {
+      data: {
+        id: "source-fail-fallback",
+        organization_id: "org-a",
+        config_id: "config-a",
+        source_type: "faq",
+        title: "FAQ",
+        metadata: {
+          question: "Qual horario?",
+          answer: "Das 9h as 18h.",
+        },
+        status: "active",
+        indexing_status: "processing",
+        indexing_error: null,
+        indexed_at: null,
+        chunk_count: 0,
+        created_at: "2026-04-24T00:00:00.000Z",
+        updated_at: "2026-04-24T00:00:00.000Z",
+      },
+      error: null,
+    });
+    supabase.queue("rpc:fail_agent_indexing_job", {
+      data: null,
+      error: { message: "rpc failed" },
+    });
+
+    await runIndexingTick(asAgentDb(supabase as never));
+
+    expect(supabase.updates.agent_indexing_jobs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          error_message: "VOYAGE_API_KEY not set",
+        }),
+      ]),
+    );
+    expect(supabase.updates.agent_knowledge_sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          indexing_status: "failed",
+          indexing_error: "VOYAGE_API_KEY not set",
+        }),
+      ]),
+    );
+  });
+
+  it("runIndexingTick converts exhausted pending jobs into failed before returning idle", async () => {
+    const supabase = createSupabaseMock();
+    createAdminClientMock.mockReturnValue(supabase as never);
+    supabase.queue("agent_indexing_jobs", {
+      data: [{
+        id: "job-exhausted",
+        organization_id: "org-a",
+        source_id: "source-exhausted",
+        status: "pending",
+        attempts: 3,
+        claimed_at: null,
+      }],
+      error: null,
+    });
+    supabase.queue("rpc:claim_agent_indexing_job", {
+      data: [],
+      error: null,
+    });
+
+    const result = await runIndexingTick(asAgentDb(supabase as never));
+
+    expect(result.claimed_job_id).toBeNull();
+    expect(supabase.updates.agent_indexing_jobs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "failed",
+          error_message: "max attempts reached",
+        }),
+      ]),
+    );
+    expect(supabase.updates.agent_knowledge_sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          indexing_status: "failed",
+          indexing_error: "max attempts reached",
         }),
       ]),
     );
@@ -554,5 +735,16 @@ describe("ai-agent PR6.2 rag runtime", () => {
     expect(sql).toContain("CREATE OR REPLACE FUNCTION public.complete_agent_indexing_job");
     expect(sql).toContain("CREATE OR REPLACE FUNCTION public.match_agent_knowledge_chunks");
     expect(sql).toContain("ai-agent-indexer-tick");
+  });
+
+  it("migration 024 hardens the claim flow and raises the cron timeout", () => {
+    const sql = readFileSync(
+      new URL("../../supabase/migrations/024_ai_agent_rag_indexer_hardening.sql", import.meta.url),
+      "utf8",
+    );
+
+    expect(sql).toContain("indexing_status = 'processing'");
+    expect(sql).toContain("error_message = coalesce(error_message, 'max attempts reached')");
+    expect(sql).toContain("timeout_milliseconds := 60000");
   });
 });
