@@ -25,6 +25,7 @@ export { AuditTab } from "./components/AuditTab";
 export { LimitsUsageTab } from "./components/LimitsUsageTab";
 export { FAQTab } from "./components/FAQTab";
 export { DocumentsTab } from "./components/DocumentsTab";
+export { NotificationsTab } from "./components/NotificationsTab";
 export { PlaceholderTab } from "./components/PlaceholderTab";
 
 // Leaf components (pra uso direto fora dos tabs padrao)

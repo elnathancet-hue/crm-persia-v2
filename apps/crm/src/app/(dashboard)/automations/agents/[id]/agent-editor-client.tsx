@@ -4,6 +4,7 @@ import type {
   AgentConfig,
   AgentCostLimit,
   AgentKnowledgeSource,
+  AgentNotificationTemplate,
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
@@ -17,6 +18,7 @@ interface Props {
   initialLimits: AgentCostLimit[];
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
+  initialNotificationTemplates?: AgentNotificationTemplate[];
 }
 
 export function AgentEditorClient(props: Props) {

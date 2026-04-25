@@ -33,6 +33,12 @@ import {
   updateFAQ,
   uploadDocument,
 } from "@/actions/ai-agent/knowledge";
+import {
+  createNotificationTemplate,
+  deleteNotificationTemplate,
+  listNotificationTemplates,
+  updateNotificationTemplate,
+} from "@/actions/ai-agent/notifications";
 
 export function createAdminAgentActions(orgId: string): AgentActions {
   return {
@@ -63,5 +69,13 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     uploadDocument: (configId, formData) => uploadDocument(orgId, configId, formData),
     deleteKnowledgeSource: (sourceId) => deleteKnowledgeSource(orgId, sourceId),
     reindexKnowledgeSource: (sourceId) => reindexKnowledgeSource(orgId, sourceId),
+    listNotificationTemplates: (configId) =>
+      listNotificationTemplates(orgId, configId),
+    createNotificationTemplate: (input) =>
+      createNotificationTemplate(orgId, input),
+    updateNotificationTemplate: (sourceId, input) =>
+      updateNotificationTemplate(orgId, sourceId, input),
+    deleteNotificationTemplate: (sourceId) =>
+      deleteNotificationTemplate(orgId, sourceId),
   };
 }

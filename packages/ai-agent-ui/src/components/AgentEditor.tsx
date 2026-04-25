@@ -21,6 +21,7 @@ import type {
   AgentConfig,
   AgentCostLimit,
   AgentKnowledgeSource,
+  AgentNotificationTemplate,
   AgentStage,
   AgentStatus,
   AgentTool,
@@ -43,6 +44,7 @@ import { AuditTab } from "./AuditTab";
 import { LimitsUsageTab } from "./LimitsUsageTab";
 import { FAQTab } from "./FAQTab";
 import { DocumentsTab } from "./DocumentsTab";
+import { NotificationsTab } from "./NotificationsTab";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
@@ -55,6 +57,7 @@ interface Props {
   initialLimits: AgentCostLimit[];
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
+  initialNotificationTemplates?: AgentNotificationTemplate[];
 }
 
 export function AgentEditor({
@@ -64,14 +67,19 @@ export function AgentEditor({
   initialLimits,
   initialAllowedDomains,
   initialKnowledgeSources = [],
+  initialNotificationTemplates = [],
 }: Props) {
-  const { updateAgent, listKnowledgeSources } = useAgentActions();
+  const { updateAgent, listKnowledgeSources, listNotificationTemplates } =
+    useAgentActions();
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
   const [tools, setTools] = React.useState(initialTools);
   const [knowledgeSources, setKnowledgeSources] = React.useState<
     AgentKnowledgeSource[]
   >(initialKnowledgeSources);
+  const [notificationTemplates, setNotificationTemplates] = React.useState<
+    AgentNotificationTemplate[]
+  >(initialNotificationTemplates);
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
@@ -85,13 +93,36 @@ export function AgentEditor({
     }
   }, [agent.id, listKnowledgeSources]);
 
+  const refreshNotificationTemplates = React.useCallback(async () => {
+    try {
+      const next = await listNotificationTemplates(agent.id);
+      setNotificationTemplates(next);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao carregar notificações");
+    }
+  }, [agent.id, listNotificationTemplates]);
+
   // Lazy first-fetch when no SSR-provided sources were passed in.
   React.useEffect(() => {
     if (initialKnowledgeSources.length === 0) {
       void refreshKnowledgeSources();
     }
+    if (initialNotificationTemplates.length === 0) {
+      void refreshNotificationTemplates();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Re-load tools when notification templates change — tool sync acontece
+  // server-side, mas a aba Ferramentas precisa enxergar os tools novos.
+  React.useEffect(() => {
+    // skip on first render (initialTools já vem do SSR)
+    if (notificationTemplates === initialNotificationTemplates) return;
+    // simplificação: nao recarrega tools via fetch — deixamos o usuário
+    // dar refresh na aba Ferramentas se quiser ver. O backend é fonte
+    // da verdade.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationTemplates]);
 
   const persistAgent = React.useCallback(
     (patch: Parameters<AgentActions["updateAgent"]>[1], successMsg?: string) => {
@@ -245,11 +276,11 @@ export function AgentEditor({
           />
         </TabsContent>
         <TabsContent value="notifications">
-          <PlaceholderTab
-            icon={Bell}
-            title="Notificações automáticas"
-            description="Templates WhatsApp enviados quando o agente toma decisões (ex: lead qualificado)."
-            phase="PR7"
+          <NotificationsTab
+            configId={agent.id}
+            templates={notificationTemplates}
+            onChange={setNotificationTemplates}
+            onRefresh={refreshNotificationTemplates}
           />
         </TabsContent>
         <TabsContent value="calendar">
