@@ -261,19 +261,25 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "trigger_notification",
     display_name: "Disparar notificacao",
     description:
-      "Send a WhatsApp notification template to configured recipients when the agent decides.",
-    ui_description: "Dispara um template WhatsApp para destinatarios configurados.",
+      "Send a WhatsApp notification template to the configured team recipient (phone or group). Use for events the team must know about: lead qualified, booking confirmed, payment received, etc.",
+    ui_description:
+      "Dispara um template WhatsApp pra equipe quando o agente decidir.",
     icon_name: "BellRing",
     category: "notification",
     shipped_in_pr: "PR7",
     input_schema: {
       type: "object",
-      required: ["notification_id"],
+      required: ["template_name"],
       properties: {
-        notification_id: { type: "string", format: "uuid" },
-        variables: {
+        template_name: {
+          type: "string",
+          description:
+            "Nome do template configurado (case-insensitive). Resolva pela lista visivel ao agente.",
+        },
+        custom: {
           type: "object",
-          properties: {},
+          description:
+            "Variaveis customizadas que substituem {{custom.<chave>}} no template. Opcional. Use chaves curtas (ate 40 chars) e valores curtos (ate 200 chars).",
         },
       },
     },

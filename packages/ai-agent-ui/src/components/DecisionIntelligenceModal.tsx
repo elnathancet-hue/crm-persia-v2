@@ -29,7 +29,7 @@ interface Props {
   onCreated: (tool: AgentTool) => void;
 }
 
-const SHIPPED_PRS = new Set<NativeToolPreset["shipped_in_pr"]>(["PR1", "PR3"]);
+const SHIPPED_PRS = new Set<NativeToolPreset["shipped_in_pr"]>(["PR1", "PR3", "PR7"]);
 
 // Display order + label PT-BR pra cada categoria. Ordem reflete o fluxo
 // tipico de uso: comunicacao primeiro, atribuicao depois, midia/auxiliares

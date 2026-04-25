@@ -2573,3 +2573,99 @@ Same harness as PR5.x runtime tests. Cover:
 - Note: CRM build still reports the pre-existing cn warnings from @/lib/utils; not introduced by PR6.2.
 - Deploy/runtime follow-up after merge: set VOYAGE_API_KEY, set PERSIA_INDEXER_SECRET, and configure DB settings pp.settings.indexer_tick_url + pp.settings.indexer_tick_secret before applying migration 022 outside local/dev.
 
+
+## 2026-04-24 — Claude — PR7.1a Notification templates contracts + schema
+
+### Scope shipped
+
+- Branch: claude/ai-agent-notifications-contracts
+- Migration 023: agent_notification_templates table com (name unique
+  per config, description, target_type phone|group, target_address,
+  body_template, status active|archived) + RLS por org
+- packages/shared/src/ai-agent/notifications.ts:
+  - Types completos para CRUD + handler input/output + audit step
+  - Renderer com 2 tipos de variavel: fixed ({{lead_name}} resolvidas
+    da conversa) + custom ({{custom.foo}} resolvidas do input do LLM)
+  - Limites: 20 templates/agente, 20 custom keys/call, body 1500 chars
+  - buildNotificationToolName() slug helper pra gerar nome do tool
+  - maskTargetAddress() pra log audit sem vazar telefone/JID
+- tool-presets.ts: trigger_notification ganhou input_schema correto
+  (template_name string + custom object). Antes era notification_id: uuid,
+  incompativel com a abordagem por nome.
+- DecisionIntelligenceModal.tsx: SHIPPED_PRS inclui "PR7"
+
+### Validation
+
+- pnpm -r typecheck OK
+- pnpm --filter @persia/crm build OK
+- pnpm --filter @persia/admin build OK
+
+---
+
+## Spec for PR7.1b — trigger_notification runtime (Codex)
+
+### Goal
+
+Implementar handler nativo trigger_notification em
+apps/crm/src/lib/ai-agent/handlers/, com auditoria + envio via mesmo
+provider WhatsApp que recebeu o lead.
+
+### Handler — apps/crm/src/lib/ai-agent/handlers/trigger-notification.ts
+
+Pseudo-codigo:
+
+  1. Parse input (template_name + custom optional)
+  2. Validate custom: max 20 keys, key max 40 chars, value max 200 chars
+  3. Lookup template por (config_id, name lower-trimmed) — case insensitive
+  4. Erro se template nao encontrado OU status === 'archived'
+  5. Build fixed variables da conversa (lead_name, lead_phone, wa_link,
+     agent_name) — usar context.lead_id + agent_config.name
+  6. Render body via renderNotificationTemplate(template.body_template,
+     fixed, custom)
+  7. Se context.dry_run: retorna { success: true, output: { ..., rendered_body,
+     dry_run: true } } sem chamar provider
+  8. Send via mesmo WhatsApp provider que recebeu o lead (lookup por
+     conversation.connection_id ou similar). target_type='phone'
+     -> strip non-digits; target_type='group' -> usa JID raw
+  9. Retorna { success: true, output: { template_id, template_name,
+     target_type, message_id }, side_effects: [...] com address masked }
+
+### Tool registration sync
+
+Quando uma row em agent_notification_templates eh criada/atualizada/deletada,
+um row correspondente em agent_tools deve existir com:
+- name: buildNotificationToolName(template.name) — ex: notify_lead_qualificado
+- description: template.description
+- execution_mode: "native"
+- native_handler: "trigger_notification"
+- input_schema: do tool-preset (template_name + custom)
+
+Decisao: o server action que Claude vai criar em PR7.1c
+(apps/crm/src/actions/ai-agent/notifications.ts) faz essa sync — insert/
+update/delete em agent_tools na mesma transacao. Codex NAO precisa
+mexer em registro de tools — so ler, validar, executar handler.
+
+Codex deve expor em apps/crm/src/lib/ai-agent/notifications.ts (NOVO
+arquivo) helpers que tanto o handler quanto a action vao usar:
+- buildNotificationToolRow(template, orgId): linha pra agent_tools
+- loadTemplateByName(db, orgId, configId, name): Promise<Template | null>
+
+### Tests — apps/crm/src/__tests__/ai-agent-pr7.1-runtime.test.ts
+
+Cobrir:
+- Handler resolve template por nome case-insensitive
+- Template arquivado retorna success: false
+- Custom > 20 keys retorna success: false
+- Custom value > 200 chars retorna success: false
+- Dry-run NAO chama provider, retorna rendered_body
+- Provider error -> handler retorna success: false com mensagem
+- Step audit grava input + output com target_address_masked
+- Multi-tenant: handler de org A nao enxerga template de org B
+
+### Out of scope PR7.1b
+
+- Nenhuma UI (vem na PR7.1c)
+- Scheduled notifications (PR7.2)
+- Calendar (PR7.3)
+- Tool registration sync — responsabilidade do server action
+  (Claude PR7.1c)
