@@ -144,13 +144,16 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           className="flex-1 overflow-y-auto px-4 py-2 space-y-3 bg-muted/20"
         >
           {turns.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center gap-2 py-12">
-              <div className="size-12 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-                <FlaskConical className="size-6 text-white" />
+            <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-12">
+              <div className="size-16 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-sm">
+                <FlaskConical className="size-7 text-white" />
               </div>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Mande uma mensagem como se fosse o cliente. O agente responde aqui sem afetar WhatsApp.
-              </p>
+              <div className="space-y-1 max-w-xs">
+                <p className="text-sm font-semibold tracking-tight">Conversa de teste</p>
+                <p className="text-xs text-muted-foreground">
+                  Mande uma mensagem como se fosse o cliente. O agente responde aqui sem afetar o WhatsApp real.
+                </p>
+              </div>
             </div>
           ) : (
             turns.map((turn, i) => <ChatBubble key={i} turn={turn} />)

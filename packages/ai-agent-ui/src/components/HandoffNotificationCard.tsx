@@ -80,8 +80,8 @@ export function HandoffNotificationCard({
           Quando o agente transferir a conversa pra humano (`stop_agent`), dispara uma mensagem WhatsApp pra equipe via a mesma conexao que recebeu o lead.
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-start justify-between gap-3 pb-3 border-b">
+      <CardContent className="space-y-5">
+        <div className="flex items-start justify-between gap-3 pb-4 border-b">
           <div className="flex-1 min-w-0">
             <Label htmlFor="handoff_enabled" className="cursor-pointer">
               Ativar notificação
@@ -151,7 +151,7 @@ export function HandoffNotificationCard({
               ) : null}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 pt-3 border-t border-border/50">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="handoff_template">Template da mensagem</Label>
                 <Button
@@ -174,7 +174,7 @@ export function HandoffNotificationCard({
                 className="font-mono text-xs"
               />
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground mr-1">Variaveis disponíveis:</span>
+                <span className="text-xs text-muted-foreground mr-1">Variáveis disponíveis:</span>
                 {HANDOFF_TEMPLATE_VARIABLES.map((variable) => (
                   <VariableChip
                     key={variable}
@@ -273,7 +273,7 @@ function VariableChip({
     <Badge
       variant={used ? "default" : "outline"}
       className={cn(
-        "text-[10px] font-mono cursor-pointer transition-opacity",
+        "text-xs font-mono cursor-pointer transition-opacity",
         used ? "opacity-100" : "opacity-70 hover:opacity-100",
       )}
       onClick={onClick}

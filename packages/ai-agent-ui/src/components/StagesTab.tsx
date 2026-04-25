@@ -173,17 +173,17 @@ function StageCard({
   onDelete: () => void;
 }) {
   return (
-    <Card>
-      <CardContent className="p-4 flex items-start gap-3">
-        <div className="flex flex-col items-center gap-1 pt-0.5">
+    <Card className="transition-shadow hover:shadow-sm">
+      <CardContent className="p-6 flex items-start gap-4">
+        <div className="flex flex-col items-center gap-1.5 pt-0.5">
           <GripVertical className="size-4 text-muted-foreground/50" />
-          <span className="size-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">
+          <span className="size-8 rounded-lg bg-primary/10 text-primary text-sm font-bold font-mono flex items-center justify-center">
             {order}
           </span>
         </div>
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center gap-2">
-            <p className="font-medium">{stage.situation}</p>
+        <div className="flex-1 min-w-0 space-y-1.5 border-l border-border/60 pl-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold tracking-tight">{stage.situation}</p>
             {stage.rag_enabled ? (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-400 font-medium uppercase tracking-wider">
                 RAG
@@ -191,25 +191,26 @@ function StageCard({
             ) : null}
           </div>
           {stage.instruction ? (
-            <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-wrap">
+            <p className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap">
               {stage.instruction}
             </p>
           ) : (
-            <p className="text-sm text-muted-foreground/60 italic">Sem instrução</p>
+            <p className="text-xs text-muted-foreground/60 italic">Sem instrução</p>
           )}
           {stage.transition_hint ? (
-            <p className="text-xs text-muted-foreground mt-1.5">
-              <span className="font-medium">Transição:</span> {stage.transition_hint}
+            <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/40">
+              <span className="font-medium text-foreground/80">Transição:</span> {stage.transition_hint}
             </p>
           ) : null}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Button size="icon" variant="ghost" onClick={onEdit} aria-label={`Editar etapa ${stage.situation}`}>
+          <Button size="icon" variant="ghost" className="size-10" onClick={onEdit} aria-label={`Editar etapa ${stage.situation}`}>
             <Pencil className="size-4" />
           </Button>
           <Button
             size="icon"
             variant="ghost"
+            className="size-10"
             onClick={onDelete}
             aria-label={`Remover etapa ${stage.situation}`}
           >
