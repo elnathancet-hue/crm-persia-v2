@@ -13,6 +13,7 @@ import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
+import { cn } from "@persia/ui/utils";
 import {
   Sheet,
   SheetContent,
@@ -195,6 +196,12 @@ export function CustomWebhookToolSheet({
               placeholder={`No mínimo ${WEBHOOK_SECRET_MIN_LENGTH} caracteres`}
               required
               autoComplete="off"
+              aria-invalid={secret.length > 0 && secret.length < WEBHOOK_SECRET_MIN_LENGTH}
+              className={cn(
+                secret.length > 0 &&
+                  secret.length < WEBHOOK_SECRET_MIN_LENGTH &&
+                  "border-destructive focus-visible:ring-destructive/40",
+              )}
             />
             <p className="text-xs text-muted-foreground">
               Cada requisição leva <code className="font-mono">X-Persia-Signature: sha256=...</code> calculado com este secret + timestamp. Configure o mesmo no receptor pra validar.
@@ -220,8 +227,12 @@ export function CustomWebhookToolSheet({
                 setSchemaError(null);
               }}
               rows={10}
-              className="font-mono text-xs"
               required
+              aria-invalid={!!schemaError}
+              className={cn(
+                "font-mono text-xs",
+                schemaError && "border-destructive focus-visible:ring-destructive/40",
+              )}
             />
             {schemaError ? (
               <p className="text-xs text-destructive">{schemaError}</p>
