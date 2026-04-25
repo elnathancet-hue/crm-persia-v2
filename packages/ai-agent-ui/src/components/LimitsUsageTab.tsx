@@ -10,6 +10,7 @@ import type {
 } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Skeleton } from "@persia/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -135,12 +136,28 @@ export function LimitsUsageTab({ configId, initialLimits }: Props) {
           <ActiveLimitsProgress limits={stats.limits} />
         </>
       ) : loading ? (
-        <Card>
-          <CardContent className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Carregando estatísticas...
-          </CardContent>
-        </Card>
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-6 space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-7 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-6 space-y-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-40 w-full rounded-md" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
       ) : null}
 
       <LimitsEditor

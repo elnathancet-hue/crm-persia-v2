@@ -7,6 +7,7 @@ import {
   RefreshCcw,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -53,6 +54,7 @@ export function DocumentsTab({
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
+  const [isDragging, setIsDragging] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -70,8 +72,7 @@ export function DocumentsTab({
     setDialogOpen(true);
   };
 
-  const handleFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const picked = event.target.files?.[0] ?? null;
+  const acceptFile = (picked: File | null) => {
     if (!picked) {
       setFile(null);
       return;
@@ -92,6 +93,32 @@ export function DocumentsTab({
     if (!title) {
       setTitle(stripExtension(picked.name));
     }
+  };
+
+  const handleFileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    acceptFile(event.target.files?.[0] ?? null);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+    const dropped = event.dataTransfer.files?.[0] ?? null;
+    if (dropped) acceptFile(dropped);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+  };
+
+  const clearSelectedFile = () => {
+    setFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleUpload = () => {
@@ -302,19 +329,69 @@ export function DocumentsTab({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="doc-file">Arquivo</Label>
-              <Input
+              <input
                 ref={fileInputRef}
                 id="doc-file"
                 type="file"
                 accept={ACCEPT_ATTRIBUTE}
-                onChange={handleFile}
+                onChange={handleFileInput}
                 disabled={isPending}
+                className="sr-only"
+                aria-describedby="doc-file-description"
               />
               {file ? (
-                <p className="text-xs text-muted-foreground">
-                  {file.name} · {formatBytes(file.size)}
-                </p>
-              ) : null}
+                <div className="flex items-center gap-3 rounded-xl border bg-card p-4">
+                  <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <FileText className="size-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatBytes(file.size)} · {mimeTypeLabel(file.type)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-9"
+                    onClick={clearSelectedFile}
+                    disabled={isPending}
+                    aria-label="Remover arquivo"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  disabled={isPending}
+                  id="doc-file-description"
+                  className={
+                    "flex flex-col items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed py-10 px-6 transition-colors " +
+                    (isDragging
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40 hover:bg-muted/30") +
+                    " disabled:opacity-50 disabled:cursor-not-allowed"
+                  }
+                >
+                  <div className="size-12 rounded-2xl bg-muted flex items-center justify-center">
+                    <Upload className="size-5 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium">
+                      {isDragging ? "Solte o arquivo aqui" : "Clique ou arraste um arquivo"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      PDF, DOCX ou TXT até {MAX_MB}MB
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
 

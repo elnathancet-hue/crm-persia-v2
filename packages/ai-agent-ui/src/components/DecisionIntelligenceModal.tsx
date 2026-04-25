@@ -3,7 +3,11 @@
 import * as React from "react";
 import { Loader2, Lock, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import type { AgentTool, NativeToolPreset } from "@persia/shared/ai-agent";
+import type {
+  AgentTool,
+  NativeToolPreset,
+  ToolCategory,
+} from "@persia/shared/ai-agent";
 import { NATIVE_TOOL_PRESETS } from "@persia/shared/ai-agent";
 import {
   Dialog,
@@ -26,6 +30,20 @@ interface Props {
 }
 
 const SHIPPED_PRS = new Set<NativeToolPreset["shipped_in_pr"]>(["PR1", "PR3"]);
+
+// Display order + label PT-BR pra cada categoria. Ordem reflete o fluxo
+// tipico de uso: comunicacao primeiro, atribuicao depois, midia/auxiliares
+// no fim.
+const CATEGORY_ORDER: ReadonlyArray<{ id: ToolCategory; label: string }> = [
+  { id: "transfer", label: "Transferência" },
+  { id: "handoff", label: "Encerramento" },
+  { id: "tag", label: "Tags" },
+  { id: "assignment", label: "Atribuição" },
+  { id: "routing", label: "Distribuição" },
+  { id: "notification", label: "Notificações" },
+  { id: "scheduling", label: "Agendamento" },
+  { id: "audio", label: "Mídia" },
+];
 
 export function DecisionIntelligenceModal({
   configId,
@@ -82,16 +100,31 @@ export function DecisionIntelligenceModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-          {NATIVE_TOOL_PRESETS.map((preset) => (
-            <PresetCard
-              key={preset.handler}
-              preset={preset}
-              already={existingByHandler.has(preset.handler)}
-              pending={pendingHandler === preset.handler && isPending}
-              onAdd={() => handleAdd(preset)}
-            />
-          ))}
+        <div className="space-y-5 pt-2">
+          {CATEGORY_ORDER.map(({ id, label }) => {
+            const presetsInCategory = NATIVE_TOOL_PRESETS.filter(
+              (p) => p.category === id,
+            );
+            if (presetsInCategory.length === 0) return null;
+            return (
+              <section key={id} className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {label}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {presetsInCategory.map((preset) => (
+                    <PresetCard
+                      key={preset.handler}
+                      preset={preset}
+                      already={existingByHandler.has(preset.handler)}
+                      pending={pendingHandler === preset.handler && isPending}
+                      onAdd={() => handleAdd(preset)}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>

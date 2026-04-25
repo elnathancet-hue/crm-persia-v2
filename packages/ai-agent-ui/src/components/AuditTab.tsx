@@ -23,6 +23,7 @@ import type {
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import { Badge } from "@persia/ui/badge";
+import { Skeleton } from "@persia/ui/skeleton";
 import { cn } from "@persia/ui/utils";
 import { useAgentActions } from "../context";
 
@@ -72,12 +73,24 @@ export function AuditTab({ configId }: Props) {
       </div>
 
       {loading ? (
-        <Card>
-          <CardContent className="py-12 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-            Carregando execuções...
-          </CardContent>
-        </Card>
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4 grid grid-cols-[auto_auto_1fr_auto] items-center gap-3">
+                <Skeleton className="size-4 rounded-full" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-3 w-12" />
+                  <Skeleton className="h-3 w-10" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : runs.length === 0 ? (
         <EmptyAudit />
       ) : (
