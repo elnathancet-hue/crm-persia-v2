@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import {
   buildNotificationToolName,
-  getPreset,
   NOTIFICATION_PHONE_MAX_DIGITS,
   NOTIFICATION_PHONE_MIN_DIGITS,
   NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH,
@@ -18,22 +17,12 @@ import {
   type UpdateNotificationTemplateInput,
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "@/lib/ai-agent/db";
+import { buildNotificationToolRow } from "@/lib/ai-agent/notifications";
 import {
   agentPaths,
   assertConfigBelongsToOrg,
   requireAgentRole,
 } from "./utils";
-
-// Cada template registra um tool implicito sob o handler trigger_notification.
-// Vamos manter agent_tools sincronizado em todas as 3 mutations (create,
-// update, delete).
-const TOOL_PRESET = getPreset("trigger_notification");
-
-if (!TOOL_PRESET) {
-  // Carrega no boot — garante que mudancas no preset sejam pegas em
-  // typecheck/runtime sem trabalho adicional.
-  throw new Error("Preset trigger_notification ausente");
-}
 
 // ============================================================================
 // Listing
@@ -211,16 +200,7 @@ async function syncToolForTemplate(
     .maybeSingle();
 
   const toolPayload = {
-    organization_id: orgId,
-    config_id: template.config_id,
-    name: newToolName,
-    description: template.description,
-    input_schema: TOOL_PRESET!.input_schema,
-    execution_mode: "native" as const,
-    native_handler: "trigger_notification" as const,
-    webhook_url: null,
-    webhook_secret: null,
-    is_enabled: template.status === "active",
+    ...buildNotificationToolRow(template, orgId),
     updated_at: new Date().toISOString(),
   };
 

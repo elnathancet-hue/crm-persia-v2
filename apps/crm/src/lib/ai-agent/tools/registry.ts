@@ -10,6 +10,7 @@ import { stopAgentHandler } from "./stop-agent";
 import { transferToAgentHandler } from "./transfer-to-agent";
 import { transferToStageHandler } from "./transfer-to-stage";
 import { transferToUserHandler } from "./transfer-to-user";
+import { triggerNotificationHandler } from "./trigger-notification";
 
 export const nativeHandlers: NativeHandlerRegistry = {
   stop_agent: stopAgentHandler,
@@ -17,6 +18,7 @@ export const nativeHandlers: NativeHandlerRegistry = {
   transfer_to_stage: transferToStageHandler,
   transfer_to_agent: transferToAgentHandler,
   add_tag: addTagHandler,
+  trigger_notification: triggerNotificationHandler,
 };
 
 export function isImplementedNativeHandler(
