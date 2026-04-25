@@ -17,7 +17,9 @@ import {
   NOTIFICATION_PHONE_MIN_DIGITS,
   NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH,
   NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS,
+  NOTIFICATION_TEMPLATE_DESCRIPTION_MIN_CHARS,
   NOTIFICATION_TEMPLATE_NAME_MAX_CHARS,
+  NOTIFICATION_TEMPLATE_NAME_MIN_CHARS,
   NOTIFICATION_TEMPLATES_MAX_PER_AGENT,
   buildNotificationToolName,
   isKnownFixedVariable,
@@ -99,15 +101,18 @@ export function NotificationsTab({
       body_template: source.body_template,
     });
 
+  const editorErrors = React.useMemo(
+    () => validateEditor(editor),
+    [editor],
+  );
+  const editorHasErrors = Object.keys(editorErrors).length > 0;
+
   const handleSave = () => {
+    if (editorHasErrors) return;
     const name = editor.name.trim();
     const description = editor.description.trim();
     const body = editor.body_template.trim();
     const address = editor.target_address.trim();
-    if (!name || !description || !body || !address) {
-      toast.error("Preencha todos os campos");
-      return;
-    }
 
     startTransition(async () => {
       try {
@@ -265,6 +270,8 @@ export function NotificationsTab({
 
       <NotificationEditorDialog
         editor={editor}
+        errors={editorErrors}
+        hasErrors={editorHasErrors}
         onChange={setEditor}
         onSave={handleSave}
         isPending={isPending}
@@ -383,8 +390,15 @@ function NotificationCard({
   );
 }
 
+type EditorErrors = Partial<Record<
+  "name" | "description" | "target_address" | "body_template",
+  string
+>>;
+
 interface EditorDialogProps {
   editor: EditorState;
+  errors: EditorErrors;
+  hasErrors: boolean;
   onChange: React.Dispatch<React.SetStateAction<EditorState>>;
   onSave: () => void;
   isPending: boolean;
@@ -392,6 +406,8 @@ interface EditorDialogProps {
 
 function NotificationEditorDialog({
   editor,
+  errors,
+  hasErrors,
   onChange,
   onSave,
   isPending,
@@ -435,15 +451,23 @@ function NotificationEditorDialog({
               placeholder="Ex: Lead qualificado"
               disabled={isPending}
               maxLength={NOTIFICATION_TEMPLATE_NAME_MAX_CHARS}
+              aria-invalid={!!errors.name}
+              className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : undefined}
             />
-            {editor.name.trim() ? (
+            {errors.name ? (
+              <p className="text-xs text-destructive">{errors.name}</p>
+            ) : editor.name.trim() ? (
               <p className="text-xs text-muted-foreground">
                 Tool registrada como{" "}
                 <code className="font-mono">
                   {buildNotificationToolName(editor.name)}
                 </code>
               </p>
-            ) : null}
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Mínimo {NOTIFICATION_TEMPLATE_NAME_MIN_CHARS} caracteres. Vira o nome do tool que o agente enxerga.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -458,11 +482,22 @@ function NotificationEditorDialog({
               rows={2}
               disabled={isPending}
               maxLength={NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS}
+              aria-invalid={!!errors.description}
+              className={errors.description ? "border-destructive focus-visible:ring-destructive/40" : undefined}
             />
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {editor.description.length} /{" "}
-              {NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              {errors.description ? (
+                <p className="text-xs text-destructive flex-1">{errors.description}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground flex-1">
+                  Descreva pra o LLM quando este template deve ser disparado.
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+                {editor.description.length} /{" "}
+                {NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS}
+              </p>
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -508,12 +543,18 @@ function NotificationEditorDialog({
                   : "Ex: 120363027489123456@g.us"
               }
               disabled={isPending}
+              aria-invalid={!!errors.target_address}
+              className={errors.target_address ? "border-destructive focus-visible:ring-destructive/40" : undefined}
             />
-            <p className="text-xs text-muted-foreground">
-              {editor.target_type === "phone"
-                ? `Número completo com DDI + DDD. ${NOTIFICATION_PHONE_MIN_DIGITS}–${NOTIFICATION_PHONE_MAX_DIGITS} dígitos.`
-                : "JID do grupo no formato 1203...@g.us. Copie do UAZAPI ou WhatsApp Business."}
-            </p>
+            {errors.target_address ? (
+              <p className="text-xs text-destructive">{errors.target_address}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {editor.target_type === "phone"
+                  ? `Número completo com DDI + DDD. ${NOTIFICATION_PHONE_MIN_DIGITS}–${NOTIFICATION_PHONE_MAX_DIGITS} dígitos.`
+                  : "JID do grupo no formato 1203...@g.us. Copie do UAZAPI ou WhatsApp Business."}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -531,8 +572,15 @@ function NotificationEditorDialog({
               rows={6}
               disabled={isPending}
               maxLength={NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH}
-              className="font-mono text-xs"
+              aria-invalid={!!errors.body_template}
+              className={cn(
+                "font-mono text-xs",
+                errors.body_template && "border-destructive focus-visible:ring-destructive/40",
+              )}
             />
+            {errors.body_template ? (
+              <p className="text-xs text-destructive">{errors.body_template}</p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground mr-1">
                 Variáveis fixas:
@@ -586,7 +634,7 @@ function NotificationEditorDialog({
           >
             Cancelar
           </Button>
-          <Button onClick={onSave} disabled={isPending}>
+          <Button onClick={onSave} disabled={isPending || hasErrors}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             Salvar
           </Button>
@@ -594,6 +642,51 @@ function NotificationEditorDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function validateEditor(editor: EditorState): EditorErrors {
+  const errors: EditorErrors = {};
+  const name = editor.name.trim();
+  const description = editor.description.trim();
+  const body = editor.body_template.trim();
+  const address = editor.target_address.trim();
+
+  if (!name) {
+    errors.name = "Nome é obrigatório";
+  } else if (name.length < NOTIFICATION_TEMPLATE_NAME_MIN_CHARS) {
+    errors.name = `Mínimo ${NOTIFICATION_TEMPLATE_NAME_MIN_CHARS} caracteres`;
+  } else if (name.length > NOTIFICATION_TEMPLATE_NAME_MAX_CHARS) {
+    errors.name = `Máximo ${NOTIFICATION_TEMPLATE_NAME_MAX_CHARS} caracteres`;
+  }
+
+  if (!description) {
+    errors.description = "Descrição é obrigatória";
+  } else if (description.length < NOTIFICATION_TEMPLATE_DESCRIPTION_MIN_CHARS) {
+    errors.description = `Mínimo ${NOTIFICATION_TEMPLATE_DESCRIPTION_MIN_CHARS} caracteres. Descreva quando o agente deve usar esse template.`;
+  } else if (description.length > NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS) {
+    errors.description = `Máximo ${NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS} caracteres`;
+  }
+
+  if (!address) {
+    errors.target_address = "Destino é obrigatório";
+  } else if (editor.target_type === "phone") {
+    const digits = address.replace(/\D/g, "");
+    if (digits.length < NOTIFICATION_PHONE_MIN_DIGITS) {
+      errors.target_address = `Telefone tem menos de ${NOTIFICATION_PHONE_MIN_DIGITS} dígitos`;
+    } else if (digits.length > NOTIFICATION_PHONE_MAX_DIGITS) {
+      errors.target_address = `Telefone tem mais de ${NOTIFICATION_PHONE_MAX_DIGITS} dígitos`;
+    }
+  } else if (address.length < 5) {
+    errors.target_address = "JID do grupo é muito curto";
+  }
+
+  if (!body) {
+    errors.body_template = "Corpo da mensagem é obrigatório";
+  } else if (body.length > NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH) {
+    errors.body_template = `Máximo ${NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH} caracteres`;
+  }
+
+  return errors;
 }
 
 interface TargetTypeButtonProps {
