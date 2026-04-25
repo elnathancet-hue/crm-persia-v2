@@ -8,6 +8,7 @@ import type {
   AgentCostLimit,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
+  AgentScheduledJob,
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
@@ -20,6 +21,7 @@ import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
 import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
 import { listNotificationTemplates } from "@/actions/ai-agent/notifications";
+import { listScheduledJobs } from "@/actions/ai-agent/scheduled-jobs";
 import { createAdminAgentActions } from "@/features/ai-agent/admin-actions";
 import { useActiveOrg } from "@/lib/stores/client-store";
 
@@ -44,6 +46,9 @@ export function AgentEditorClient({ agentId }: Props) {
   const [notificationTemplates, setNotificationTemplates] = React.useState<
     AgentNotificationTemplate[]
   >([]);
+  const [scheduledJobs, setScheduledJobs] = React.useState<
+    AgentScheduledJob[]
+  >([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -58,6 +63,7 @@ export function AgentEditorClient({ agentId }: Props) {
         setAllowedDomains([]);
         setKnowledgeSources([]);
         setNotificationTemplates([]);
+        setScheduledJobs([]);
         setLoading(false);
         return;
       }
@@ -74,6 +80,7 @@ export function AgentEditorClient({ agentId }: Props) {
             setAllowedDomains([]);
             setKnowledgeSources([]);
             setNotificationTemplates([]);
+            setScheduledJobs([]);
           }
           return;
         }
@@ -85,6 +92,7 @@ export function AgentEditorClient({ agentId }: Props) {
           nextAllowedDomains,
           nextKnowledgeSources,
           nextNotificationTemplates,
+          nextScheduledJobs,
         ] = await Promise.all([
           listStages(activeOrgId, agentId),
           listToolsForAgent(activeOrgId, agentId),
@@ -92,6 +100,7 @@ export function AgentEditorClient({ agentId }: Props) {
           listAllowedDomains(activeOrgId),
           listKnowledgeSources(activeOrgId, agentId),
           listNotificationTemplates(activeOrgId, agentId),
+          listScheduledJobs(activeOrgId, agentId),
         ]);
 
         if (!cancelled) {
@@ -102,6 +111,7 @@ export function AgentEditorClient({ agentId }: Props) {
           setAllowedDomains(nextAllowedDomains);
           setKnowledgeSources(nextKnowledgeSources);
           setNotificationTemplates(nextNotificationTemplates);
+          setScheduledJobs(nextScheduledJobs);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -153,6 +163,7 @@ export function AgentEditorClient({ agentId }: Props) {
             initialAllowedDomains={allowedDomains}
             initialKnowledgeSources={knowledgeSources}
             initialNotificationTemplates={notificationTemplates}
+            initialScheduledJobs={scheduledJobs}
           />
         </AgentActionsProvider>
       )}

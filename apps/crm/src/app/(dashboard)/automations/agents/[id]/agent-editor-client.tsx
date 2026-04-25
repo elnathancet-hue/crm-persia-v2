@@ -5,6 +5,7 @@ import type {
   AgentCostLimit,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
+  AgentScheduledJob,
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
@@ -19,6 +20,7 @@ interface Props {
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
   initialNotificationTemplates?: AgentNotificationTemplate[];
+  initialScheduledJobs?: AgentScheduledJob[];
 }
 
 export function AgentEditorClient(props: Props) {

@@ -22,6 +22,7 @@ import type {
   AgentCostLimit,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
+  AgentScheduledJob,
   AgentStage,
   AgentStatus,
   AgentTool,
@@ -45,6 +46,7 @@ import { LimitsUsageTab } from "./LimitsUsageTab";
 import { FAQTab } from "./FAQTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { NotificationsTab } from "./NotificationsTab";
+import { SchedulingTab } from "./SchedulingTab";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
@@ -58,6 +60,7 @@ interface Props {
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
   initialNotificationTemplates?: AgentNotificationTemplate[];
+  initialScheduledJobs?: AgentScheduledJob[];
 }
 
 export function AgentEditor({
@@ -68,9 +71,14 @@ export function AgentEditor({
   initialAllowedDomains,
   initialKnowledgeSources = [],
   initialNotificationTemplates = [],
+  initialScheduledJobs = [],
 }: Props) {
-  const { updateAgent, listKnowledgeSources, listNotificationTemplates } =
-    useAgentActions();
+  const {
+    updateAgent,
+    listKnowledgeSources,
+    listNotificationTemplates,
+    listScheduledJobs,
+  } = useAgentActions();
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
   const [tools, setTools] = React.useState(initialTools);
@@ -80,6 +88,9 @@ export function AgentEditor({
   const [notificationTemplates, setNotificationTemplates] = React.useState<
     AgentNotificationTemplate[]
   >(initialNotificationTemplates);
+  const [scheduledJobs, setScheduledJobs] = React.useState<
+    AgentScheduledJob[]
+  >(initialScheduledJobs);
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
@@ -102,6 +113,15 @@ export function AgentEditor({
     }
   }, [agent.id, listNotificationTemplates]);
 
+  const refreshScheduledJobs = React.useCallback(async () => {
+    try {
+      const next = await listScheduledJobs(agent.id);
+      setScheduledJobs(next);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao carregar agendamentos");
+    }
+  }, [agent.id, listScheduledJobs]);
+
   // Lazy first-fetch when no SSR-provided sources were passed in.
   React.useEffect(() => {
     if (initialKnowledgeSources.length === 0) {
@@ -109,6 +129,9 @@ export function AgentEditor({
     }
     if (initialNotificationTemplates.length === 0) {
       void refreshNotificationTemplates();
+    }
+    if (initialScheduledJobs.length === 0) {
+      void refreshScheduledJobs();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -284,11 +307,12 @@ export function AgentEditor({
           />
         </TabsContent>
         <TabsContent value="calendar">
-          <PlaceholderTab
-            icon={Calendar}
-            title="Agendamento integrado"
-            description="Conecte Google Calendar e permita que o agente marque reunioes direto na conversa."
-            phase="PR7"
+          <SchedulingTab
+            configId={agent.id}
+            jobs={scheduledJobs}
+            templates={notificationTemplates}
+            onChange={setScheduledJobs}
+            onRefresh={refreshScheduledJobs}
           />
         </TabsContent>
         <TabsContent value="limits">

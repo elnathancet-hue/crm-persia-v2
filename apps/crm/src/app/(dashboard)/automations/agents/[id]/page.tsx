@@ -6,6 +6,7 @@ import { listCostLimits } from "@/actions/ai-agent/limits";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
 import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
 import { listNotificationTemplates } from "@/actions/ai-agent/notifications";
+import { listScheduledJobs } from "@/actions/ai-agent/scheduled-jobs";
 import { AgentEditorClient } from "./agent-editor-client";
 
 interface PageProps {
@@ -24,6 +25,7 @@ export default async function AgentDetailPage({ params }: PageProps) {
     allowedDomains,
     knowledgeSources,
     notificationTemplates,
+    scheduledJobs,
   ] = await Promise.all([
     listStages(id),
     listToolsForAgent(id),
@@ -31,6 +33,7 @@ export default async function AgentDetailPage({ params }: PageProps) {
     listAllowedDomains(),
     listKnowledgeSources(id),
     listNotificationTemplates(id),
+    listScheduledJobs(id),
   ]);
 
   return (
@@ -42,6 +45,7 @@ export default async function AgentDetailPage({ params }: PageProps) {
       initialAllowedDomains={allowedDomains}
       initialKnowledgeSources={knowledgeSources}
       initialNotificationTemplates={notificationTemplates}
+      initialScheduledJobs={scheduledJobs}
     />
   );
 }
