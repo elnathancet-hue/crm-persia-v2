@@ -18,3 +18,4 @@ export * from "./handoff";
 export * from "./rag";
 export * from "./notifications";
 export * from "./scheduled-jobs";
+export * from "./calendar";
