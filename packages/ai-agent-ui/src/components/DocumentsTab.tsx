@@ -2,8 +2,6 @@
 
 import * as React from "react";
 import {
-  AlertCircle,
-  CheckCircle2,
   FileText,
   Loader2,
   RefreshCcw,
@@ -15,10 +13,8 @@ import {
   DOCUMENT_ALLOWED_MIME_TYPES,
   DOCUMENT_UPLOAD_MAX_BYTES,
   type AgentKnowledgeSource,
-  type IndexingStatus,
   type KnowledgeSourceMetadata,
 } from "@persia/shared/ai-agent";
-import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import {
@@ -32,6 +28,7 @@ import {
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { useAgentActions } from "../context";
+import { IndexingStatusBadge } from "./IndexingStatusBadge";
 
 interface Props {
   configId: string;
@@ -199,10 +196,11 @@ export function DocumentsTab({
               <FileText className="size-6 text-muted-foreground" />
             </div>
             <div className="max-w-md space-y-1">
-              <p className="font-medium text-sm">Nenhum documento carregado</p>
+              <p className="font-semibold text-sm">Adicione a base de conhecimento</p>
               <p className="text-xs text-muted-foreground">
-                Envie um arquivo PDF, DOCX ou TXT. O agente consulta a base por
-                similaridade sempre que a etapa atual tiver RAG ativado.
+                Suba PDFs, DOCX ou TXT com o conteúdo que o agente deve consultar.
+                Etapas com base de conhecimento ativa recuperam os trechos relevantes
+                automaticamente em cada resposta.
               </p>
             </div>
             <Button onClick={openUpload}>
@@ -216,12 +214,12 @@ export function DocumentsTab({
           {docs.map((source) => {
             const meta = source.metadata as DocMetadata;
             return (
-              <Card key={source.id}>
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-3">
+              <Card key={source.id} className="transition-shadow hover:shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm truncate">
+                        <p className="font-semibold text-sm truncate tracking-tight">
                           {source.title}
                         </p>
                         <IndexingStatusBadge
@@ -243,6 +241,7 @@ export function DocumentsTab({
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="size-10"
                           aria-label="Reindexar"
                           onClick={() => handleReindex(source)}
                           disabled={isPending}
@@ -253,6 +252,7 @@ export function DocumentsTab({
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="size-10"
                         aria-label="Apagar"
                         onClick={() => handleDelete(source)}
                         disabled={isPending}
@@ -341,55 +341,6 @@ export function DocumentsTab({
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-interface StatusBadgeProps {
-  status: IndexingStatus;
-  error: string | null;
-  chunkCount: number;
-}
-
-function IndexingStatusBadge({ status, error, chunkCount }: StatusBadgeProps) {
-  if (status === "pending") {
-    return (
-      <Badge variant="outline" className="text-xs gap-1">
-        <Loader2 className="size-3 animate-spin" />
-        Em fila
-      </Badge>
-    );
-  }
-  if (status === "processing") {
-    return (
-      <Badge
-        variant="outline"
-        className="text-xs gap-1 border-blue-500/40 text-blue-600"
-      >
-        <Loader2 className="size-3 animate-spin" />
-        Indexando
-      </Badge>
-    );
-  }
-  if (status === "indexed") {
-    return (
-      <Badge
-        variant="outline"
-        className="text-xs gap-1 border-emerald-500/40 text-emerald-600"
-      >
-        <CheckCircle2 className="size-3" />
-        Indexado ({chunkCount} chunk{chunkCount === 1 ? "" : "s"})
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="text-xs gap-1 border-destructive/40 text-destructive"
-      title={error ?? undefined}
-    >
-      <AlertCircle className="size-3" />
-      Falhou
-    </Badge>
   );
 }
 

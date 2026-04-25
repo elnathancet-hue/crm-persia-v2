@@ -2,8 +2,6 @@
 
 import * as React from "react";
 import {
-  AlertCircle,
-  CheckCircle2,
   HelpCircle,
   Loader2,
   Pencil,
@@ -16,7 +14,6 @@ import {
   FAQ_ANSWER_MAX_CHARS,
   FAQ_QUESTION_MAX_CHARS,
   type AgentKnowledgeSource,
-  type IndexingStatus,
   type KnowledgeSourceMetadata,
 } from "@persia/shared/ai-agent";
 import { Badge } from "@persia/ui/badge";
@@ -34,6 +31,7 @@ import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { useAgentActions } from "../context";
+import { IndexingStatusBadge } from "./IndexingStatusBadge";
 
 interface Props {
   configId: string;
@@ -191,10 +189,11 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
               <HelpCircle className="size-6 text-muted-foreground" />
             </div>
             <div className="max-w-md space-y-1">
-              <p className="font-medium text-sm">Nenhuma FAQ ainda</p>
+              <p className="font-semibold text-sm">Ensine o que o agente precisa saber</p>
               <p className="text-xs text-muted-foreground">
-                Adicione a primeira pergunta frequente. O agente vai consultar
-                essa base sempre que a etapa tiver RAG ativado.
+                Cadastre perguntas e respostas que o agente deve usar como base.
+                Etapas com base de conhecimento ativa recuperam essas FAQs por similaridade
+                antes de responder.
               </p>
             </div>
             <Button onClick={openCreate}>
@@ -208,12 +207,12 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
           {faqs.map((source) => {
             const meta = source.metadata as FAQMetadata;
             return (
-              <Card key={source.id}>
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-3">
+              <Card key={source.id} className="transition-shadow hover:shadow-sm">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0 space-y-2">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm truncate">
+                        <p className="font-semibold text-sm truncate tracking-tight">
                           {source.title}
                         </p>
                         <IndexingStatusBadge
@@ -247,6 +246,7 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="size-10"
                           aria-label="Reindexar"
                           onClick={() => handleReindex(source)}
                           disabled={isPending}
@@ -257,6 +257,7 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="size-10"
                         aria-label="Editar"
                         onClick={() => openEdit(source)}
                         disabled={isPending}
@@ -266,6 +267,7 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="size-10"
                         aria-label="Apagar"
                         onClick={() => handleDelete(source)}
                         disabled={isPending}
@@ -369,48 +371,3 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
   );
 }
 
-interface StatusBadgeProps {
-  status: IndexingStatus;
-  error: string | null;
-  chunkCount: number;
-}
-
-function IndexingStatusBadge({ status, error, chunkCount }: StatusBadgeProps) {
-  if (status === "pending") {
-    return (
-      <Badge variant="outline" className="text-xs gap-1">
-        <Loader2 className="size-3 animate-spin" />
-        Em fila
-      </Badge>
-    );
-  }
-  if (status === "processing") {
-    return (
-      <Badge variant="outline" className="text-xs gap-1 border-blue-500/40 text-blue-600">
-        <Loader2 className="size-3 animate-spin" />
-        Indexando
-      </Badge>
-    );
-  }
-  if (status === "indexed") {
-    return (
-      <Badge
-        variant="outline"
-        className="text-xs gap-1 border-emerald-500/40 text-emerald-600"
-      >
-        <CheckCircle2 className="size-3" />
-        Indexada ({chunkCount} chunk{chunkCount === 1 ? "" : "s"})
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="text-xs gap-1 border-destructive/40 text-destructive"
-      title={error ?? undefined}
-    >
-      <AlertCircle className="size-3" />
-      Falhou
-    </Badge>
-  );
-}

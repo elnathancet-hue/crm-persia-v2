@@ -104,9 +104,10 @@ function EmptyAudit() {
           <CircleDashed className="size-6 text-muted-foreground" />
         </div>
         <div className="space-y-1 max-w-md">
-          <h3 className="font-semibold">Nenhuma execução registrada</h3>
+          <h3 className="font-semibold tracking-tight">Histórico vazio por enquanto</h3>
           <p className="text-sm text-muted-foreground">
-            Assim que o agente responder uma conversa ou você usar o testador, as execuções aparecem aqui.
+            Cada resposta do agente vira uma linha aqui — com o passo a passo, tokens consumidos
+            e ferramentas chamadas. Use o testador para gerar a primeira execução sem afetar o WhatsApp.
           </p>
         </div>
       </CardContent>
