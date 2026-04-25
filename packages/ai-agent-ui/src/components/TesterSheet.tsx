@@ -166,28 +166,42 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           ) : null}
         </div>
 
-        <SheetFooter className="flex-row gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleClear}
-            disabled={turns.length === 0 || isPending}
-          >
-            Limpar
-          </Button>
-          <form onSubmit={handleSend} className="flex-1 flex gap-2">
-            <Input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Digite uma mensagem..."
-              disabled={isPending}
-              aria-label="Mensagem de teste"
-            />
-            <Button type="submit" disabled={isPending || !message.trim()}>
-              <Send className="size-4" />
+        <SheetFooter className="flex-col gap-2">
+          {stages.length === 0 ? (
+            <p className="text-xs text-muted-foreground self-start">
+              Crie pelo menos uma etapa na aba <strong>Etapas</strong> antes de testar.
+            </p>
+          ) : null}
+          <div className="flex flex-row gap-2 w-full">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleClear}
+              disabled={turns.length === 0 || isPending}
+            >
+              Limpar
             </Button>
-          </form>
+            <form onSubmit={handleSend} className="flex-1 flex gap-2">
+              <Input
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={
+                  stages.length === 0
+                    ? "Crie uma etapa primeiro"
+                    : "Digite uma mensagem..."
+                }
+                disabled={isPending || stages.length === 0}
+                aria-label="Mensagem de teste"
+              />
+              <Button
+                type="submit"
+                disabled={isPending || !message.trim() || stages.length === 0}
+              >
+                <Send className="size-4" />
+              </Button>
+            </form>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>

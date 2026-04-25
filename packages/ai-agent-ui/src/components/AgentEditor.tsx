@@ -207,7 +207,7 @@ export function AgentEditor({
             onValueChange={(v) => v && handleStatusChange(v as AgentStatus)}
           >
             <SelectTrigger className="w-36">
-              <SelectValue />
+              <SelectValue>{statusLabel(agent.status)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="draft">Rascunho</SelectItem>
