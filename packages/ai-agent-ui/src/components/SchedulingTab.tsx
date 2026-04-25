@@ -533,14 +533,23 @@ function SchedulingEditorDialog({
                 aria-invalid={!!errors.template_id}
                 className={errors.template_id ? "border-destructive" : undefined}
               >
-                <SelectValue placeholder="Selecione um template" />
+                <SelectValue placeholder="Selecione um template">
+                  {templates.find((t) => t.id === editor.template_id)?.name ??
+                    "Selecione um template"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {templates.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
+                {templates.length === 0 ? (
+                  <SelectItem value="_empty" disabled>
+                    Nenhum template ativo. Crie em Notificações.
                   </SelectItem>
-                ))}
+                ) : (
+                  templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
             {errors.template_id ? (
@@ -556,7 +565,11 @@ function SchedulingEditorDialog({
               disabled={isPending}
             >
               <SelectTrigger id="sched-cron">
-                <SelectValue placeholder="Personalizado" />
+                <SelectValue placeholder="Personalizado">
+                  {SCHEDULED_JOB_CRON_PRESETS.find(
+                    (p) => p.expr === editor.cron_preset,
+                  )?.label ?? "Personalizado"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {SCHEDULED_JOB_CRON_PRESETS.map((p) => (
@@ -564,7 +577,7 @@ function SchedulingEditorDialog({
                     {p.label}
                   </SelectItem>
                 ))}
-                <SelectItem value="">Personalizado</SelectItem>
+                <SelectItem value="">Personalizado (avançado)</SelectItem>
               </SelectContent>
             </Select>
             {editor.cron_preset === "" ? (
@@ -586,7 +599,12 @@ function SchedulingEditorDialog({
               <p className="text-xs text-destructive">{errors.cron_expr}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Formato cron com 5 campos: minuto, hora, dia, mês, dia-da-semana. Horários em UTC.
+                {describeCronInBrazil(editor.cron_expr)}
+                {editor.cron_preset === "" ? (
+                  <span className="block opacity-70 mt-0.5">
+                    Formato cron: minuto hora dia mês dia-da-semana. Horários em UTC (Brasília −3h).
+                  </span>
+                ) : null}
               </p>
             )}
           </div>
@@ -624,6 +642,49 @@ function SchedulingEditorDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// Converte uma expressão cron em descrição PT-BR mostrando o horário em
+// Brasília (UTC−3). Apenas pra cron simples (minuto + hora literais);
+// fallback pra expressão crua quando o padrão for complexo demais pra
+// resumir num parágrafo.
+function describeCronInBrazil(cron: string): string {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return `Expressão: ${cron}`;
+  const [minute, hour, day, month, weekday] = parts;
+  const minNum = Number(minute);
+  const hourNum = Number(hour);
+
+  if (Number.isNaN(minNum) || Number.isNaN(hourNum)) {
+    return `Expressão: ${cron}`;
+  }
+
+  // Converte UTC pra horário de Brasília (UTC−3, sem DST)
+  const brHour = (hourNum - 3 + 24) % 24;
+  const time = `${String(brHour).padStart(2, "0")}:${String(minNum).padStart(2, "0")}`;
+
+  if (day === "*" && month === "*" && weekday === "*") {
+    return `Dispara todo dia às ${time} (horário de Brasília).`;
+  }
+  if (day === "*" && month === "*") {
+    const days: Record<string, string> = {
+      "0": "domingo",
+      "1": "segunda",
+      "2": "terça",
+      "3": "quarta",
+      "4": "quinta",
+      "5": "sexta",
+      "6": "sábado",
+      "1-5": "segunda a sexta",
+      "0,6": "fim de semana",
+    };
+    const label = days[weekday] ?? `dia da semana ${weekday}`;
+    return `Dispara ${label} às ${time} (horário de Brasília).`;
+  }
+  if (month === "*" && weekday === "*") {
+    return `Dispara todo dia ${day} de cada mês às ${time} (horário de Brasília).`;
+  }
+  return `Cron: ${cron} (UTC).`;
 }
 
 function validateSchedulingEditor(editor: EditorState): SchedulingEditorErrors {

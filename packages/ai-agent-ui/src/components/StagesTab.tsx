@@ -113,6 +113,7 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
               key={stage.id}
               stage={stage}
               order={index + 1}
+              isLast={index === sorted.length - 1}
               onEdit={() => setEditing(stage)}
               onDelete={() => setDeleteTarget(stage)}
             />
@@ -164,14 +165,17 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
 function StageCard({
   stage,
   order,
+  isLast,
   onEdit,
   onDelete,
 }: {
   stage: AgentStage;
   order: number;
+  isLast: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const missingTransition = !isLast && !stage.transition_hint;
   return (
     <Card className="transition-shadow hover:shadow-sm">
       <CardContent className="p-6 flex items-start gap-4">
@@ -189,6 +193,19 @@ function StageCard({
                 RAG
               </span>
             ) : null}
+            {isLast ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-medium">
+                Última etapa
+              </span>
+            ) : null}
+            {missingTransition ? (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 font-medium"
+                title="Sem dica de transição: o agente pode ficar preso aqui sem avançar pra próxima etapa"
+              >
+                ⚠ Sem dica de transição
+              </span>
+            ) : null}
           </div>
           {stage.instruction ? (
             <p className="text-xs text-muted-foreground line-clamp-2 whitespace-pre-wrap">
@@ -200,6 +217,10 @@ function StageCard({
           {stage.transition_hint ? (
             <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/40">
               <span className="font-medium text-foreground/80">Transição:</span> {stage.transition_hint}
+            </p>
+          ) : missingTransition ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-2 pt-2 border-t border-border/40">
+              Adicione uma <strong>dica de transição</strong> pra orientar quando o agente deve avançar pra etapa {order + 1}.
             </p>
           ) : null}
         </div>
