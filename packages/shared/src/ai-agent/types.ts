@@ -106,6 +106,11 @@ export interface AgentConfig {
   handoff_notification_target_type?: HandoffNotificationTargetType | null;
   handoff_notification_target_address?: string | null;
   handoff_notification_template?: string | null;
+  // PR7.3: per-agent Google Calendar assignment. Migration 026 adds the
+  // column nullable. Quando null, handler `schedule_event` retorna erro
+  // de "calendario nao configurado". UI permite escolher entre
+  // conexoes da org no editor do agente.
+  calendar_connection_id?: string | null;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -328,6 +333,9 @@ export interface CreateAgentInput {
   handoff_notification_target_type?: HandoffNotificationTargetType | null;
   handoff_notification_target_address?: string | null;
   handoff_notification_template?: string | null;
+  // PR7.3: opcional. Server valida que connection_id pertence a mesma
+  // org e esta active.
+  calendar_connection_id?: string | null;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {

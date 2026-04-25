@@ -2840,3 +2840,122 @@ DB settings via SQL:
 - Custom variables no scheduler (usuario nao escolhe — templates que
   usam {{custom.X}} recebem vazio)
 - Calendar sync (PR7.3)
+
+## 2026-04-25 — Claude — PR7.3a Google Calendar contracts + schema
+
+### Scope shipped
+
+- Branch: claude/ai-agent-calendar-contracts
+- Migration 026:
+  - agent_calendar_connections (id, org, connected_by_user, google_email,
+    google_calendar_id, display_name, encrypted_refresh_token_id,
+    status, last_refreshed_at, last_error)
+  - agent_configs.calendar_connection_id (nullable FK)
+  - Refresh token CRIPTOGRAFADO via Supabase Vault — coluna armazena
+    UUID do secret, NAO o cleartext
+  - 2 RPCs SECURITY DEFINER service_role-only:
+    - get_calendar_refresh_token(connection_id, org_id) — retorna
+      cleartext via vault.decrypted_secrets
+    - upsert_calendar_connection(...) — server action chama no fim do
+      OAuth flow, cria/atualiza secret no Vault + row na tabela
+- packages/shared/src/ai-agent/calendar.ts:
+  - Types: AgentCalendarConnection, *Public, ScheduleEventHandlerInput,
+    ScheduleEventHandlerResult, CalendarEventSummary, audit step
+    payloads
+  - Constants: GOOGLE_CALENDAR_SCOPE, OAUTH_AUTH_URL, TOKEN_URL,
+    CALLBACK_PATH, SCHEDULE_EVENT_DURATION_MIN/MAX_MINUTES,
+    LIST_MAX_RESULTS, MAX_DAYS_AHEAD
+  - Helpers: maskEmail, validateScheduleEventInput
+  - toPublicConnection(conn): omite encrypted_refresh_token_id pra
+    UI nao receber por engano
+- tool-presets.ts: schedule_event ganhou input_schema correto pra 3
+  acoes (list, create, cancel) com validacao detalhada
+- types.ts: AgentConfig.calendar_connection_id?, CreateAgentInput.calendar_connection_id?
+
+### Validation
+
+- pnpm -r typecheck OK
+- pnpm --filter @persia/crm build OK
+- pnpm --filter @persia/admin build OK
+
+---
+
+## Spec for PR7.3b — Calendar runtime (Codex)
+
+### Pre-requisito EXTERNO (user fara)
+
+1. Criar projeto no Google Cloud Console (https://console.cloud.google.com)
+2. Habilitar Google Calendar API
+3. Configurar OAuth consent screen (External, scopes:
+   /auth/calendar.events)
+4. Criar OAuth client ID (Web application):
+   - Authorized JavaScript origins: https://crm.funilpersia.top
+   - Authorized redirect URIs:
+     https://crm.funilpersia.top/api/oauth/google/callback
+5. Setar env vars no EasyPanel CRM:
+   - GOOGLE_OAUTH_CLIENT_ID=<client_id.apps.googleusercontent.com>
+   - GOOGLE_OAUTH_CLIENT_SECRET=<secret>
+
+### Goal
+
+3 components:
+1. OAuth callback endpoint (apps/crm/src/app/api/oauth/google/callback/route.ts)
+2. Calendar API client (apps/crm/src/lib/ai-agent/calendar/google-client.ts)
+3. Handler schedule_event (apps/crm/src/lib/ai-agent/handlers/schedule-event.ts)
+
+### Endpoint OAuth callback
+
+GET /api/oauth/google/callback?code=...&state=<csrf+orgId+returnPath>
+
+Fluxo:
+1. Validate state (CSRF + org context). State eh JWT assinado com
+   ADMIN_CONTEXT_SECRET ou similar — EXPIRA em 5min
+2. POST pra GOOGLE_OAUTH_TOKEN_URL com code+client_id+secret+redirect_uri
+3. Recebe { access_token, refresh_token, expires_in, token_type }
+4. GET https://www.googleapis.com/oauth2/v2/userinfo com access_token
+   pra pegar email
+5. Chama RPC public.upsert_calendar_connection(org_id, user_id,
+   email, 'primary', display_name, refresh_token)
+6. Redirect pro return_path com query ?calendar_connected=true
+
+### Google client
+
+Wrapper com 3 metodos:
+- listEvents(connection_id, org_id, time_min?, time_max?, max_results?)
+- createEvent(connection_id, org_id, { summary, description?, start, duration_min, attendee_email? })
+- cancelEvent(connection_id, org_id, event_id)
+
+Cada chamada:
+1. Pega refresh_token via RPC
+2. Refresh access_token (POST token_url, grant_type=refresh_token)
+3. Chama Google Calendar API v3 com Authorization: Bearer
+4. Em 401: marca connection.status='expired', return error
+5. Outros erros: log + return error
+
+### Handler schedule_event
+
+Validate input via validateScheduleEventInput.
+Carrega agent_config.calendar_connection_id; se null, return error.
+Dispatch baseado em action:
+- list: return { events: [...] }
+- create: builda CalendarEventSummary do response do Google
+- cancel: success boolean
+
+Audit step com address mascarada (maskEmail no attendee).
+
+### Tests
+
+ai-agent-pr7.3-runtime.test.ts:
+- OAuth callback rejeita state expirado
+- Token refresh recovers de 401 unico
+- 401 persistente marca connection.status=expired
+- Handler com calendar_connection_id null retorna erro
+- list, create, cancel paths do handler
+- Multi-tenant: handler de org A nao acessa connection de org B
+- maskEmail nao vaza email completo no audit
+
+### Out of scope PR7.3b
+
+- UI de gerenciar conexoes (Claude PR7.3c)
+- Webhook pra eventos cancelados externamente (Calendar push notifications) — futuro
+- Pegar livre/ocupado de outros calendarios — futuro

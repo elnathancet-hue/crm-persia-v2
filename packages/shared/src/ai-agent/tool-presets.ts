@@ -287,19 +287,63 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
   {
     handler: "schedule_event",
     name: "schedule_event",
-    display_name: "Agendar reuniao",
-    description: "Create a calendar event for the current lead.",
-    ui_description: "Marca uma reuniao/call no calendario integrado.",
+    display_name: "Calendario (Google)",
+    description:
+      "Manage Google Calendar events for the current lead. Use action='list' to check availability, action='create' to book a meeting, action='cancel' to cancel by event_id. The agent must have a calendar connection assigned.",
+    ui_description:
+      "Lista, cria e cancela eventos no Google Calendar conectado.",
     icon_name: "CalendarPlus",
     category: "scheduling",
     shipped_in_pr: "PR7",
     input_schema: {
       type: "object",
-      required: ["start_at", "duration_minutes"],
+      required: ["action"],
       properties: {
-        start_at: { type: "string", description: "ISO-8601 datetime" },
-        duration_minutes: { type: "integer", minimum: 10, maximum: 240 },
-        notes: { type: "string" },
+        action: {
+          type: "string",
+          description: "list | create | cancel",
+        },
+        event_summary: {
+          type: "string",
+          description: "Titulo do evento (so action=create)",
+        },
+        event_description: {
+          type: "string",
+          description: "Detalhes do evento (so action=create)",
+        },
+        start_time: {
+          type: "string",
+          description: "ISO 8601 (so action=create)",
+        },
+        duration_minutes: {
+          type: "integer",
+          minimum: 5,
+          maximum: 480,
+          description: "Duracao em minutos (so action=create)",
+        },
+        attendee_email: {
+          type: "string",
+          description:
+            "Email do participante alem do dono do calendario (so action=create)",
+        },
+        time_min: {
+          type: "string",
+          description: "ISO 8601 limite inferior (action=list)",
+        },
+        time_max: {
+          type: "string",
+          description: "ISO 8601 limite superior (action=list)",
+        },
+        max_results: {
+          type: "integer",
+          minimum: 1,
+          maximum: 25,
+          description: "Quantos eventos retornar (action=list, default 10)",
+        },
+        event_id: {
+          type: "string",
+          description: "ID do evento Google (so action=cancel)",
+        },
       },
     },
   },
