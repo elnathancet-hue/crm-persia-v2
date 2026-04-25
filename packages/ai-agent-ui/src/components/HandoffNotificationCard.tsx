@@ -131,6 +131,10 @@ export function HandoffNotificationCard({
                     : "Ex: 5511999999999"
                 }
                 aria-invalid={phoneInvalid || addressMissing}
+                className={cn(
+                  (phoneInvalid || addressMissing) &&
+                    "border-destructive focus-visible:ring-destructive/40",
+                )}
               />
               {draftTargetType === "phone" ? (
                 <p className="text-xs text-muted-foreground">
@@ -171,7 +175,11 @@ export function HandoffNotificationCard({
                 onChange={(e) => onTemplateChange(e.target.value)}
                 placeholder={HANDOFF_DEFAULT_TEMPLATE}
                 rows={7}
-                className="font-mono text-xs"
+                aria-invalid={templateTooLong}
+                className={cn(
+                  "font-mono text-xs",
+                  templateTooLong && "border-destructive focus-visible:ring-destructive/40",
+                )}
               />
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-muted-foreground mr-1">Variáveis disponíveis:</span>
