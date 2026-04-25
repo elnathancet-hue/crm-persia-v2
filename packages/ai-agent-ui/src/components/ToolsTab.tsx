@@ -281,7 +281,7 @@ function EmptyTools({ onCreate }: { onCreate: () => void }) {
           <Plus className="size-7 text-white" />
         </div>
         <div className="space-y-1 max-w-md">
-          <h3 className="font-semibold">Nenhuma ferramenta adicionada</h3>
+          <h3 className="font-semibold tracking-tight">Dê superpoderes ao agente</h3>
           <p className="text-sm text-muted-foreground">
             Decisões inteligentes deixam o agente transferir conversa, aplicar tags, encerrar atendimento e mais — sem precisar de webhook externo.
           </p>

@@ -33,6 +33,7 @@ export { ActiveLimitsProgress } from "./components/ActiveLimitsProgress";
 export { CustomWebhookToolSheet } from "./components/CustomWebhookToolSheet";
 export { DecisionIntelligenceModal } from "./components/DecisionIntelligenceModal";
 export { HandoffNotificationCard } from "./components/HandoffNotificationCard";
+export { IndexingStatusBadge } from "./components/IndexingStatusBadge";
 export { LimitsEditor } from "./components/LimitsEditor";
 export { ReactivateAgentButton } from "./components/ReactivateAgentButton";
 export { StageSheet } from "./components/StageSheet";

@@ -93,7 +93,7 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
-          <Button variant="outline" size="sm" disabled title="Disponível na PR8">
+          <Button variant="outline" size="sm" disabled title="Em breve">
             <Wand2 className="size-4" />
             Gerar etapas com IA
           </Button>
@@ -229,9 +229,9 @@ function EmptyStages({ onCreate }: { onCreate: () => void }) {
           <Plus className="size-6 text-muted-foreground" />
         </div>
         <div className="space-y-1 max-w-sm">
-          <h3 className="font-semibold">Sem etapas ainda</h3>
+          <h3 className="font-semibold tracking-tight">Comece desenhando o fluxo</h3>
           <p className="text-sm text-muted-foreground">
-            Uma etapa descreve o que o agente faz em cada fase da conversa. Comece com algo como <em>Boas-vindas</em>.
+            Cada etapa diz como o agente se comporta numa fase da conversa. A primeira costuma ser <em>Boas-vindas</em> — você adiciona qualificação, oferta e fechamento depois.
           </p>
         </div>
         <Button onClick={onCreate}>

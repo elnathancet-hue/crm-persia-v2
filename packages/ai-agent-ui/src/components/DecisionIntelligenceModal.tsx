@@ -147,7 +147,7 @@ function PresetCard({
             </Badge>
           ) : !shipped ? (
             <Badge variant="outline" className="text-[10px]">
-              Em breve · {preset.shipped_in_pr}
+              Em breve
             </Badge>
           ) : null}
         </div>

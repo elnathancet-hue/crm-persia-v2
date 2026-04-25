@@ -262,9 +262,9 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
           <Sparkles className="size-7 text-white" />
         </div>
         <div className="space-y-1 max-w-md">
-          <h2 className="font-semibold">Nenhum agente configurado</h2>
+          <h2 className="font-semibold tracking-tight">Crie seu primeiro agente</h2>
           <p className="text-sm text-muted-foreground">
-            Crie seu primeiro agente IA nativo pra responder conversas no WhatsApp diretamente pelo sistema, sem precisar de webhooks externos.
+            Um agente responde conversas do WhatsApp automaticamente, seguindo o prompt e as etapas que você definir. Comece com um perfil simples — você refina depois.
           </p>
         </div>
         <Button onClick={onCreate}>
@@ -284,8 +284,8 @@ function AgentCard({
   onDelete: () => void;
 }) {
   return (
-    <Card className="hover:border-primary/50 transition-colors">
-      <CardContent className="p-5 flex flex-col gap-3">
+    <Card className="transition-all hover:shadow-sm hover:border-primary/40">
+      <CardContent className="p-6 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className="size-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shrink-0">
@@ -295,18 +295,18 @@ function AgentCard({
               <div className="flex items-center gap-2 flex-wrap">
                 <Link
                   href={`/automations/agents/${agent.id}`}
-                  className="font-medium hover:underline truncate"
+                  className="text-base font-semibold tracking-tight hover:underline truncate"
                 >
                   {agent.name}
                 </Link>
                 <AgentStatusBadge status={agent.status} />
               </div>
               {agent.description ? (
-                <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                   {agent.description}
                 </p>
               ) : (
-                <p className="text-sm text-muted-foreground/60 italic mt-0.5">
+                <p className="text-xs text-muted-foreground/60 italic mt-1">
                   Sem descrição
                 </p>
               )}
@@ -315,6 +315,7 @@ function AgentCard({
           <Button
             size="icon"
             variant="ghost"
+            className="size-10"
             onClick={onDelete}
             aria-label={`Remover agente ${agent.name}`}
           >
