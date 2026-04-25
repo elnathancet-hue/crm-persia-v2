@@ -45,10 +45,18 @@ import {
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import { useAgentActions } from "../context";
 
+const MODEL_LABEL: Record<string, string> = {
+  "gpt-5-mini": "Padrão (recomendado)",
+  "gpt-4o-mini": "Econômico",
+  "gpt-4o": "Avançado",
+  "gpt-5": "Premium",
+};
+
 const STARTER_PROMPT = `Você é um atendente virtual profissional e cordial.
 - Apresente-se de forma breve.
 - Entenda o que o cliente precisa antes de responder.
 - Use linguagem objetiva, com no máximo 3 frases por mensagem.
+- IMPORTANTE: NUNCA invente informações sobre preços, recursos, prazos, descontos ou políticas que não estejam explicitamente nas instruções da etapa atual ou na base de conhecimento. Se o cliente perguntar algo que você não sabe, responda "Vou transferir você para um especialista que pode confirmar essa informação" e peça a transferência.
 - Peça transferência para um humano se não souber responder.`;
 
 interface Props {
@@ -213,18 +221,21 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="model">Modelo</Label>
+              <Label htmlFor="model">Modelo de IA</Label>
               <Select name="model" defaultValue={DEFAULT_MODEL}>
                 <SelectTrigger id="model">
-                  <SelectValue />
+                  <SelectValue>{MODEL_LABEL[DEFAULT_MODEL] ?? DEFAULT_MODEL}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="gpt-5-mini">GPT-5 mini (recomendado)</SelectItem>
-                  <SelectItem value="gpt-4o-mini">GPT-4o mini (mais rápido e barato)</SelectItem>
-                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                  <SelectItem value="gpt-5">GPT-5 (mais caro, melhor raciocínio)</SelectItem>
+                  <SelectItem value="gpt-5-mini">Padrão (recomendado)</SelectItem>
+                  <SelectItem value="gpt-4o-mini">Econômico (mais rápido e barato)</SelectItem>
+                  <SelectItem value="gpt-4o">Avançado</SelectItem>
+                  <SelectItem value="gpt-5">Premium (melhor raciocínio, mais caro)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Recomendado pra começar. Você pode trocar depois nas Regras do agente.
+              </p>
             </div>
           </form>
           <DialogFooter>

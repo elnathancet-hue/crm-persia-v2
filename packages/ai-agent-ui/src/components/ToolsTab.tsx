@@ -92,8 +92,16 @@ export function ToolsTab({
         <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
-            onClick={() => setWebhookOpen(true)}
-            disabled={!hasAllowlist}
+            onClick={() => {
+              if (!hasAllowlist) {
+                toast.info(
+                  "Cadastre primeiro um domínio na Allowlist abaixo (n8n.suaempresa.com.br, por exemplo) antes de criar webhook customizado.",
+                );
+                return;
+              }
+              setWebhookOpen(true);
+            }}
+            className={!hasAllowlist ? "opacity-60" : undefined}
             title={
               hasAllowlist
                 ? "Adicionar webhook customizado"

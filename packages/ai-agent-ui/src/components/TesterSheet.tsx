@@ -108,7 +108,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           </div>
           <SheetDescription className="flex items-start gap-1.5">
             <Info className="size-3.5 shrink-0 mt-0.5" />
-            Modo dry-run: toda ferramenta que mudaria dados é simulada. Nenhum WhatsApp é enviado.
+            Modo simulação: nenhum WhatsApp é enviado. Toda ação que mudaria dados é apenas simulada.
           </SheetDescription>
           <div className="pt-3 space-y-1.5">
             <Label className="text-xs">Iniciar na etapa</Label>
@@ -230,12 +230,19 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
       {turn.steps && turn.steps.length > 0 ? (
         <details className="text-xs text-muted-foreground ml-1">
           <summary className="cursor-pointer hover:text-foreground select-none">
-            {turn.steps.length} passo(s) · {turn.tokens ?? 0} tokens
+            {turn.steps.length === 1 ? "1 passo" : `${turn.steps.length} passos`}
+            {turn.tokens ? ` · ~${formatBRL(estimateCostBRL(turn.tokens))}` : ""}
+            <span className="ml-1 opacity-60">(detalhes técnicos)</span>
           </summary>
           <div className="mt-1.5 space-y-1 pl-2 border-l-2 border-muted">
             {turn.steps.map((step, idx) => (
               <StepDetail key={idx} step={step} />
             ))}
+            {turn.tokens ? (
+              <div className="text-[10px] text-muted-foreground/70 pt-1">
+                {turn.tokens.toLocaleString("pt-BR")} tokens
+              </div>
+            ) : null}
           </div>
         </details>
       ) : null}
@@ -243,13 +250,30 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
   );
 }
 
+// Estimativa grosseira: GPT-4o-mini ~ US$ 0.0006 por 1k tokens.
+// USD/BRL ~ 5.30. Dá ~R$ 0.0032 por 1k tokens. Suficiente pra o leigo
+// ter noção de "centavos" em vez de números abstratos de tokens.
+function estimateCostBRL(tokens: number): number {
+  return (tokens / 1000) * 0.0032;
+}
+
+function formatBRL(value: number): string {
+  if (value < 0.01) return "menos de R$ 0,01";
+  return value.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
 function StepDetail({ step }: { step: TesterStepSummary }) {
   const label =
     step.step_type === "llm"
-      ? "LLM"
+      ? "Pensamento da IA"
       : step.step_type === "tool"
       ? `Ferramenta: ${step.tool_name ?? step.native_handler ?? "?"}`
-      : "Guardrail";
+      : "Verificação de regra";
   return (
     <div className="text-[11px]">
       <div className="flex items-center gap-1.5">
