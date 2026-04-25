@@ -60,6 +60,19 @@ export function DocumentsTab({
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const docs = sources.filter((s) => s.source_type === "document");
+  const hasActiveIndexing = docs.some(
+    (source) =>
+      source.indexing_status === "pending" || source.indexing_status === "processing",
+  );
+
+  // Auto-refresh while any document is still being indexed.
+  React.useEffect(() => {
+    if (!hasActiveIndexing) return;
+    const interval = window.setInterval(() => {
+      void onRefresh();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [hasActiveIndexing, onRefresh]);
 
   const resetDialog = () => {
     setTitle("");

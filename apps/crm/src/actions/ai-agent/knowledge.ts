@@ -330,6 +330,28 @@ async function enqueueIndexingJob(
   if (error) {
     throw new Error(`Falha ao enfileirar indexacao: ${error.message}`);
   }
+
+  await kickIndexerTickBestEffort();
+}
+
+async function kickIndexerTickBestEffort(): Promise<void> {
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://crm.funilpersia.top").replace(/\/$/, "");
+  const secret = process.env.PERSIA_INDEXER_SECRET;
+  if (!secret) return;
+
+  try {
+    await fetch(`${appUrl}/api/ai-agent/indexer/tick`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Persia-Indexer-Secret": secret,
+      },
+      body: "{}",
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.warn("[ai-agent] indexer kick failed", error);
+  }
 }
 
 function normalizeFAQInput(input: CreateFAQInput): CreateFAQInput {
