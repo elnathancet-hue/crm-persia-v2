@@ -103,7 +103,12 @@ export function DecisionIntelligenceModal({
         <div className="space-y-5 pt-2">
           {CATEGORY_ORDER.map(({ id, label }) => {
             const presetsInCategory = NATIVE_TOOL_PRESETS.filter(
-              (p) => p.category === id,
+              (p) =>
+                p.category === id &&
+                // trigger_notification eh registrada implicitamente por
+                // cada template em "Notificacoes" — esconder do modal pra
+                // nao induzir o admin a criar uma tool orfa.
+                p.handler !== "trigger_notification",
             );
             if (presetsInCategory.length === 0) return null;
             return (

@@ -37,6 +37,12 @@ import {
   updateFAQ,
   uploadDocument,
 } from "@/actions/ai-agent/knowledge";
+import {
+  createNotificationTemplate,
+  deleteNotificationTemplate,
+  listNotificationTemplates,
+  updateNotificationTemplate,
+} from "@/actions/ai-agent/notifications";
 
 export const crmAgentActions: AgentActions = {
   createAgent,
@@ -66,4 +72,8 @@ export const crmAgentActions: AgentActions = {
   uploadDocument,
   deleteKnowledgeSource,
   reindexKnowledgeSource,
+  listNotificationTemplates,
+  createNotificationTemplate,
+  updateNotificationTemplate,
+  deleteNotificationTemplate,
 };

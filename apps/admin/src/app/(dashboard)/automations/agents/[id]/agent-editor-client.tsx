@@ -7,6 +7,7 @@ import type {
   AgentConfig,
   AgentCostLimit,
   AgentKnowledgeSource,
+  AgentNotificationTemplate,
   AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
@@ -18,6 +19,7 @@ import { listStages } from "@/actions/ai-agent/stages";
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
 import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
+import { listNotificationTemplates } from "@/actions/ai-agent/notifications";
 import { createAdminAgentActions } from "@/features/ai-agent/admin-actions";
 import { useActiveOrg } from "@/lib/stores/client-store";
 
@@ -39,6 +41,9 @@ export function AgentEditorClient({ agentId }: Props) {
   const [knowledgeSources, setKnowledgeSources] = React.useState<
     AgentKnowledgeSource[]
   >([]);
+  const [notificationTemplates, setNotificationTemplates] = React.useState<
+    AgentNotificationTemplate[]
+  >([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
@@ -52,6 +57,7 @@ export function AgentEditorClient({ agentId }: Props) {
         setLimits([]);
         setAllowedDomains([]);
         setKnowledgeSources([]);
+        setNotificationTemplates([]);
         setLoading(false);
         return;
       }
@@ -67,6 +73,7 @@ export function AgentEditorClient({ agentId }: Props) {
             setLimits([]);
             setAllowedDomains([]);
             setKnowledgeSources([]);
+            setNotificationTemplates([]);
           }
           return;
         }
@@ -77,12 +84,14 @@ export function AgentEditorClient({ agentId }: Props) {
           nextLimits,
           nextAllowedDomains,
           nextKnowledgeSources,
+          nextNotificationTemplates,
         ] = await Promise.all([
           listStages(activeOrgId, agentId),
           listToolsForAgent(activeOrgId, agentId),
           listCostLimits(activeOrgId),
           listAllowedDomains(activeOrgId),
           listKnowledgeSources(activeOrgId, agentId),
+          listNotificationTemplates(activeOrgId, agentId),
         ]);
 
         if (!cancelled) {
@@ -92,6 +101,7 @@ export function AgentEditorClient({ agentId }: Props) {
           setLimits(nextLimits);
           setAllowedDomains(nextAllowedDomains);
           setKnowledgeSources(nextKnowledgeSources);
+          setNotificationTemplates(nextNotificationTemplates);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -142,6 +152,7 @@ export function AgentEditorClient({ agentId }: Props) {
             initialLimits={limits}
             initialAllowedDomains={allowedDomains}
             initialKnowledgeSources={knowledgeSources}
+            initialNotificationTemplates={notificationTemplates}
           />
         </AgentActionsProvider>
       )}

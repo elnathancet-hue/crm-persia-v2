@@ -13,6 +13,7 @@ import type {
   AgentConfig,
   AgentCostLimit,
   AgentKnowledgeSource,
+  AgentNotificationTemplate,
   AgentRunWithSteps,
   AgentStage,
   AgentStageTool,
@@ -20,6 +21,7 @@ import type {
   CreateAgentInput,
   CreateCustomWebhookToolInput,
   CreateFAQInput,
+  CreateNotificationTemplateInput,
   CreateStageInput,
   CreateToolFromPresetInput,
   ListRunsInput,
@@ -30,6 +32,7 @@ import type {
   TesterResponse,
   UpdateAgentInput,
   UpdateFAQInput,
+  UpdateNotificationTemplateInput,
   UpdateStageInput,
   UpdateToolInput,
   UsageStats,
@@ -83,4 +86,15 @@ export interface AgentActions {
   uploadDocument: (configId: string, formData: FormData) => Promise<AgentKnowledgeSource>;
   deleteKnowledgeSource: (sourceId: string) => Promise<void>;
   reindexKnowledgeSource: (sourceId: string) => Promise<AgentKnowledgeSource>;
+
+  // Notification templates (PR7.1)
+  listNotificationTemplates: (configId: string) => Promise<AgentNotificationTemplate[]>;
+  createNotificationTemplate: (
+    input: CreateNotificationTemplateInput,
+  ) => Promise<AgentNotificationTemplate>;
+  updateNotificationTemplate: (
+    sourceId: string,
+    input: UpdateNotificationTemplateInput,
+  ) => Promise<AgentNotificationTemplate>;
+  deleteNotificationTemplate: (sourceId: string) => Promise<void>;
 }
