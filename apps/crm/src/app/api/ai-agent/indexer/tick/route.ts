@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { runIndexingTick } from "@/lib/ai-agent/rag/indexer";
 
+export const maxDuration = 60;
+
 function secretsMatch(expected: string, received: string | null): boolean {
   if (!received) return false;
   const expectedBuffer = Buffer.from(expected);

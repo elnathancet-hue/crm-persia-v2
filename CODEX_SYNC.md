@@ -2669,3 +2669,54 @@ Cobrir:
 - Calendar (PR7.3)
 - Tool registration sync — responsabilidade do server action
   (Claude PR7.1c)
+
+---
+
+## Codex note â€” RAG indexer hardening (April 24, 2026)
+
+### Production diagnosis
+
+Investigacao feita em cima do `main` atualizado depois do bug de
+"Documento em fila" persistente:
+
+1. `agent_knowledge_sources.indexing_status` podia ficar em `pending`
+   mesmo com `agent_indexing_jobs.status = 'processing'`.
+   Causa: o claim do job nao promovia a source para `processing`.
+
+2. Jobs com `attempts >= 3` podiam permanecer em `pending` para sempre.
+   Causa: `claim_agent_indexing_job()` so pega jobs com
+   `attempts < p_max_attempts`, mas nao convertia os exaustos para `failed`.
+
+3. O catch do runtime chamava `rpc("fail_agent_indexing_job", ...)`
+   usando `.catch(() => {})`, o que engolia throw, mas nao tratava o caso
+   mais comum do Supabase RPC responder `{ error }` sem throw.
+   Resultado: job/source podiam ficar presos se a RPC de fail falhasse.
+
+4. O cron do indexer estava com `timeout_milliseconds := 5000`.
+   Para PDF + parse + embedding, 5s e curto demais e aumenta a chance
+   de job ficar em `processing` sem completar.
+
+### Fix shipped
+
+- Runtime `apps/crm/src/lib/ai-agent/rag/indexer.ts`
+  - normaliza jobs exaustos para `failed` antes do claim
+  - marca a source como `processing` assim que o job e claimed
+  - faz fallback para update direto em `agent_indexing_jobs` /
+    `agent_knowledge_sources` se a RPC `fail_agent_indexing_job`
+    responder com erro
+
+- Route `apps/crm/src/app/api/ai-agent/indexer/tick/route.ts`
+  - `export const maxDuration = 60`
+
+- Migration `024_ai_agent_rag_indexer_hardening.sql`
+  - endurece `claim_agent_indexing_job()` no banco
+  - converte exaustos para `failed`
+  - sincroniza source -> `processing` no claim
+  - aumenta timeout do cron do indexer para `60000`
+
+### Validation
+
+- `pnpm -r typecheck` OK
+- `pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr6.2-rag-runtime.test.ts` OK
+- `pnpm --filter @persia/crm build` OK
+  - mesmos warnings preexistentes de `cn` fora do escopo
