@@ -315,11 +315,13 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
 
   try {
     if (!params.stage) {
-      throw new Error("agent has no stages");
+      throw new Error(
+        "Agente ainda sem etapas. Crie pelo menos uma etapa na aba Etapas antes de testar.",
+      );
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is not configured");
+      throw new Error("OPENAI_API_KEY não está configurado no servidor.");
     }
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

@@ -259,7 +259,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
   {
     handler: "trigger_notification",
     name: "trigger_notification",
-    display_name: "Disparar notificacao",
+    display_name: "Disparar notificação",
     description:
       "Send a WhatsApp notification template to the configured team recipient (phone or group). Use for events the team must know about: lead qualified, booking confirmed, payment received, etc.",
     ui_description:

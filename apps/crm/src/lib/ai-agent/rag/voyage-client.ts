@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   VOYAGE_BATCH_MAX,
+  VOYAGE_DIM,
   VOYAGE_MODEL,
   VOYAGE_PRICING_USD_PER_1M,
   type VoyageInputType,
@@ -61,6 +62,7 @@ export async function embedTexts(
           input,
           model: VOYAGE_MODEL,
           input_type: inputType,
+          output_dimension: VOYAGE_DIM,
         }),
       });
 
@@ -75,6 +77,12 @@ export async function embedTexts(
       const embeddings = (payload.data ?? []).map((row) => row.embedding ?? []);
       if (embeddings.length !== input.length) {
         throw new Error("Voyage response length mismatch");
+      }
+      const wrongDim = embeddings.find((vec) => vec.length !== VOYAGE_DIM);
+      if (wrongDim) {
+        throw new Error(
+          `Voyage retornou dim ${wrongDim.length}, esperado ${VOYAGE_DIM} (modelo ${VOYAGE_MODEL}). Verifique se output_dimension está sendo aceito.`,
+        );
       }
 
       const totalTokens = Number(payload.usage?.total_tokens ?? 0);

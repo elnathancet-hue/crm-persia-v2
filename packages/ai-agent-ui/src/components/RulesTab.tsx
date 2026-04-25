@@ -291,8 +291,8 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           <CardContent className="space-y-4">
             <GuardrailField
               id="max_iterations"
-              label="Máximo de iteracoes"
-              help="Quantas vezes o agente pode chamar ferramentas em uma unica mensagem."
+              label="Máximo de iterações"
+              help="Quantas vezes o agente pode chamar ferramentas em uma única mensagem."
               value={guardrails.max_iterations}
               min={1}
               max={20}
@@ -432,7 +432,13 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
                       ? "Carregando..."
                       : "Selecione uma conexão"
                   }
-                />
+                >
+                  {calendarConnectionId === null
+                    ? "Nenhum (agente sem calendário)"
+                    : calendarConnections?.find(
+                        (c) => c.id === calendarConnectionId,
+                      )?.display_name ?? "Selecione uma conexão"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_none">Nenhum (agente sem calendário)</SelectItem>
@@ -470,7 +476,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           className="w-full"
         >
           <Save className="size-4" />
-          Salvar alteracoes
+          Salvar alterações
         </Button>
       </div>
     </div>

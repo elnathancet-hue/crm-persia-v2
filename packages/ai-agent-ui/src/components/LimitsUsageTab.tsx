@@ -35,7 +35,7 @@ const RANGE_LABELS: Record<Range, string> = {
   today: "Hoje",
   last_7_days: "7 dias",
   last_30_days: "30 dias",
-  month_to_date: "Mes corrente",
+  month_to_date: "Mês corrente",
 };
 
 export function LimitsUsageTab({ configId, initialLimits }: Props) {
@@ -75,7 +75,7 @@ export function LimitsUsageTab({ configId, initialLimits }: Props) {
         <div className="flex items-center gap-2 shrink-0">
           <Select value={range} onValueChange={(v) => v && setRange(v as Range)}>
             <SelectTrigger className="w-36">
-              <SelectValue />
+              <SelectValue>{RANGE_LABELS[range]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(RANGE_LABELS).map(([value, label]) => (

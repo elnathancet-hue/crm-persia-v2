@@ -30,7 +30,7 @@ export function UsageStatsCards({ totals }: Props) {
       color: "text-amber-600",
     },
     {
-      label: "Tempo medio",
+      label: "Tempo médio",
       value: totals.run_count === 0 ? "—" : `${(totals.avg_duration_ms / 1000).toFixed(1)}s`,
       sub: "por execução",
       icon: Clock,
