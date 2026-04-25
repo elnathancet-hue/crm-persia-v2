@@ -2720,3 +2720,123 @@ Investigacao feita em cima do `main` atualizado depois do bug de
 - `pnpm --filter @persia/crm test -- src/__tests__/ai-agent-pr6.2-rag-runtime.test.ts` OK
 - `pnpm --filter @persia/crm build` OK
   - mesmos warnings preexistentes de `cn` fora do escopo
+
+## 2026-04-24 — Claude — PR7.2a Scheduled jobs contracts + schema
+
+### Scope shipped
+
+- Branch: claude/ai-agent-scheduled-jobs-contracts
+- Migration 025:
+  - agent_scheduled_jobs (name unique per config, template_id FK,
+    cron_expr, lead_filter jsonb, status, last_run_*, next_run_at,
+    claimed_at lease)
+  - agent_scheduled_runs (audit trail por execucao)
+  - RPCs: claim/complete/fail com SECURITY DEFINER + REVOKE public
+  - pg_cron 'ai-agent-scheduler-tick' a cada 1 min chamando
+    /api/ai-agent/scheduler/tick com X-Persia-Scheduler-Secret
+- packages/shared/src/ai-agent/scheduled-jobs.ts:
+  - Types: AgentScheduledJob, LeadFilter, CreateScheduledJobInput,
+    UpdateScheduledJobInput, ScheduledJobRunResult
+  - LeadFilter campos: tag_slugs, pipeline_stage_ids, statuses,
+    age_days (gt|gte|lt|lte), only_active_agents, silence_recent_hours
+  - Presets de cron (5 itens) pra UI
+  - Helpers: isValidCronShape, isEmptyLeadFilter, validateLeadFilter
+  - Constants: SCHEDULED_JOBS_MAX_PER_AGENT=10, LEADS_PER_TICK_MAX=500,
+    MIN_INTERVAL_MINUTES=15
+
+---
+
+## Spec for PR7.2b — Scheduler runtime (Codex)
+
+### Dependencia
+
+Requer handler trigger_notification registrado no NativeHandlerRegistry
+(PR7.1b). Se nao estiver, scheduler pode rodar mas send falha — runtime
+loga e registra como error em scheduled_runs.
+
+### Architecture
+
+- Endpoint: apps/crm/src/app/api/ai-agent/scheduler/tick/route.ts
+  - Auth: mesmo padrao do indexer — X-Persia-Scheduler-Secret OR
+    Authorization: Bearer (CRM_API_SECRET pra bridge admin)
+  - timingSafeEqual + fail-safe 200 mesmo em erro
+  - Delega pra runScheduledTick()
+
+- Runtime: apps/crm/src/lib/ai-agent/scheduler/
+  - tick.ts: runScheduledTick() - claim um job por tick
+    (pg_cron dispara a cada 1min; loop externo pg_cron, loop interno
+    so processa 1 job por request)
+  - cron-parser.ts: usa npm install cron-parser. Computa proximo
+    next_run_at a partir de cron_expr + timezone (default
+    America/Sao_Paulo? ou UTC? runtime decide — recomendo UTC pra
+    evitar DST)
+  - lead-resolver.ts: traduz LeadFilter em SQL query em public.leads,
+    com JOIN em lead_tags + pipeline_stages + agent_conversations
+    (pro only_active_agents). RETORNA array de lead_id, LIMIT 500.
+  - dispatcher.ts: pra cada lead, resolve a conversa ativa (ou cria
+    placeholder?), chama helper send do handler trigger_notification.
+    IMPORTANTE: scheduler NAO vai pelo executor do agente — nao ha
+    LLM no loop. Vai direto send via WhatsApp provider. Mas REUSA
+    a logica de render do notifications.ts (template + lead vars).
+
+### Tick flow
+
+1. Autentica endpoint via secret
+2. claim_agent_scheduled_job() — pega 1 job ou null
+3. Se null, retorna ok: true (sem trabalho)
+4. Start transaction implicita (nao precisa BEGIN explicito — jobs
+   sao independentes). Record started_at em agent_scheduled_runs.
+5. Valida template (load + status = active). Se nao, fail job com
+   erro claro.
+6. Resolve leads via lead-resolver. Se empty, complete com
+   leads_processed=0 + next_run_at computado.
+7. Pra cada lead (cap 500):
+   - Resolve conversa ativa (leads.active_conversation_id OU cria
+     uma transient. Decidir no design — scheduler nao cria
+     conversas novas? Nao pode ser ephemeral? Acho que precisa de
+     conversa, senao o send WhatsApp nao tem contexto)
+   - Render template (fixed vars do lead + custom vazio por
+     enquanto — PR7.2 nao expoe custom no scheduler; LLM handler
+     sim)
+   - Call provider.sendText(address, rendered)
+   - Incrementa counter. Erro por lead grava em error_samples
+     (cap 20)
+8. Finaliza: insert em agent_scheduled_runs, complete_agent_scheduled_job
+   com leads_processed + next_run_at
+
+### Tests (em ai-agent-pr7.2-runtime.test.ts)
+
+Cobrir:
+- Claim pula jobs status=paused
+- Claim pula jobs next_run_at > now
+- Claim pega job apenas se claimed_at null OU < 5min atras
+- Template arquivado -> fail + error_samples vazio
+- Lead filter empty -> reject na ACTION (nao deixa salvar), scheduler
+  assume nao-vazio
+- silence_recent_hours filtra leads com ultima mensagem recente
+- only_active_agents filtra leads sem human_handoff_at null
+- Leads cap 500 (teste com 600 matches, processa 500, marca skipped)
+- Multi-tenant: scheduler de org A nunca processa leads de org B
+- Computacao de next_run_at via cron-parser
+
+### Env vars + DB settings (deploy)
+
+CRM:
+- PERSIA_SCHEDULER_SECRET (gerar 48 chars hex)
+- existing PERSIA_INDEXER_SECRET ja serve pra outros, nao reutilizar
+
+Admin:
+- Reusa CRM_CLIENT_BASE_URL + CRM_API_SECRET pra bridge
+
+DB settings via SQL:
+- ALTER DATABASE postgres SET app.settings.scheduler_tick_url
+  TO 'https://crm.funilpersia.top/api/ai-agent/scheduler/tick';
+- ALTER DATABASE postgres SET app.settings.scheduler_tick_secret
+  TO '<valor>';
+
+### Out of scope PR7.2b
+
+- UI da aba Agendamento (vem em PR7.2c)
+- Custom variables no scheduler (usuario nao escolhe — templates que
+  usam {{custom.X}} recebem vazio)
+- Calendar sync (PR7.3)
