@@ -12,7 +12,9 @@ import {
 import { toast } from "sonner";
 import {
   FAQ_ANSWER_MAX_CHARS,
+  FAQ_ANSWER_MIN_CHARS,
   FAQ_QUESTION_MAX_CHARS,
+  FAQ_QUESTION_MIN_CHARS,
   type AgentKnowledgeSource,
   type KnowledgeSourceMetadata,
 } from "@persia/shared/ai-agent";
@@ -93,14 +95,17 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
     });
   };
 
+  const editorErrors = React.useMemo(
+    () => validateFaqEditor(editor),
+    [editor],
+  );
+  const editorHasErrors = Object.keys(editorErrors).length > 0;
+
   const handleSave = () => {
+    if (editorHasErrors) return;
     const title = editor.title.trim();
     const question = editor.question.trim();
     const answer = editor.answer.trim();
-    if (!title || !question || !answer) {
-      toast.error("Preencha título, pergunta e resposta");
-      return;
-    }
 
     startTransition(async () => {
       try {
@@ -328,7 +333,12 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
                 placeholder="Ex: Política de cancelamento"
                 disabled={isPending}
                 maxLength={200}
+                aria-invalid={!!editorErrors.title}
+                className={editorErrors.title ? "border-destructive focus-visible:ring-destructive/40" : undefined}
               />
+              {editorErrors.title ? (
+                <p className="text-xs text-destructive">{editorErrors.title}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="faq-question">Pergunta</Label>
@@ -342,10 +352,19 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
                 rows={2}
                 disabled={isPending}
                 maxLength={FAQ_QUESTION_MAX_CHARS}
+                aria-invalid={!!editorErrors.question}
+                className={editorErrors.question ? "border-destructive focus-visible:ring-destructive/40" : undefined}
               />
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {editor.question.length} / {FAQ_QUESTION_MAX_CHARS}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                {editorErrors.question ? (
+                  <p className="text-xs text-destructive flex-1">{editorErrors.question}</p>
+                ) : (
+                  <span className="flex-1" />
+                )}
+                <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {editor.question.length} / {FAQ_QUESTION_MAX_CHARS}
+                </p>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="faq-answer">Resposta</Label>
@@ -359,10 +378,19 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
                 rows={6}
                 disabled={isPending}
                 maxLength={FAQ_ANSWER_MAX_CHARS}
+                aria-invalid={!!editorErrors.answer}
+                className={editorErrors.answer ? "border-destructive focus-visible:ring-destructive/40" : undefined}
               />
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {editor.answer.length} / {FAQ_ANSWER_MAX_CHARS}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                {editorErrors.answer ? (
+                  <p className="text-xs text-destructive flex-1">{editorErrors.answer}</p>
+                ) : (
+                  <span className="flex-1" />
+                )}
+                <p className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {editor.answer.length} / {FAQ_ANSWER_MAX_CHARS}
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -373,7 +401,7 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
             >
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={isPending}>
+            <Button onClick={handleSave} disabled={isPending || editorHasErrors}>
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
               Salvar
             </Button>
@@ -384,3 +412,36 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
   );
 }
 
+
+type FaqEditorErrors = Partial<Record<"title" | "question" | "answer", string>>;
+
+function validateFaqEditor(editor: EditorState): FaqEditorErrors {
+  const errors: FaqEditorErrors = {};
+  const title = editor.title.trim();
+  const question = editor.question.trim();
+  const answer = editor.answer.trim();
+
+  if (!title) {
+    errors.title = "Título é obrigatório";
+  } else if (title.length > 200) {
+    errors.title = "Máximo 200 caracteres";
+  }
+
+  if (!question) {
+    errors.question = "Pergunta é obrigatória";
+  } else if (question.length < FAQ_QUESTION_MIN_CHARS) {
+    errors.question = `Mínimo ${FAQ_QUESTION_MIN_CHARS} caracteres`;
+  } else if (question.length > FAQ_QUESTION_MAX_CHARS) {
+    errors.question = `Máximo ${FAQ_QUESTION_MAX_CHARS} caracteres`;
+  }
+
+  if (!answer) {
+    errors.answer = "Resposta é obrigatória";
+  } else if (answer.length < FAQ_ANSWER_MIN_CHARS) {
+    errors.answer = `Mínimo ${FAQ_ANSWER_MIN_CHARS} caracteres`;
+  } else if (answer.length > FAQ_ANSWER_MAX_CHARS) {
+    errors.answer = `Máximo ${FAQ_ANSWER_MAX_CHARS} caracteres`;
+  }
+
+  return errors;
+}

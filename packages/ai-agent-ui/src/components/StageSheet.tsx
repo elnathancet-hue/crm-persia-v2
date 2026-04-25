@@ -61,13 +61,24 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
     }
   }, [open, stage]);
 
+  const trimmedSituation = situation.trim();
+  const trimmedInstruction = instruction.trim();
+  const situationError = !trimmedSituation
+    ? "Situação é obrigatória"
+    : trimmedSituation.length < 2
+      ? "Mínimo 2 caracteres"
+      : null;
+  const instructionError = !trimmedInstruction
+    ? "Instrução é obrigatória"
+    : null;
+  const formInvalid = !!situationError || !!instructionError;
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedSituation = situation.trim();
-    if (!trimmedSituation) return;
+    if (formInvalid) return;
     onSubmit({
       situation: trimmedSituation,
-      instruction: instruction.trim(),
+      instruction: trimmedInstruction,
       transition_hint: transitionHint.trim() || undefined,
       rag_enabled: ragEnabled,
       rag_top_k: ragTopK,
@@ -94,7 +105,12 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
                 placeholder="Ex: Boas-vindas, Qualificação, Apresentação da oferta"
                 required
                 autoFocus
+                aria-invalid={!!situationError && situation.length > 0}
+                className={situationError && situation.length > 0 ? "border-destructive focus-visible:ring-destructive/40" : undefined}
               />
+              {situationError && situation.length > 0 ? (
+                <p className="text-xs text-destructive">{situationError}</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="instruction">Instrução do agente</Label>
@@ -104,7 +120,12 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
                 onChange={(e) => setInstruction(e.target.value)}
                 placeholder="O que o agente deve fazer nesta etapa? Ex: Cumprimente o cliente pelo nome, se apresente brevemente, pergunte como pode ajudar."
                 rows={8}
+                aria-invalid={!!instructionError && instruction.length > 0}
+                className={instructionError && instruction.length > 0 ? "border-destructive focus-visible:ring-destructive/40" : undefined}
               />
+              {instructionError && instruction.length > 0 ? (
+                <p className="text-xs text-destructive">{instructionError}</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="transition_hint">Dica de transição</Label>
@@ -176,7 +197,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancelar
           </Button>
-          <Button type="submit" form="stage-form" disabled={isPending || !situation.trim()}>
+          <Button type="submit" form="stage-form" disabled={isPending || formInvalid}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             {mode === "create" ? "Criar etapa" : "Salvar"}
           </Button>

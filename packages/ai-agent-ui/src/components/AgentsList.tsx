@@ -191,7 +191,17 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           >
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
-              <Input id="name" name="name" placeholder="Ex: Recepção" required />
+              <Input
+                id="name"
+                name="name"
+                placeholder="Ex: Recepção"
+                required
+                minLength={2}
+                maxLength={80}
+              />
+              <p className="text-xs text-muted-foreground">
+                Como você identifica esse agente. Mínimo 2 caracteres.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Descrição (opcional)</Label>

@@ -112,20 +112,15 @@ export function SchedulingTab({
     });
   };
 
+  const editorErrors = React.useMemo(
+    () => validateSchedulingEditor(editor),
+    [editor],
+  );
+  const editorHasErrors = Object.keys(editorErrors).length > 0;
+
   const handleSave = () => {
+    if (editorHasErrors) return;
     const name = editor.name.trim();
-    if (!name) {
-      toast.error("Informe um nome");
-      return;
-    }
-    if (!editor.template_id) {
-      toast.error("Selecione um template");
-      return;
-    }
-    if (!isValidCronShape(editor.cron_expr)) {
-      toast.error("Expressão cron inválida");
-      return;
-    }
 
     startTransition(async () => {
       try {
@@ -276,6 +271,8 @@ export function SchedulingTab({
 
       <SchedulingEditorDialog
         editor={editor}
+        errors={editorErrors}
+        hasErrors={editorHasErrors}
         templates={activeTemplates}
         onChange={setEditor}
         onSave={handleSave}
@@ -447,8 +444,15 @@ function LeadFilterSummary({ filter }: { filter: LeadFilter }) {
   );
 }
 
+type SchedulingEditorErrors = Partial<Record<
+  "name" | "template_id" | "cron_expr" | "lead_filter",
+  string
+>>;
+
 interface EditorDialogProps {
   editor: EditorState;
+  errors: SchedulingEditorErrors;
+  hasErrors: boolean;
   templates: AgentNotificationTemplate[];
   onChange: React.Dispatch<React.SetStateAction<EditorState>>;
   onSave: () => void;
@@ -457,6 +461,8 @@ interface EditorDialogProps {
 
 function SchedulingEditorDialog({
   editor,
+  errors,
+  hasErrors,
   templates,
   onChange,
   onSave,
@@ -505,7 +511,12 @@ function SchedulingEditorDialog({
               placeholder="Ex: Follow-up 3 dias"
               disabled={isPending}
               maxLength={80}
+              aria-invalid={!!errors.name}
+              className={errors.name ? "border-destructive focus-visible:ring-destructive/40" : undefined}
             />
+            {errors.name ? (
+              <p className="text-xs text-destructive">{errors.name}</p>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -517,7 +528,11 @@ function SchedulingEditorDialog({
               }
               disabled={isPending}
             >
-              <SelectTrigger id="sched-template">
+              <SelectTrigger
+                id="sched-template"
+                aria-invalid={!!errors.template_id}
+                className={errors.template_id ? "border-destructive" : undefined}
+              >
                 <SelectValue placeholder="Selecione um template" />
               </SelectTrigger>
               <SelectContent>
@@ -528,6 +543,9 @@ function SchedulingEditorDialog({
                 ))}
               </SelectContent>
             </Select>
+            {errors.template_id ? (
+              <p className="text-xs text-destructive">{errors.template_id}</p>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -557,12 +575,20 @@ function SchedulingEditorDialog({
                 }
                 placeholder="0 9 * * *"
                 disabled={isPending}
-                className="font-mono text-sm"
+                aria-invalid={!!errors.cron_expr}
+                className={cn(
+                  "font-mono text-sm",
+                  errors.cron_expr && "border-destructive focus-visible:ring-destructive/40",
+                )}
               />
             ) : null}
-            <p className="text-xs text-muted-foreground">
-              Formato cron com 5 campos: minuto, hora, dia, mês, dia-da-semana. Horários em UTC.
-            </p>
+            {errors.cron_expr ? (
+              <p className="text-xs text-destructive">{errors.cron_expr}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Formato cron com 5 campos: minuto, hora, dia, mês, dia-da-semana. Horários em UTC.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 pt-2 border-t border-border/50">
@@ -576,6 +602,9 @@ function SchedulingEditorDialog({
               onChange={updateFilter}
               disabled={isPending}
             />
+            {errors.lead_filter ? (
+              <p className="text-xs text-destructive">{errors.lead_filter}</p>
+            ) : null}
           </div>
         </div>
 
@@ -587,7 +616,7 @@ function SchedulingEditorDialog({
           >
             Cancelar
           </Button>
-          <Button onClick={onSave} disabled={isPending}>
+          <Button onClick={onSave} disabled={isPending || hasErrors}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             Salvar
           </Button>
@@ -595,6 +624,46 @@ function SchedulingEditorDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function validateSchedulingEditor(editor: EditorState): SchedulingEditorErrors {
+  const errors: SchedulingEditorErrors = {};
+  const name = editor.name.trim();
+
+  if (!name) {
+    errors.name = "Nome é obrigatório";
+  } else if (name.length < 3) {
+    errors.name = "Mínimo 3 caracteres";
+  } else if (name.length > 80) {
+    errors.name = "Máximo 80 caracteres";
+  }
+
+  if (!editor.template_id) {
+    errors.template_id = "Selecione um template ativo";
+  }
+
+  if (!editor.cron_expr.trim()) {
+    errors.cron_expr = "Expressão cron é obrigatória";
+  } else if (!isValidCronShape(editor.cron_expr)) {
+    errors.cron_expr = "Formato inválido — use 5 campos (ex: '0 9 * * *')";
+  }
+
+  // Filtro vazio = aplicaria a TODOS os leads, perigoso. Server-side
+  // tambem rejeita, mas mostra inline aqui.
+  const f = editor.lead_filter;
+  const filterIsEmpty =
+    (!f.tag_slugs || f.tag_slugs.length === 0) &&
+    (!f.pipeline_stage_ids || f.pipeline_stage_ids.length === 0) &&
+    (!f.statuses || f.statuses.length === 0) &&
+    !f.age_days &&
+    !f.only_active_agents &&
+    !f.silence_recent_hours;
+  if (filterIsEmpty) {
+    errors.lead_filter =
+      "Adicione pelo menos um critério (tag, etapa, idade ou bot ativo). Sem filtro, o agendamento dispara pra TODOS os leads da org.";
+  }
+
+  return errors;
 }
 
 interface LeadFilterFormProps {
