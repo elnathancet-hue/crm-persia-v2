@@ -441,6 +441,28 @@ async function enqueueIndexingJob(
   if (error) {
     throw new Error(`Falha ao enfileirar indexacao: ${error.message}`);
   }
+
+  await kickIndexerTickBestEffort();
+}
+
+async function kickIndexerTickBestEffort(): Promise<void> {
+  const base = process.env.CRM_CLIENT_BASE_URL?.replace(/\/$/, "");
+  const apiSecret = process.env.CRM_API_SECRET;
+  if (!base || !apiSecret) return;
+
+  try {
+    await fetch(`${base}/api/ai-agent/indexer/tick`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.warn("[admin ai-agent] indexer kick failed", error);
+  }
 }
 
 function normalizeFAQInput(input: CreateFAQInput): CreateFAQInput {

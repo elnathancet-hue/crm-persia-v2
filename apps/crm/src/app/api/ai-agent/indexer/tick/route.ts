@@ -11,11 +11,33 @@ function secretsMatch(expected: string, received: string | null): boolean {
   return timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
+function isAuthorized(request: NextRequest): {
+  ok: boolean;
+  method: "indexer_secret" | "crm_api_secret" | "missing";
+} {
+  const indexerSecret = process.env.PERSIA_INDEXER_SECRET;
+  const crmApiSecret = process.env.CRM_API_SECRET;
+  const bearer = request.headers.get("Authorization");
+  const bearerToken =
+    bearer && bearer.startsWith("Bearer ") ? bearer.slice("Bearer ".length) : null;
+
+  if (indexerSecret && secretsMatch(indexerSecret, request.headers.get("X-Persia-Indexer-Secret"))) {
+    return { ok: true, method: "indexer_secret" };
+  }
+
+  if (crmApiSecret && secretsMatch(crmApiSecret, bearerToken)) {
+    return { ok: true, method: "crm_api_secret" };
+  }
+
+  return { ok: false, method: "missing" };
+}
+
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request.headers);
-  const expectedSecret = process.env.PERSIA_INDEXER_SECRET;
+  const hasIndexerSecret = Boolean(process.env.PERSIA_INDEXER_SECRET);
+  const hasCrmApiSecret = Boolean(process.env.CRM_API_SECRET);
 
-  if (!expectedSecret) {
+  if (!hasIndexerSecret && !hasCrmApiSecret) {
     logWarn("ai_agent_indexer_secret_missing", {
       organization_id: null,
       request_id: requestId,
@@ -24,7 +46,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "indexer_secret_missing" }, { status: 503 });
   }
 
-  if (!secretsMatch(expectedSecret, request.headers.get("X-Persia-Indexer-Secret"))) {
+  const auth = isAuthorized(request);
+  if (!auth.ok) {
     logWarn("ai_agent_indexer_secret_mismatch", {
       organization_id: null,
       request_id: requestId,
@@ -39,6 +62,7 @@ export async function POST(request: NextRequest) {
       organization_id: null,
       request_id: requestId,
       route: "/api/ai-agent/indexer/tick",
+      auth_method: auth.method,
       claimed_job_id: result.claimed_job_id,
       processed_jobs: result.processed_jobs,
       indexed_sources: result.indexed_sources,

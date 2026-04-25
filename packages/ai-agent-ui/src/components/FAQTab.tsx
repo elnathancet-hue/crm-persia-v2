@@ -66,6 +66,19 @@ export function FAQTab({ configId, sources, onChange, onRefresh }: Props) {
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const faqs = sources.filter((s) => s.source_type === "faq");
+  const hasActiveIndexing = faqs.some(
+    (source) =>
+      source.indexing_status === "pending" || source.indexing_status === "processing",
+  );
+
+  // Auto-refresh while any FAQ is still being indexed.
+  React.useEffect(() => {
+    if (!hasActiveIndexing) return;
+    const interval = window.setInterval(() => {
+      void onRefresh();
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [hasActiveIndexing, onRefresh]);
 
   const openCreate = () => setEditor({ ...EMPTY_EDITOR, open: true });
 
