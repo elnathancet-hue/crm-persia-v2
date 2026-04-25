@@ -45,6 +45,11 @@ import {
   listScheduledJobs,
   updateScheduledJob,
 } from "@/actions/ai-agent/scheduled-jobs";
+import {
+  buildOAuthStartUrl,
+  deleteCalendarConnection,
+  listCalendarConnections,
+} from "@/actions/ai-agent/calendar";
 
 export function createAdminAgentActions(orgId: string): AgentActions {
   return {
@@ -88,5 +93,9 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     updateScheduledJob: (jobId, input) =>
       updateScheduledJob(orgId, jobId, input),
     deleteScheduledJob: (jobId) => deleteScheduledJob(orgId, jobId),
+    listCalendarConnections: () => listCalendarConnections(orgId),
+    deleteCalendarConnection: (connectionId) =>
+      deleteCalendarConnection(orgId, connectionId),
+    buildOAuthStartUrl: (returnTo) => buildOAuthStartUrl(orgId, returnTo),
   };
 }

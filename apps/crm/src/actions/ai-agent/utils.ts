@@ -75,6 +75,7 @@ export function normalizeAgentInput(input: CreateAgentInput): CreateAgentInput {
     handoff_notification_target_type: handoff.target_type,
     handoff_notification_target_address: handoff.target_address,
     handoff_notification_template: handoff.template,
+    calendar_connection_id: input.calendar_connection_id ?? null,
   };
 }
 
@@ -131,6 +132,9 @@ export function normalizeAgentPatch(
   }
   if (handoffPatch.handoff_notification_template !== undefined) {
     patch.handoff_notification_template = handoffPatch.handoff_notification_template;
+  }
+  if (input.calendar_connection_id !== undefined) {
+    patch.calendar_connection_id = input.calendar_connection_id;
   }
   if (input.status !== undefined) patch.status = input.status;
   return patch;

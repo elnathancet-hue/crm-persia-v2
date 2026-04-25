@@ -49,6 +49,11 @@ import {
   listScheduledJobs,
   updateScheduledJob,
 } from "@/actions/ai-agent/scheduled-jobs";
+import {
+  buildOAuthStartUrl,
+  deleteCalendarConnection,
+  listCalendarConnections,
+} from "@/actions/ai-agent/calendar";
 
 export const crmAgentActions: AgentActions = {
   createAgent,
@@ -86,4 +91,7 @@ export const crmAgentActions: AgentActions = {
   createScheduledJob,
   updateScheduledJob,
   deleteScheduledJob,
+  listCalendarConnections,
+  deleteCalendarConnection,
+  buildOAuthStartUrl,
 };
