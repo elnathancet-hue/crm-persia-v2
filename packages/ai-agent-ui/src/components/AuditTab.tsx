@@ -134,12 +134,12 @@ function RunRow({
   });
 
   return (
-    <Card className={cn(expanded && "border-primary/40")}>
+    <Card className={cn("transition-shadow", expanded ? "border-primary/40 shadow-sm" : "hover:shadow-sm")}>
       <CardContent className="p-0">
         <button
           type="button"
           onClick={onToggle}
-          className="w-full text-left p-4 flex items-center gap-3 hover:bg-muted/30 transition-colors"
+          className="w-full text-left p-4 grid grid-cols-[auto_auto_1fr_auto] items-center gap-3 hover:bg-muted/30 transition-colors"
           aria-expanded={expanded}
         >
           <div className="shrink-0">
@@ -150,28 +150,28 @@ function RunRow({
             )}
           </div>
           <RunStatusBadge status={run.status} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono text-muted-foreground">
-                {formattedDate}
-              </span>
-              <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs text-muted-foreground">{run.steps.length} passo{run.steps.length === 1 ? "" : "s"}</span>
-              <span className="text-xs text-muted-foreground">·</span>
-              <span className="text-xs font-mono text-muted-foreground">{run.model}</span>
+          <div className="min-w-0 space-y-0.5">
+            <div className="text-sm font-mono text-foreground tabular-nums truncate">
+              {formattedDate}
             </div>
-            {run.error_msg ? (
-              <p className="text-xs text-destructive mt-0.5 line-clamp-1">
-                {run.error_msg}
-              </p>
-            ) : null}
+            <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              <span>{run.steps.length} passo{run.steps.length === 1 ? "" : "s"}</span>
+              <span aria-hidden>·</span>
+              <span className="font-mono">{run.model}</span>
+              {run.error_msg ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-destructive truncate">{run.error_msg}</span>
+                </>
+              ) : null}
+            </div>
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 tabular-nums">
             <span className="flex items-center gap-1">
               <Coins className="size-3" />
               {run.tokens_input + run.tokens_output}
             </span>
-            <span className="tabular-nums">{run.duration_ms}ms</span>
+            <span>{run.duration_ms}ms</span>
           </div>
         </button>
         {expanded ? (
