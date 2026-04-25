@@ -13,6 +13,7 @@ import type {
   AgentConfig,
   AgentCostLimit,
   AgentKnowledgeSource,
+  AgentCalendarConnectionPublic,
   AgentNotificationTemplate,
   AgentRunWithSteps,
   AgentScheduledJob,
@@ -111,4 +112,9 @@ export interface AgentActions {
     input: UpdateScheduledJobInput,
   ) => Promise<AgentScheduledJob>;
   deleteScheduledJob: (jobId: string) => Promise<void>;
+
+  // Calendar connections (PR7.3)
+  listCalendarConnections: () => Promise<AgentCalendarConnectionPublic[]>;
+  deleteCalendarConnection: (connectionId: string) => Promise<void>;
+  buildOAuthStartUrl: (returnTo: string) => Promise<{ url: string }>;
 }

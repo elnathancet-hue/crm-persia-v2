@@ -32,6 +32,7 @@ export { PlaceholderTab } from "./components/PlaceholderTab";
 // Leaf components (pra uso direto fora dos tabs padrao)
 export { AgentStatusBadge } from "./components/AgentStatusBadge";
 export { ActiveLimitsProgress } from "./components/ActiveLimitsProgress";
+export { CalendarConnectionsCard } from "./components/CalendarConnectionsCard";
 export { CustomWebhookToolSheet } from "./components/CustomWebhookToolSheet";
 export { DecisionIntelligenceModal } from "./components/DecisionIntelligenceModal";
 export { HandoffNotificationCard } from "./components/HandoffNotificationCard";

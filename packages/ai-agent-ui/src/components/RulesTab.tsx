@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Info, Save } from "lucide-react";
+import { CalendarCheck, Info, Save } from "lucide-react";
+import { toast } from "sonner";
 import type {
+  AgentCalendarConnectionPublic,
   AgentConfig,
   AgentGuardrails,
   HandoffNotificationTargetType,
@@ -29,7 +31,9 @@ import {
   clampTokenThreshold,
   clampTurnThreshold,
 } from "@persia/shared/ai-agent";
+import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
 import { HandoffNotificationCard } from "./HandoffNotificationCard";
+import { useAgentActions } from "../context";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
@@ -79,6 +83,35 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [handoffTemplate, setHandoffTemplate] = React.useState<string>(
     agent.handoff_notification_template ?? "",
   );
+  const [calendarConnectionId, setCalendarConnectionId] = React.useState<
+    string | null
+  >(agent.calendar_connection_id ?? null);
+  const [calendarConnections, setCalendarConnections] = React.useState<
+    AgentCalendarConnectionPublic[] | null
+  >(null);
+
+  const { listCalendarConnections } = useAgentActions();
+
+  // Load connections once. Re-runs only if agent.id changes (não quando
+  // o user salva, porque a lista vive em outro escopo).
+  React.useEffect(() => {
+    let cancelled = false;
+    listCalendarConnections()
+      .then((list) => {
+        if (!cancelled) setCalendarConnections(list);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error(
+            err instanceof Error ? err.message : "Falha ao carregar calendários",
+          );
+          setCalendarConnections([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listCalendarConnections]);
 
   React.useEffect(() => {
     setPrompt(agent.system_prompt);
@@ -93,6 +126,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     setHandoffTargetType(agent.handoff_notification_target_type ?? null);
     setHandoffTargetAddress(agent.handoff_notification_target_address ?? "");
     setHandoffTemplate(agent.handoff_notification_template ?? "");
+    setCalendarConnectionId(agent.calendar_connection_id ?? null);
   }, [
     agent.id,
     agent.system_prompt,
@@ -107,6 +141,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     agent.handoff_notification_target_type,
     agent.handoff_notification_target_address,
     agent.handoff_notification_template,
+    agent.calendar_connection_id,
   ]);
 
   const promptDirty = prompt !== agent.system_prompt;
@@ -138,6 +173,8 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     handoffTargetTypeDirty ||
     handoffAddressDirty ||
     handoffTemplateDirty;
+  const calendarConnectionDirty =
+    calendarConnectionId !== (agent.calendar_connection_id ?? null);
 
   // Client-side validation that mirrors the server (lets the Save button
   // disable proactively on bad data — server still re-validates).
@@ -165,7 +202,8 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     turnThresholdDirty ||
     tokenThresholdDirty ||
     recentMessagesDirty ||
-    handoffDirty;
+    handoffDirty ||
+    calendarConnectionDirty;
 
   const handleSave = () => {
     const patch: UpdateAgentInput = {};
@@ -184,6 +222,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     }
     if (handoffTemplateDirty) {
       patch.handoff_notification_template = handoffTemplate.trim() || null;
+    }
+    if (calendarConnectionDirty) {
+      patch.calendar_connection_id = calendarConnectionId;
     }
     onChange(patch, "Regras salvas");
   };
@@ -361,6 +402,66 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           onTargetTypeChange={setHandoffTargetType}
           onTargetAddressChange={setHandoffTargetAddress}
           onTemplateChange={setHandoffTemplate}
+        />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <CalendarCheck className="size-4 text-primary" />
+              Calendário do agente
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Qual conexão Google o agente usa quando chama
+              <code className="font-mono mx-1 text-[11px]">schedule_event</code>.
+              Se vazio, o agente não consegue agendar.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Label htmlFor="calendar-connection">Conexão atribuída</Label>
+            <Select
+              value={calendarConnectionId ?? "_none"}
+              onValueChange={(v) =>
+                setCalendarConnectionId(v && v !== "_none" ? v : null)
+              }
+              disabled={isPending}
+            >
+              <SelectTrigger id="calendar-connection">
+                <SelectValue
+                  placeholder={
+                    calendarConnections === null
+                      ? "Carregando..."
+                      : "Selecione uma conexão"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Nenhum (agente sem calendário)</SelectItem>
+                {calendarConnections?.map((conn) => (
+                  <SelectItem
+                    key={conn.id}
+                    value={conn.id}
+                    disabled={conn.status !== "active"}
+                  >
+                    {conn.display_name}
+                    {conn.status !== "active" ? (
+                      <span className="text-muted-foreground"> ({conn.status})</span>
+                    ) : null}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {calendarConnections && calendarConnections.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhuma conexão Google ativa nesta org. Use o card abaixo pra
+                conectar uma conta antes.
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <CalendarConnectionsCard
+          initialConnections={calendarConnections ?? undefined}
+          returnTo={`/automations/agents/${agent.id}`}
         />
 
         <Button

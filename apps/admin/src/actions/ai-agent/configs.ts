@@ -72,6 +72,7 @@ export async function createAgent(
         handoff_notification_target_type: normalized.handoff_notification_target_type ?? null,
         handoff_notification_target_address: normalized.handoff_notification_target_address ?? null,
         handoff_notification_template: normalized.handoff_notification_template ?? null,
+        calendar_connection_id: normalized.calendar_connection_id ?? null,
         status: "draft",
       })
       .select("*")
@@ -153,6 +154,9 @@ export async function updateAgent(
     }
     if (patch.handoff_notification_template !== undefined) {
       updates.handoff_notification_template = patch.handoff_notification_template;
+    }
+    if (patch.calendar_connection_id !== undefined) {
+      updates.calendar_connection_id = patch.calendar_connection_id;
     }
     if (patch.status !== undefined) updates.status = patch.status;
 
