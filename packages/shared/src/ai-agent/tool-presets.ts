@@ -20,7 +20,8 @@ export type ToolCategory =
   | "routing"
   | "notification"
   | "audio"
-  | "scheduling";
+  | "scheduling"
+  | "kanban";
 
 export interface NativeToolPreset {
   handler: NativeHandlerName;
@@ -31,7 +32,7 @@ export interface NativeToolPreset {
   icon_name: string;            // lucide-react icon name; UI maps to component
   category: ToolCategory;
   input_schema: JSONSchemaObject;
-  shipped_in_pr: "PR1" | "PR3" | "PR5" | "PR7";
+  shipped_in_pr: "PR1" | "PR3" | "PR5" | "PR7" | "PR8";
 }
 
 export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
@@ -347,6 +348,42 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
       },
     },
   },
+
+  // PR8 — Kanban control (move lead between pipeline stages)
+  {
+    handler: "move_pipeline_stage",
+    name: "move_pipeline_stage",
+    display_name: "Mover etapa no CRM",
+    description:
+      "Move the lead's deal to a different pipeline stage in the CRM Kanban. Use when the conversation reveals the lead has progressed (e.g., 'Novo' -> 'Qualificado' -> 'Negociacao'). The target stage must belong to the same pipeline as the lead's active deal.",
+    ui_description:
+      "Move o lead para outra etapa do funil de vendas no CRM (Kanban).",
+    icon_name: "Columns3",
+    category: "kanban",
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      required: ["stage_id"],
+      properties: {
+        stage_id: {
+          type: "string",
+          format: "uuid",
+          description:
+            "UUID da pipeline_stage de destino. Precisa pertencer ao mesmo funil do deal ativo do lead.",
+        },
+        pipeline_id: {
+          type: "string",
+          format: "uuid",
+          description:
+            "UUID do funil. Opcional — usa o funil do deal ativo do lead se omitido. Necessario se o lead tem deals ativos em mais de um funil.",
+        },
+        reason: {
+          type: "string",
+          description: "Justificativa curta da movimentacao (logada no historico do lead).",
+        },
+      },
+    },
+  },
 ];
 
 export function getPreset(handler: NativeHandlerName): NativeToolPreset | undefined {
@@ -356,7 +393,7 @@ export function getPreset(handler: NativeHandlerName): NativeToolPreset | undefi
 export function getPresetsShippedInOrBefore(
   currentPr: NativeToolPreset["shipped_in_pr"],
 ): NativeToolPreset[] {
-  const order: NativeToolPreset["shipped_in_pr"][] = ["PR1", "PR3", "PR5", "PR7"];
+  const order: NativeToolPreset["shipped_in_pr"][] = ["PR1", "PR3", "PR5", "PR7", "PR8"];
   const cutoff = order.indexOf(currentPr);
   return NATIVE_TOOL_PRESETS.filter(
     (preset) => order.indexOf(preset.shipped_in_pr) <= cutoff,

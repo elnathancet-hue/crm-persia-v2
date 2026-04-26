@@ -6,6 +6,7 @@ import type {
 } from "@persia/shared/ai-agent";
 import { getPreset } from "@persia/shared/ai-agent";
 import { addTagHandler } from "./add-tag";
+import { movePipelineStageHandler } from "./move-pipeline-stage";
 import { stopAgentHandler } from "./stop-agent";
 import { transferToAgentHandler } from "./transfer-to-agent";
 import { transferToStageHandler } from "./transfer-to-stage";
@@ -19,6 +20,7 @@ export const nativeHandlers: NativeHandlerRegistry = {
   transfer_to_agent: transferToAgentHandler,
   add_tag: addTagHandler,
   trigger_notification: triggerNotificationHandler,
+  move_pipeline_stage: movePipelineStageHandler,
 };
 
 export function isImplementedNativeHandler(
