@@ -32,6 +32,7 @@ export const NATIVE_HANDLERS = [
   "trigger_notification",
   "schedule_event",
   "stop_agent",
+  "move_pipeline_stage",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];
