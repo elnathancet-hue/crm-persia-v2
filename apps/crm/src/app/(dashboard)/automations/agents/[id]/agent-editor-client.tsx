@@ -3,6 +3,7 @@
 import type {
   AgentConfig,
   AgentCostLimit,
+  AgentFollowup,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentScheduledJob,
@@ -21,6 +22,7 @@ interface Props {
   initialKnowledgeSources?: AgentKnowledgeSource[];
   initialNotificationTemplates?: AgentNotificationTemplate[];
   initialScheduledJobs?: AgentScheduledJob[];
+  initialFollowups?: AgentFollowup[];
 }
 
 export function AgentEditorClient(props: Props) {

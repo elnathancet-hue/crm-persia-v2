@@ -12,6 +12,7 @@ import type {
   AddAllowedDomainInput,
   AgentConfig,
   AgentCostLimit,
+  AgentFollowup,
   AgentKnowledgeSource,
   AgentCalendarConnectionPublic,
   AgentNotificationTemplate,
@@ -23,6 +24,7 @@ import type {
   CreateAgentInput,
   CreateCustomWebhookToolInput,
   CreateFAQInput,
+  CreateFollowupInput,
   CreateNotificationTemplateInput,
   CreateScheduledJobInput,
   CreateStageInput,
@@ -35,6 +37,7 @@ import type {
   TesterResponse,
   UpdateAgentInput,
   UpdateFAQInput,
+  UpdateFollowupInput,
   UpdateNotificationTemplateInput,
   UpdateScheduledJobInput,
   UpdateStageInput,
@@ -117,4 +120,14 @@ export interface AgentActions {
   listCalendarConnections: () => Promise<AgentCalendarConnectionPublic[]>;
   deleteCalendarConnection: (connectionId: string) => Promise<void>;
   buildOAuthStartUrl: (returnTo: string) => Promise<{ url: string }>;
+
+  // Follow-ups (PR #62) — runtime tick pendente, UI/CRUD ja prontos.
+  listFollowups: (configId: string) => Promise<AgentFollowup[]>;
+  createFollowup: (input: CreateFollowupInput) => Promise<AgentFollowup>;
+  updateFollowup: (
+    followupId: string,
+    input: UpdateFollowupInput,
+  ) => Promise<AgentFollowup>;
+  deleteFollowup: (followupId: string) => Promise<void>;
+  toggleFollowup: (followupId: string, isEnabled: boolean) => Promise<AgentFollowup>;
 }
