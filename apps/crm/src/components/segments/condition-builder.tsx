@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@persia/ui/select";
@@ -60,19 +60,37 @@ const OPERATORS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
+function genId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
+}
+
 export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: (r: Rules) => void }) {
-  // Positional ids — stay stable across update/reorder so React does not reuse input state
-  const idsRef = useRef<string[]>([]);
-  function genId() {
-    // eslint-disable-next-line react-hooks/purity -- ref-sync pattern; TODO: migrate to useState lazy init
-    return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-  }
-  // Sync ids array length with conditions (first render or external change)
-  while (idsRef.current.length < rules.conditions.length) idsRef.current.push(genId());
-  if (idsRef.current.length > rules.conditions.length) idsRef.current.length = rules.conditions.length;
+  // Positional IDs — stay stable across update/reorder so React does not
+  // reuse input state. Lazy init com 1 ID por condicao inicial. Mudancas
+  // posteriores (add/remove de conditions externamente) sao reconciliadas
+  // num useEffect — evita acesso a ref durante render (react-hooks/refs).
+  const [ids, setIds] = useState<string[]>(() =>
+    rules.conditions.map(() => genId()),
+  );
+
+  useEffect(() => {
+    setIds((prev) => {
+      const target = rules.conditions.length;
+      if (prev.length === target) return prev;
+      if (prev.length < target) {
+        const extras = Array.from({ length: target - prev.length }, () => genId());
+        return [...prev, ...extras];
+      }
+      return prev.slice(0, target);
+    });
+  }, [rules.conditions.length]);
 
   function addCondition() {
-    idsRef.current.push(genId());
+    // Pre-popula o ID antes do parent renderizar com a nova condicao —
+    // evita 1-frame de fallback `cond-${index}` no item novo.
+    setIds((prev) => [...prev, genId()]);
     onChange({
       ...rules,
       conditions: [...rules.conditions, { field: "status", op: "eq", value: "" }],
@@ -80,7 +98,11 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
   }
 
   function removeCondition(index: number) {
-    idsRef.current.splice(index, 1);
+    setIds((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next;
+    });
     onChange({
       ...rules,
       conditions: rules.conditions.filter((_, i) => i !== index),
@@ -109,7 +131,7 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
       )}
 
       {rules.conditions.map((condition, index) => (
-        <div key={idsRef.current[index] ?? `cond-${index}`} className="flex items-center gap-2">
+        <div key={ids[index] ?? `cond-${index}`} className="flex items-center gap-2">
           <Select
             value={condition.field}
             onValueChange={(v) => updateCondition(index, { field: v ?? "status", op: OPERATORS[v ?? "status"]?.[0]?.value || "eq" })}
