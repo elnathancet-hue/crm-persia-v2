@@ -336,6 +336,11 @@ export interface CreateAgentInput {
   // PR7.3: opcional. Server valida que connection_id pertence a mesma
   // org e esta active.
   calendar_connection_id?: string | null;
+  // PR onboarding: opcional. Quando informado e nao-blank, server cria
+  // stages pre-definidas (ver agent-templates.ts) junto com o config.
+  // O system_prompt continua vindo do client (cliente preenche com o
+  // prompt do template no form). Template apenas materializa stages.
+  template_slug?: import("./agent-templates").AgentTemplateSlug;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {

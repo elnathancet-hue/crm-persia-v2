@@ -10,8 +10,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { AgentConfig } from "@persia/shared/ai-agent";
-import { DEFAULT_MODEL } from "@persia/shared/ai-agent";
+import type { AgentConfig, AgentTemplateSlug } from "@persia/shared/ai-agent";
+import {
+  AGENT_TEMPLATES,
+  DEFAULT_MODEL,
+  getAgentTemplate,
+  isAgentTemplateSlug,
+} from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
@@ -71,6 +76,16 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
   const [deleteTarget, setDeleteTarget] = React.useState<AgentConfig | null>(null);
   const [enabled, setEnabled] = React.useState(nativeEnabled);
   const [isPending, startTransition] = React.useTransition();
+  const [templateSlug, setTemplateSlug] = React.useState<AgentTemplateSlug>("blank");
+
+  // Reset template selection when modal closes pra começar limpo na próxima
+  // criação. Evita confusão se usuário abrir, mudar template, fechar e
+  // reabrir esperando o default.
+  React.useEffect(() => {
+    if (!createOpen) setTemplateSlug("blank");
+  }, [createOpen]);
+
+  const selectedTemplate = getAgentTemplate(templateSlug);
 
   const handleToggleFlag = () => {
     startTransition(async () => {
@@ -90,22 +105,34 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
     const name = String(formData.get("name") || "").trim();
     const description = String(formData.get("description") || "").trim();
     const model = String(formData.get("model") || DEFAULT_MODEL);
+    const rawTemplate = String(formData.get("template") || "blank");
+    const template: AgentTemplateSlug = isAgentTemplateSlug(rawTemplate)
+      ? rawTemplate
+      : "blank";
     if (!name) {
       toast.error("Nome e obrigatório");
       return;
     }
+    const tpl = getAgentTemplate(template);
     startTransition(async () => {
       try {
         const created = await createAgent({
           name,
-          description: description || undefined,
+          description: description || tpl.short_description,
           scope_type: "global",
           model,
-          system_prompt: STARTER_PROMPT,
+          // Usa o prompt do template selecionado (blank cai no STARTER_PROMPT
+          // generico). Server materializa stages se template != blank.
+          system_prompt: tpl.system_prompt || STARTER_PROMPT,
+          template_slug: template,
         });
         setAgents((prev) => [created, ...prev]);
         setCreateOpen(false);
-        toast.success("Agente criado");
+        toast.success(
+          tpl.stages.length > 0
+            ? `Agente criado com ${tpl.stages.length} etapa${tpl.stages.length === 1 ? "" : "s"} pré-configuradas`
+            : "Agente criado",
+        );
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Falha ao criar agente");
       }
@@ -197,6 +224,48 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
             className="space-y-4"
             id="create-agent-form"
           >
+            <div className="space-y-2">
+              <Label htmlFor="template">Começar a partir de</Label>
+              {/* Hidden input pra carregar valor no FormData (Select do Radix
+                  não preenche FormData nativo). */}
+              <input type="hidden" name="template" value={templateSlug} />
+              <Select
+                value={templateSlug}
+                onValueChange={(v) =>
+                  isAgentTemplateSlug(v) && setTemplateSlug(v)
+                }
+              >
+                <SelectTrigger id="template">
+                  <SelectValue>{selectedTemplate.label}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENT_TEMPLATES.map((tpl) => (
+                    <SelectItem key={tpl.slug} value={tpl.slug}>
+                      {tpl.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1.5">
+                <p className="text-muted-foreground">
+                  {selectedTemplate.long_description}
+                </p>
+                {selectedTemplate.stages.length > 0 ? (
+                  <p className="font-medium text-foreground/90">
+                    {selectedTemplate.stages.length === 1
+                      ? "1 etapa pré-configurada:"
+                      : `${selectedTemplate.stages.length} etapas pré-configuradas:`}
+                  </p>
+                ) : null}
+                {selectedTemplate.stages.length > 0 ? (
+                  <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground">
+                    {selectedTemplate.stages.map((stage, i) => (
+                      <li key={i}>{stage.situation}</li>
+                    ))}
+                  </ol>
+                ) : null}
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="name">Nome</Label>
               <Input
