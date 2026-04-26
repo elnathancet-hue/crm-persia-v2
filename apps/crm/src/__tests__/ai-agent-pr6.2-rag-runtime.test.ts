@@ -550,6 +550,95 @@ describe("ai-agent PR6.2 rag runtime", () => {
     );
   });
 
+  it("runIndexingTick auto-requeues sources whose error matches a transient pattern", async () => {
+    const supabase = createSupabaseMock();
+    createAdminClientMock.mockReturnValue(supabase as never);
+
+    // normalizeExhaustedJobs: nenhum job esgotado
+    supabase.queue("agent_indexing_jobs", { data: [], error: null });
+
+    // requeueTransientFailures: 2 sources failed por motivos diferentes —
+    // uma transient (Voyage 400 do dim mismatch antigo), uma definitiva
+    // (PDF corrompido). So a transient deve ser re-enfileirada.
+    const oldUpdatedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    supabase.queue("agent_knowledge_sources", {
+      data: [
+        {
+          id: "source-transient",
+          organization_id: "org-a",
+          indexing_error: "Voyage request failed with status 400",
+          updated_at: oldUpdatedAt,
+        },
+        {
+          id: "source-definitive",
+          organization_id: "org-a",
+          indexing_error: "OPENAI_API_KEY is not configured",
+          updated_at: oldUpdatedAt,
+        },
+      ],
+      error: null,
+    });
+    // Update das sources transient pra pending
+    supabase.queue("agent_knowledge_sources", { data: null, error: null });
+    // Insert dos jobs novos
+    supabase.queue("agent_indexing_jobs", { data: null, error: null });
+
+    // claim retorna nada (sem job pra processar agora)
+    supabase.queue("rpc:claim_agent_indexing_job", { data: [], error: null });
+
+    const result = await runIndexingTick(asAgentDb(supabase as never));
+
+    expect(result.claimed_job_id).toBeNull();
+
+    // Apenas a source transient teve update pending + job novo.
+    const sourcePendingUpdates = (supabase.updates.agent_knowledge_sources ?? []).filter(
+      (row) => (row as { indexing_status?: string }).indexing_status === "pending",
+    );
+    expect(sourcePendingUpdates).toHaveLength(1);
+
+    const newJobs = supabase.inserts.agent_indexing_jobs ?? [];
+    expect(newJobs).toHaveLength(1);
+    expect(newJobs[0]).toMatchObject({
+      source_id: "source-transient",
+      organization_id: "org-a",
+      status: "pending",
+      attempts: 0,
+    });
+  });
+
+  it("runIndexingTick does NOT auto-requeue sources whose error is definitive", async () => {
+    const supabase = createSupabaseMock();
+    createAdminClientMock.mockReturnValue(supabase as never);
+
+    supabase.queue("agent_indexing_jobs", { data: [], error: null });
+
+    // So source com erro definitivo (max attempts esgotados).
+    supabase.queue("agent_knowledge_sources", {
+      data: [
+        {
+          id: "source-exhausted",
+          organization_id: "org-a",
+          indexing_error: "max attempts reached",
+          updated_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        },
+      ],
+      error: null,
+    });
+
+    supabase.queue("rpc:claim_agent_indexing_job", { data: [], error: null });
+
+    const result = await runIndexingTick(asAgentDb(supabase as never));
+
+    expect(result.claimed_job_id).toBeNull();
+    // Nada de update pending — source fica como estava.
+    const sourcePendingUpdates = (supabase.updates.agent_knowledge_sources ?? []).filter(
+      (row) => (row as { indexing_status?: string }).indexing_status === "pending",
+    );
+    expect(sourcePendingUpdates).toHaveLength(0);
+    // Nenhum job novo.
+    expect(supabase.inserts.agent_indexing_jobs ?? []).toHaveLength(0);
+  });
+
   it("executeAgent skips retrieval entirely when rag_enabled is false", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("agent_runs", { data: { id: "run-a" }, error: null });
