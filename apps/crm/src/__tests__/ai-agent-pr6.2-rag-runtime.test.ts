@@ -596,7 +596,10 @@ describe("ai-agent PR6.2 rag runtime", () => {
     );
     expect(sourcePendingUpdates).toHaveLength(1);
 
-    const newJobs = supabase.inserts.agent_indexing_jobs ?? [];
+    // Mock guarda batch insert como [ [item1, item2] ] (1 chamada =
+    // 1 elemento no array, mesmo que o argumento seja array de N items).
+    // Por isso achatamos antes de validar.
+    const newJobs = (supabase.inserts.agent_indexing_jobs ?? []).flat();
     expect(newJobs).toHaveLength(1);
     expect(newJobs[0]).toMatchObject({
       source_id: "source-transient",
