@@ -3,7 +3,7 @@
 // Retrieval-Augmented Generation for the agent knowledge base:
 //   - Two source types under one schema: "faq" (Q&A pairs) and "document"
 //     (uploaded PDF/DOCX/TXT in Supabase Storage).
-//   - Embedding via Voyage AI (`voyage-3-lite`, dim 1024). Sem Voyage key
+//   - Embedding via Voyage AI (`voyage-3`, dim 1024). Sem Voyage key
 //     → RAG silenciosamente off: indexing jobs marcam failed, retrieval
 //     retorna vazio, executor cai direto no LLM sem contexto extra.
 //   - Per-stage opt-in: `agent_stages.rag_enabled` + `rag_top_k` (1–10).
@@ -20,7 +20,13 @@
 
 // Changing the model = different dim = rebuild of every chunk. Do not
 // adjust without a dedicated migration that re-embeds the corpus.
-export const VOYAGE_MODEL = "voyage-3-lite" as const;
+//
+// IMPORTANT: voyage-3-lite is HARD-CODED at 512 dimensions and rejects
+// `output_dimension: 1024` with HTTP 400 (descoberto em prod 2026-04-25).
+// O schema usa vector(1024), entao usamos voyage-3 (default 1024,
+// suporta 256/512/1024/2048). Pricing voyage-3 e ~9x voyage-3-lite
+// ($0.18 vs $0.02 / 1M tokens) mas qualidade tambem e melhor.
+export const VOYAGE_MODEL = "voyage-3" as const;
 export const VOYAGE_DIM = 1024 as const;
 
 // Voyage billing API accepts up to 128 inputs per request and caps at
@@ -29,10 +35,10 @@ export const VOYAGE_DIM = 1024 as const;
 export const VOYAGE_BATCH_MAX = 128 as const;
 export const VOYAGE_MAX_TOKENS_PER_INPUT = 16_000 as const;
 
-// Voyage pricing (USD per 1M tokens), used by cost-tracking. Keep in sync
-// with https://docs.voyageai.com/docs/pricing. Re-validated before billing;
-// drift here affects telemetry only, not guardrails.
-export const VOYAGE_PRICING_USD_PER_1M = 0.02 as const;
+// Voyage pricing (USD per 1M tokens). voyage-3 = $0.18/1M (vs $0.02 do
+// lite). Mantem em sync com https://docs.voyageai.com/docs/pricing.
+// Drift aqui afeta so telemetria, nao guardrails.
+export const VOYAGE_PRICING_USD_PER_1M = 0.18 as const;
 
 // Distinguishes the embedding mode Voyage uses internally. Retrieval
 // quality is better when documents and queries pass different
