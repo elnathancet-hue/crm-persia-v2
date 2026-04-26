@@ -20,3 +20,4 @@ export * from "./notifications";
 export * from "./scheduled-jobs";
 export * from "./calendar";
 export * from "./agent-templates";
+export * from "./followups";

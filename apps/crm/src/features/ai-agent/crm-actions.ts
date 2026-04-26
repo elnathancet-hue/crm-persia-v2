@@ -54,6 +54,13 @@ import {
   deleteCalendarConnection,
   listCalendarConnections,
 } from "@/actions/ai-agent/calendar";
+import {
+  createFollowup,
+  deleteFollowup,
+  listFollowups,
+  toggleFollowup,
+  updateFollowup,
+} from "@/actions/ai-agent/followups";
 
 export const crmAgentActions: AgentActions = {
   createAgent,
@@ -94,4 +101,9 @@ export const crmAgentActions: AgentActions = {
   listCalendarConnections,
   deleteCalendarConnection,
   buildOAuthStartUrl,
+  listFollowups,
+  createFollowup,
+  updateFollowup,
+  deleteFollowup,
+  toggleFollowup,
 };

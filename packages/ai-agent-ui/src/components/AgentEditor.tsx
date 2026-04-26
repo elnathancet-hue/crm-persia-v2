@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Bell,
   Calendar,
+  Clock,
   FlaskConical,
   Gauge,
   HelpCircle,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import type {
   AgentConfig,
   AgentCostLimit,
+  AgentFollowup,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentScheduledJob,
@@ -47,6 +49,7 @@ import { FAQTab } from "./FAQTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { NotificationsTab } from "./NotificationsTab";
 import { SchedulingTab } from "./SchedulingTab";
+import { FollowupTab } from "./FollowupTab";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
@@ -61,6 +64,7 @@ interface Props {
   initialKnowledgeSources?: AgentKnowledgeSource[];
   initialNotificationTemplates?: AgentNotificationTemplate[];
   initialScheduledJobs?: AgentScheduledJob[];
+  initialFollowups?: AgentFollowup[];
 }
 
 export function AgentEditor({
@@ -72,12 +76,14 @@ export function AgentEditor({
   initialKnowledgeSources = [],
   initialNotificationTemplates = [],
   initialScheduledJobs = [],
+  initialFollowups = [],
 }: Props) {
   const {
     updateAgent,
     listKnowledgeSources,
     listNotificationTemplates,
     listScheduledJobs,
+    listFollowups,
   } = useAgentActions();
   const [agent, setAgent] = React.useState(initialAgent);
   const [stages, setStages] = React.useState(initialStages);
@@ -91,6 +97,7 @@ export function AgentEditor({
   const [scheduledJobs, setScheduledJobs] = React.useState<
     AgentScheduledJob[]
   >(initialScheduledJobs);
+  const [followups, setFollowups] = React.useState<AgentFollowup[]>(initialFollowups);
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
@@ -113,6 +120,15 @@ export function AgentEditor({
     }
   }, [agent.id, listNotificationTemplates]);
 
+  const refreshFollowups = React.useCallback(async () => {
+    try {
+      const next = await listFollowups(agent.id);
+      setFollowups(next);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao carregar follow-ups");
+    }
+  }, [agent.id, listFollowups]);
+
   const refreshScheduledJobs = React.useCallback(async () => {
     try {
       const next = await listScheduledJobs(agent.id);
@@ -132,6 +148,9 @@ export function AgentEditor({
     }
     if (initialScheduledJobs.length === 0) {
       void refreshScheduledJobs();
+    }
+    if (initialFollowups.length === 0) {
+      void refreshFollowups();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -252,6 +271,10 @@ export function AgentEditor({
             <Calendar className="size-4" />
             Agendamento
           </TabsTrigger>
+          <TabsTrigger value="followups" className="gap-2">
+            <Clock className="size-4" />
+            Follow-up
+          </TabsTrigger>
           <TabsTrigger value="limits" className="gap-2">
             <Gauge className="size-4" />
             Limites e Uso
@@ -313,6 +336,14 @@ export function AgentEditor({
             templates={notificationTemplates}
             onChange={setScheduledJobs}
             onRefresh={refreshScheduledJobs}
+          />
+        </TabsContent>
+        <TabsContent value="followups">
+          <FollowupTab
+            configId={agent.id}
+            followups={followups}
+            templates={notificationTemplates}
+            onChange={setFollowups}
           />
         </TabsContent>
         <TabsContent value="limits">

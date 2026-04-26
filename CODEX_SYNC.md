@@ -2959,3 +2959,83 @@ ai-agent-pr7.3-runtime.test.ts:
 - UI de gerenciar conexoes (Claude PR7.3c)
 - Webhook pra eventos cancelados externamente (Calendar push notifications) — futuro
 - Pegar livre/ocupado de outros calendarios — futuro
+
+---
+
+## 2026-04-25 — Claude — PR #62 Follow-up Automatico (UI/contracts/actions; runtime pendente)
+
+Branch: `claude/ai-agent-followup-automation`.
+
+Feature nova de "lembretes automaticos por inatividade da conversa" —
+diferente de scheduled-jobs (cron + filtros). Caso de uso: cliente quer
+3 follow-ups em cascata (24h/48h/72h sem resposta do lead).
+
+### Files shipped (Claude)
+
+- `packages/shared/src/ai-agent/followups.ts` — types + limits + presets +
+  validation helpers. Cap 5 follow-ups por agente, delay 1-720h.
+- `packages/shared/src/ai-agent/index.ts` — re-export.
+- `apps/crm/supabase/migrations/027_ai_agent_followups.sql` — `agent_followups`
+  + `agent_followup_runs` (idempotency log com UNIQUE follow-up+conversation)
+  + RLS + indexes. SEM PL/pgSQL functions (lesson learned do PR #57 — bug
+  do SQL Editor com `$$`).
+- `apps/crm/src/actions/ai-agent/followups.ts` — CRUD com role checks,
+  validacao input, cap por agente, dedup template_id por org.
+- `packages/ai-agent-ui/src/components/FollowupTab.tsx` — tab nova entre
+  Agendamento e Limites. Lista cards com toggle inline + sheet de edicao
+  (nome, template, delay com presets 24h/48h/72h/1sem/2sem).
+- `packages/ai-agent-ui/src/actions.ts` — 5 metodos novos no AgentActions
+  (list/create/update/delete/toggle).
+- `packages/ai-agent-ui/src/components/AgentEditor.tsx` — wire tab + state
+  + lazy refresh.
+- `apps/crm/src/features/ai-agent/crm-actions.ts` — wire actions.
+- `apps/crm/src/app/(dashboard)/automations/agents/[id]/page.tsx` — SSR
+  loader carrega followups inicial.
+
+### Runtime pendente (Codex)
+
+Tudo acima e UI + contracts + storage. **O motor que dispara os follow-ups
+NAO foi implementado**. Spec pra Codex:
+
+**Endpoint**: `POST /api/ai-agent/followups/tick` (auth via PERSIA_SCHEDULER_SECRET,
+mesmo padrao do scheduled-jobs tick).
+
+**Frequencia recomendada**: pg_cron a cada 15min. Mais que isso vira spam,
+menos pode atrasar o lembrete pra alem do delay esperado.
+
+**Algoritmo**:
+1. Carrega todos `agent_followups` com `is_enabled = true`, agrupado por org.
+2. Pra cada follow-up:
+   - Query no DB: conversations com (a) ja roteadas pra esse config_id,
+     (b) `last_inbound_message_at < now() - delay_hours * interval '1 hour'`,
+     (c) `status = 'active'` (nao foi pra humano nem fechada),
+     (d) NAO existe row em `agent_followup_runs` com (followup_id, conversation_id).
+   - Pra cada conversation que bate:
+     - INSERT em `agent_followup_runs` (followup_id, conversation_id) com
+       ON CONFLICT DO NOTHING. Se conflict (race), pula o disparo.
+     - Se insert OK, dispara `trigger_notification` handler com template_id
+       e conversation_id (usa o motor existente do PR7.1b).
+3. Cap por tick: 100 disparos por org pra evitar burst.
+
+**Detalhes importantes**:
+- O contador "tempo desde ultima resposta" deve usar `last_inbound_message_at`
+  (mensagem do LEAD), nao `last_message_at` (qualquer msg). Se o agente
+  enviou follow-up #1 e o lead nao respondeu, o follow-up #2 ainda deve
+  disparar quando atingir SEU delay (medido do mesmo `last_inbound_message_at`).
+- Idempotency: a tabela `agent_followup_runs` tem `UNIQUE (followup_id,
+  conversation_id)`. Se a mesma conversation reativar (lead voltou a
+  responder + ficou inativo de novo), tecnicamente pode receber o mesmo
+  follow-up de novo. Isso e desejado — mas significa que o cleanup de
+  `agent_followup_runs` precisa considerar isso. Sugestao: cleanup de
+  rows >90d via job separado.
+- Lock-free: nao precisa de claim_lease pq o INSERT com UNIQUE garante
+  single-flight natural. Ticks concorrentes simplesmente competem pelo
+  insert; o perdedor pula sem disparar.
+
+**Out of scope PR #62**:
+
+- Telemetria (count de follow-ups disparados por org/agente/follow-up — fica
+  pra Limits&Uso futuro)
+- UI de "ver historico de disparos" (audit) — fica pra futuro
+- Templates personalizados por canal (e-mail vs WhatsApp) — hoje so WhatsApp
+  via `agent_notification_templates`
