@@ -78,6 +78,17 @@ CREATE INDEX IF NOT EXISTS idx_agent_followup_runs_fired_at
 ALTER TABLE public.agent_followups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.agent_followup_runs ENABLE ROW LEVEL SECURITY;
 
+-- DROP IF EXISTS antes de cada CREATE POLICY pra deixar a migration
+-- idempotente. Postgres NAO tem `CREATE POLICY IF NOT EXISTS`, entao
+-- re-executar a migration apos uma falha parcial (ex: comando anterior
+-- abortou por conflito) explode com 42710 "policy already exists".
+-- Esse padrao DROP+CREATE permite re-rodar sem dor.
+DROP POLICY IF EXISTS "agent_followups_select" ON public.agent_followups;
+DROP POLICY IF EXISTS "agent_followups_insert" ON public.agent_followups;
+DROP POLICY IF EXISTS "agent_followups_update" ON public.agent_followups;
+DROP POLICY IF EXISTS "agent_followups_delete" ON public.agent_followups;
+DROP POLICY IF EXISTS "agent_followup_runs_select" ON public.agent_followup_runs;
+
 -- agent_followups: agentes leem (executor pode precisar consultar),
 -- admins/owners mutam.
 CREATE POLICY "agent_followups_select" ON public.agent_followups
