@@ -2,11 +2,14 @@
 
 import {
   DEFAULT_GUARDRAILS,
+  getAgentTemplate,
+  isAgentTemplateSlug,
   type AgentConfig,
   type CreateAgentInput,
   type UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import { revalidatePath } from "next/cache";
+import { slugify } from "./utils";
 import { getDefaultStopAgentTool } from "@/lib/ai-agent/tools/registry";
 import {
   assertAgentStatus,
@@ -82,6 +85,32 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
   });
   const { error: toolError } = await db.from("agent_tools").insert(defaultTool);
   if (toolError) throw new Error(toolError.message);
+
+  // Onboarding: se cliente escolheu um template (nao-blank), materializa
+  // as stages pre-definidas. Falha aqui NAO desfaz o agente — o cliente
+  // pode adicionar stages manualmente depois.
+  if (input.template_slug && isAgentTemplateSlug(input.template_slug)) {
+    const template = getAgentTemplate(input.template_slug);
+    if (template.stages.length > 0) {
+      const stageRows = template.stages.map((stage, index) => ({
+        organization_id: orgId,
+        config_id: config.id,
+        situation: stage.situation,
+        instruction: stage.instruction,
+        transition_hint: stage.transition_hint ?? null,
+        rag_enabled: false,
+        rag_top_k: 3,
+        order_index: index,
+        slug: slugify(stage.situation),
+      }));
+      const { error: stagesError } = await db.from("agent_stages").insert(stageRows);
+      if (stagesError) {
+        // Log + segue. O agente foi criado; cliente vai cair na aba Etapas
+        // vazia e pode criar manualmente. Melhor que falhar tudo.
+        console.error("Failed to seed template stages:", stagesError.message);
+      }
+    }
+  }
 
   for (const path of agentPaths()) revalidatePath(path);
   return config;
