@@ -62,6 +62,7 @@ const STARTER_PROMPT = `Você é um atendente virtual profissional e cordial.
 - Entenda o que o cliente precisa antes de responder.
 - Use linguagem objetiva, com no máximo 3 frases por mensagem.
 - IMPORTANTE: NUNCA invente informações sobre preços, recursos, prazos, descontos ou políticas que não estejam explicitamente nas instruções da etapa atual ou na base de conhecimento. Se o cliente perguntar algo que você não sabe, responda "Vou transferir você para um especialista que pode confirmar essa informação" e peça a transferência.
+- IMPORTANTE: NUNCA assuma o ramo de negócio (ex: não diga "internet, TV, celular", "consultoria", "infoproduto" etc) sem que isso esteja explicitamente nas instruções da etapa ou tenha sido informado pelo cliente. Se não souber a vertical, pergunte de forma genérica: "Em que posso ajudar hoje?".
 - Peça transferência para um humano se não souber responder.`;
 
 interface Props {
@@ -212,7 +213,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Novo agente</DialogTitle>
             <DialogDescription>
@@ -235,7 +236,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
                   isAgentTemplateSlug(v) && setTemplateSlug(v)
                 }
               >
-                <SelectTrigger id="template">
+                <SelectTrigger id="template" className="w-full">
                   <SelectValue>{selectedTemplate.label}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -292,7 +293,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
             <div className="space-y-2">
               <Label htmlFor="model">Modelo de IA</Label>
               <Select name="model" defaultValue={DEFAULT_MODEL}>
-                <SelectTrigger id="model">
+                <SelectTrigger id="model" className="w-full">
                   <SelectValue>{MODEL_LABEL[DEFAULT_MODEL] ?? DEFAULT_MODEL}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>

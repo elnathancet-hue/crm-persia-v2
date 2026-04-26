@@ -75,7 +75,7 @@ export function DecisionIntelligenceModal({
           handler: preset.handler,
         });
         onCreated(created);
-        toast.success(`${preset.display_name} adicionada`);
+        toast.success(`Ferramenta '${preset.display_name}' habilitada`);
         onOpenChange(false);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Falha ao adicionar ferramenta");
