@@ -33,6 +33,10 @@
     "./ai-agent": {
       "types": "./src/ai-agent/index.ts",
       "default": "./src/ai-agent/index.ts"
+    },
+    "./crm": {
+      "types": "./src/crm/index.ts",
+      "default": "./src/crm/index.ts"
     }
   },
   "scripts": {

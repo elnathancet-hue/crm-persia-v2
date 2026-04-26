@@ -23,34 +23,17 @@ import {
 } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { toast } from "sonner";
+import type {
+  Deal,
+  PipelineGoal,
+  PipelineWithStagesAndDeals,
+  StageWithDeals,
+} from "@persia/shared/crm";
 
-interface Deal {
-  id: string;
-  title: string;
-  value: number;
-  status: string;
-  lead_id: string | null;
-  sort_order: number;
-}
-
-interface Stage {
-  id: string;
-  name: string;
-  color: string;
-  sort_order: number;
-  deals: Deal[];
-}
-
-interface Pipeline {
-  id: string;
-  name: string;
-  pipeline_stages: Stage[];
-}
-
-interface PipelineGoal {
-  revenue: number;
-  won: number;
-}
+// Aliases locais pra manter o resto do componente legível sem precisar
+// renomear referências.
+type Stage = StageWithDeals;
+type Pipeline = PipelineWithStagesAndDeals;
 
 function getStageMetrics(deals: Deal[]) {
   const total = deals.reduce((sum, deal) => sum + (deal.value || 0), 0);

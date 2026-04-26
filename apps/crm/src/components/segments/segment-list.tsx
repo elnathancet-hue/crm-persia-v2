@@ -12,15 +12,7 @@ import { Plus, Users, Trash2, Pencil } from "lucide-react";
 import { createSegment, deleteSegment } from "@/actions/segments";
 import { ConditionBuilder } from "./condition-builder";
 import { useRole } from "@/lib/hooks/use-role";
-
-interface Segment {
-  id: string;
-  name: string;
-  description: string | null;
-  rules: any;
-  lead_count: number;
-  created_at: string;
-}
+import type { Segment } from "@persia/shared/crm";
 
 export function SegmentList({ segments }: { segments: Segment[] }) {
   const { isAdmin } = useRole(); // only admin+ can create/edit/delete segments

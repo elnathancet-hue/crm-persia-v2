@@ -9,29 +9,14 @@ import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Plus, GripVertical, DollarSign, Trash2 } from "lucide-react";
 import { createDeal, moveDeal, deleteDeal } from "@/actions/pipelines";
+import type {
+  Deal,
+  PipelineWithStagesAndDeals,
+  StageWithDeals,
+} from "@persia/shared/crm";
 
-interface Deal {
-  id: string;
-  title: string;
-  value: number;
-  status: string;
-  lead_id: string | null;
-  sort_order: number;
-}
-
-interface Stage {
-  id: string;
-  name: string;
-  color: string;
-  sort_order: number;
-  deals: Deal[];
-}
-
-interface Pipeline {
-  id: string;
-  name: string;
-  pipeline_stages: Stage[];
-}
+type Stage = StageWithDeals;
+type Pipeline = PipelineWithStagesAndDeals;
 
 export function KanbanBoard({ pipeline }: { pipeline: Pipeline }) {
   const [isPending, startTransition] = useTransition();

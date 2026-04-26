@@ -2,64 +2,16 @@
 
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import type {
+  LeadActivity,
+  LeadDetail,
+  LeadFilters,
+  LeadWithTags,
+} from "@persia/shared/crm";
 
-export type LeadFilters = {
-  search?: string;
-  status?: string;
-  tags?: string[];
-  page?: number;
-  limit?: number;
-};
-
-export type LeadWithTags = {
-  id: string;
-  organization_id: string;
-  name: string | null;
-  phone: string | null;
-  email: string | null;
-  avatar_url: string | null;
-  source: string;
-  status: string;
-  score: number;
-  whatsapp_id: string | null;
-  channel: string;
-  opt_in: boolean;
-  metadata: unknown;
-  last_interaction_at: string | null;
-  created_at: string;
-  updated_at: string;
-  lead_tags: {
-    tag_id: string;
-    tags: {
-      id: string;
-      name: string;
-      color: string;
-    };
-  }[];
-};
-
-export type LeadDetail = LeadWithTags & {
-  lead_custom_field_values: {
-    id: string;
-    custom_field_id: string;
-    value: string;
-    custom_fields: {
-      id: string;
-      name: string;
-      field_type: string;
-    };
-  }[];
-};
-
-export type LeadActivity = {
-  id: string;
-  lead_id: string;
-  performed_by: string | null;
-  type: string;
-  description: string | null;
-  metadata: unknown;
-  created_at: string | null;
-};
+// Re-exporta tipos canônicos pra manter o path `@/actions/leads` que vários
+// componentes do CRM importam. Fonte da verdade: @persia/shared/crm.
+export type { LeadActivity, LeadDetail, LeadFilters, LeadWithTags };
 
 export async function getLeads(filters: LeadFilters = {}) {
   const { supabase, orgId } = await requireRole("agent");

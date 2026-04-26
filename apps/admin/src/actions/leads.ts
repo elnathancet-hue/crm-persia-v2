@@ -2,32 +2,12 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import type { LeadFilters, LeadWithTags } from "@persia/shared/crm";
 
-
-export type LeadWithTags = {
-  id: string;
-  organization_id: string;
-  name: string | null;
-  phone: string | null;
-  email: string | null;
-  avatar_url: string | null;
-  source: string;
-  status: string;
-  score: number;
-  channel: string;
-  last_interaction_at: string | null;
-  created_at: string;
-  updated_at: string;
-  lead_tags: { tag_id: string; tags: { id: string; name: string; color: string } }[];
-};
-
-export type LeadFilters = {
-  search?: string;
-  status?: string;
-  tags?: string[];
-  page?: number;
-  limit?: number;
-};
+// Re-exporta tipos canônicos. Admin não usa whatsapp_id/opt_in/metadata
+// (são opcionais no tipo shared), então as queries existentes continuam
+// compatíveis.
+export type { LeadFilters, LeadWithTags };
 
 export async function getLeads(filters: LeadFilters = {}) {
   const { admin, orgId } = await requireSuperadminForOrg();

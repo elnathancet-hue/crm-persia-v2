@@ -43,19 +43,7 @@ import {
 
 // ============ TYPES ============
 
-interface Pipeline {
-  id: string;
-  name: string;
-}
-
-interface Stage {
-  id: string;
-  pipeline_id: string;
-  name: string;
-  color: string;
-  sort_order: number;
-  description?: string | null;
-}
+import type { Pipeline, Stage } from "@persia/shared/crm";
 
 // ============ PRESET COLORS ============
 

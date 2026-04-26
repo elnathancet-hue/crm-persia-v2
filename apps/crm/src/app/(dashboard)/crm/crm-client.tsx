@@ -43,59 +43,27 @@ import {
   deleteDeal,
 } from "@/actions/crm";
 import { useRole } from "@/lib/hooks/use-role";
+import type {
+  DealWithLead,
+  LeadTagJoin,
+  Pipeline,
+  PipelineGoal,
+  Stage,
+  TagRef,
+} from "@persia/shared/crm";
 
 // ============ TYPES ============
 
-interface Tag {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface LeadTag {
-  tags: Tag | null;
-}
+// Aliases locais pra preservar nomes usados no resto do componente.
+type Tag = TagRef;
+type LeadTag = LeadTagJoin;
+type Deal = DealWithLead;
 
 interface Lead {
   id: string;
   name: string;
   phone: string | null;
   email: string | null;
-}
-
-interface Deal {
-  id: string;
-  title: string;
-  value: number;
-  status: string;
-  lead_id: string | null;
-  pipeline_id: string;
-  sort_order: number;
-  leads: {
-    name: string;
-    phone: string | null;
-    email: string | null;
-    lead_tags?: LeadTag[];
-  } | null;
-  stage_id: string;
-}
-
-interface Stage {
-  id: string;
-  pipeline_id: string;
-  name: string;
-  color: string;
-  sort_order: number;
-}
-
-interface Pipeline {
-  id: string;
-  name: string;
-}
-
-interface PipelineGoal {
-  revenue: number;
-  won: number;
 }
 
 // ============ HELPERS ============

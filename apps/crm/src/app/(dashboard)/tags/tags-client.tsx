@@ -17,15 +17,10 @@ import { Label } from "@persia/ui/label";
 import { TagBadge } from "@/components/tags/tag-badge";
 import { createTag, updateTag, deleteTag } from "@/actions/tags";
 import { useRole } from "@/lib/hooks/use-role";
+import type { TagWithCount } from "@persia/shared/crm";
 
-interface Tag {
-  id: string;
-  name: string;
-  color: string;
-  organization_id: string;
-  created_at: string;
-  lead_count: number;
-}
+// `Tag` aqui é a versão com lead_count agregado (página de listagem).
+type Tag = TagWithCount;
 
 const COLOR_GRID = [
   "#ef4444", "#f97316", "#f59e0b", "#eab308",
