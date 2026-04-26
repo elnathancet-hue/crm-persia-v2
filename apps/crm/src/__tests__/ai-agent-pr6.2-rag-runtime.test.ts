@@ -115,6 +115,19 @@ function jsonResponse(data: unknown, status = 200): Response {
   } as Response;
 }
 
+// Gera embedding com VOYAGE_DIM (1024) dimensoes — necessario porque
+// voyage-client.ts valida que vec.length === VOYAGE_DIM e throw
+// "Voyage retornou dim X, esperado 1024" se nao bater. Os valores
+// passados (head) ficam no inicio, resto e zero (irrelevante pra
+// retrieval — distance e calculada server-side via pgvector). Helper
+// adicionado quando trocamos voyage-3-lite (512) por voyage-3 (1024)
+// nativo no PR #57.
+function mockEmbedding(head: number[]): number[] {
+  const VOYAGE_DIM = 1024;
+  if (head.length >= VOYAGE_DIM) return head.slice(0, VOYAGE_DIM);
+  return [...head, ...Array<number>(VOYAGE_DIM - head.length).fill(0)];
+}
+
 describe("ai-agent PR6.2 rag runtime", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -189,7 +202,7 @@ describe("ai-agent PR6.2 rag runtime", () => {
     });
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({
-        data: [{ embedding: [0.11, 0.22, 0.33] }],
+        data: [{ embedding: mockEmbedding([0.11, 0.22, 0.33]) }],
         usage: { total_tokens: 12 },
       }),
     );
@@ -282,7 +295,7 @@ describe("ai-agent PR6.2 rag runtime", () => {
     });
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        data: [{ embedding: mockEmbedding([0.1, 0.2, 0.3]) }],
         usage: { total_tokens: 18 },
       }),
     );
@@ -425,7 +438,7 @@ describe("ai-agent PR6.2 rag runtime", () => {
     });
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({
-        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        data: [{ embedding: mockEmbedding([0.1, 0.2, 0.3]) }],
         usage: { total_tokens: 18 },
       }),
     );
@@ -706,7 +719,7 @@ describe("ai-agent PR6.2 rag runtime", () => {
     });
     vi.mocked(global.fetch).mockResolvedValue(
       jsonResponse({
-        data: [{ embedding: [0.4, 0.5, 0.6] }],
+        data: [{ embedding: mockEmbedding([0.4, 0.5, 0.6]) }],
         usage: { total_tokens: 9 },
       }),
     );
