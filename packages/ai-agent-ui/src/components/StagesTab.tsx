@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { GripVertical, Pencil, Plus, Trash2, Wand2 } from "lucide-react";
+import { GripVertical, List, Pencil, Plus, Share2, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import type {
   AgentStage,
@@ -23,6 +23,13 @@ import {
 } from "@persia/ui/alert-dialog";
 import { useAgentActions } from "../context";
 import { StageSheet } from "./StageSheet";
+import { StagesFlowView } from "./StagesFlowView";
+
+type StagesView = "list" | "flow";
+
+// Persistencia da escolha "lista vs fluxograma" entre sessoes/abas. Cada
+// usuario tem sua preferencia. Default = lista (familiar).
+const STAGES_VIEW_STORAGE_KEY = "ai-agent-stages-view";
 
 interface Props {
   configId: string;
@@ -37,6 +44,27 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
   const [creating, setCreating] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<AgentStage | null>(null);
   const [isPending, startTransition] = React.useTransition();
+  const [view, setView] = React.useState<StagesView>("list");
+
+  // Hidrata view do localStorage no primeiro render (client-only).
+  // useEffect evita SSR hydration mismatch quando o storage tem "flow".
+  React.useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(STAGES_VIEW_STORAGE_KEY);
+      if (stored === "flow" || stored === "list") setView(stored);
+    } catch {
+      /* localStorage indisponivel — segue com default */
+    }
+  }, []);
+
+  const switchView = (next: StagesView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(STAGES_VIEW_STORAGE_KEY, next);
+    } catch {
+      /* segue silencioso */
+    }
+  };
 
   const handleCreate = (input: CreateStageInput) => {
     startTransition(async () => {
@@ -86,13 +114,51 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
           <p className="text-sm text-muted-foreground">
             O agente avança pelas etapas conforme a conversa evolui. Cada etapa tem uma situação, instrução e dica de transição.
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex gap-2 shrink-0 items-center">
+          {sorted.length > 0 ? (
+            <div
+              className="inline-flex rounded-md border bg-background p-0.5"
+              role="tablist"
+              aria-label="Visualização das etapas"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "list"}
+                onClick={() => switchView("list")}
+                className={
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors " +
+                  (view === "list"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                <List className="size-3.5" />
+                Lista
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === "flow"}
+                onClick={() => switchView("flow")}
+                className={
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors " +
+                  (view === "flow"
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                <Share2 className="size-3.5" />
+                Fluxograma
+              </button>
+            </div>
+          ) : null}
           <Button variant="outline" size="sm" disabled title="Em breve">
             <Wand2 className="size-4" />
             Gerar etapas com IA
@@ -106,6 +172,12 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
 
       {sorted.length === 0 ? (
         <EmptyStages onCreate={() => setCreating(true)} />
+      ) : view === "flow" ? (
+        <StagesFlowView
+          stages={sorted}
+          onEdit={(stage) => setEditing(stage)}
+          onAdd={() => setCreating(true)}
+        />
       ) : (
         <div className="space-y-3">
           {sorted.map((stage, index) => (

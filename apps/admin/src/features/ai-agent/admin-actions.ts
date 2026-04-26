@@ -50,6 +50,13 @@ import {
   deleteCalendarConnection,
   listCalendarConnections,
 } from "@/actions/ai-agent/calendar";
+import {
+  createFollowup,
+  deleteFollowup,
+  listFollowups,
+  toggleFollowup,
+  updateFollowup,
+} from "@/actions/ai-agent/followups";
 
 export function createAdminAgentActions(orgId: string): AgentActions {
   return {
@@ -97,5 +104,12 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     deleteCalendarConnection: (connectionId) =>
       deleteCalendarConnection(orgId, connectionId),
     buildOAuthStartUrl: (returnTo) => buildOAuthStartUrl(orgId, returnTo),
+    listFollowups: (configId) => listFollowups(orgId, configId),
+    createFollowup: (input) => createFollowup(orgId, input),
+    updateFollowup: (followupId, input) =>
+      updateFollowup(orgId, followupId, input),
+    deleteFollowup: (followupId) => deleteFollowup(orgId, followupId),
+    toggleFollowup: (followupId, isEnabled) =>
+      toggleFollowup(orgId, followupId, isEnabled),
   };
 }

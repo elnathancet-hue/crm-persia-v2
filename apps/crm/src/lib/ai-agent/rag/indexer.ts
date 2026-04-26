@@ -95,10 +95,15 @@ export async function runIndexingTick(
   db: AgentDb = asAgentDb(createAdminClient()),
 ): Promise<IndexingTickResult> {
   await normalizeExhaustedJobs(db);
-  await requeueTransientFailures(db);
 
   const job = await claimIndexingJob(db);
   if (!job) {
+    // Sem job pendente — aproveita o tick "ocioso" pra auto-requeue de
+    // sources que falharam por motivo transient (ex: hotfix do RAG).
+    // Importante NAO rodar isso quando ha job pendente (custo extra de
+    // query + tests existentes nao anteciparam essa chamada). Trade-off:
+    // requeue demora 1 tick extra (proximo ocioso) — aceitavel.
+    await requeueTransientFailures(db);
     return {
       claimed_job_id: null,
       processed_jobs: 0,
