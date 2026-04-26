@@ -42,6 +42,13 @@ interface ChatTurn {
   steps?: TesterStepSummary[];
   tokens?: number;
   error?: string;
+  // Etapa em que o run COMECOU (snapshot do selectedStageId no momento
+  // do envio). Usado pra detectar transicao quando comparado com
+  // next_stage_id retornado.
+  started_stage_id?: string;
+  // Etapa pra qual o agente avancou apos esse run. null = continua
+  // na mesma etapa. Vem direto de TesterResponse.next_stage_id.
+  next_stage_id?: string | null;
 }
 
 export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
@@ -61,6 +68,12 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
     const text = message.trim();
     if (!text || isPending) return;
 
+    // Snapshot da etapa atual (selectedStageId pode mudar entre clicks
+    // do usuario; queremos a que estava ativa no momento do envio).
+    const stageAtSend = selectedStageId ?? stages.slice().sort(
+      (a, b) => a.order_index - b.order_index,
+    )[0]?.id;
+
     setTurns((prev) => [...prev, { role: "user", text }]);
     setMessage("");
 
@@ -72,6 +85,12 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           message: text,
           dry_run: true,
         });
+        // Auto-avança o select pra etapa seguinte se o agente transicionou.
+        // Assim a proxima mensagem do usuario continua de onde parou,
+        // espelhando o comportamento real em prod.
+        if (res.next_stage_id && res.next_stage_id !== stageAtSend) {
+          setSelectedStageId(res.next_stage_id);
+        }
         setTurns((prev) => [
           ...prev,
           {
@@ -80,6 +99,8 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
             steps: res.steps,
             tokens: res.tokens_used,
             error: res.error,
+            started_stage_id: stageAtSend,
+            next_stage_id: res.next_stage_id,
           },
         ]);
       } catch (err) {
@@ -98,6 +119,16 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
 
   const handleClear = () => setTurns([]);
 
+  // Descritor (numero + nome) da etapa atual pra renderizar badge no
+  // header. Se nada selecionado, mostra a primeira etapa por order_index
+  // (que e a default real do executor).
+  const currentStageDescriptor = React.useMemo(() => {
+    if (stages.length === 0) return null;
+    const sorted = stages.slice().sort((a, b) => a.order_index - b.order_index);
+    const targetId = selectedStageId ?? sorted[0]!.id;
+    return findStageDescriptor(stages, targetId);
+  }, [stages, selectedStageId]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-xl flex flex-col">
@@ -111,7 +142,14 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
             Modo simulação: nenhum WhatsApp é enviado. Toda ação que mudaria dados é apenas simulada.
           </SheetDescription>
           <div className="pt-3 space-y-1.5">
-            <Label className="text-xs">Iniciar na etapa</Label>
+            <Label className="text-xs">
+              Iniciar na etapa
+              {currentStageDescriptor ? (
+                <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-normal text-[10px] text-muted-foreground">
+                  Atual: {currentStageDescriptor.order}. {currentStageDescriptor.situation}
+                </span>
+              ) : null}
+            </Label>
             <Select
               value={selectedStageId ?? ""}
               onValueChange={(v) => setSelectedStageId(v || undefined)}
@@ -156,7 +194,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
               </div>
             </div>
           ) : (
-            turns.map((turn, i) => <ChatBubble key={i} turn={turn} />)
+            turns.map((turn, i) => <ChatBubble key={i} turn={turn} stages={stages} />)
           )}
           {isPending ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 py-1">
@@ -208,7 +246,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
   );
 }
 
-function ChatBubble({ turn }: { turn: ChatTurn }) {
+function ChatBubble({ turn, stages }: { turn: ChatTurn; stages: AgentStage[] }) {
   if (turn.role === "user") {
     return (
       <div className="flex justify-end">
@@ -218,6 +256,14 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
       </div>
     );
   }
+
+  // Detecta transicao: agente avancou pra etapa diferente da que comecou.
+  // Quando next_stage_id == null, agente continua na mesma etapa (sem badge).
+  const transition =
+    turn.next_stage_id && turn.next_stage_id !== turn.started_stage_id
+      ? findStageDescriptor(stages, turn.next_stage_id)
+      : null;
+
   return (
     <div className="flex flex-col items-start gap-1.5 max-w-[85%]">
       <div className="rounded-2xl rounded-bl-sm bg-background border px-3 py-2 text-sm whitespace-pre-wrap">
@@ -227,6 +273,12 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
           turn.text
         )}
       </div>
+      {transition ? (
+        <div className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
+          <span aria-hidden>→</span>
+          Avançou pra Etapa {transition.order}: {transition.situation}
+        </div>
+      ) : null}
       {turn.steps && turn.steps.length > 0 ? (
         <details className="text-xs text-muted-foreground ml-1">
           <summary className="cursor-pointer hover:text-foreground select-none">
@@ -248,6 +300,19 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
       ) : null}
     </div>
   );
+}
+
+// Devolve order_index (1-based) + situation pra render do badge de
+// transicao. Retorna null se a etapa nao existir mais (ex: usuario
+// deletou a etapa entre runs do tester — caso raro mas possivel).
+function findStageDescriptor(
+  stages: AgentStage[],
+  stageId: string,
+): { order: number; situation: string } | null {
+  const sorted = stages.slice().sort((a, b) => a.order_index - b.order_index);
+  const idx = sorted.findIndex((s) => s.id === stageId);
+  if (idx < 0) return null;
+  return { order: idx + 1, situation: sorted[idx]!.situation };
 }
 
 // Estimativa grosseira: GPT-4o-mini ~ US$ 0.0006 por 1k tokens.
