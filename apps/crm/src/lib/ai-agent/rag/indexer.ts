@@ -19,6 +19,39 @@ const INDEXING_MAX_ATTEMPTS = 3;
 const INDEXING_LEASE_TIMEOUT_MS = 5 * 60 * 1000;
 const INDEXING_EXHAUSTED_ERROR = "max attempts reached";
 
+// Auto-requeue de fontes que falharam por motivos *transitorios* — assim
+// hotfixes de RAG (ex: trocar VOYAGE_MODEL apos um deploy) auto-recuperam
+// items "Falhou" sem cliente precisar clicar Reindexar manualmente um por
+// um. Erros realmente *definitivos* (PDF corrompido, max chunks estourado,
+// OpenAI key faltando, attempts esgotados) NAO entram aqui pra evitar loop
+// eterno.
+const TRANSIENT_ERROR_PATTERNS: RegExp[] = [
+  /Voyage.*status\s+(4\d\d|5\d\d)/i,        // 4xx/5xx do Voyage (cobre 400 do dim mismatch antes do PR #57)
+  /expected.*\d+\s+dimensions/i,             // dim mismatch — cobre erro pre-PR #57
+  /Voyage\s+response\s+length\s+mismatch/i,
+  /Voyage\s+retornou\s+dim\s+\d+/i,          // PR #55 defensive check
+  /timeout/i,
+  /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN/i,
+  /fetch failed/i,                           // node fetch generic
+  /openai.*5\d\d/i,
+  /openai.*rate\s*limit/i,
+];
+
+// Espera minima (ms) entre auto-requeues consecutivos pra mesma source.
+// Usa updated_at da source como ancora — quando requeue acontece a source
+// vira pending+updated_at=now; quando falha de novo vira failed+updated_at=now.
+// 1h deixa hotfix propagar via deploy + um ciclo Voyage retry sem DDOS
+// interno.
+const AUTO_REQUEUE_COOLDOWN_MS = 60 * 60 * 1000;
+
+// Cap por tick pra nao explodir custo Voyage caso varias fontes estejam
+// failed por motivo transient. Itens que sobrarem entram no proximo tick.
+const AUTO_REQUEUE_MAX_PER_TICK = 5;
+
+// Marcador no error_message pra distinguir falhas que ja vieram de auto-
+// requeue (evita reentry imediata se o motivo persistir).
+const AUTO_REQUEUE_MARKER = "[auto-requeued]";
+
 interface StorageDownloadClient {
   storage: {
     from(bucket: string): {
@@ -62,6 +95,7 @@ export async function runIndexingTick(
   db: AgentDb = asAgentDb(createAdminClient()),
 ): Promise<IndexingTickResult> {
   await normalizeExhaustedJobs(db);
+  await requeueTransientFailures(db);
 
   const job = await claimIndexingJob(db);
   if (!job) {
@@ -176,6 +210,115 @@ async function claimIndexingJob(db: AgentDb): Promise<AgentIndexingJob | null> {
 
   const row = Array.isArray(data) ? data[0] : data;
   return (row ?? null) as AgentIndexingJob | null;
+}
+
+// Re-enfileira automaticamente fontes em "failed" cujo motivo bate com
+// um dos TRANSIENT_ERROR_PATTERNS — desde que tenha passado pelo menos
+// AUTO_REQUEUE_COOLDOWN_MS desde a ultima atualizacao.
+//
+// Usado pra cenarios tipo: voce ajustou VOYAGE_MODEL e deployou.
+// Sources que falharam por dim mismatch antes do deploy auto-recuperam
+// na proxima execucao do cron, sem o cliente precisar clicar Reindexar
+// item por item.
+//
+// NAO mexe em jobs de fontes ainda em pending/processing nem em fontes
+// cujo erro indica problema definitivo (PDF corrompido, OPENAI_API_KEY
+// faltando, max attempts esgotados).
+export async function requeueTransientFailures(
+  db: AgentDb,
+): Promise<{ requeued: number; source_ids: string[] }> {
+  const cutoffIso = new Date(Date.now() - AUTO_REQUEUE_COOLDOWN_MS).toISOString();
+
+  const { data, error } = await db
+    .from("agent_knowledge_sources")
+    .select("id, organization_id, indexing_error, updated_at")
+    .eq("indexing_status", "failed")
+    .lte("updated_at", cutoffIso)
+    .order("updated_at", { ascending: true })
+    // Overfetch porque filtramos os patterns no client. 4x o cap permite
+    // skipping de erros definitivos sem precisar paginar.
+    .limit(AUTO_REQUEUE_MAX_PER_TICK * 4);
+
+  if (error) {
+    logError("ai_agent_rag_auto_requeue_select_failed", { error: error.message });
+    return { requeued: 0, source_ids: [] };
+  }
+
+  if (!Array.isArray(data) || data.length === 0) {
+    return { requeued: 0, source_ids: [] };
+  }
+
+  const transient = data
+    .filter((row) => isTransientError(String(row.indexing_error ?? "")))
+    .slice(0, AUTO_REQUEUE_MAX_PER_TICK);
+
+  if (transient.length === 0) {
+    return { requeued: 0, source_ids: [] };
+  }
+
+  const nowIso = new Date().toISOString();
+  const sourceIds = transient.map((row) => String(row.id));
+
+  // Reset das sources pra pending (dispara re-render do badge na UI).
+  const { error: sourcesUpdateError } = await db
+    .from("agent_knowledge_sources")
+    .update({
+      indexing_status: "pending",
+      indexing_error: null,
+      updated_at: nowIso,
+    })
+    .in("id", sourceIds);
+
+  if (sourcesUpdateError) {
+    logError("ai_agent_rag_auto_requeue_sources_update_failed", {
+      error: sourcesUpdateError.message,
+      source_ids: sourceIds,
+    });
+    return { requeued: 0, source_ids: [] };
+  }
+
+  // Cria jobs novos (attempts=0). NAO reusa os jobs antigos com attempts
+  // esgotado — o claim_agent_indexing_job ignora jobs com attempts >= 3.
+  const { error: jobsInsertError } = await db
+    .from("agent_indexing_jobs")
+    .insert(
+      transient.map((row) => ({
+        organization_id: String(row.organization_id),
+        source_id: String(row.id),
+        status: "pending",
+        attempts: 0,
+      })),
+    );
+
+  if (jobsInsertError) {
+    // Rollback: volta sources pra failed pra evitar fica em pending sem job.
+    await db
+      .from("agent_knowledge_sources")
+      .update({
+        indexing_status: "failed",
+        indexing_error: `${AUTO_REQUEUE_MARKER} ${jobsInsertError.message}`,
+        updated_at: nowIso,
+      })
+      .in("id", sourceIds);
+
+    logError("ai_agent_rag_auto_requeue_jobs_insert_failed", {
+      error: jobsInsertError.message,
+      source_ids: sourceIds,
+    });
+    return { requeued: 0, source_ids: [] };
+  }
+
+  logInfo("ai_agent_rag_auto_requeued", {
+    count: transient.length,
+    source_ids: sourceIds,
+  });
+
+  return { requeued: transient.length, source_ids: sourceIds };
+}
+
+function isTransientError(message: string): boolean {
+  if (!message) return false;
+  return TRANSIENT_ERROR_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 async function normalizeExhaustedJobs(db: AgentDb): Promise<void> {
