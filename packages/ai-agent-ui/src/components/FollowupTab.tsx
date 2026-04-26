@@ -179,7 +179,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
     });
   };
 
-  const handlePresetChange = (value: string) => {
+  const handlePresetChange = (value: string | null) => {
     if (!value) {
       // "Personalizado": mantem hours atual.
       setEditor((e) => ({ ...e, delay_preset: "" }));
