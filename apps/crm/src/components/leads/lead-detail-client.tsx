@@ -104,15 +104,9 @@ type LeadDetailClientProps = {
   agentHandoff: LeadAgentHandoffState;
 };
 
-type Pipeline = {
-  id: string;
-  name: string;
-};
-
-type Stage = {
-  id: string;
-  name: string;
-};
+// Tipos canônicos vindos de @persia/shared/crm. Esta view usa apenas
+// `id` e `name`, mas TS aceita objetos com mais campos sem reclamar.
+import type { Pipeline, Stage } from "@persia/shared/crm";
 
 export function LeadDetailClient({
   lead,

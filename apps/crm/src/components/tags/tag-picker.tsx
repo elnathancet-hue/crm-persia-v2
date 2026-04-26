@@ -18,12 +18,7 @@ import {
   CommandItem,
 } from "@persia/ui/command";
 import { getTags, createTag, addTagToLead, removeTagFromLead } from "@/actions/tags";
-
-interface Tag {
-  id: string;
-  name: string;
-  color: string;
-}
+import type { TagRef as Tag } from "@persia/shared/crm";
 
 interface TagPickerProps {
   leadId: string;
