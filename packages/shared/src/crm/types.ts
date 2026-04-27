@@ -99,10 +99,15 @@ export interface TagRef {
   color: string;
 }
 
-/** Tag completa — quando carregada da tabela `tags`. */
+/**
+ * Tag completa — quando carregada via SELECT na tabela `tags`. Os
+ * campos `organization_id` e `created_at` sao requireds aqui porque
+ * sao colunas NOT NULL na tabela e queries diretas (select *) sempre
+ * trazem. Use `TagRef` (id/name/color) pra projecoes em joins.
+ */
 export interface Tag extends TagRef {
-  organization_id?: string;
-  created_at?: string;
+  organization_id: string;
+  created_at: string;
 }
 
 /** Tag com contagem agregada — view "lista de tags com totais". */

@@ -51,3 +51,25 @@ export {
   listTags,
   listTagsWithCount,
 } from "./queries";
+
+// Mutations CRM compartilhadas (CRUD de leads + tags).
+// Cada app passa { db, orgId, onLeadChanged? } depois de fazer auth.
+export type {
+  CrmMutationContext,
+  CreateLeadInput,
+  UpdateLeadInput,
+  CreatedLead,
+  CreateTagInput,
+  UpdateTagInput,
+} from "./mutations";
+
+export {
+  createLead,
+  updateLead,
+  deleteLead,
+  createTag,
+  updateTag,
+  deleteTag,
+  addTagToLead,
+  removeTagFromLead,
+} from "./mutations";

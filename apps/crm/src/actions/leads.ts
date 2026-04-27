@@ -8,16 +8,35 @@ import type {
   LeadFilters,
   LeadWithTags,
 } from "@persia/shared/crm";
-import { fetchLead, listLeads } from "@persia/shared/crm";
+import {
+  addTagToLead as addTagToLeadShared,
+  createLead as createLeadShared,
+  deleteLead as deleteLeadShared,
+  fetchLead,
+  listLeads,
+  listTags,
+  removeTagFromLead as removeTagFromLeadShared,
+  updateLead as updateLeadShared,
+} from "@persia/shared/crm";
 
-// Re-exporta tipos canônicos pra manter o path `@/actions/leads` que vários
-// componentes do CRM importam. Fonte da verdade: @persia/shared/crm.
+// Re-exporta tipos canônicos. Fonte da verdade: @persia/shared/crm.
 export type { LeadActivity, LeadDetail, LeadFilters, LeadWithTags };
 
-// `getLeads` e `getLead` sao thin wrappers em volta das queries
-// compartilhadas em @persia/shared/crm. A logica de filtragem, paginacao e
-// joins fica la — aqui apenas resolvemos auth (requireRole) e adaptamos o
-// shape pro contrato historico do CRM (throw on error).
+// Helper: callback fire-and-forget que sincroniza o lead com UAZAPI
+// apos qualquer mudanca. Carregado dinamicamente pra nao puxar o
+// modulo de sync no bundle das paginas que so leem leads.
+function makeOnLeadChanged(orgId: string) {
+  return (leadId: string) => {
+    import("@/lib/whatsapp/sync")
+      .then(({ syncLeadToUazapi }) => syncLeadToUazapi(orgId, leadId))
+      .catch((err) => console.error("[lead-action] sync error:", err));
+  };
+}
+
+// ============================================================================
+// Queries (read-only) — thin wrappers em volta de @persia/shared/crm
+// ============================================================================
+
 export async function getLeads(filters: LeadFilters = {}) {
   const { supabase, orgId } = await requireRole("agent");
   return listLeads({ db: supabase, orgId }, filters);
@@ -28,165 +47,76 @@ export async function getLead(id: string) {
   return fetchLead({ db: supabase, orgId }, id);
 }
 
+export async function getOrgTags() {
+  const { supabase, orgId } = await requireRole("agent");
+  return listTags({ db: supabase, orgId }, { orderBy: "name" });
+}
+
+// ============================================================================
+// Mutations — thin wrappers que injetam onLeadChanged + revalidatePath
+// ============================================================================
+
+// Helper: extrai valor do FormData distinguindo "campo não enviado"
+// (`undefined`) de "campo enviado vazio" (`null`). FormData.get sempre
+// retorna `null` pra keys ausentes, o que perde essa distincao — usamos
+// `has` antes pra preservar a semantica do PATCH (so altera campos
+// efetivamente enviados).
+function fdField(formData: FormData, key: string): string | null | undefined {
+  if (!formData.has(key)) return undefined;
+  const value = formData.get(key);
+  return typeof value === "string" ? value : null;
+}
+
 export async function createLead(formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const name = formData.get("name") as string;
-  const phone = formData.get("phone") as string;
-  const email = formData.get("email") as string;
-  const source = (formData.get("source") as string) || "manual";
-  const status = (formData.get("status") as string) || "new";
-  const channel = (formData.get("channel") as string) || "whatsapp";
-
-  // If phone is provided, reuse existing lead (webhook may have created it)
-  if (phone) {
-    const { data: existing } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("organization_id", orgId)
-      .eq("phone", phone)
-      .maybeSingle();
-    if (existing) {
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (name && !existing.name) patch.name = name;
-      if (email && !existing.email) patch.email = email;
-      await supabase.from("leads").update(patch as never).eq("id", existing.id);
-      revalidatePath("/leads");
-      return { ...existing, ...patch };
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("leads")
-    .insert({
-      organization_id: orgId,
-      name: name || null,
-      phone: phone || null,
-      email: email || null,
-      source,
-      status,
-      channel,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  const lead = await createLeadShared(
+    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+    {
+      name: fdField(formData, "name"),
+      phone: fdField(formData, "phone"),
+      email: fdField(formData, "email"),
+      source: (fdField(formData, "source") as string) || undefined,
+      status: (fdField(formData, "status") as string) || undefined,
+      channel: (fdField(formData, "channel") as string) || undefined,
+    },
+  );
   revalidatePath("/leads");
-  return data;
+  return lead;
 }
 
 export async function updateLead(id: string, formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const name = formData.get("name") as string;
-  const phone = formData.get("phone") as string;
-  const email = formData.get("email") as string;
-  const source = formData.get("source") as string;
-  const status = formData.get("status") as string;
-  const channel = formData.get("channel") as string;
-
-  const updateData: Record<string, unknown> = {};
-  if (name !== null) updateData.name = name || null;
-  if (phone !== null) updateData.phone = phone || null;
-  if (email !== null) updateData.email = email || null;
-  if (source) updateData.source = source;
-  if (status) updateData.status = status;
-  if (channel) updateData.channel = channel;
-
-  const { data, error } = await supabase
-    .from("leads")
-    .update(updateData as never)
-    .eq("id", id)
-    .eq("organization_id", orgId)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  // Sync lead to UAZAPI (fire and forget)
-  import("@/lib/whatsapp/sync").then(({ syncLeadToUazapi }) => {
-    syncLeadToUazapi(orgId, id);
-  }).catch((err) => {
-    console.error("[updateLead] sync error:", err);
-  });
-
+  const updated = await updateLeadShared(
+    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+    id,
+    {
+      name: fdField(formData, "name"),
+      phone: fdField(formData, "phone"),
+      email: fdField(formData, "email"),
+      source: (fdField(formData, "source") as string) || undefined,
+      status: (fdField(formData, "status") as string) || undefined,
+      channel: (fdField(formData, "channel") as string) || undefined,
+    },
+  );
   revalidatePath("/leads");
   revalidatePath(`/leads/${id}`);
-  return data;
+  return updated;
 }
 
 export async function deleteLead(id: string) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const { error } = await supabase
-    .from("leads")
-    .delete()
-    .eq("id", id)
-    .eq("organization_id", orgId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  await deleteLeadShared({ db: supabase, orgId }, id);
   revalidatePath("/leads");
   return { success: true };
 }
 
-export async function getOrgTags() {
-  const { supabase, orgId } = await requireRole("agent");
-
-  const { data, error } = await supabase
-    .from("tags")
-    .select("*")
-    .eq("organization_id", orgId)
-    .order("name");
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return data as { id: string; name: string; color: string; organization_id: string; created_at: string }[];
-}
-
 export async function addTagToLead(leadId: string, tagId: string) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("id", leadId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-
-  if (!lead) {
-    throw new Error("Lead nao encontrado nesta organizacao");
-  }
-
-  const { data: tag } = await supabase
-    .from("tags")
-    .select("id")
-    .eq("id", tagId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-
-  if (!tag) {
-    throw new Error("Tag nao encontrada nesta organizacao");
-  }
-
-  const { error } = await supabase
-    .from("lead_tags")
-    .insert({ lead_id: leadId, tag_id: tagId, organization_id: orgId });
-
-  if (error) {
-    if (error.code === "23505") return; // duplicate, ignore
-    throw new Error(error.message);
-  }
-
+  await addTagToLeadShared(
+    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+    leadId,
+    tagId,
+  );
   revalidatePath("/leads");
   revalidatePath(`/leads/${leadId}`);
   revalidatePath("/crm");
@@ -194,18 +124,11 @@ export async function addTagToLead(leadId: string, tagId: string) {
 
 export async function removeTagFromLead(leadId: string, tagId: string) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const { error } = await supabase
-    .from("lead_tags")
-    .delete()
-    .eq("lead_id", leadId)
-    .eq("tag_id", tagId)
-    .eq("organization_id", orgId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  await removeTagFromLeadShared(
+    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+    leadId,
+    tagId,
+  );
   revalidatePath(`/leads/${leadId}`);
   revalidatePath("/leads");
   revalidatePath("/crm");

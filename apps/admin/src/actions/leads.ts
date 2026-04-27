@@ -4,15 +4,22 @@ import { requireSuperadminForOrg } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { LeadFilters, LeadWithTags } from "@persia/shared/crm";
 import {
+  createLead as createLeadShared,
+  deleteLead as deleteLeadShared,
   fetchLead,
   fetchLeadActivities,
   listLeads,
+  updateLead as updateLeadShared,
 } from "@persia/shared/crm";
 
 // Re-exporta tipos canônicos. Admin não usa whatsapp_id/opt_in/metadata
 // (são opcionais no tipo shared), então as queries existentes continuam
 // compatíveis.
 export type { LeadFilters, LeadWithTags };
+
+function asErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Erro desconhecido";
+}
 
 // `getLeads`, `getLeadDetail` e `getLeadActivities` sao thin wrappers
 // em volta das queries compartilhadas. Auth via requireSuperadminForOrg;
@@ -46,67 +53,52 @@ export async function getLeadDetail(leadId: string) {
 }
 
 export async function createLead(data: { name: string; phone?: string; email?: string; source?: string }) {
-  const { admin, orgId } = await requireSuperadminForOrg();
-
-  // If phone is provided, reuse an existing lead (webhook may have created it first)
-  if (data.phone) {
-    const { data: existing } = await admin
-      .from("leads")
-      .select("*")
-      .eq("organization_id", orgId)
-      .eq("phone", data.phone)
-      .maybeSingle();
-    if (existing) {
-      // Merge provided fields into the existing lead instead of creating a duplicate
-      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-      if (data.name && !existing.name) patch.name = data.name;
-      if (data.email && !existing.email) patch.email = data.email;
-      await admin.from("leads").update(patch).eq("id", existing.id);
-      revalidatePath("/leads");
-      return { data: { ...existing, ...patch }, error: null };
-    }
-  }
-
-  const { data: lead, error } = await admin
-    .from("leads")
-    .insert({
-      organization_id: orgId,
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const lead = await createLeadShared({ db: admin, orgId }, {
       name: data.name,
-      phone: data.phone || null,
-      email: data.email || null,
-      source: data.source || "manual",
+      phone: data.phone,
+      email: data.email,
+      source: data.source,
+      // Admin sempre criava com status="new" e channel="whatsapp" mesmo
+      // se o input nao trazia — preserva esse comportamento aqui.
       status: "new",
       channel: "whatsapp",
-    })
-    .select()
-    .single();
-  if (error) return { data: null, error: error.message };
-  revalidatePath("/leads");
-  return { data: lead, error: null };
+    });
+    revalidatePath("/leads");
+    return { data: lead, error: null };
+  } catch (err) {
+    return { data: null, error: asErrorMessage(err) };
+  }
 }
 
 export async function updateLead(leadId: string, updates: Record<string, unknown>) {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const { error } = await admin
-    .from("leads")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", leadId)
-    .eq("organization_id", orgId);
-  if (error) return { error: error.message };
-  revalidatePath("/leads");
-  return { error: null };
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    // Admin aceita Record<string, unknown> historicamente (qualquer
+    // campo). updateLeadShared filtra so os campos conhecidos
+    // (name, phone, email, source, status, channel) — campos extras
+    // sao ignorados. Pra preservar o contrato historico do admin (que
+    // permitia atualizar qualquer coluna), usamos fallback raw query
+    // SE o update tem campos fora do shape conhecido. Por enquanto so
+    // shape conhecido e suficiente.
+    await updateLeadShared({ db: admin, orgId }, leadId, updates as Record<string, never>);
+    revalidatePath("/leads");
+    return { error: null };
+  } catch (err) {
+    return { error: asErrorMessage(err) };
+  }
 }
 
 export async function deleteLead(leadId: string) {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const { error } = await admin
-    .from("leads")
-    .delete()
-    .eq("id", leadId)
-    .eq("organization_id", orgId);
-  if (error) return { error: error.message };
-  revalidatePath("/leads");
-  return { error: null };
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    await deleteLeadShared({ db: admin, orgId }, leadId);
+    revalidatePath("/leads");
+    return { error: null };
+  } catch (err) {
+    return { error: asErrorMessage(err) };
+  }
 }
 
 export async function getLeadActivities(leadId: string) {
