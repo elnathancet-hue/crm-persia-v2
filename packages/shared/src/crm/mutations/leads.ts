@@ -15,7 +15,24 @@ export interface CreateLeadInput {
   channel?: string;
 }
 
-export type UpdateLeadInput = Partial<CreateLeadInput>;
+/**
+ * UpdateLeadInput cobre os mesmos campos de criacao + os campos do
+ * drawer "Informações do lead" (Fase 2: address_*, notes, website,
+ * assigned_to). Todos opcionais — undefined = nao mexe; null/'' = limpa.
+ */
+export interface UpdateLeadInput extends Partial<CreateLeadInput> {
+  website?: string | null;
+  assigned_to?: string | null;
+  address_country?: string | null;
+  address_state?: string | null;
+  address_city?: string | null;
+  address_zip?: string | null;
+  address_street?: string | null;
+  address_number?: string | null;
+  address_neighborhood?: string | null;
+  address_complement?: string | null;
+  notes?: string | null;
+}
 
 export interface CreatedLead {
   id: string;
@@ -120,6 +137,29 @@ export async function updateLead(
   if (input.source) updateData.source = input.source;
   if (input.status) updateData.status = input.status;
   if (input.channel) updateData.channel = input.channel;
+
+  // Campos do drawer "Informações do lead" (Fase 2). Undefined preserva,
+  // null/'' limpa explicitamente.
+  if (input.website !== undefined) updateData.website = input.website || null;
+  if (input.assigned_to !== undefined)
+    updateData.assigned_to = input.assigned_to || null;
+  if (input.address_country !== undefined)
+    updateData.address_country = input.address_country || null;
+  if (input.address_state !== undefined)
+    updateData.address_state = input.address_state || null;
+  if (input.address_city !== undefined)
+    updateData.address_city = input.address_city || null;
+  if (input.address_zip !== undefined)
+    updateData.address_zip = input.address_zip || null;
+  if (input.address_street !== undefined)
+    updateData.address_street = input.address_street || null;
+  if (input.address_number !== undefined)
+    updateData.address_number = input.address_number || null;
+  if (input.address_neighborhood !== undefined)
+    updateData.address_neighborhood = input.address_neighborhood || null;
+  if (input.address_complement !== undefined)
+    updateData.address_complement = input.address_complement || null;
+  if (input.notes !== undefined) updateData.notes = input.notes || null;
 
   const { data, error } = await db
     .from("leads")
