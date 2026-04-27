@@ -7,6 +7,7 @@ import type {
   LeadDetail,
   LeadFilters,
   LeadWithTags,
+  UpdateLeadInput,
 } from "@persia/shared/crm";
 import {
   addTagToLead as addTagToLeadShared,
@@ -84,22 +85,34 @@ export async function createLead(formData: FormData) {
   return lead;
 }
 
-export async function updateLead(id: string, formData: FormData) {
+/**
+ * Atualiza um lead. Aceita FormData (form basico do /leads/[id]/edit)
+ * OU um objeto `UpdateLeadInput` (drawer "Informações do lead", Fase 2,
+ * com endereço/notas/responsável/website).
+ */
+export async function updateLead(
+  id: string,
+  data: FormData | UpdateLeadInput,
+) {
   const { supabase, orgId } = await requireRole("agent");
-  const updated = await updateLeadShared(
-    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
-    id,
-    {
-      name: fdField(formData, "name"),
-      phone: fdField(formData, "phone"),
-      email: fdField(formData, "email"),
-      source: (fdField(formData, "source") as string) || undefined,
-      status: (fdField(formData, "status") as string) || undefined,
-      channel: (fdField(formData, "channel") as string) || undefined,
-    },
-  );
+  const ctx = { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) };
+
+  const input: UpdateLeadInput =
+    data instanceof FormData
+      ? {
+          name: fdField(data, "name"),
+          phone: fdField(data, "phone"),
+          email: fdField(data, "email"),
+          source: (fdField(data, "source") as string) || undefined,
+          status: (fdField(data, "status") as string) || undefined,
+          channel: (fdField(data, "channel") as string) || undefined,
+        }
+      : data;
+
+  const updated = await updateLeadShared(ctx, id, input);
   revalidatePath("/leads");
   revalidatePath(`/leads/${id}`);
+  revalidatePath("/crm");
   return updated;
 }
 

@@ -29,6 +29,7 @@ import {
 } from "@persia/ui/empty";
 import { DataTable, type ColumnDef } from "@/components/shared/data-table";
 import { LeadForm } from "@/components/leads/lead-form";
+import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
 import {
   getLeads,
   createLead,
@@ -110,6 +111,12 @@ export function LeadList({
   const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([]);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  // Drawer "Informações do lead" — abre ao clicar na linha (Fase 2,
+  // estilo da referencia). Pra editar/deletar com mais ações, dropdown
+  // continua linkando pra /leads/[id].
+  const [infoDrawerLead, setInfoDrawerLead] = React.useState<LeadWithTags | null>(
+    null,
+  );
   const debounceRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const fetchLeads = React.useCallback(
@@ -294,7 +301,7 @@ export function LeadList({
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                router.push(`/leads/${row.id}`);
+                setInfoDrawerLead(row);
               }}
             >
               <Eye className="size-4" />
@@ -441,7 +448,7 @@ export function LeadList({
           <DataTable
             columns={columns}
             data={leads}
-            onRowClick={(row) => router.push(`/leads/${row.id}`)}
+            onRowClick={(row) => setInfoDrawerLead(row)}
           />
         )}
       </Card>
@@ -510,6 +517,25 @@ export function LeadList({
           />
         </DialogContent>
       </Dialog>
+
+      {/* Drawer "Informações do lead" — Fase 2 da reformulacao do /crm */}
+      {infoDrawerLead ? (
+        <LeadInfoDrawer
+          open={!!infoDrawerLead}
+          onOpenChange={(open) => {
+            if (!open) setInfoDrawerLead(null);
+          }}
+          lead={infoDrawerLead}
+          onSaved={(updates) => {
+            // Atualiza a row local com os campos retornados (otimistico).
+            setLeads((prev) =>
+              prev.map((l) =>
+                l.id === infoDrawerLead.id ? { ...l, ...updates } : l,
+              ),
+            );
+          }}
+        />
+      ) : null}
     </div>
   );
 }

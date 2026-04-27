@@ -35,6 +35,10 @@ export interface LeadFilters {
  * historicamente não os seleciona em suas queries. Apps que precisam (CRM
  * client) selecionam explicitamente; apps que não precisam (admin) deixam
  * `undefined` sem quebrar tipos.
+ *
+ * Campos de endereço, notes, website e assigned_to são opcionais porque
+ * foram adicionados pela migration 030 (drawer "Informações do lead") e
+ * stages de migração podem nao ter esses dados.
  */
 export interface LeadWithTags {
   id: string;
@@ -53,6 +57,18 @@ export interface LeadWithTags {
   last_interaction_at: string | null;
   created_at: string;
   updated_at: string;
+  // Campos do drawer "Informações do lead" (migration 030)
+  website?: string | null;
+  assigned_to?: string | null;
+  address_country?: string | null;
+  address_state?: string | null;
+  address_city?: string | null;
+  address_zip?: string | null;
+  address_street?: string | null;
+  address_number?: string | null;
+  address_neighborhood?: string | null;
+  address_complement?: string | null;
+  notes?: string | null;
   lead_tags: {
     tag_id: string;
     tags: {
