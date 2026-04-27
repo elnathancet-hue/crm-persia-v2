@@ -14,12 +14,17 @@ export default async function LeadsPage() {
     redirect("/login");
   }
 
+  // .single() explode pra users com 2+ memberships (PGRST116) e
+  // disparava redirect /login mesmo com sessao valida. Usa
+  // .order().limit(1).maybeSingle() — mesmo padrao do dashboard.
   const { data: membership } = await supabase
     .from("organization_members")
     .select("organization_id")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (!membership) {
     redirect("/login");

@@ -8,12 +8,16 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // .single() falha com PGRST116 pra users com 2+ memberships, o que
+  // disparava redirect /login. Pega o mais antigo (padrao dashboard).
   const { data: member } = await supabase
     .from("organization_members")
     .select("organization_id")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (!member) redirect("/login");
 

@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
       .select("organization_id")
       .eq("user_id", user.id)
       .eq("is_active", true)
-      .single();
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
     if (!member) return NextResponse.json({ error: "Sem organizacao" }, { status: 403 });
 
     const body = await request.json();

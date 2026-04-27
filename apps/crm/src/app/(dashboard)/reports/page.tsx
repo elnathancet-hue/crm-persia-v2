@@ -8,12 +8,16 @@ export default async function ReportsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // .single() falha pra users com 2+ memberships (PGRST116). Pega o
+  // mais antigo — mesmo padrao usado no dashboard.
   const { data: member } = await supabase
     .from("organization_members")
     .select("organization_id")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   const orgId = member?.organization_id;
   if (!orgId) return null;
