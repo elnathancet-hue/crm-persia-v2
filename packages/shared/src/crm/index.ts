@@ -33,3 +33,21 @@ export type {
   SegmentRules,
   Segment,
 } from "./types";
+
+// Queries read-only compartilhadas entre apps/crm e apps/admin.
+// Cada app passa { db, orgId } depois de fazer auth com seu padrao
+// (requireRole vs requireSuperadminForOrg).
+export type {
+  CrmQueryContext,
+  CrmQueryDb,
+  PaginatedLeads,
+  ListTagsOptions,
+} from "./queries";
+
+export {
+  listLeads,
+  fetchLead,
+  fetchLeadActivities,
+  listTags,
+  listTagsWithCount,
+} from "./queries";

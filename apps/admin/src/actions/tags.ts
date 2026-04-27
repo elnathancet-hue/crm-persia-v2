@@ -2,17 +2,19 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { listTags } from "@persia/shared/crm";
 
-
+// `getTags` e thin wrapper em volta de listTags. Admin ordena por nome
+// (alfabetico) — diferente do CRM que ordena por created_at desc.
+// Mantem o contrato historico de retornar `[]` em qualquer erro
+// (em vez de throw).
 export async function getTags() {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const { data, error } = await admin
-    .from("tags")
-    .select("*")
-    .eq("organization_id", orgId)
-    .order("name");
-  if (error) return [];
-  return data || [];
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    return await listTags({ db: admin, orgId }, { orderBy: "name" });
+  } catch {
+    return [];
+  }
 }
 
 export async function createTag(name: string, color: string) {

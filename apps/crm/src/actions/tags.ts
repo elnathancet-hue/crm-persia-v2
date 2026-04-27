@@ -2,52 +2,23 @@
 
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { listTags, listTagsWithCount } from "@persia/shared/crm";
 
+// `getTags` e `getTagsWithCount` sao thin wrappers em volta das queries
+// compartilhadas. Auth via requireRole; logica em @persia/shared/crm.
+// O parametro `orgId` opcional permite admins multitenancia consultarem
+// tags de outras orgs explicitamente — nesse caso passamos pelo orgId
+// fornecido em vez do contexto.
 export async function getTags(orgId?: string) {
   const ctx = await requireRole("agent");
   const resolvedOrgId = orgId || ctx.orgId;
-
-  const { data, error } = await ctx.supabase
-    .from("tags")
-    .select("*")
-    .eq("organization_id", resolvedOrgId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return data;
+  return listTags({ db: ctx.supabase, orgId: resolvedOrgId });
 }
 
 export async function getTagsWithCount(orgId?: string) {
   const ctx = await requireRole("agent");
   const resolvedOrgId = orgId || ctx.orgId;
-
-  const { data: tags, error } = await ctx.supabase
-    .from("tags")
-    .select("*")
-    .eq("organization_id", resolvedOrgId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-
-  if (!tags || tags.length === 0) return [];
-
-  const tagIds = tags.map((t: { id: string }) => t.id);
-  const { data: leadTags, error: ltError } = await ctx.supabase
-    .from("lead_tags")
-    .select("tag_id")
-    .in("tag_id", tagIds);
-
-  if (ltError) throw new Error(ltError.message);
-
-  const countMap: Record<string, number> = {};
-  (leadTags || []).forEach((lt: { tag_id: string }) => {
-    countMap[lt.tag_id] = (countMap[lt.tag_id] || 0) + 1;
-  });
-
-  return tags.map((tag: { id: string; name: string; color: string | null; organization_id: string; created_at: string | null }) => ({
-    ...tag,
-    lead_count: countMap[tag.id] || 0,
-  }));
+  return listTagsWithCount({ db: ctx.supabase, orgId: resolvedOrgId });
 }
 
 export async function createTag({ name, color }: { name: string; color: string }) {

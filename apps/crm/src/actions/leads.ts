@@ -8,154 +8,24 @@ import type {
   LeadFilters,
   LeadWithTags,
 } from "@persia/shared/crm";
+import { fetchLead, listLeads } from "@persia/shared/crm";
 
 // Re-exporta tipos canônicos pra manter o path `@/actions/leads` que vários
 // componentes do CRM importam. Fonte da verdade: @persia/shared/crm.
 export type { LeadActivity, LeadDetail, LeadFilters, LeadWithTags };
 
+// `getLeads` e `getLead` sao thin wrappers em volta das queries
+// compartilhadas em @persia/shared/crm. A logica de filtragem, paginacao e
+// joins fica la — aqui apenas resolvemos auth (requireRole) e adaptamos o
+// shape pro contrato historico do CRM (throw on error).
 export async function getLeads(filters: LeadFilters = {}) {
   const { supabase, orgId } = await requireRole("agent");
-  const { search, status, tags, page = 1, limit = 20 } = filters;
-
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  let leadIdsFromTags: string[] | null = null;
-
-  if (tags && tags.length > 0) {
-    const { data: taggedLeads, error: tagError } = await supabase
-      .from("lead_tags")
-      .select("lead_id")
-      .eq("organization_id", orgId)
-      .in("tag_id", tags);
-
-    if (tagError) {
-      throw new Error(tagError.message);
-    }
-
-    leadIdsFromTags = Array.from(
-      new Set((taggedLeads || []).map((row) => row.lead_id).filter(Boolean))
-    );
-
-    if (leadIdsFromTags.length === 0) {
-      return {
-        leads: [],
-        total: 0,
-        page,
-        limit,
-        totalPages: 0,
-      };
-    }
-  }
-
-  let query = supabase
-    .from("leads")
-    .select(
-      `
-      *,
-      lead_tags (
-        tag_id,
-        tags (
-          id,
-          name,
-          color
-        )
-      )
-    `,
-      { count: "exact" }
-    )
-    .eq("organization_id", orgId)
-    .order("created_at", { ascending: false })
-    .range(from, to);
-
-  if (search) {
-    const sanitized = search.replace(/[%_,()\\]/g, "").trim();
-    if (sanitized) {
-      query = query.or(
-        `name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`
-      );
-    }
-  }
-
-  if (status && status !== "all") {
-    query = query.eq("status", status);
-  }
-
-  if (leadIdsFromTags) {
-    query = query.in("id", leadIdsFromTags);
-  }
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return {
-    leads: data as LeadWithTags[],
-    total: count ?? 0,
-    page,
-    limit,
-    totalPages: Math.ceil((count ?? 0) / limit),
-  };
+  return listLeads({ db: supabase, orgId }, filters);
 }
 
 export async function getLead(id: string) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const { data: lead, error } = await supabase
-    .from("leads")
-    .select(
-      `
-      *,
-      lead_tags (
-        tag_id,
-        tags (
-          id,
-          name,
-          color
-        )
-      )
-    `
-    )
-    .eq("id", id)
-    .eq("organization_id", orgId)
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  // Fetch custom field values separately
-  const { data: customFieldValues } = await supabase
-    .from("lead_custom_field_values")
-    .select(
-      `
-      id,
-      custom_field_id,
-      value,
-      custom_fields (
-        id,
-        name,
-        field_type
-      )
-    `
-    )
-    .eq("lead_id", id);
-
-  // Fetch activities
-  const { data: activities } = await supabase
-    .from("lead_activities")
-    .select("*")
-    .eq("lead_id", id)
-    .order("created_at", { ascending: false });
-
-  return {
-    lead: {
-      ...lead,
-      lead_custom_field_values: customFieldValues ?? [],
-    } as LeadDetail,
-    activities: (activities ?? []) as LeadActivity[],
-  };
+  return fetchLead({ db: supabase, orgId }, id);
 }
 
 export async function createLead(formData: FormData) {
