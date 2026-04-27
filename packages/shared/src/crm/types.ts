@@ -209,6 +209,67 @@ export interface PipelineGoal {
 }
 
 // ============================================================================
+// Product + LeadProduct (Fase 4)
+// ============================================================================
+
+export interface Product {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Produto vinculado a um lead. `unit_price` eh um snapshot — preserva
+ * o valor cobrado mesmo se o `Product.price` mudar depois.
+ */
+export interface LeadProduct {
+  id: string;
+  organization_id: string;
+  lead_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  notes: string | null;
+  created_at: string;
+}
+
+/** LeadProduct com nome do produto embed (view tipica do drawer). */
+export interface LeadProductWithProduct extends LeadProduct {
+  products: {
+    id: string;
+    name: string;
+    description: string | null;
+  } | null;
+}
+
+// ============================================================================
+// LeadComment (Fase 4)
+// ============================================================================
+
+export interface LeadComment {
+  id: string;
+  organization_id: string;
+  lead_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Comment com nome do autor embed via profiles. */
+export interface LeadCommentWithAuthor extends LeadComment {
+  author?: {
+    id: string;
+    full_name: string | null;
+  } | null;
+}
+
+// ============================================================================
 // Segment
 // ============================================================================
 
