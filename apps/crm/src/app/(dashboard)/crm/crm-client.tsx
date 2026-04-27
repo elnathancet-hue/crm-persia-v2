@@ -43,6 +43,8 @@ import {
   deleteDeal,
 } from "@/actions/crm";
 import { useRole } from "@/lib/hooks/use-role";
+import { useRouter } from "next/navigation";
+import { PipelineConfigDrawer } from "@/components/crm/pipeline-config-drawer";
 import type {
   DealWithLead,
   LeadTagJoin,
@@ -153,8 +155,10 @@ export function CrmClient({
   const [selectedPipeline, setSelectedPipeline] = React.useState(
     pipelines[0]?.id || ""
   );
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [configDrawerOpen, setConfigDrawerOpen] = React.useState(false);
   // Bucket de outcome ativo no filtro principal. Default "em_andamento"
   // (mesmo da referencia: usuario foca primeiro nos leads em progresso).
   const [activeOutcome, setActiveOutcome] =
@@ -479,16 +483,15 @@ export function CrmClient({
             Metas
           </Button>
           {isAdmin && (
-            <Link href="/crm/settings">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-8 rounded-md"
-                title="Configurações do CRM"
-              >
-                <Settings className="size-4" />
-              </Button>
-            </Link>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-8 rounded-md"
+              title="Configurar funis"
+              onClick={() => setConfigDrawerOpen(true)}
+            >
+              <Settings className="size-4" />
+            </Button>
           )}
         </div>
       </div>
@@ -650,6 +653,20 @@ export function CrmClient({
           );
         })}
       </div>
+
+      {/* Drawer "Configurar funis" — abre sem sair da pagina (estilo
+          referencia). 3 colunas por outcome, drag-drop entre buckets
+          atualiza outcome via mutation. Pra config avancada (cor, etc),
+          o drawer linka /crm/settings. */}
+      {isAdmin && (
+        <PipelineConfigDrawer
+          open={configDrawerOpen}
+          onOpenChange={setConfigDrawerOpen}
+          pipelines={pipelines}
+          stages={initialStages}
+          onChange={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }
