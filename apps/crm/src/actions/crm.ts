@@ -75,6 +75,8 @@ export async function updateStage(
     color?: string;
     sort_order?: number;
     description?: string | null;
+    /** Move a stage entre buckets (em_andamento/falha/bem_sucedido). */
+    outcome?: "em_andamento" | "falha" | "bem_sucedido";
   },
 ) {
   const { supabase, orgId } = await requireRole("admin");
@@ -83,6 +85,7 @@ export async function updateStage(
     color: data.color,
     sortOrder: data.sort_order,
     description: data.description,
+    outcome: data.outcome,
   });
   revalidatePath("/crm");
   revalidatePath("/crm/settings");
