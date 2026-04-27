@@ -2,8 +2,9 @@
 
 /**
  * DEPRECATED: This file is a compatibility shim.
- * All pipeline/deal functions are now in crm.ts.
- * New code should import from "@/actions/crm" directly.
+ * All pipeline/deal functions are now in crm.ts (which delegates to
+ * @persia/shared/crm). New code should import from "@/actions/crm"
+ * directly.
  */
 export {
   getPipelines,
@@ -14,19 +15,19 @@ export {
   deleteDeal,
 } from "@/actions/crm";
 
-// createStage signature differed (positional args vs FormData).
-// Re-export the FormData version from crm.ts. If kanban needs positional args,
-// wrap it here:
+// `createStage` versao com argumentos posicionais (legado de
+// componentes do kanban-board que chamavam dessa forma). Wrappers
+// agora delegam pra @persia/shared/crm.
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { createStage as createStageShared } from "@persia/shared/crm";
 
 export async function createStage(pipelineId: string, name: string, sortOrder: number) {
   const { supabase, orgId } = await requireRole("admin");
-  const { data } = await supabase
-    .from("pipeline_stages")
-    .insert({ pipeline_id: pipelineId, organization_id: orgId, name, sort_order: sortOrder })
-    .select()
-    .single();
+  const stage = await createStageShared(
+    { db: supabase, orgId },
+    { pipelineId, name, sortOrder },
+  );
   revalidatePath("/crm");
-  return data;
+  return stage;
 }

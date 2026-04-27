@@ -44,15 +44,23 @@ export type {
   ListTagsOptions,
 } from "./queries";
 
+export type {
+  ListPipelinesOptions,
+  ListDealsOptions,
+} from "./queries";
+
 export {
   listLeads,
   fetchLead,
   fetchLeadActivities,
   listTags,
   listTagsWithCount,
+  listPipelines,
+  listStages,
+  listDeals,
 } from "./queries";
 
-// Mutations CRM compartilhadas (CRUD de leads + tags).
+// Mutations CRM compartilhadas (CRUD de leads + tags + pipelines + deals).
 // Cada app passa { db, orgId, onLeadChanged? } depois de fazer auth.
 export type {
   CrmMutationContext,
@@ -61,6 +69,12 @@ export type {
   CreatedLead,
   CreateTagInput,
   UpdateTagInput,
+  CreatePipelineOptions,
+  CreateStageInput,
+  UpdateStageInput,
+  CreateDealInput,
+  UpdateDealInput,
+  DealStatus,
 } from "./mutations";
 
 export {
@@ -72,4 +86,16 @@ export {
   deleteTag,
   addTagToLead,
   removeTagFromLead,
+  createPipeline,
+  updatePipelineName,
+  deletePipeline,
+  createStage,
+  updateStage,
+  updateStageOrder,
+  deleteStage,
+  createDeal,
+  updateDeal,
+  updateDealStatus,
+  moveDealKanban,
+  deleteDeal,
 } from "./mutations";
