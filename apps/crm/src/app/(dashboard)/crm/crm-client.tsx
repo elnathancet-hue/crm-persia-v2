@@ -34,6 +34,8 @@ import {
   TrendingUp,
   Flag,
   Percent,
+  X,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -342,6 +344,49 @@ export function CrmClient({
     });
   }
 
+  // ---- MOVE TO TERMINAL (atalhos do card "Negocio descartado/fechado") ----
+  // Move o deal pra primeira stage do bucket falha/bem_sucedido do
+  // pipeline atual. Usa updateDealStage que delega pra moveDealToStage
+  // (rica, com activity log + onStageChanged + sync).
+  function handleMoveToTerminal(
+    dealId: string,
+    outcome: "falha" | "bem_sucedido",
+  ) {
+    const terminalStage = stagesByOutcome[outcome][0];
+    if (!terminalStage) {
+      // Pipeline nao tem stage com esse outcome — guard de UX. Nao
+      // bloqueia o app, so loga (toast no DealCard se quiser).
+      console.warn(
+        `[handleMoveToTerminal] Pipeline nao tem stage com outcome=${outcome}. Configure em "Configurar funis".`,
+      );
+      return;
+    }
+    const deal = localDeals.find((d) => d.id === dealId);
+    if (!deal || deal.stage_id === terminalStage.id) return;
+
+    const previousStageId = deal.stage_id;
+
+    // Optimistic
+    setLocalDeals((prev) =>
+      prev.map((d) =>
+        d.id === dealId ? { ...d, stage_id: terminalStage.id } : d,
+      ),
+    );
+
+    startTransition(async () => {
+      try {
+        await updateDealStage(dealId, terminalStage.id);
+      } catch {
+        // Revert
+        setLocalDeals((prev) =>
+          prev.map((d) =>
+            d.id === dealId ? { ...d, stage_id: previousStageId } : d,
+          ),
+        );
+      }
+    });
+  }
+
   // ---- DELETE DEAL ----
   function handleDeleteDeal(dealId: string) {
     const previous = [...localDeals];
@@ -638,6 +683,9 @@ export function CrmClient({
                       onDragStart={handleDragStart}
                       onDelete={handleDeleteDeal}
                       onUpdate={handleDealUpdated}
+                      onMoveToTerminal={handleMoveToTerminal}
+                      hasFailureBucket={stagesByOutcome.falha.length > 0}
+                      hasSuccessBucket={stagesByOutcome.bem_sucedido.length > 0}
                       leads={leads}
                       canEdit={isAgent}
                     />
@@ -679,6 +727,9 @@ function DealCard({
   onDragStart,
   onDelete,
   onUpdate,
+  onMoveToTerminal,
+  hasFailureBucket,
+  hasSuccessBucket,
   leads,
   canEdit,
 }: {
@@ -687,6 +738,9 @@ function DealCard({
   onDragStart: (e: React.DragEvent, dealId: string) => void;
   onDelete: (dealId: string) => void;
   onUpdate: (dealId: string, updates: Partial<Deal>) => void;
+  onMoveToTerminal: (dealId: string, outcome: "falha" | "bem_sucedido") => void;
+  hasFailureBucket: boolean;
+  hasSuccessBucket: boolean;
   leads: { id: string; name: string; phone: string | null; email: string | null }[];
   canEdit: boolean;
 }) {
@@ -704,40 +758,70 @@ function DealCard({
       .filter((t): t is Tag => t !== null);
   }, [lead?.lead_tags]);
 
+  // Iniciais do nome pra avatar fallback (max 2 letras maiusculas)
+  const initials = React.useMemo(() => {
+    const name = lead?.name?.trim();
+    if (!name) return "";
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "";
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }, [lead?.name]);
+
+  const displayName = lead?.name || deal.title;
+
   return (
     <>
       <div
-        className={`bg-card border rounded-lg p-3 hover:shadow-sm hover:-translate-y-0.5 hover:border-primary/30 transition-all duration-150 ${
+        className={`group bg-card border rounded-xl p-3 hover:shadow-sm hover:border-primary/30 transition-all duration-150 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
         } ${isDragging ? "opacity-40 ring-2 ring-primary" : ""}`}
         draggable={canEdit}
         onDragStart={(e) => canEdit && onDragStart(e, deal.id)}
         onClick={() => setDetailOpen(true)}
       >
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium truncate">
-            {lead?.name || deal.title}
+        {/* Linha 1: avatar + nome + WhatsApp */}
+        <div className="flex items-center gap-2.5">
+          {/* Avatar redondo (foto ou iniciais ou ?) */}
+          <div className="size-9 shrink-0 rounded-full bg-muted overflow-hidden flex items-center justify-center text-xs font-semibold text-muted-foreground">
+            {initials ? (
+              <span>{initials}</span>
+            ) : (
+              <span aria-hidden>?</span>
+            )}
+          </div>
+
+          {/* Nome (cyan, igual referencia) */}
+          <p className="flex-1 min-w-0 text-sm font-semibold truncate text-cyan-600">
+            {displayName}
           </p>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-            {deal.status === "won" ? "Ganho" : deal.status === "lost" ? "Perdido" : "Aberto"}
-          </Badge>
+
+          {/* WhatsApp icon (verde, redondo) */}
+          {phone && (
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-green-500/15 text-green-600 hover:bg-green-500/25 transition-colors"
+              title="Abrir WhatsApp"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(
+                  `https://wa.me/55${cleanPhone(phone)}`,
+                  "_blank",
+                );
+              }}
+            >
+              <MessageCircle className="size-3.5" />
+            </button>
+          )}
         </div>
 
-        <p className="text-[11px] text-muted-foreground truncate mt-1">
-          {deal.title}
-        </p>
-
-        {/* Tags */}
+        {/* Tags (pills azul claro) */}
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
+          <div className="flex flex-wrap gap-1 mt-2 ml-11.5">
             {tags.map((tag) => (
               <span
                 key={tag.id}
-                className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium"
-                style={{
-                  backgroundColor: tag.color + "20",
-                  color: tag.color,
-                }}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-cyan-50 text-cyan-700"
               >
                 {tag.name}
               </span>
@@ -745,31 +829,52 @@ function DealCard({
           </div>
         )}
 
-        {/* Contact actions */}
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex items-center gap-1.5">
-            {phone && (
-              <button
-                type="button"
-                className="inline-flex items-center justify-center size-7 rounded-md bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-colors"
-                title="Abrir WhatsApp"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.open(
-                    `https://wa.me/55${cleanPhone(phone)}`,
-                    "_blank"
-                  );
-                }}
-              >
-                <MessageCircle className="size-4" />
-              </button>
-            )}
-          </div>
+        {/* Linha responsavel (avatar ? + nome) — placeholder ate Fase
+            2 mergear com `assigned_to` no shape do lead. Por enquanto
+            mostra "Sem responsavel". */}
+        <p className="mt-2 text-xs text-muted-foreground">Sem responsável</p>
+
+        {/* Footer: 2 botoes pill atalho pros buckets terminais */}
+        <div className="flex items-center gap-1.5 mt-2.5">
+          <button
+            type="button"
+            disabled={!canEdit || !hasFailureBucket}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveToTerminal(deal.id, "falha");
+            }}
+            title={
+              hasFailureBucket
+                ? "Mover pra etapa de falha"
+                : "Sem etapa de falha configurada neste funil"
+            }
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium bg-red-500 text-white hover:bg-red-600 disabled:bg-red-200 disabled:cursor-not-allowed transition-colors"
+          >
+            <X className="size-3" />
+            Negócio descartado
+          </button>
+          <button
+            type="button"
+            disabled={!canEdit || !hasSuccessBucket}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMoveToTerminal(deal.id, "bem_sucedido");
+            }}
+            title={
+              hasSuccessBucket
+                ? "Mover pra etapa de sucesso"
+                : "Sem etapa de sucesso configurada neste funil"
+            }
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-emerald-200 disabled:cursor-not-allowed transition-colors"
+          >
+            <Check className="size-3" />
+            Negócio fechado
+          </button>
         </div>
 
-        {/* Value */}
+        {/* Valor (se tiver) */}
         {deal.value > 0 && (
-          <p className="text-xs font-medium text-muted-foreground mt-2">
+          <p className="text-[11px] font-medium text-muted-foreground mt-2">
             R$ {formatCurrency(deal.value)}
           </p>
         )}
