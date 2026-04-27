@@ -29,6 +29,13 @@ export type {
   PipelineWithStages,
   PipelineWithStagesAndDeals,
   PipelineGoal,
+  // Product + LeadProduct (Fase 4)
+  Product,
+  LeadProduct,
+  LeadProductWithProduct,
+  // LeadComment (Fase 4)
+  LeadComment,
+  LeadCommentWithAuthor,
   // Segment
   SegmentCondition,
   SegmentRules,

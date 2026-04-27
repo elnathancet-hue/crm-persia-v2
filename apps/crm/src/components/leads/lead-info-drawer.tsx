@@ -44,6 +44,8 @@ import {
   TabsTrigger,
 } from "@persia/ui/tabs";
 import { updateLead } from "@/actions/leads";
+import { LeadProductsTab } from "@/components/leads/lead-products-tab";
+import { LeadCommentsTab } from "@/components/leads/lead-comments-tab";
 
 type Stage = { id: string; name: string };
 type Member = { user_id: string; name: string };
@@ -372,15 +374,11 @@ export function LeadInfoDrawer({
             </TabsContent>
 
             <TabsContent value="produtos" className="mt-0">
-              <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-                Em breve. Vincule produtos ao lead pra montar propostas.
-              </div>
+              <LeadProductsTab leadId={lead.id} active={open} />
             </TabsContent>
 
             <TabsContent value="comentarios" className="mt-0">
-              <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-                Em breve. Comentários internos da equipe sobre o lead.
-              </div>
+              <LeadCommentsTab leadId={lead.id} active={open} />
             </TabsContent>
           </form>
         </Tabs>
