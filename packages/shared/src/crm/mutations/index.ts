@@ -24,3 +24,31 @@ export {
   addTagToLead,
   removeTagFromLead,
 } from "./tags";
+
+export type {
+  CreatePipelineOptions,
+  CreateStageInput,
+  UpdateStageInput,
+} from "./pipelines";
+export {
+  createPipeline,
+  updatePipelineName,
+  deletePipeline,
+  createStage,
+  updateStage,
+  updateStageOrder,
+  deleteStage,
+} from "./pipelines";
+
+export type {
+  CreateDealInput,
+  UpdateDealInput,
+  DealStatus,
+} from "./deals";
+export {
+  createDeal,
+  updateDeal,
+  updateDealStatus,
+  moveDealKanban,
+  deleteDeal,
+} from "./deals";

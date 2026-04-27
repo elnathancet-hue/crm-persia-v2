@@ -8,6 +8,8 @@
 export type { CrmQueryContext, CrmQueryDb } from "./context";
 export type { PaginatedLeads } from "./leads";
 export type { ListTagsOptions } from "./tags";
+export type { ListPipelinesOptions } from "./pipelines";
+export type { ListDealsOptions } from "./deals";
 
 export {
   listLeads,
@@ -16,3 +18,7 @@ export {
 } from "./leads";
 
 export { listTags, listTagsWithCount } from "./tags";
+
+export { listPipelines, listStages } from "./pipelines";
+
+export { listDeals } from "./deals";
