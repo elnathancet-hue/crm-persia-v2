@@ -2,13 +2,30 @@
 
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { listTags, listTagsWithCount } from "@persia/shared/crm";
+import {
+  addTagToLead as addTagToLeadShared,
+  createTag as createTagShared,
+  deleteTag as deleteTagShared,
+  listTags,
+  listTagsWithCount,
+  removeTagFromLead as removeTagFromLeadShared,
+  updateTag as updateTagShared,
+} from "@persia/shared/crm";
 
-// `getTags` e `getTagsWithCount` sao thin wrappers em volta das queries
-// compartilhadas. Auth via requireRole; logica em @persia/shared/crm.
-// O parametro `orgId` opcional permite admins multitenancia consultarem
-// tags de outras orgs explicitamente — nesse caso passamos pelo orgId
-// fornecido em vez do contexto.
+// Helper: callback fire-and-forget pra UAZAPI sync apos
+// add/removeTagToLead. Carregado dinamicamente.
+function makeOnLeadChanged(orgId: string) {
+  return (leadId: string) => {
+    import("@/lib/whatsapp/sync")
+      .then(({ syncLeadToUazapi }) => syncLeadToUazapi(orgId, leadId))
+      .catch((err) => console.error("[tag-action] sync error:", err));
+  };
+}
+
+// ============================================================================
+// Queries
+// ============================================================================
+
 export async function getTags(orgId?: string) {
   const ctx = await requireRole("agent");
   const resolvedOrgId = orgId || ctx.orgId;
@@ -21,134 +38,6 @@ export async function getTagsWithCount(orgId?: string) {
   return listTagsWithCount({ db: ctx.supabase, orgId: resolvedOrgId });
 }
 
-export async function createTag({ name, color }: { name: string; color: string }) {
-  const { supabase, orgId } = await requireRole("agent");
-
-  const { data, error } = await supabase
-    .from("tags")
-    .insert({
-      organization_id: orgId,
-      name,
-      color: color || "#6366f1",
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/tags");
-  return data;
-}
-
-export async function updateTag(id: string, { name, color }: { name?: string; color?: string }) {
-  const { supabase, orgId } = await requireRole("agent");
-
-  const updateData: Record<string, string> = {};
-  if (name !== undefined) updateData.name = name;
-  if (color !== undefined) updateData.color = color;
-
-  const { error } = await supabase
-    .from("tags")
-    .update(updateData as never)
-    .eq("id", id)
-    .eq("organization_id", orgId);
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/tags");
-  revalidatePath("/leads");
-  revalidatePath("/crm");
-}
-
-export async function deleteTag(id: string) {
-  const { supabase, orgId } = await requireRole("admin");
-
-  // Remove all lead_tags first
-  await supabase.from("lead_tags").delete().eq("tag_id", id).eq("organization_id", orgId);
-
-  const { error } = await supabase
-    .from("tags")
-    .delete()
-    .eq("id", id)
-    .eq("organization_id", orgId);
-
-  if (error) throw new Error(error.message);
-  revalidatePath("/tags");
-  revalidatePath("/leads");
-  revalidatePath("/crm");
-}
-
-export async function addTagToLead(leadId: string, tagId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("id", leadId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-
-  if (!lead) {
-    throw new Error("Lead nao encontrado nesta organizacao");
-  }
-
-  const { data: tag } = await supabase
-    .from("tags")
-    .select("id")
-    .eq("id", tagId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-
-  if (!tag) {
-    throw new Error("Tag nao encontrada nesta organizacao");
-  }
-
-  const { error } = await supabase.from("lead_tags").insert({
-    lead_id: leadId,
-    tag_id: tagId,
-    organization_id: orgId,
-  });
-
-  if (error) {
-    // Ignore duplicate
-    if (error.code === "23505") return;
-    throw new Error(error.message);
-  }
-
-  // Sync tags to UAZAPI (fire and forget)
-  import("@/lib/whatsapp/sync").then(({ syncLeadToUazapi }) => {
-    syncLeadToUazapi(orgId, leadId);
-  }).catch((err) => {
-    console.error("[addTagToLead] sync error:", err);
-  });
-
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/crm");
-}
-
-export async function removeTagFromLead(leadId: string, tagId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-
-  const { error } = await supabase
-    .from("lead_tags")
-    .delete()
-    .eq("lead_id", leadId)
-    .eq("tag_id", tagId)
-    .eq("organization_id", orgId);
-
-  if (error) throw new Error(error.message);
-
-  // Sync tags to UAZAPI (fire and forget)
-  import("@/lib/whatsapp/sync").then(({ syncLeadToUazapi }) => {
-    syncLeadToUazapi(orgId, leadId);
-  }).catch((err) => {
-    console.error("[removeTagFromLead] sync error:", err);
-  });
-
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/crm");
-}
-
 export async function getLeadTags(leadId: string) {
   const { supabase, orgId } = await requireRole("agent");
 
@@ -159,5 +48,56 @@ export async function getLeadTags(leadId: string) {
     .eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
-  return (data || []).map((lt: any) => lt.tags).flat().filter(Boolean);
+  return (data || []).map((lt: { tags: unknown }) => lt.tags).flat().filter(Boolean);
+}
+
+// ============================================================================
+// Mutations — thin wrappers em volta de @persia/shared/crm
+// ============================================================================
+
+export async function createTag({ name, color }: { name: string; color: string }) {
+  const { supabase, orgId } = await requireRole("agent");
+  const tag = await createTagShared({ db: supabase, orgId }, { name, color });
+  revalidatePath("/tags");
+  return tag;
+}
+
+export async function updateTag(id: string, { name, color }: { name?: string; color?: string }) {
+  const { supabase, orgId } = await requireRole("agent");
+  await updateTagShared({ db: supabase, orgId }, id, { name, color });
+  revalidatePath("/tags");
+  revalidatePath("/leads");
+  revalidatePath("/crm");
+}
+
+export async function deleteTag(id: string) {
+  const { supabase, orgId } = await requireRole("admin");
+  await deleteTagShared({ db: supabase, orgId }, id);
+  revalidatePath("/tags");
+  revalidatePath("/leads");
+  revalidatePath("/crm");
+}
+
+export async function addTagToLead(leadId: string, tagId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  await addTagToLeadShared(
+    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+    leadId,
+    tagId,
+  );
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/crm");
+}
+
+export async function removeTagFromLead(leadId: string, tagId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  await removeTagFromLeadShared(
+    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+    leadId,
+    tagId,
+  );
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/crm");
 }

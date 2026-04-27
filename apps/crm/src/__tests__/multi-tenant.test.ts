@@ -320,6 +320,9 @@ describe("tags — INSERT carries org, UPDATE/DELETE scope by org", () => {
   it("updateTag scopes UPDATE by organization_id", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
+    // PR-C: shared updateTag faz lookup org-scoped antes do UPDATE
+    // (defesa em profundidade pra service-role do admin que bypassa RLS).
+    supabase.queue("tags", { data: { id: "t1" }, error: null });
     supabase.queue("tags", { data: null, error: null });
 
     await updateTag("t1", { name: "New" });
@@ -330,6 +333,9 @@ describe("tags — INSERT carries org, UPDATE/DELETE scope by org", () => {
   it("deleteTag scopes both the lead_tags cleanup and the tags DELETE by org", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase, ORG_A, "admin");
+    // PR-C: shared deleteTag faz lookup org-scoped antes de qualquer
+    // mutacao (mesma defesa em profundidade).
+    supabase.queue("tags", { data: { id: "t1" }, error: null });
     supabase.queue("lead_tags", { data: null, error: null });
     supabase.queue("tags", { data: null, error: null });
 
