@@ -6,12 +6,16 @@ async function getBillingData() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // .single() falha pra users com 2+ memberships. Pega o mais antigo
+  // (mesmo padrao do dashboard).
   const { data: member } = await supabase
     .from("organization_members")
     .select("organization_id, organizations(*)")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   if (!member) return null;
 

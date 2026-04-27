@@ -18,13 +18,16 @@ async function requireAdmin(request?: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Nao autenticado");
 
+  // .single() falha pra users owners de 2+ orgs. Aqui basta confirmar
+  // que existe pelo menos UMA owner membership ativa, entao limit(1).
   const { data: member } = await supabase
     .from("organization_members")
     .select("role")
     .eq("user_id", user.id)
     .eq("role", "owner")
     .eq("is_active", true)
-    .single();
+    .limit(1)
+    .maybeSingle();
 
   if (!member) throw new Error("Acesso negado");
   return user;

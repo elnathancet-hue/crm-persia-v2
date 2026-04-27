@@ -23,11 +23,13 @@ export default async function SetupPage() {
   // Check if onboarding is already complete
   if (org?.onboarding_completed) redirect("/");
 
+  // .single() throwa PGRST116 quando ainda nao existe progress —
+  // .maybeSingle() retorna null limpo (caso de 1a visita ao setup).
   const { data: progress } = await supabase
     .from("onboarding_progress")
     .select("*")
     .eq("organization_id", member.organization_id)
-    .single();
+    .maybeSingle();
 
   return (
     <div className="min-h-screen bg-background p-6">

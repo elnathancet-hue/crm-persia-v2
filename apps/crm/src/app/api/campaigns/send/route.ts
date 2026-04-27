@@ -8,12 +8,16 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
 
+    // .single() falha pra users com 2+ memberships (PGRST116). Pega
+    // o mais antigo (padrao do dashboard).
     const { data: member } = await supabase
       .from("organization_members")
       .select("organization_id")
       .eq("user_id", user.id)
       .eq("is_active", true)
-      .single();
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
     if (!member) return NextResponse.json({ error: "Sem organizacao" }, { status: 403 });
 
     const { campaignId } = await request.json();

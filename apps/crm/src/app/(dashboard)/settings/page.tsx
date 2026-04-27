@@ -8,12 +8,16 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // .single() falha com PGRST116 quando o user tem 2+ memberships.
+  // Pega o mais antigo (mesmo padrao do dashboard).
   const { data: member } = await supabase
     .from("organization_members")
     .select("*, organizations(*)")
     .eq("user_id", user.id)
     .eq("is_active", true)
-    .single();
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
   const org = (member as any)?.organizations;
 
