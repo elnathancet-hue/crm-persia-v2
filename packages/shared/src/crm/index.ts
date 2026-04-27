@@ -22,6 +22,7 @@ export type {
   // Pipeline + Stage + Deal
   Pipeline,
   Stage,
+  StageOutcome,
   Deal,
   DealWithLead,
   StageWithDeals,

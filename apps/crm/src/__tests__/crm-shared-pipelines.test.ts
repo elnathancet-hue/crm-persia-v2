@@ -95,21 +95,40 @@ describe("@persia/shared/crm — pipelines & stages & deals", () => {
   // createPipeline
   // ============================================================================
 
-  it("createPipeline insere pipeline + 5 stages padrao por default", async () => {
+  it("createPipeline insere pipeline + 6 stages padrao com outcomes corretos", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("pipelines", { data: { id: "p-new", name: "Funil Principal" }, error: null });
-    // 5 inserts em pipeline_stages
-    for (let i = 0; i < 5; i++) {
+    // 6 inserts em pipeline_stages (4 em_andamento + 1 falha + 1 bem_sucedido)
+    for (let i = 0; i < 6; i++) {
       supabase.queue("pipeline_stages", { data: null, error: null });
     }
 
     const pipeline = await createPipeline(ctx(supabase));
 
     expect(pipeline.id).toBe("p-new");
-    expect(supabase.inserts.pipeline_stages).toHaveLength(5);
-    const stageNames = (supabase.inserts.pipeline_stages as Array<{ name: string }>)
-      .map((s) => s.name);
-    expect(stageNames).toEqual(["Novo", "Contato", "Qualificado", "Proposta", "Fechado"]);
+    expect(supabase.inserts.pipeline_stages).toHaveLength(6);
+
+    const inserted = supabase.inserts.pipeline_stages as Array<{
+      name: string;
+      outcome: string;
+    }>;
+
+    expect(inserted.map((s) => s.name)).toEqual([
+      "Novo",
+      "Contato",
+      "Qualificado",
+      "Proposta",
+      "Perdido",
+      "Fechado",
+    ]);
+    expect(inserted.map((s) => s.outcome)).toEqual([
+      "em_andamento",
+      "em_andamento",
+      "em_andamento",
+      "em_andamento",
+      "falha",
+      "bem_sucedido",
+    ]);
   });
 
   it("createPipeline com withDefaultStages: false nao cria stages", async () => {

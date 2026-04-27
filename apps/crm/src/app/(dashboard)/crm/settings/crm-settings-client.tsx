@@ -102,21 +102,27 @@ export function CrmSettingsClient({
         const result = await createPipeline(formData);
         if (result) {
           setPipelines((prev) => [...prev, result]);
-          // Add default stages locally
-          const defaultStages = [
-            { name: "Novo", color: "#3b82f6" },
-            { name: "Contato", color: "#f59e0b" },
-            { name: "Qualificado", color: "#8b5cf6" },
-            { name: "Proposta", color: "#ef4444" },
-            { name: "Fechado", color: "#22c55e" },
+          // Add default stages locally — espelha os defaults do shared
+          // mutation (incluindo Perdido em "falha" e Fechado em "bem_sucedido").
+          const defaultStages: Array<{
+            name: string;
+            color: string;
+            outcome: Stage["outcome"];
+          }> = [
+            { name: "Novo", color: "#3b82f6", outcome: "em_andamento" },
+            { name: "Contato", color: "#f59e0b", outcome: "em_andamento" },
+            { name: "Qualificado", color: "#8b5cf6", outcome: "em_andamento" },
+            { name: "Perdido", color: "#ef4444", outcome: "falha" },
+            { name: "Fechado", color: "#22c55e", outcome: "bem_sucedido" },
           ];
           // Refetch stages from server would be ideal but let's add optimistic
-          const newStages = defaultStages.map((s, i) => ({
+          const newStages: Stage[] = defaultStages.map((s, i) => ({
             id: `temp-${Date.now()}-${i}`,
             pipeline_id: result.id,
             name: s.name,
             color: s.color,
             sort_order: i,
+            outcome: s.outcome,
           }));
           setStages((prev) => [...prev, ...newStages]);
         }

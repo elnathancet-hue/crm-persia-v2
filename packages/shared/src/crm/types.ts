@@ -129,12 +129,23 @@ export interface Pipeline {
   name: string;
 }
 
+/**
+ * Categoria terminal da stage no Kanban. Toda stage pertence a um destes
+ * 3 buckets, refletido no header colorido do filtro principal:
+ *   - em_andamento: leads ainda sendo trabalhados (azul/cyan/teal/mint)
+ *   - falha: leads perdidos/descartados (vermelho)
+ *   - bem_sucedido: leads convertidos/fechados (verde)
+ */
+export type StageOutcome = "em_andamento" | "falha" | "bem_sucedido";
+
 export interface Stage {
   id: string;
   pipeline_id: string;
   name: string;
   color: string;
   sort_order: number;
+  /** Categoria terminal — agrupa a stage no Kanban. Default em_andamento. */
+  outcome: StageOutcome;
   /** Descrição opcional (config do CRM). */
   description?: string | null;
 }

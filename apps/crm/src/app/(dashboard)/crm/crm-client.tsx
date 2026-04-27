@@ -49,8 +49,44 @@ import type {
   Pipeline,
   PipelineGoal,
   Stage,
+  StageOutcome,
   TagRef,
 } from "@persia/shared/crm";
+
+// Buckets de outcome — define labels, cores e ordem visual dos 3
+// pills do filtro principal. Espelha o design da referencia.
+const OUTCOME_BUCKETS: Array<{
+  outcome: StageOutcome;
+  label: string;
+  /** Tailwind classes pra pill ATIVO (cor cheia + texto branco). */
+  activeClass: string;
+  /** Tailwind classes pra pill INATIVO (border discreto). */
+  inactiveClass: string;
+  /** Cor do header das colunas deste bucket. */
+  headerBg: string;
+}> = [
+  {
+    outcome: "em_andamento",
+    label: "Em andamento",
+    activeClass: "bg-purple-600 text-white",
+    inactiveClass: "border border-purple-300 text-purple-700 hover:bg-purple-50",
+    headerBg: "bg-blue-500",
+  },
+  {
+    outcome: "falha",
+    label: "Falha",
+    activeClass: "bg-red-500 text-white",
+    inactiveClass: "border border-red-300 text-red-700 hover:bg-red-50",
+    headerBg: "bg-red-500",
+  },
+  {
+    outcome: "bem_sucedido",
+    label: "Bem-sucedido",
+    activeClass: "bg-emerald-500 text-white",
+    inactiveClass: "border border-emerald-300 text-emerald-700 hover:bg-emerald-50",
+    headerBg: "bg-emerald-500",
+  },
+];
 
 // ============ TYPES ============
 
@@ -119,6 +155,10 @@ export function CrmClient({
   );
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  // Bucket de outcome ativo no filtro principal. Default "em_andamento"
+  // (mesmo da referencia: usuario foca primeiro nos leads em progresso).
+  const [activeOutcome, setActiveOutcome] =
+    React.useState<StageOutcome>("em_andamento");
   const [draggedDealId, setDraggedDealId] = React.useState<string | null>(null);
   const [dragOverStageId, setDragOverStageId] = React.useState<string | null>(
     null
@@ -158,14 +198,29 @@ export function CrmClient({
     }
   }, [goalsByPipeline]);
 
-  // Sort stages by sort_order
-  const sortedStages = React.useMemo(
-    () =>
-      initialStages
-        .filter((stage) => stage.pipeline_id === selectedPipeline)
-        .sort((a, b) => a.sort_order - b.sort_order),
-    [initialStages, selectedPipeline]
-  );
+  // Stages do pipeline selecionado, agrupadas por outcome (mantem a
+  // ordem original via sort_order dentro de cada bucket).
+  const stagesByOutcome = React.useMemo(() => {
+    const grouped: Record<StageOutcome, Stage[]> = {
+      em_andamento: [],
+      falha: [],
+      bem_sucedido: [],
+    };
+    for (const stage of initialStages) {
+      if (stage.pipeline_id !== selectedPipeline) continue;
+      // Stages legadas sem outcome (cache desatualizado) caem em
+      // em_andamento por seguranca.
+      const bucket = (stage.outcome ?? "em_andamento") as StageOutcome;
+      grouped[bucket].push(stage);
+    }
+    for (const k of Object.keys(grouped) as StageOutcome[]) {
+      grouped[k].sort((a, b) => a.sort_order - b.sort_order);
+    }
+    return grouped;
+  }, [initialStages, selectedPipeline]);
+
+  // Stages visiveis no kanban — apenas as do bucket ativo.
+  const sortedStages = stagesByOutcome[activeOutcome];
 
   // Filter deals
   const filteredDeals = React.useMemo(() => {
@@ -311,6 +366,39 @@ export function CrmClient({
 
   return (
     <div className="space-y-4">
+      {/* ====== OUTCOME PILLS ====== */}
+      {/* Filtro principal (estilo da referencia): 3 pills coloridos
+          que segmentam as colunas por categoria terminal. Conta o
+          numero de stages em cada bucket pra dar feedback rapido. */}
+      <div className="flex items-center justify-center gap-2 flex-wrap">
+        {OUTCOME_BUCKETS.map((bucket) => {
+          const isActive = activeOutcome === bucket.outcome;
+          const stageCount = stagesByOutcome[bucket.outcome].length;
+          return (
+            <button
+              key={bucket.outcome}
+              type="button"
+              onClick={() => setActiveOutcome(bucket.outcome)}
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-1.5 text-sm font-medium transition-colors ${
+                isActive ? bucket.activeClass : bucket.inactiveClass
+              }`}
+              aria-pressed={isActive}
+            >
+              <span>{bucket.label}</span>
+              {stageCount > 0 && (
+                <span
+                  className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                    isActive ? "bg-white/20" : "bg-current/10"
+                  }`}
+                >
+                  {stageCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ====== TOP BAR ====== */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Pipeline selector */}
@@ -466,6 +554,20 @@ export function CrmClient({
       )}
 
       {/* ====== KANBAN COLUMNS ====== */}
+      {sortedStages.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhuma etapa em <strong>{
+              OUTCOME_BUCKETS.find((b) => b.outcome === activeOutcome)?.label
+            }</strong> neste funil.
+          </p>
+          {isAdmin && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Configure no menu de configurações.
+            </p>
+          )}
+        </div>
+      ) : null}
       <div className={`flex gap-4 overflow-x-auto pb-4 ${isPending ? "opacity-90" : ""}`}>
         {sortedStages.map((stage, index) => {
           const stageDeals = dealsByStage(stage.id);

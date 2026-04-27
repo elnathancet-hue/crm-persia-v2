@@ -3,20 +3,24 @@
 // Throw on error. Wrappers nos apps adaptam pro shape historico de
 // cada um (CRM throw, admin retorna `null` ou `{ error }`).
 
-import type { Pipeline, Stage } from "../types";
+import type { Pipeline, Stage, StageOutcome } from "../types";
 import type { CrmMutationContext } from "./context";
 
-// Stages padrao criadas pra todo pipeline novo (cobre o ciclo
-// de vendas tipico do CRM Persia: Novo → Contato → Qualificado →
-// Proposta → Fechado). Antes do PR-D, CRM e admin tinham defaults
-// ligeiramente diferentes ("Negociacao" no admin vs "Qualificado" no
-// CRM) — agora unificado pelo conjunto do CRM.
-const DEFAULT_STAGES: Array<{ name: string; color: string }> = [
-  { name: "Novo", color: "#3b82f6" },
-  { name: "Contato", color: "#f59e0b" },
-  { name: "Qualificado", color: "#8b5cf6" },
-  { name: "Proposta", color: "#ef4444" },
-  { name: "Fechado", color: "#22c55e" },
+// Stages padrao criadas pra todo pipeline novo. Cobre os 3 outcomes:
+// 4 estagios "em andamento" (ciclo de vendas tipico), 1 "falha"
+// (Perdido) e 1 "bem sucedido" (Fechado). UI do Kanban agrupa por
+// outcome com headers coloridos.
+const DEFAULT_STAGES: Array<{
+  name: string;
+  color: string;
+  outcome: StageOutcome;
+}> = [
+  { name: "Novo", color: "#3b82f6", outcome: "em_andamento" },
+  { name: "Contato", color: "#f59e0b", outcome: "em_andamento" },
+  { name: "Qualificado", color: "#8b5cf6", outcome: "em_andamento" },
+  { name: "Proposta", color: "#ec4899", outcome: "em_andamento" },
+  { name: "Perdido", color: "#ef4444", outcome: "falha" },
+  { name: "Fechado", color: "#22c55e", outcome: "bem_sucedido" },
 ];
 
 const DEFAULT_PIPELINE_NAME = "Funil Principal";
@@ -65,6 +69,7 @@ export async function createPipeline(
         name: DEFAULT_STAGES[i].name,
         sort_order: i,
         color: DEFAULT_STAGES[i].color,
+        outcome: DEFAULT_STAGES[i].outcome,
       });
     }
   }
@@ -152,6 +157,8 @@ export interface CreateStageInput {
   name: string;
   sortOrder: number;
   color?: string;
+  /** Categoria terminal — agrupa a stage no Kanban. Default em_andamento. */
+  outcome?: StageOutcome;
 }
 
 export interface UpdateStageInput {
@@ -159,6 +166,8 @@ export interface UpdateStageInput {
   color?: string;
   sortOrder?: number;
   description?: string | null;
+  /** Move a stage entre os 3 buckets (em_andamento/falha/bem_sucedido). */
+  outcome?: StageOutcome;
 }
 
 export async function createStage(
@@ -187,6 +196,7 @@ export async function createStage(
       name: input.name,
       sort_order: input.sortOrder,
       color: input.color || DEFAULT_STAGE_COLOR,
+      outcome: input.outcome ?? "em_andamento",
     })
     .select()
     .single();
@@ -218,6 +228,7 @@ export async function updateStage(
   if (input.color !== undefined) updateData.color = input.color;
   if (input.sortOrder !== undefined) updateData.sort_order = input.sortOrder;
   if (input.description !== undefined) updateData.description = input.description;
+  if (input.outcome !== undefined) updateData.outcome = input.outcome;
 
   if (Object.keys(updateData).length === 0) return;
 
