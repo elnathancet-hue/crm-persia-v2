@@ -16,6 +16,7 @@
     "@base-ui/react": "^1.3.0",
     "@persia/shared": "workspace:*",
     "@persia/ai-agent-ui": "workspace:*",
+    "@persia/crm-ui": "workspace:*",
     "@persia/ui": "workspace:*",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.0",
