@@ -183,7 +183,17 @@ export interface DealWithLead extends Deal {
     name: string;
     phone: string | null;
     email: string | null;
+    /** ID do responsavel (auth.users.id) — opcional pra compat. */
+    assigned_to?: string | null;
     lead_tags?: LeadTagJoin[];
+    /**
+     * Profile do responsavel via join `profiles!leads_assigned_to_fkey`.
+     * Renderizado na linha "Responsavel" do card do Kanban.
+     */
+    assignee?: {
+      id: string;
+      full_name: string | null;
+    } | null;
   } | null;
 }
 

@@ -16,8 +16,9 @@ import {
   StickyNote,
   Loader2,
   Save,
+  ChevronDown,
 } from "lucide-react";
-import type { LeadWithTags } from "@persia/shared/crm";
+import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -38,12 +39,39 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@persia/ui/popover";
+import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@persia/ui/tabs";
 import { updateLead } from "@/actions/leads";
+import { getLeadOpenDealWithStages, updateDealStage } from "@/actions/crm";
+
+// Buckets pra agrupar stages no Popover do subheader. Espelha o
+// schema de outcome (Fase 1) e as cores usadas no Kanban.
+const OUTCOME_LABEL: Record<StageOutcome, string> = {
+  em_andamento: "EM ANDAMENTO",
+  falha: "FALHA",
+  bem_sucedido: "BEM-SUCEDIDO",
+};
+const OUTCOME_COLOR: Record<StageOutcome, string> = {
+  em_andamento: "text-purple-700",
+  falha: "text-red-600",
+  bem_sucedido: "text-emerald-600",
+};
+
+interface DrawerStage {
+  id: string;
+  name: string;
+  color: string;
+  outcome: StageOutcome;
+  sort_order: number;
+}
 
 type Stage = { id: string; name: string };
 type Member = { user_id: string; name: string };
@@ -117,10 +145,88 @@ export function LeadInfoDrawer({
   );
   const [isPending, startTransition] = React.useTransition();
 
+  // Subheader "Etapa atual" — busca o deal aberto + stages do pipeline
+  // ao abrir, pra trocar etapa via Popover sem fechar o drawer (#2 do
+  // polish do Kanban). currentStageName (prop) ainda eh suportada como
+  // fallback caso o caller queira display estatico.
+  const [currentDeal, setCurrentDeal] = React.useState<{
+    id: string;
+    pipeline_id: string;
+    stage_id: string;
+  } | null>(null);
+  const [drawerStages, setDrawerStages] = React.useState<DrawerStage[]>([]);
+  const [stageChangePending, setStageChangePending] = React.useState(false);
+
   // Re-hidrata o form quando trocar de lead ou reabrir.
   React.useEffect(() => {
     if (open) setForm(leadToFormState(lead));
   }, [open, lead]);
+
+  // Busca deal aberto + stages quando abrir.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    getLeadOpenDealWithStages(lead.id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res) {
+          setCurrentDeal(res.deal);
+          setDrawerStages(res.stages as DrawerStage[]);
+        } else {
+          setCurrentDeal(null);
+          setDrawerStages([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentDeal(null);
+          setDrawerStages([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, lead.id]);
+
+  function handleChangeStage(newStageId: string) {
+    if (!currentDeal || newStageId === currentDeal.stage_id) return;
+    const previousStageId = currentDeal.stage_id;
+    setCurrentDeal({ ...currentDeal, stage_id: newStageId });
+    setStageChangePending(true);
+    updateDealStage(currentDeal.id, newStageId)
+      .then(() => toast.success("Etapa atualizada"))
+      .catch((err) => {
+        // Revert
+        setCurrentDeal((prev) =>
+          prev ? { ...prev, stage_id: previousStageId } : prev,
+        );
+        toast.error(err instanceof Error ? err.message : "Erro ao mover");
+      })
+      .finally(() => setStageChangePending(false));
+  }
+
+  // Stages agrupadas por outcome pra renderizar no Popover (3 grupos
+  // coloridos, igual o Kanban).
+  const stagesByOutcome = React.useMemo(() => {
+    const groups: Record<StageOutcome, DrawerStage[]> = {
+      em_andamento: [],
+      falha: [],
+      bem_sucedido: [],
+    };
+    for (const s of drawerStages) groups[s.outcome].push(s);
+    for (const k of Object.keys(groups) as StageOutcome[]) {
+      groups[k].sort((a, b) => a.sort_order - b.sort_order);
+    }
+    return groups;
+  }, [drawerStages]);
+
+  const currentStageObj = React.useMemo(
+    () =>
+      currentDeal
+        ? drawerStages.find((s) => s.id === currentDeal.stage_id) ?? null
+        : null,
+    [currentDeal, drawerStages],
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -180,7 +286,67 @@ export function LeadInfoDrawer({
       >
         <SheetHeader className="px-5 pt-5 pb-2 border-b">
           <SheetTitle>Informações do lead</SheetTitle>
-          {currentStageName ? (
+          {currentStageObj ? (
+            <SheetDescription className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Etapa atual:</span>
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <button
+                      type="button"
+                      disabled={stageChangePending}
+                      className="inline-flex items-center gap-1 font-medium text-cyan-600 hover:text-cyan-700 hover:underline transition-colors"
+                    />
+                  }
+                >
+                  <span>{currentStageObj.name}</span>
+                  <ChevronDown className="size-3" />
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-1" align="start">
+                  {(["em_andamento", "falha", "bem_sucedido"] as StageOutcome[]).map(
+                    (outcome) => {
+                      const list = stagesByOutcome[outcome];
+                      if (list.length === 0) return null;
+                      return (
+                        <div key={outcome} className="py-1">
+                          <p
+                            className={`px-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider ${OUTCOME_COLOR[outcome]}`}
+                          >
+                            {OUTCOME_LABEL[outcome]}
+                          </p>
+                          {list.map((s) => {
+                            const isActive = s.id === currentDeal?.stage_id;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => handleChangeStage(s.id)}
+                                disabled={stageChangePending || isActive}
+                                className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors ${
+                                  isActive ? "bg-muted/40 font-medium" : ""
+                                }`}
+                              >
+                                <span className="truncate">{s.name}</span>
+                                {isActive ? (
+                                  <span
+                                    className="size-2 rounded-full"
+                                    style={{ backgroundColor: s.color }}
+                                  />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    },
+                  )}
+                </PopoverContent>
+              </Popover>
+            </SheetDescription>
+          ) : currentStageName ? (
+            // Fallback display estatico (caller pode ainda passar
+            // currentStageName mesmo sem deal aberto — ex: contexto
+            // sem permissao de edicao).
             <SheetDescription className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Etapa atual:</span>
               <span className="font-medium text-cyan-600">

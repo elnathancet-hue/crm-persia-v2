@@ -68,6 +68,8 @@ const OUTCOME_BUCKETS: Array<{
   inactiveClass: string;
   /** Cor do header das colunas deste bucket. */
   headerBg: string;
+  /** Cor de fundo da coluna inteira quando ativa (refletindo o outcome). */
+  columnBg: string;
 }> = [
   {
     outcome: "em_andamento",
@@ -75,6 +77,7 @@ const OUTCOME_BUCKETS: Array<{
     activeClass: "bg-purple-600 text-white",
     inactiveClass: "border border-purple-300 text-purple-700 hover:bg-purple-50",
     headerBg: "bg-blue-500",
+    columnBg: "bg-sky-50/60",
   },
   {
     outcome: "falha",
@@ -82,6 +85,7 @@ const OUTCOME_BUCKETS: Array<{
     activeClass: "bg-red-500 text-white",
     inactiveClass: "border border-red-300 text-red-700 hover:bg-red-50",
     headerBg: "bg-red-500",
+    columnBg: "bg-red-50/50",
   },
   {
     outcome: "bem_sucedido",
@@ -89,6 +93,7 @@ const OUTCOME_BUCKETS: Array<{
     activeClass: "bg-emerald-500 text-white",
     inactiveClass: "border border-emerald-300 text-emerald-700 hover:bg-emerald-50",
     headerBg: "bg-emerald-500",
+    columnBg: "bg-emerald-50/50",
   },
 ];
 
@@ -626,6 +631,14 @@ export function CrmClient({
           const stageConversion =
             index === 0 ? 100 : previousCount > 0 ? (metrics.count / previousCount) * 100 : 0;
 
+          // Cor de fundo da coluna reflete o outcome ativo
+          // (#7 do polish — empty state e coluna inteira ganham
+          // tonalidade do bucket pra coerencia visual com os pills).
+          const bucketDef = OUTCOME_BUCKETS.find(
+            (b) => b.outcome === activeOutcome,
+          );
+          const columnBgClass = bucketDef?.columnBg ?? "bg-muted/30";
+
           return (
             <div
               key={stage.id}
@@ -635,7 +648,7 @@ export function CrmClient({
               onDrop={() => handleDrop(stage.id)}
             >
               <div
-                className={`rounded-xl bg-muted/30 transition-all duration-200 min-h-[500px] flex flex-col ${
+                className={`rounded-xl ${columnBgClass} transition-all duration-200 min-h-[500px] flex flex-col ${
                   isOver ? "ring-2 ring-primary/50 bg-primary/5 -translate-y-0.5" : ""
                 }`}
               >
@@ -829,10 +842,13 @@ function DealCard({
           </div>
         )}
 
-        {/* Linha responsavel (avatar ? + nome) — placeholder ate Fase
-            2 mergear com `assigned_to` no shape do lead. Por enquanto
-            mostra "Sem responsavel". */}
-        <p className="mt-2 text-xs text-muted-foreground">Sem responsável</p>
+        {/* Linha responsavel — puxa lead.assignee.full_name via embed
+            de `getDeals`. Empty state PT-BR consistente. */}
+        <p className="mt-2 text-xs text-muted-foreground">
+          {lead?.assignee?.full_name
+            ? `Responsável: ${lead.assignee.full_name}`
+            : "Sem responsável"}
+        </p>
 
         {/* Footer: 2 botoes pill atalho pros buckets terminais */}
         <div className="flex items-center gap-1.5 mt-2.5">
