@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { readSuperadminContext } from "@/lib/superadmin-context";
 import { redirect } from "next/navigation";
 
 export type OrgRole = "owner" | "admin" | "agent" | "viewer";
@@ -13,6 +14,46 @@ const ROLE_HIERARCHY: Record<OrgRole, number> = {
 interface MembershipRow {
   organization_id: string;
   role: OrgRole;
+}
+
+/**
+ * Verifica se o user logado eh superadmin (profiles.is_superadmin).
+ * Retornar true desbloqueia o cookie de impersonacao em getAuthContext.
+ */
+async function isSuperadmin(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("is_superadmin")
+    .eq("id", userId)
+    .maybeSingle();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return Boolean((data as any)?.is_superadmin);
+}
+
+/**
+ * Resolve o orgId ativo a partir do cookie de impersonacao do
+ * superadmin. So retorna se:
+ *   1. user logado e superadmin (profiles.is_superadmin = true)
+ *   2. cookie existe + assinatura valida (HMAC + sid binding)
+ *   3. cookie.userId bate com a sessao atual
+ *
+ * Retorna null em qualquer outro caso (caller usa membership normal).
+ */
+async function resolveSuperadminImpersonation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string | null> {
+  const sa = await isSuperadmin(supabase, userId);
+  if (!sa) return null;
+
+  const ctx = await readSuperadminContext();
+  if (!ctx) return null;
+  if (ctx.userId !== userId) return null;
+
+  return ctx.orgId;
 }
 
 /**
@@ -56,12 +97,15 @@ function pickActiveMembership(memberships: MembershipRow[]): MembershipRow | nul
  * Returns auth context with org membership. Does NOT enforce a minimum role.
  * Use this for read-only operations accessible to all members (including viewers).
  *
- * Behavior on failure:
- *   - no session       -> redirect("/login")  (page-level helper)
- *   - no membership    -> returns { orgId: null, role: null }
- *   - multi-membership -> returns first (oldest), exposes all via `memberships`
+ * Behavior:
+ *   - no session             -> redirect("/login")
+ *   - SUPERADMIN + cookie     -> usa orgId do cookie de impersonacao
+ *                                (role efetivo = "owner" sobre a org alvo)
+ *   - membership normal       -> primeira membership (single-org)
+ *   - sem nada                -> { orgId: null, role: null }
  *
- * Caller can inspect `memberships` to render an org switcher.
+ * `isSuperadmin` indica se o user logado eh superadmin (independente
+ * de impersonacao ativa). UI usa pra mostrar switcher de org.
  */
 export async function getAuthContext() {
   const supabase = await createClient();
@@ -73,6 +117,30 @@ export async function getAuthContext() {
     redirect("/login");
   }
 
+  // 1. Tenta resolver via cookie de impersonacao (so disponivel pra
+  //    superadmin com cookie valido + sid bind).
+  const impersonatedOrgId = await resolveSuperadminImpersonation(
+    supabase,
+    user.id,
+  );
+  const userIsSuperadmin = await isSuperadmin(supabase, user.id);
+
+  if (impersonatedOrgId) {
+    return {
+      supabase,
+      user,
+      orgId: impersonatedOrgId,
+      userId: user.id,
+      // Superadmin atuando em nome do cliente — concede role maximo
+      // (owner) sobre a org alvo. Permite editar tudo.
+      role: "owner" as OrgRole,
+      memberships: [] as MembershipRow[],
+      isSuperadmin: true,
+      isImpersonating: true,
+    };
+  }
+
+  // 2. Fluxo normal: pega primeira membership do user.
   const memberships = await loadMemberships(supabase, user.id);
   const active = pickActiveMembership(memberships);
 
@@ -84,6 +152,8 @@ export async function getAuthContext() {
       userId: user.id,
       role: null,
       memberships: [] as MembershipRow[],
+      isSuperadmin: userIsSuperadmin,
+      isImpersonating: false,
     };
   }
 
@@ -94,6 +164,8 @@ export async function getAuthContext() {
     userId: user.id,
     role: active.role,
     memberships,
+    isSuperadmin: userIsSuperadmin,
+    isImpersonating: false,
   };
 }
 
@@ -123,6 +195,27 @@ export async function requireRole(minRole: OrgRole) {
     throw new Error("Nao autenticado");
   }
 
+  // Superadmin com cookie de impersonacao tem acesso "owner" a org
+  // alvo (bypassa qualquer minRole). Mesmo padrao do antigo
+  // requireSuperadminForOrg() — auth via cookie assinado, nao via
+  // organization_members.
+  const impersonatedOrgId = await resolveSuperadminImpersonation(
+    supabase,
+    user.id,
+  );
+  if (impersonatedOrgId) {
+    return {
+      supabase,
+      user,
+      orgId: impersonatedOrgId,
+      userId: user.id,
+      role: "owner" as OrgRole,
+      memberships: [] as MembershipRow[],
+      isSuperadmin: true,
+      isImpersonating: true,
+    };
+  }
+
   const memberships = await loadMemberships(supabase, user.id);
   const active = pickActiveMembership(memberships);
 
@@ -144,5 +237,7 @@ export async function requireRole(minRole: OrgRole) {
     userId: user.id,
     role: active.role,
     memberships,
+    isSuperadmin: false,
+    isImpersonating: false,
   };
 }
