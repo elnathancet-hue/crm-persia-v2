@@ -96,3 +96,8 @@ export {
 // Prefer the subpath import `@persia/shared/ai-agent` for locality; this
 // re-export exists for convenience on top-level imports.
 export * from "./ai-agent";
+
+// Agenda — domain types + pure availability/conflict logic.
+// Subpath: `@persia/shared/agenda`. Compartilhado entre apps/crm e
+// apps/admin pra que os dois apps falem do mesmo modelo de agendamento.
+export * from "./agenda";
