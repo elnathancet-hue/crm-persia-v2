@@ -37,6 +37,10 @@
     "./crm": {
       "types": "./src/crm/index.ts",
       "default": "./src/crm/index.ts"
+    },
+    "./agenda": {
+      "types": "./src/agenda/index.ts",
+      "default": "./src/agenda/index.ts"
     }
   },
   "scripts": {
