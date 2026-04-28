@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@persia/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
 import { Plus, X } from "lucide-react";
 
 interface Condition {
@@ -36,9 +42,7 @@ const OPERATORS: Record<string, { value: string; label: string }[]> = {
     { value: "eq", label: "igual a" },
     { value: "neq", label: "diferente de" },
   ],
-  channel: [
-    { value: "eq", label: "igual a" },
-  ],
+  channel: [{ value: "eq", label: "igual a" }],
   score: [
     { value: "gt", label: "maior que" },
     { value: "lt", label: "menor que" },
@@ -66,11 +70,13 @@ function genId(): string {
     : `${Date.now()}-${Math.random()}`;
 }
 
-export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: (r: Rules) => void }) {
-  // Positional IDs — stay stable across update/reorder so React does not
-  // reuse input state. Lazy init com 1 ID por condicao inicial. Mudancas
-  // posteriores (add/remove de conditions externamente) sao reconciliadas
-  // num useEffect — evita acesso a ref durante render (react-hooks/refs).
+export function ConditionBuilder({
+  rules,
+  onChange,
+}: {
+  rules: Rules;
+  onChange: (r: Rules) => void;
+}) {
   const [ids, setIds] = useState<string[]>(() =>
     rules.conditions.map(() => genId()),
   );
@@ -80,7 +86,9 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
       const target = rules.conditions.length;
       if (prev.length === target) return prev;
       if (prev.length < target) {
-        const extras = Array.from({ length: target - prev.length }, () => genId());
+        const extras = Array.from({ length: target - prev.length }, () =>
+          genId(),
+        );
         return [...prev, ...extras];
       }
       return prev.slice(0, target);
@@ -88,12 +96,13 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
   }, [rules.conditions.length]);
 
   function addCondition() {
-    // Pre-popula o ID antes do parent renderizar com a nova condicao —
-    // evita 1-frame de fallback `cond-${index}` no item novo.
     setIds((prev) => [...prev, genId()]);
     onChange({
       ...rules,
-      conditions: [...rules.conditions, { field: "status", op: "eq", value: "" }],
+      conditions: [
+        ...rules.conditions,
+        { field: "status", op: "eq", value: "" },
+      ],
     });
   }
 
@@ -116,7 +125,10 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
   }
 
   function toggleOperator() {
-    onChange({ ...rules, operator: rules.operator === "AND" ? "OR" : "AND" });
+    onChange({
+      ...rules,
+      operator: rules.operator === "AND" ? "OR" : "AND",
+    });
   }
 
   return (
@@ -124,24 +136,39 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
       {rules.conditions.length > 1 && (
         <div className="flex items-center gap-2 mb-2">
           <span className="text-sm text-muted-foreground">Combinar com:</span>
-          <Button type="button" variant="outline" size="sm" onClick={toggleOperator}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleOperator}
+          >
             {rules.operator === "AND" ? "E (todas)" : "OU (qualquer)"}
           </Button>
         </div>
       )}
 
       {rules.conditions.map((condition, index) => (
-        <div key={ids[index] ?? `cond-${index}`} className="flex items-center gap-2">
+        <div
+          key={ids[index] ?? `cond-${index}`}
+          className="flex items-center gap-2"
+        >
           <Select
             value={condition.field}
-            onValueChange={(v) => updateCondition(index, { field: v ?? "status", op: OPERATORS[v ?? "status"]?.[0]?.value || "eq" })}
+            onValueChange={(v) =>
+              updateCondition(index, {
+                field: v ?? "status",
+                op: OPERATORS[v ?? "status"]?.[0]?.value || "eq",
+              })
+            }
           >
             <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {FIELDS.map((f) => (
-                <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                <SelectItem key={f.value} value={f.value}>
+                  {f.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -155,7 +182,9 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
             </SelectTrigger>
             <SelectContent>
               {(OPERATORS[condition.field] || []).map((op) => (
-                <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
+                <SelectItem key={op.value} value={op.value}>
+                  {op.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -163,19 +192,32 @@ export function ConditionBuilder({ rules, onChange }: { rules: Rules; onChange: 
           {condition.op !== "is_null" && (
             <Input
               value={condition.value}
-              onChange={(e) => updateCondition(index, { value: e.target.value })}
+              onChange={(e) =>
+                updateCondition(index, { value: e.target.value })
+              }
               placeholder="Valor"
               className="flex-1"
             />
           )}
 
-          <Button type="button" variant="ghost" size="icon" onClick={() => removeCondition(index)} aria-label="Remover regra">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => removeCondition(index)}
+            aria-label="Remover regra"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
       ))}
 
-      <Button type="button" variant="outline" size="sm" onClick={addCondition}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={addCondition}
+      >
         <Plus className="h-4 w-4 mr-1" />
         Adicionar regra
       </Button>

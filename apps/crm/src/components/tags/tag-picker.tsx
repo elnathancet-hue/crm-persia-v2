@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Plus } from "lucide-react";
-import { TagBadge } from "./tag-badge";
+import { TagBadge } from "@persia/tags-ui";
 import { Button } from "@persia/ui/button";
 import {
   Popover,

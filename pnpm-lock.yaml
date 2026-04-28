@@ -36,9 +36,15 @@ importers:
       '@persia/leads-ui':
         specifier: workspace:*
         version: link:../../packages/leads-ui
+      '@persia/segments-ui':
+        specifier: workspace:*
+        version: link:../../packages/segments-ui
       '@persia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@persia/tags-ui':
+        specifier: workspace:*
+        version: link:../../packages/tags-ui
       '@persia/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -130,9 +136,15 @@ importers:
       '@persia/leads-ui':
         specifier: workspace:*
         version: link:../../packages/leads-ui
+      '@persia/segments-ui':
+        specifier: workspace:*
+        version: link:../../packages/segments-ui
       '@persia/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@persia/tags-ui':
+        specifier: workspace:*
+        version: link:../../packages/tags-ui
       '@persia/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -357,8 +369,70 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/segments-ui:
+    dependencies:
+      '@persia/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@persia/ui':
+        specifier: workspace:*
+        version: link:../ui
+      lucide-react:
+        specifier: ^1.7.0
+        version: 1.8.0(react@19.2.5)
+      next:
+        specifier: ^15.5.14
+        version: 15.5.15(@babel/core@7.29.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.2.4
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.5(react@19.2.5)
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.2.3(@types/react@19.2.14)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   packages/shared:
     devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  packages/tags-ui:
+    dependencies:
+      '@persia/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@persia/ui':
+        specifier: workspace:*
+        version: link:../ui
+      lucide-react:
+        specifier: ^1.7.0
+        version: 1.8.0(react@19.2.5)
+      next:
+        specifier: ^15.5.14
+        version: 15.5.15(@babel/core@7.29.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19.2.4
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.5(react@19.2.5)
+    devDependencies:
+      '@types/react':
+        specifier: ^19
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: ^5
         version: 5.9.3

@@ -7,6 +7,7 @@ import {
   createTag as createTagShared,
   deleteTag as deleteTagShared,
   listTags,
+  listTagsWithCount,
   removeTagFromLead as removeTagFromLeadShared,
   updateTag as updateTagShared,
 } from "@persia/shared/crm";
@@ -19,6 +20,15 @@ export async function getTags() {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     return await listTags({ db: admin, orgId }, { orderBy: "name" });
+  } catch {
+    return [];
+  }
+}
+
+export async function getTagsWithCount() {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    return await listTagsWithCount({ db: admin, orgId });
   } catch {
     return [];
   }
