@@ -1,0 +1,41 @@
+// Admin-side LeadsActions wiring.
+//
+// requireSuperadminForOrg() le orgId do cookie assinado (admin context)
+// e devolve o admin (service-role) client. As actions abaixo embrulham
+// o shape historico do admin (`{ data, error, count }`) no contrato
+// canonico do @persia/leads-ui (`PaginatedLeadsResult`).
+
+import type { LeadsActions, OrgTag } from "@persia/leads-ui";
+import { createLead, getLeads } from "@/actions/leads";
+import { getTags } from "@/actions/tags";
+
+export const adminLeadsActions: LeadsActions = {
+  listLeads: async (filters) => {
+    const result = await getLeads(filters);
+    if (result.error) throw new Error(result.error);
+    const total = result.count ?? 0;
+    const limit = filters.limit ?? 20;
+    return {
+      leads: result.data ?? [],
+      total,
+      page: filters.page ?? 1,
+      totalPages: Math.ceil(total / limit),
+    };
+  },
+  createLead: async (formData) => {
+    // Admin's createLead aceita objeto, nao FormData. Extrai os campos
+    // que o LeadForm envia.
+    const result = await createLead({
+      name: (formData.get("name") as string) || "",
+      phone: (formData.get("phone") as string) || undefined,
+      email: (formData.get("email") as string) || undefined,
+      source: (formData.get("source") as string) || undefined,
+    });
+    if (result.error) throw new Error(result.error);
+    return result.data ? { id: result.data.id } : undefined;
+  },
+  getOrgTags: async () => {
+    const tags = await getTags();
+    return tags as OrgTag[];
+  },
+};
