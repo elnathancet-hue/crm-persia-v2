@@ -9,9 +9,12 @@ import {
   deleteDeal as deleteDealShared,
   deletePipeline as deletePipelineShared,
   deleteStage as deleteStageShared,
+  ensureDefaultPipeline as ensureDefaultPipelineShared,
   listDeals as listDealsShared,
+  listLeadsForDealAssignment,
   listPipelines,
   listStages as listStagesShared,
+  listStagesForOrg,
   moveDealKanban,
   updateDeal as updateDealShared,
   updateDealStatus as updateDealStatusShared,
@@ -225,13 +228,7 @@ export async function moveDealStage(dealId: string, stageId: string) {
 export async function getStagesForOrg() {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
-    const { data, error } = await admin
-      .from("pipeline_stages")
-      .select("*")
-      .eq("organization_id", orgId)
-      .order("sort_order", { ascending: true });
-    if (error) return [];
-    return data ?? [];
+    return await listStagesForOrg({ db: admin, orgId });
   } catch {
     return [];
   }
@@ -258,14 +255,7 @@ export async function getDeals(pipelineId?: string) {
 export async function getLeads() {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
-    const { data, error } = await admin
-      .from("leads")
-      .select("id, name, phone, email")
-      .eq("organization_id", orgId)
-      .order("name", { ascending: true })
-      .limit(200);
-    if (error) return [];
-    return data ?? [];
+    return await listLeadsForDealAssignment({ db: admin, orgId });
   } catch {
     return [];
   }
@@ -274,16 +264,9 @@ export async function getLeads() {
 export async function ensureDefaultPipeline() {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
-    const { data: existing } = await admin
-      .from("pipelines")
-      .select("id")
-      .eq("organization_id", orgId)
-      .limit(1)
-      .maybeSingle();
-    if (existing) return existing.id as string;
-    const pipeline = await createPipelineShared({ db: admin, orgId }, {});
+    const id = await ensureDefaultPipelineShared({ db: admin, orgId });
     revalidatePath("/crm");
-    return pipeline.id;
+    return id;
   } catch {
     return null;
   }
