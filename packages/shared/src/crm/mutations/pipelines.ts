@@ -77,6 +77,31 @@ export async function createPipeline(
   return created;
 }
 
+/**
+ * Garante que existe ao menos um pipeline no org. Se ja existe, retorna
+ * o id do mais antigo. Caso contrario, cria o pipeline default (com
+ * stages padrao) e retorna o id novo. Idempotente — seguro chamar em
+ * qualquer ponto de boot.
+ */
+export async function ensureDefaultPipeline(
+  ctx: CrmMutationContext,
+): Promise<string> {
+  const { db, orgId } = ctx;
+
+  const { data: existing } = await db
+    .from("pipelines")
+    .select("id")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id as string;
+
+  const pipeline = await createPipeline(ctx, {});
+  return pipeline.id;
+}
+
 export async function updatePipelineName(
   ctx: CrmMutationContext,
   pipelineId: string,

@@ -9,7 +9,10 @@ import {
   deleteDeal as deleteDealShared,
   deletePipeline as deletePipelineShared,
   deleteStage as deleteStageShared,
+  ensureDefaultPipeline as ensureDefaultPipelineShared,
+  findLeadOpenDealWithStages,
   listDeals,
+  listLeadsForDealAssignment,
   listPipelines,
   listStages,
   moveDealKanban,
@@ -125,48 +128,9 @@ export async function getDeals(pipelineId?: string) {
  * clicável que troca a etapa atual sem sair da pagina). Se o lead
  * nao tem nenhum deal aberto, retorna null.
  */
-export async function getLeadOpenDealWithStages(leadId: string): Promise<{
-  deal: { id: string; pipeline_id: string; stage_id: string };
-  stages: Array<{
-    id: string;
-    name: string;
-    color: string;
-    outcome: "em_andamento" | "falha" | "bem_sucedido";
-    sort_order: number;
-  }>;
-} | null> {
+export async function getLeadOpenDealWithStages(leadId: string) {
   const { supabase, orgId } = await requireRole("agent");
-
-  const { data: deal } = await supabase
-    .from("deals")
-    .select("id, pipeline_id, stage_id, status")
-    .eq("organization_id", orgId)
-    .eq("lead_id", leadId)
-    .eq("status", "open")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!deal) return null;
-
-  const { data: stages, error: stagesErr } = await supabase
-    .from("pipeline_stages")
-    .select("id, name, color, outcome, sort_order")
-    .eq("pipeline_id", deal.pipeline_id)
-    .eq("organization_id", orgId)
-    .order("sort_order", { ascending: true });
-
-  if (stagesErr) throw new Error(stagesErr.message);
-
-  return {
-    deal: {
-      id: deal.id as string,
-      pipeline_id: deal.pipeline_id as string,
-      stage_id: deal.stage_id as string,
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    stages: (stages ?? []) as any,
-  };
+  return findLeadOpenDealWithStages({ db: supabase, orgId }, leadId);
 }
 
 export async function createDeal(formData: FormData) {
@@ -257,33 +221,14 @@ export async function updateDealStatus(dealId: string, status: string) {
 
 export async function getLeads() {
   const { supabase, orgId } = await requireRole("agent");
-  const { data, error } = await supabase
-    .from("leads")
-    .select("id, name, phone, email")
-    .eq("organization_id", orgId)
-    .order("name", { ascending: true })
-    .limit(200);
-
-  if (error) throw new Error(error.message);
-  return data || [];
+  return listLeadsForDealAssignment({ db: supabase, orgId });
 }
 
 // ============ AUTO-CREATE DEFAULT PIPELINE ============
 
 export async function ensureDefaultPipeline() {
   const { supabase, orgId } = await requireRole("agent");
-
-  const { data: existing } = await supabase
-    .from("pipelines")
-    .select("id")
-    .eq("organization_id", orgId)
-    .limit(1)
-    .single();
-
-  if (existing) return existing.id;
-
-  // Cria pipeline default + stages padrao via shared mutation
-  const pipeline = await createPipelineShared({ db: supabase, orgId }, {});
+  const id = await ensureDefaultPipelineShared({ db: supabase, orgId });
   revalidatePath("/crm");
-  return pipeline.id;
+  return id;
 }

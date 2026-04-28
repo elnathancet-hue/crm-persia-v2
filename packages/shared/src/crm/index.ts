@@ -42,23 +42,28 @@ export type {
   CrmQueryContext,
   CrmQueryDb,
   PaginatedLeads,
+  LeadForDealAssignment,
   ListTagsOptions,
 } from "./queries";
 
 export type {
   ListPipelinesOptions,
   ListDealsOptions,
+  LeadOpenDealWithStages,
 } from "./queries";
 
 export {
   listLeads,
   fetchLead,
   fetchLeadActivities,
+  listLeadsForDealAssignment,
   listTags,
   listTagsWithCount,
   listPipelines,
   listStages,
+  listStagesForOrg,
   listDeals,
+  findLeadOpenDealWithStages,
 } from "./queries";
 
 // Mutations CRM compartilhadas (CRUD de leads + tags + pipelines + deals).
@@ -88,6 +93,7 @@ export {
   addTagToLead,
   removeTagFromLead,
   createPipeline,
+  ensureDefaultPipeline,
   updatePipelineName,
   deletePipeline,
   createStage,

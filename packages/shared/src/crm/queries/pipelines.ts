@@ -66,3 +66,22 @@ export async function listStages(
   if (error) throw new Error(error.message);
   return (data ?? []) as Stage[];
 }
+
+/**
+ * Lista todas as stages do org (sem filtrar por pipeline). Util pra
+ * seletores cross-pipeline. Ordena por sort_order ASC.
+ */
+export async function listStagesForOrg(
+  ctx: CrmQueryContext,
+): Promise<Stage[]> {
+  const { db, orgId } = ctx;
+
+  const { data, error } = await db
+    .from("pipeline_stages")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("sort_order", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Stage[];
+}

@@ -32,6 +32,7 @@ export type {
 } from "./pipelines";
 export {
   createPipeline,
+  ensureDefaultPipeline,
   updatePipelineName,
   deletePipeline,
   createStage,

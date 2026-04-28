@@ -211,3 +211,32 @@ export async function fetchLeadActivities(
   if (error) throw new Error(error.message);
   return (data ?? []) as LeadActivity[];
 }
+
+export interface LeadForDealAssignment {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+/**
+ * Lista compacta de leads do org para preencher seletores de deal
+ * (id/name/phone/email apenas, ordem alfabetica, cap em 200).
+ */
+export async function listLeadsForDealAssignment(
+  ctx: CrmQueryContext,
+  opts: { limit?: number } = {},
+): Promise<LeadForDealAssignment[]> {
+  const { db, orgId } = ctx;
+  const limit = opts.limit ?? 200;
+
+  const { data, error } = await db
+    .from("leads")
+    .select("id, name, phone, email")
+    .eq("organization_id", orgId)
+    .order("name", { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as LeadForDealAssignment[];
+}

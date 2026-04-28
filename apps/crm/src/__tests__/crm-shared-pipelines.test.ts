@@ -10,8 +10,12 @@ import {
   deleteDeal,
   deletePipeline,
   deleteStage,
+  ensureDefaultPipeline,
+  findLeadOpenDealWithStages,
+  listLeadsForDealAssignment,
   listPipelines,
   listStages,
+  listStagesForOrg,
   moveDealKanban,
   updateDeal,
   updateDealStatus,
@@ -411,5 +415,186 @@ describe("@persia/shared/crm — pipelines & stages & deals", () => {
     await deleteDeal(ctx(supabase), "d1");
 
     expect(supabase.deletes.deals).toBe(true);
+  });
+
+  // ============================================================================
+  // listLeadsForDealAssignment
+  // ============================================================================
+
+  it("listLeadsForDealAssignment retorna lista compacta org-scoped", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("leads", {
+      data: [
+        { id: "l1", name: "Ana", phone: "111", email: "a@x" },
+        { id: "l2", name: "Bruno", phone: "222", email: "b@x" },
+      ],
+      error: null,
+    });
+
+    const result = await listLeadsForDealAssignment(ctx(supabase));
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("l1");
+    const eqs = supabase.filters.leads?.eq ?? [];
+    expect(
+      eqs.some(([col, val]) => col === "organization_id" && val === ORG_A),
+    ).toBe(true);
+  });
+
+  it("listLeadsForDealAssignment retorna [] quando query vazia", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("leads", { data: null, error: null });
+
+    const result = await listLeadsForDealAssignment(ctx(supabase));
+    expect(result).toEqual([]);
+  });
+
+  it("listLeadsForDealAssignment throw quando DB retorna erro", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("leads", { data: null, error: { message: "boom" } });
+
+    await expect(listLeadsForDealAssignment(ctx(supabase))).rejects.toThrow(
+      "boom",
+    );
+  });
+
+  // ============================================================================
+  // listStagesForOrg
+  // ============================================================================
+
+  it("listStagesForOrg retorna stages do org sem filtrar pipeline", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("pipeline_stages", {
+      data: [
+        { id: "s1", pipeline_id: "p1", sort_order: 0 },
+        { id: "s2", pipeline_id: "p2", sort_order: 1 },
+      ],
+      error: null,
+    });
+
+    const result = await listStagesForOrg(ctx(supabase));
+    expect(result).toHaveLength(2);
+    const eqs = supabase.filters.pipeline_stages?.eq ?? [];
+    expect(
+      eqs.some(([col, val]) => col === "organization_id" && val === ORG_A),
+    ).toBe(true);
+    // Nao filtra por pipeline_id
+    expect(eqs.some(([col]) => col === "pipeline_id")).toBe(false);
+  });
+
+  it("listStagesForOrg throw em erro de DB", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("pipeline_stages", {
+      data: null,
+      error: { message: "fail" },
+    });
+
+    await expect(listStagesForOrg(ctx(supabase))).rejects.toThrow("fail");
+  });
+
+  // ============================================================================
+  // findLeadOpenDealWithStages
+  // ============================================================================
+
+  it("findLeadOpenDealWithStages retorna null quando lead nao tem deal aberto", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("deals", { data: null, error: null });
+
+    const result = await findLeadOpenDealWithStages(ctx(supabase), "lead-1");
+    expect(result).toBeNull();
+  });
+
+  it("findLeadOpenDealWithStages retorna deal + stages do pipeline", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("deals", {
+      data: {
+        id: "d1",
+        pipeline_id: "p1",
+        stage_id: "s2",
+        status: "open",
+      },
+      error: null,
+    });
+    supabase.queue("pipeline_stages", {
+      data: [
+        {
+          id: "s1",
+          name: "Novo",
+          color: "#fff",
+          outcome: "em_andamento",
+          sort_order: 0,
+        },
+        {
+          id: "s2",
+          name: "Qualificado",
+          color: "#000",
+          outcome: "em_andamento",
+          sort_order: 1,
+        },
+      ],
+      error: null,
+    });
+
+    const result = await findLeadOpenDealWithStages(ctx(supabase), "lead-1");
+    expect(result).not.toBeNull();
+    expect(result!.deal).toEqual({
+      id: "d1",
+      pipeline_id: "p1",
+      stage_id: "s2",
+    });
+    expect(result!.stages).toHaveLength(2);
+    expect(result!.stages[0].id).toBe("s1");
+  });
+
+  it("findLeadOpenDealWithStages throw quando query de stages falha", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("deals", {
+      data: { id: "d1", pipeline_id: "p1", stage_id: "s1", status: "open" },
+      error: null,
+    });
+    supabase.queue("pipeline_stages", {
+      data: null,
+      error: { message: "stages err" },
+    });
+
+    await expect(
+      findLeadOpenDealWithStages(ctx(supabase), "lead-1"),
+    ).rejects.toThrow("stages err");
+  });
+
+  // ============================================================================
+  // ensureDefaultPipeline
+  // ============================================================================
+
+  it("ensureDefaultPipeline retorna id existente quando ja ha pipeline", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("pipelines", {
+      data: { id: "p-existing" },
+      error: null,
+    });
+
+    const id = await ensureDefaultPipeline(ctx(supabase));
+    expect(id).toBe("p-existing");
+    // Nao chamou insert
+    expect(supabase.inserts.pipelines).toBeUndefined();
+  });
+
+  it("ensureDefaultPipeline cria pipeline default quando org nao tem nenhum", async () => {
+    const supabase = createSupabaseMock();
+    // 1. lookup do existing — nada
+    supabase.queue("pipelines", { data: null, error: null });
+    // 2. insert do pipeline novo
+    supabase.queue("pipelines", {
+      data: { id: "p-new", name: "Funil Principal" },
+      error: null,
+    });
+    // 3-8. inserts das 6 stages padrao (best-effort, retorno nao importa)
+    for (let i = 0; i < 6; i++) {
+      supabase.queue("pipeline_stages", { data: null, error: null });
+    }
+
+    const id = await ensureDefaultPipeline(ctx(supabase));
+    expect(id).toBe("p-new");
+    expect(supabase.inserts.pipelines).toBeDefined();
   });
 });
