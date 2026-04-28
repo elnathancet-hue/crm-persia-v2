@@ -1,5 +1,9 @@
 "use client";
 
+// DataTable — tabela generica com sort por coluna. Originalmente em
+// apps/crm/src/components/shared/data-table.tsx. Movida pra leads-ui
+// porque so o LeadList consome (verificado via grep no monorepo).
+
 import * as React from "react";
 import {
   Table,

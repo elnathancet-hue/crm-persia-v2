@@ -40,7 +40,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
-import { LeadForm } from "@/components/leads/lead-form";
+import { LeadForm } from "@persia/leads-ui";
 import {
   updateLead,
   deleteLead,
