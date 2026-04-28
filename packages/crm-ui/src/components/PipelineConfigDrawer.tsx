@@ -1,17 +1,13 @@
 "use client";
 
-// Drawer "Configurar funis" — abre dentro do /crm sem sair da pagina.
-// Espelha o design da referencia: cada funil eh um card com 3 colunas
-// (EM ANDAMENTO / FALHA / BEM-SUCEDIDO), stages categorizadas pelo
-// outcome, drag-drop entre colunas atualiza outcome via mutation
-// updateStage. CRUD basico (criar funil/stage, editar nome, deletar).
-//
-// Pra editar configuracoes detalhadas (cor, descricao), o link "Editar
-// avancado" leva pra /crm/settings (pagina dedicada existente).
+// Drawer "Configurar funis" — abre dentro do Kanban sem sair da pagina.
+// Cada funil eh um card com 3 colunas (EM ANDAMENTO / FALHA / BEM-SUCEDIDO),
+// stages categorizadas pelo outcome, drag-drop entre colunas atualiza outcome.
+// Originalmente em apps/crm/src/components/crm/pipeline-config-drawer.tsx —
+// agora compartilhado via @persia/crm-ui.
 
 import * as React from "react";
-import Link from "next/link";
-import { Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Pipeline, Stage, StageOutcome } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
@@ -32,17 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
-import {
-  createPipeline,
-  createStage,
-  deletePipeline,
-  deleteStage,
-  updatePipelineName,
-  updateStage,
-} from "@/actions/crm";
 
-// Layout dos 3 buckets (mesma ordem da Fase 1 — em_andamento/falha/bem_sucedido).
-// Cores espelham as pills do filtro do Kanban pra coerencia visual.
+import { useKanbanActions } from "../context";
+
 interface BucketDef {
   outcome: StageOutcome;
   label: string;
@@ -89,8 +77,7 @@ export function PipelineConfigDrawer({
   stages: initialStages,
   onChange,
 }: Props) {
-  // Estado local pra updates otimistas (UI responsiva enquanto o
-  // server confirma). Sync com props quando o drawer reabre.
+  const actions = useKanbanActions();
   const [pipelines, setPipelines] = React.useState(initialPipelines);
   const [stages, setStages] = React.useState(initialStages);
   const [isPending, startTransition] = React.useTransition();
@@ -107,7 +94,6 @@ export function PipelineConfigDrawer({
     outcome: StageOutcome;
   } | null>(null);
 
-  // Re-hidrata quando reabrir (caso parent tenha refetched).
   React.useEffect(() => {
     if (open) {
       setPipelines(initialPipelines);
@@ -119,26 +105,20 @@ export function PipelineConfigDrawer({
     onChange?.();
   }
 
-  // ============================================================
-  // Handlers
-  // ============================================================
-
   function handleCreatePipeline() {
     const name = window.prompt("Nome do novo funil:", "Novo funil");
     if (!name?.trim()) return;
     startTransition(async () => {
       try {
-        const formData = new FormData();
-        formData.set("name", name.trim());
-        const created = await createPipeline(formData);
+        const created = await actions.createPipeline(name.trim());
         if (created) {
-          // Server retorna pipeline + cria stages padrao. Pega tudo
-          // novamente via callback do parent (recarrega via revalidatePath).
           notify();
           toast.success("Funil criado");
         }
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao criar funil");
+        toast.error(
+          err instanceof Error ? err.message : "Erro ao criar funil",
+        );
       }
     });
   }
@@ -154,11 +134,10 @@ export function PipelineConfigDrawer({
 
     startTransition(async () => {
       try {
-        await updatePipelineName(p.id, trimmed);
+        await actions.updatePipelineName(p.id, trimmed);
         toast.success("Funil renomeado");
         notify();
       } catch (err) {
-        // Reverte
         setPipelines((prev) =>
           prev.map((x) => (x.id === p.id ? { ...x, name: p.name } : x)),
         );
@@ -177,12 +156,12 @@ export function PipelineConfigDrawer({
 
     startTransition(async () => {
       try {
-        await deletePipeline(target.id);
+        await actions.deletePipeline(target.id);
         toast.success("Funil removido");
         notify();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Erro ao remover");
-        notify(); // re-fetch pra reverter
+        notify();
       }
     });
   }
@@ -196,23 +175,25 @@ export function PipelineConfigDrawer({
 
     startTransition(async () => {
       try {
-        const formData = new FormData();
-        formData.set("pipeline_id", pipelineId);
-        formData.set("name", name.trim());
-        formData.set("sort_order", String(sortOrder));
-        // createStage do wrapper usa outcome=em_andamento por default.
-        // Se a coluna alvo for diferente, atualiza logo apos criar.
-        const created = await createStage(formData);
+        const created = await actions.createStage({
+          pipelineId,
+          name: name.trim(),
+          sortOrder,
+          outcome,
+        });
         if (created && outcome !== "em_andamento") {
-          await updateStage(
-            (created as { id: string }).id,
-            { outcome },
-          );
+          // Defesa em profundidade: se o backend ignorar `outcome` no
+          // create (legacy), forca o update aqui pra manter UX consistente.
+          if ((created as Stage).outcome !== outcome) {
+            await actions.updateStage(created.id, { outcome });
+          }
         }
         notify();
         toast.success("Etapa criada");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao criar etapa");
+        toast.error(
+          err instanceof Error ? err.message : "Erro ao criar etapa",
+        );
       }
     });
   }
@@ -228,7 +209,7 @@ export function PipelineConfigDrawer({
 
     startTransition(async () => {
       try {
-        await updateStage(s.id, { name: trimmed });
+        await actions.updateStage(s.id, { name: trimmed });
         toast.success("Etapa renomeada");
         notify();
       } catch (err) {
@@ -249,7 +230,7 @@ export function PipelineConfigDrawer({
 
     startTransition(async () => {
       try {
-        await deleteStage(target.id);
+        await actions.deleteStage(target.id);
         toast.success("Etapa removida");
         notify();
       } catch (err) {
@@ -266,7 +247,6 @@ export function PipelineConfigDrawer({
     const stage = stages.find((s) => s.id === stageId);
     if (!stage || stage.outcome === targetOutcome) return;
 
-    // Optimistic update
     const previousOutcome = stage.outcome;
     setStages((prev) =>
       prev.map((s) =>
@@ -276,11 +256,10 @@ export function PipelineConfigDrawer({
 
     startTransition(async () => {
       try {
-        await updateStage(stageId, { outcome: targetOutcome });
+        await actions.updateStage(stageId, { outcome: targetOutcome });
         toast.success("Etapa movida");
         notify();
       } catch (err) {
-        // Reverte
         setStages((prev) =>
           prev.map((s) =>
             s.id === stageId ? { ...s, outcome: previousOutcome } : s,
@@ -290,10 +269,6 @@ export function PipelineConfigDrawer({
       }
     });
   }
-
-  // ============================================================
-  // Drag handlers
-  // ============================================================
 
   function handleDragStart(e: React.DragEvent, stageId: string) {
     setDraggedStageId(stageId);
@@ -324,10 +299,6 @@ export function PipelineConfigDrawer({
     handleMoveStageBetweenBuckets(stage.id, outcome);
   }
 
-  // ============================================================
-  // Render helpers
-  // ============================================================
-
   function stagesForPipelineBucket(
     pipelineId: string,
     outcome: StageOutcome,
@@ -336,10 +307,6 @@ export function PipelineConfigDrawer({
       .filter((s) => s.pipeline_id === pipelineId && s.outcome === outcome)
       .sort((a, b) => a.sort_order - b.sort_order);
   }
-
-  // ============================================================
-  // Render
-  // ============================================================
 
   return (
     <>
@@ -361,16 +328,7 @@ export function PipelineConfigDrawer({
               </Button>
             </div>
             <SheetDescription>
-              Arraste as etapas entre as colunas pra reclassificá-las. Para
-              editar cor e descrição,{" "}
-              <Link
-                href="/crm/settings"
-                className="text-primary hover:underline inline-flex items-center gap-0.5"
-              >
-                abrir configurações avançadas
-                <ExternalLink className="size-3" />
-              </Link>
-              .
+              Arraste as etapas entre as colunas pra reclassificá-las.
             </SheetDescription>
           </SheetHeader>
 
@@ -402,7 +360,11 @@ export function PipelineConfigDrawer({
                   }
                   onRenameStage={handleRenameStage}
                   onAskDeleteStage={(s) =>
-                    setStagedDelete({ type: "stage", id: s.id, name: s.name })
+                    setStagedDelete({
+                      type: "stage",
+                      id: s.id,
+                      name: s.name,
+                    })
                   }
                   onDragStart={handleDragStart}
                   onDragOver={(e, outcome) =>
@@ -459,10 +421,6 @@ export function PipelineConfigDrawer({
     </>
   );
 }
-
-// ============================================================
-// PipelineCard — um funil com 3 colunas
-// ============================================================
 
 function PipelineCard({
   pipeline,
@@ -582,10 +540,6 @@ function PipelineCard({
   );
 }
 
-// ============================================================
-// StagePill — uma etapa arrastavel
-// ============================================================
-
 function StagePill({
   stage,
   bgColor,
@@ -639,4 +593,3 @@ function StagePill({
     </div>
   );
 }
-

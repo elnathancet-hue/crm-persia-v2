@@ -9,9 +9,13 @@ import {
   deleteDeal as deleteDealShared,
   deletePipeline as deletePipelineShared,
   deleteStage as deleteStageShared,
+  listDeals as listDealsShared,
   listPipelines,
+  listStages as listStagesShared,
   moveDealKanban,
+  updateDeal as updateDealShared,
   updateDealStatus as updateDealStatusShared,
+  updatePipelineName as updatePipelineNameShared,
   updateStage as updateStageShared,
 } from "@persia/shared/crm";
 
@@ -128,7 +132,13 @@ export async function updateDealStatus(
 
 export async function updateStage(
   stageId: string,
-  data: { name?: string; color?: string; sort_order?: number },
+  data: {
+    name?: string;
+    color?: string;
+    sort_order?: number;
+    description?: string | null;
+    outcome?: "em_andamento" | "falha" | "bem_sucedido";
+  },
 ) {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
@@ -136,6 +146,8 @@ export async function updateStage(
       name: data.name,
       color: data.color,
       sortOrder: data.sort_order,
+      description: data.description,
+      outcome: data.outcome,
     });
     revalidatePath("/crm");
   } catch {
@@ -160,5 +172,119 @@ export async function deletePipeline(pipelineId: string) {
     revalidatePath("/crm");
   } catch {
     // noop
+  }
+}
+
+export async function updatePipelineName(pipelineId: string, name: string) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    await updatePipelineNameShared({ db: admin, orgId }, pipelineId, name);
+    revalidatePath("/crm");
+  } catch {
+    // noop
+  }
+}
+
+export async function updateDeal(
+  dealId: string,
+  data: {
+    title?: string;
+    value?: number;
+    status?: string;
+    lead_id?: string | null;
+  },
+) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    await updateDealShared({ db: admin, orgId }, dealId, {
+      title: data.title,
+      value: data.value,
+      status: data.status,
+      leadId: data.lead_id,
+    });
+    revalidatePath("/crm");
+  } catch {
+    // noop
+  }
+}
+
+/** Move "leve" — atualiza stage_id sem disparar flows/sync (admin
+ * superadmin nao precisa de side-effects por padrao). Caller pode
+ * preferir esse behavior em vez do `moveDeal` (que e drag-drop com
+ * sort_order). */
+export async function moveDealStage(dealId: string, stageId: string) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    await moveDealKanban({ db: admin, orgId }, dealId, stageId, 0);
+    revalidatePath("/crm");
+  } catch {
+    // noop
+  }
+}
+
+export async function getStagesForOrg() {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const { data, error } = await admin
+      .from("pipeline_stages")
+      .select("*")
+      .eq("organization_id", orgId)
+      .order("sort_order", { ascending: true });
+    if (error) return [];
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getStagesForPipeline(pipelineId: string) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    return await listStagesShared({ db: admin, orgId }, pipelineId);
+  } catch {
+    return [];
+  }
+}
+
+export async function getDeals(pipelineId?: string) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    return await listDealsShared({ db: admin, orgId }, { pipelineId });
+  } catch {
+    return [];
+  }
+}
+
+export async function getLeads() {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const { data, error } = await admin
+      .from("leads")
+      .select("id, name, phone, email")
+      .eq("organization_id", orgId)
+      .order("name", { ascending: true })
+      .limit(200);
+    if (error) return [];
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function ensureDefaultPipeline() {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const { data: existing } = await admin
+      .from("pipelines")
+      .select("id")
+      .eq("organization_id", orgId)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return existing.id as string;
+    const pipeline = await createPipelineShared({ db: admin, orgId }, {});
+    revalidatePath("/crm");
+    return pipeline.id;
+  } catch {
+    return null;
   }
 }

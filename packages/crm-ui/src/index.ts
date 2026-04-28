@@ -1,0 +1,22 @@
+// @persia/crm-ui — shared CRM Kanban UI surface.
+//
+// Both @persia/crm and @persia/admin consume these components via
+// <KanbanProvider actions={...}>. Components pull mutations
+// through useKanbanActions() so each app can wire its own server actions
+// (requireRole on crm, requireSuperadminForOrg on admin).
+
+export type {
+  KanbanActions,
+  CreateStageInput,
+  CreateDealInput,
+  UpdateDealInput,
+  UpdateStageInput,
+} from "./actions";
+export {
+  KanbanProvider,
+  useKanbanActions,
+  type KanbanProviderProps,
+} from "./context";
+
+export { KanbanBoard, type KanbanBoardProps, type KanbanLead } from "./components/KanbanBoard";
+export { PipelineConfigDrawer } from "./components/PipelineConfigDrawer";
