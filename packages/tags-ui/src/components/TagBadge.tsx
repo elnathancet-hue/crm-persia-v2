@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@persia/ui/utils";
 import { X } from "lucide-react";
 
 interface TagBadgeProps {
@@ -19,7 +19,13 @@ function getContrastColor(hex: string): string {
   return luminance > 0.6 ? "#1f2937" : "#ffffff";
 }
 
-export function TagBadge({ name, color, onRemove, className, size = "default" }: TagBadgeProps) {
+export function TagBadge({
+  name,
+  color,
+  onRemove,
+  className,
+  size = "default",
+}: TagBadgeProps) {
   const textColor = getContrastColor(color);
 
   return (
@@ -27,7 +33,7 @@ export function TagBadge({ name, color, onRemove, className, size = "default" }:
       className={cn(
         "inline-flex items-center gap-1 rounded-full font-medium whitespace-nowrap",
         size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs",
-        className
+        className,
       )}
       style={{ backgroundColor: color, color: textColor }}
     >

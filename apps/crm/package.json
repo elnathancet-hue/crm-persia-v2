@@ -18,6 +18,8 @@
     "@persia/ai-agent-ui": "workspace:*",
     "@persia/crm-ui": "workspace:*",
     "@persia/leads-ui": "workspace:*",
+    "@persia/segments-ui": "workspace:*",
+    "@persia/tags-ui": "workspace:*",
     "@persia/ui": "workspace:*",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.0",
