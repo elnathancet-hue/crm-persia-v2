@@ -17,10 +17,13 @@ export async function listDeals(
 ): Promise<unknown[]> {
   const { db, orgId } = ctx;
 
+  // Embed do responsavel via assigned_to -> profiles(full_name).
+  // Mostrado na linha "Responsavel" do card do Kanban (sem precisar
+  // de query extra).
   let query = db
     .from("deals")
     .select(
-      "*, leads(id, name, phone, email, status, lead_tags(tags(id, name, color)))",
+      "*, leads(id, name, phone, email, status, assigned_to, lead_tags(tags(id, name, color)), assignee:profiles!leads_assigned_to_fkey(id, full_name))",
     )
     .eq("organization_id", orgId)
     .order("sort_order", { ascending: true });
