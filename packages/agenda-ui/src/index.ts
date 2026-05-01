@@ -32,3 +32,11 @@ export { AppointmentCard } from "./components/AppointmentCard";
 export { TodayAppointments } from "./components/TodayAppointments";
 export { AgendaHeader } from "./components/AgendaHeader";
 export { AgendaOverview } from "./components/AgendaOverview";
+
+// Components — PR4 batch 2 (calendar views + tabs + drawer read-only)
+export { AgendaTabs, type AgendaTab } from "./components/AgendaTabs";
+export { AgendaListView } from "./components/AgendaListView";
+export { AgendaWeekView } from "./components/AgendaWeekView";
+export { AgendaMonthView } from "./components/AgendaMonthView";
+export { AgendaCalendarView } from "./components/AgendaCalendarView";
+export { AppointmentDrawer } from "./components/AppointmentDrawer";
