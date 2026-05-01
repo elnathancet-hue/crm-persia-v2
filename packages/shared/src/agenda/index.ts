@@ -52,3 +52,11 @@ export {
   projectLocalToUtc,
   getTimezoneOffsetMinutes,
 } from "./availability";
+
+// Queries — leitura compartilhada entre apps. Cada app passa { db, orgId }
+// depois de fazer auth (requireRole no CRM, requireSuperadminForOrg no admin).
+export * from "./queries";
+
+// Mutations — escrita compartilhada com validacao server-side (conflito,
+// availability) + appointment_history automatico.
+export * from "./mutations";
