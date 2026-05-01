@@ -60,3 +60,7 @@ export * from "./queries";
 // Mutations — escrita compartilhada com validacao server-side (conflito,
 // availability) + appointment_history automatico.
 export * from "./mutations";
+
+// Labels (PT-BR) + helpers de formato. Usado pela UI pra evitar magic
+// strings e centralizar tradutores dos enums internos snake_case english.
+export * from "./labels";
