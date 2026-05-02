@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   AgendaActionsProvider,
+  AgendaAvailabilitySettings,
+  AgendaBookingPagesList,
   AgendaCalendarView,
   AgendaCreateMenu,
   AgendaHeader,
@@ -29,6 +31,7 @@ interface Props {
   initialRange: { from: string; to: string };
   services: AgendaService[];
   currentUserId: string;
+  orgSlug: string;
 }
 
 /**
@@ -36,7 +39,6 @@ interface Props {
  * state local (tab ativa, drawers, viewMode, data corrente, modal Novo).
  *
  * PRs proximos:
- *   - PR5b: tabs Disponibilidade + Páginas de agendamento (admin)
  *   - PR6: booking publico /agendar/{org}/{slug}
  *   - PR7: lembretes WhatsApp via UAZAPI
  */
@@ -45,6 +47,7 @@ export function AgendaPageClient({
   initialRange,
   services,
   currentUserId,
+  orgSlug,
 }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AgendaTab>("overview");
@@ -82,15 +85,17 @@ export function AgendaPageClient({
       searchLeads: (query: string, limit?: number) =>
         searchLeadsForAgenda(query, limit ?? 8),
       currentUserId,
-      // agendaUsers: PR5b vai popular esta lista (admin pode atribuir
+      // agendaUsers: PR futuro vai popular esta lista (admin pode atribuir
       // pra terceiros). Por enquanto agent so cria pra si mesmo.
       agendaUsers: [],
     }),
     [router, refetch, currentUserId],
   );
 
-  const tabHidden: AgendaTab[] = ["availability", "booking-pages", "settings"];
-  const showCalendarHeader = activeTab !== "overview";
+  // Esconde so 'settings' agora — Disponibilidade e Paginas habilitadas no PR5b.
+  const tabHidden: AgendaTab[] = ["settings"];
+  const showCalendarHeader =
+    activeTab === "calendar" || activeTab === "list";
 
   return (
     <AgendaActionsProvider actions={crmAgendaActions} callbacks={callbacks}>
@@ -140,6 +145,12 @@ export function AgendaPageClient({
             appointments={appointments}
             onSelectAppointment={setSelected}
           />
+        )}
+
+        {activeTab === "availability" && <AgendaAvailabilitySettings />}
+
+        {activeTab === "booking-pages" && (
+          <AgendaBookingPagesList orgSlug={orgSlug} services={services} />
         )}
 
         <AppointmentDrawer
