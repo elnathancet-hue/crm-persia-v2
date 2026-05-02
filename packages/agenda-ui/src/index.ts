@@ -56,3 +56,13 @@ export {
 export { CreateAppointmentDrawer } from "./components/CreateAppointmentDrawer";
 export { RescheduleAppointmentDrawer } from "./components/RescheduleAppointmentDrawer";
 export { AgendaCreateMenu } from "./components/AgendaCreateMenu";
+
+// Components — PR5b batch 4 (admin: disponibilidade + paginas)
+export { TimeRangeInput } from "./components/TimeRangeInput";
+export { AvailabilityDayRow } from "./components/AvailabilityDayRow";
+export { WeeklyAvailabilityEditor } from "./components/WeeklyAvailabilityEditor";
+export { AgendaAvailabilitySettings } from "./components/AgendaAvailabilitySettings";
+export { BookingPageStatusBadge } from "./components/BookingPageStatusBadge";
+export { BookingPageCard } from "./components/BookingPageCard";
+export { BookingPageDrawer } from "./components/BookingPageDrawer";
+export { AgendaBookingPagesList } from "./components/AgendaBookingPagesList";
