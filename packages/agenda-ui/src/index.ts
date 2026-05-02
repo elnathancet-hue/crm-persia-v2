@@ -39,10 +39,11 @@ export { AgendaHeader } from "./components/AgendaHeader";
 export { AgendaOverview } from "./components/AgendaOverview";
 
 // Components — PR4 batch 2 (calendar views + tabs + drawer read-only)
+// PR8a: AgendaWeekView + AgendaMonthView removidos. Calendar agora usa
+// react-big-calendar (Day/Week/Month/Agenda built-in, drag, current time
+// line, color por status, etc). AgendaListView mantido pra fallback.
 export { AgendaTabs, type AgendaTab } from "./components/AgendaTabs";
 export { AgendaListView } from "./components/AgendaListView";
-export { AgendaWeekView } from "./components/AgendaWeekView";
-export { AgendaMonthView } from "./components/AgendaMonthView";
 export { AgendaCalendarView } from "./components/AgendaCalendarView";
 export { AppointmentDrawer } from "./components/AppointmentDrawer";
 

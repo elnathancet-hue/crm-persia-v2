@@ -19,6 +19,13 @@ interface CreateAppointmentDrawerProps {
   /** Lead pre-selecionado (criacao a partir de /leads/[id] no futuro). */
   initialLead?: LeadOption | null;
   services: readonly AgendaService[];
+  /** Slot pre-preenchido (vindo de click no calendar em horario vazio). */
+  prefillSlot?: { start: Date; end: Date } | null;
+}
+
+function dateToLocalInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /**
@@ -62,6 +69,7 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
   initialKind = "appointment",
   initialLead = null,
   services,
+  prefillSlot = null,
 }) => {
   const actions = useAgendaActions();
   const callbacks = useAgendaCallbacks();
@@ -69,6 +77,25 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [conflictTitle, setConflictTitle] = React.useState<string | null>(null);
+
+  // Re-key o form quando prefillSlot muda — garante que o initial value
+  // refletir o slot novo (ja que o AppointmentForm usa initial=... so na 1a render).
+  const formKey = React.useMemo(
+    () => `${prefillSlot?.start.getTime() ?? 0}-${initialKind}`,
+    [prefillSlot, initialKind],
+  );
+
+  const initialForm = React.useMemo<Partial<AppointmentFormValues>>(() => {
+    const base: Partial<AppointmentFormValues> = {
+      kind: initialKind,
+      lead_id: initialLead?.id ?? null,
+    };
+    if (prefillSlot) {
+      base.start_local = dateToLocalInput(prefillSlot.start);
+      base.end_local = dateToLocalInput(prefillSlot.end);
+    }
+    return base;
+  }, [prefillSlot, initialKind, initialLead]);
 
   if (!open) return null;
 
@@ -151,10 +178,11 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
 
         <div className="flex-1 overflow-y-auto p-5">
           <AppointmentForm
+            key={formKey}
             ref={formRef}
             services={services}
             initialLead={initialLead}
-            initial={{ kind: initialKind, lead_id: initialLead?.id ?? null }}
+            initial={initialForm}
           />
 
           {conflictTitle && (
