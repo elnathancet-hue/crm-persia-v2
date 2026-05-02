@@ -5,7 +5,14 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Skip auth check for public routes entirely - no Supabase call needed
-  const publicRoutes = ["/login", "/register", "/forgot-password", "/reset-password", "/lp"];
+  const publicRoutes = [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/lp",
+    "/agendar", // booking publico — lead acessa anonimo
+  ];
   const isPublicRoute = publicRoutes.some((route) => pathname.startsWith(route));
   const isApiRoute = pathname.startsWith("/api");
   const isStaticAsset = pathname.startsWith("/_next") || pathname.includes(".");
