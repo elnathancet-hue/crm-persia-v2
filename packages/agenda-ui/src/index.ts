@@ -8,7 +8,12 @@
 // Re-export central — apps fazem
 //   import { useAppointments, AgendaOverview } from "@persia/agenda-ui";
 
-export type { AgendaActions, AgendaCallbacks } from "./actions";
+export type {
+  AgendaActions,
+  AgendaCallbacks,
+  LeadOption,
+  AgendaUserOption,
+} from "./actions";
 export {
   AgendaActionsProvider,
   useAgendaActions,
@@ -40,3 +45,14 @@ export { AgendaWeekView } from "./components/AgendaWeekView";
 export { AgendaMonthView } from "./components/AgendaMonthView";
 export { AgendaCalendarView } from "./components/AgendaCalendarView";
 export { AppointmentDrawer } from "./components/AppointmentDrawer";
+
+// Components — PR5a batch 3 (write: criar / reagendar)
+export { LeadSearchSelect } from "./components/LeadSearchSelect";
+export {
+  AppointmentForm,
+  type AppointmentFormHandle,
+  type AppointmentFormValues,
+} from "./components/AppointmentForm";
+export { CreateAppointmentDrawer } from "./components/CreateAppointmentDrawer";
+export { RescheduleAppointmentDrawer } from "./components/RescheduleAppointmentDrawer";
+export { AgendaCreateMenu } from "./components/AgendaCreateMenu";

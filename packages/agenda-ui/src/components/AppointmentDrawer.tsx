@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  CalendarClock,
   CalendarDays,
   Check,
   Clock,
@@ -30,6 +31,8 @@ interface AppointmentDrawerProps {
   onClose: () => void;
   /** Quando true, esconde botoes de acao (ex: visualizacao publica). */
   readOnly?: boolean;
+  /** Callback do botao 'Reagendar'. Parent abre seu RescheduleAppointmentDrawer. */
+  onReschedule?: (appointment: Appointment) => void;
 }
 
 const ACTION_BUTTONS: { status: AppointmentStatus; label: string; icon: React.ComponentType<{ size?: number }>; tone: string }[] = [
@@ -42,6 +45,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
   appointment,
   onClose,
   readOnly = false,
+  onReschedule,
 }) => {
   const actions = useAgendaActions();
   const { onOpenLead, onOpenChat, onAppointmentChange } = useAgendaCallbacks();
@@ -270,6 +274,21 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
                 );
               },
             )}
+
+            {/* Reagendar — abre RescheduleAppointmentDrawer no parent */}
+            {onReschedule &&
+              appointment.status !== "cancelled" &&
+              appointment.status !== "completed" && (
+                <button
+                  type="button"
+                  disabled={isMutating}
+                  onClick={() => onReschedule(appointment)}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100 disabled:opacity-50"
+                >
+                  <CalendarClock size={14} />
+                  Reagendar
+                </button>
+              )}
 
             {appointment.status !== "cancelled" && (
               <button
