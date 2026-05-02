@@ -107,4 +107,29 @@ export interface AgendaCallbacks {
   onOpenChat?: (leadId: string) => void;
   /** Notifica o parent que houve mudanca (refresh externo, etc). */
   onAppointmentChange?: (appointmentId: string) => void;
+  /** Busca leads pra autocomplete em forms. App-injected pra evitar
+   *  acoplar agenda-ui ao tipo Lead do CRM. Default: undefined (sem
+   *  autocomplete; LeadSearchSelect mostra so um input desabilitado). */
+  searchLeads?: (query: string, limit?: number) => Promise<LeadOption[]>;
+  /** Lista de usuarios da org pra preencher select 'Responsavel' nos forms.
+   *  App fetcha 1x ao montar a tela. Default: array vazio (so o user
+   *  corrente fica disponivel; admin/owner nao consegue assignar pra terceiro). */
+  agendaUsers?: AgendaUserOption[];
+  /** UUID do user logado. Usado como default em 'Responsavel' nos forms. */
+  currentUserId?: string;
+}
+
+/** Forma minima que LeadSearchSelect espera retornar do `searchLeads`. */
+export interface LeadOption {
+  id: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+}
+
+/** Forma minima que selects de 'Responsavel' esperam. */
+export interface AgendaUserOption {
+  id: string;
+  name: string;
+  email?: string | null;
 }

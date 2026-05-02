@@ -1,4 +1,6 @@
 import { getAppointments } from "@/actions/agenda/appointments";
+import { getAgendaServices } from "@/actions/agenda/services";
+import { getAuthContext } from "@/lib/auth";
 import { AgendaPageClient } from "./agenda-page-client";
 
 export const metadata = { title: "Agenda" };
@@ -14,11 +16,15 @@ function defaultRange() {
 
 export default async function AgendaPage() {
   const range = defaultRange();
-  const initialAppointments = await getAppointments({
-    from: range.from,
-    to: range.to,
-    limit: 500,
-  });
+  const [initialAppointments, services, ctx] = await Promise.all([
+    getAppointments({
+      from: range.from,
+      to: range.to,
+      limit: 500,
+    }),
+    getAgendaServices({ is_active: true }),
+    getAuthContext(),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -33,6 +39,8 @@ export default async function AgendaPage() {
       <AgendaPageClient
         initialAppointments={initialAppointments}
         initialRange={range}
+        services={services}
+        currentUserId={ctx.userId}
       />
     </div>
   );

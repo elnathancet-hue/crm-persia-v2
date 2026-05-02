@@ -1,87 +1,110 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   AgendaActionsProvider,
   AgendaCalendarView,
+  AgendaCreateMenu,
   AgendaHeader,
   AgendaOverview,
   AgendaTabs,
   AppointmentDrawer,
+  CreateAppointmentDrawer,
+  RescheduleAppointmentDrawer,
   useAgendaFilters,
+  type AgendaCallbacks,
   type AgendaTab,
 } from "@persia/agenda-ui";
-import type { Appointment } from "@persia/shared/agenda";
+import type {
+  AgendaService,
+  Appointment,
+  AppointmentKind,
+} from "@persia/shared/agenda";
 import { crmAgendaActions } from "@/features/agenda/crm-actions";
+import { searchLeadsForAgenda } from "@/actions/agenda/lead-search";
 
 interface Props {
   initialAppointments: Appointment[];
   initialRange: { from: string; to: string };
+  services: AgendaService[];
+  currentUserId: string;
 }
 
 /**
- * Wrapper client da Agenda. Monta o AgendaActionsProvider e gerencia
- * o state local da pagina (tab ativa, drawer, viewMode, data corrente).
+ * Wrapper client da Agenda. Monta o AgendaActionsProvider e gerencia o
+ * state local (tab ativa, drawers, viewMode, data corrente, modal Novo).
  *
- * Os 4 PRs proximos vao incrementar:
- *   - PR5: modais de Novo/Editar appointment
- *   - PR6: tab "Disponibilidade" + "Páginas de agendamento"
- *   - PR7: lembretes WhatsApp + booking publico
+ * PRs proximos:
+ *   - PR5b: tabs Disponibilidade + Páginas de agendamento (admin)
+ *   - PR6: booking publico /agendar/{org}/{slug}
+ *   - PR7: lembretes WhatsApp via UAZAPI
  */
-export function AgendaPageClient({ initialAppointments, initialRange }: Props) {
+export function AgendaPageClient({
+  initialAppointments,
+  initialRange,
+  services,
+  currentUserId,
+}: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AgendaTab>("overview");
   const [appointments, setAppointments] = useState<Appointment[]>(
     initialAppointments,
   );
   const [selected, setSelected] = useState<Appointment | null>(null);
-
-  const filters = useAgendaFilters(new Date());
-  const periodTitle = useMemo(
-    () => filters.formatPeriodTitle(),
-    [filters],
+  const [createKind, setCreateKind] = useState<AppointmentKind | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(
+    null,
   );
 
-  // Callbacks que atualizam state local + invalidam server data depois.
-  const callbacks = useMemo(
+  const filters = useAgendaFilters(new Date());
+  const periodTitle = useMemo(() => filters.formatPeriodTitle(), [filters]);
+
+  const refetch = useCallback(() => {
+    crmAgendaActions
+      .getAppointments({
+        from: initialRange.from,
+        to: initialRange.to,
+        limit: 500,
+      })
+      .then(setAppointments)
+      .catch((err) => {
+        console.error("[agenda] refetch falhou:", err);
+      });
+    router.refresh();
+  }, [router, initialRange.from, initialRange.to]);
+
+  const callbacks = useMemo<AgendaCallbacks>(
     () => ({
       onOpenLead: (leadId: string) => router.push(`/leads/${leadId}`),
       onOpenChat: (leadId: string) => router.push(`/chat?lead=${leadId}`),
-      onAppointmentChange: (id: string) => {
-        // Refetch tudo da janela inicial — simples e correto pro MVP.
-        // Otimizacao com .map(updated) por id fica pra um refactor futuro.
-        crmAgendaActions
-          .getAppointments({
-            from: initialRange.from,
-            to: initialRange.to,
-            limit: 500,
-          })
-          .then(setAppointments)
-          .catch((err) => {
-            console.error("[agenda] refetch falhou:", err);
-          });
-        // Invalida o cache da rota tambem, pra proxima navegacao SSR.
-        router.refresh();
-        // Suprime warning de id nao usado.
-        void id;
-      },
+      onAppointmentChange: () => refetch(),
+      searchLeads: (query: string, limit?: number) =>
+        searchLeadsForAgenda(query, limit ?? 8),
+      currentUserId,
+      // agendaUsers: PR5b vai popular esta lista (admin pode atribuir
+      // pra terceiros). Por enquanto agent so cria pra si mesmo.
+      agendaUsers: [],
     }),
-    [router, initialRange.from, initialRange.to],
+    [router, refetch, currentUserId],
   );
 
   const tabHidden: AgendaTab[] = ["availability", "booking-pages", "settings"];
+  const showCalendarHeader = activeTab !== "overview";
 
   return (
     <AgendaActionsProvider actions={crmAgendaActions} callbacks={callbacks}>
       <div className="space-y-6">
-        <AgendaTabs
-          active={activeTab}
-          onChange={setActiveTab}
-          hidden={tabHidden}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <AgendaTabs
+            active={activeTab}
+            onChange={setActiveTab}
+            hidden={tabHidden}
+          />
+          <AgendaCreateMenu onSelect={setCreateKind} />
+        </div>
 
-        {activeTab !== "overview" && (
+        {showCalendarHeader && (
           <AgendaHeader
             periodTitle={periodTitle}
             viewMode={filters.viewMode}
@@ -89,7 +112,6 @@ export function AgendaPageClient({ initialAppointments, initialRange }: Props) {
             onPrev={filters.handlePrev}
             onNext={filters.handleNext}
             onToday={filters.handleToday}
-            // PR5 vai ligar isto ao modal de criacao
             onCreate={undefined}
           />
         )}
@@ -123,6 +145,22 @@ export function AgendaPageClient({ initialAppointments, initialRange }: Props) {
         <AppointmentDrawer
           appointment={selected}
           onClose={() => setSelected(null)}
+          onReschedule={(a) => {
+            setSelected(null);
+            setRescheduleTarget(a);
+          }}
+        />
+
+        <CreateAppointmentDrawer
+          open={createKind !== null}
+          initialKind={createKind ?? "appointment"}
+          services={services}
+          onClose={() => setCreateKind(null)}
+        />
+
+        <RescheduleAppointmentDrawer
+          appointment={rescheduleTarget}
+          onClose={() => setRescheduleTarget(null)}
         />
       </div>
     </AgendaActionsProvider>
