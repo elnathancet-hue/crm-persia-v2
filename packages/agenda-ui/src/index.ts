@@ -66,3 +66,13 @@ export { BookingPageStatusBadge } from "./components/BookingPageStatusBadge";
 export { BookingPageCard } from "./components/BookingPageCard";
 export { BookingPageDrawer } from "./components/BookingPageDrawer";
 export { AgendaBookingPagesList } from "./components/AgendaBookingPagesList";
+
+// Components — PR7 batch 5 (settings: lembretes WhatsApp)
+export {
+  ReminderConfigDrawer,
+  type ExistingPayload as ReminderConfigPayload,
+} from "./components/ReminderConfigDrawer";
+export {
+  AgendaSettingsTab,
+  type AgendaSettingsActions,
+} from "./components/AgendaSettingsTab";

@@ -10,12 +10,14 @@ import {
   AgendaCreateMenu,
   AgendaHeader,
   AgendaOverview,
+  AgendaSettingsTab,
   AgendaTabs,
   AppointmentDrawer,
   CreateAppointmentDrawer,
   RescheduleAppointmentDrawer,
   useAgendaFilters,
   type AgendaCallbacks,
+  type AgendaSettingsActions,
   type AgendaTab,
 } from "@persia/agenda-ui";
 import type {
@@ -25,6 +27,13 @@ import type {
 } from "@persia/shared/agenda";
 import { crmAgendaActions } from "@/features/agenda/crm-actions";
 import { searchLeadsForAgenda } from "@/actions/agenda/lead-search";
+import {
+  createReminderConfig,
+  deleteReminderConfig,
+  getReminderConfigs,
+  seedDefaultReminderConfigs,
+  updateReminderConfig,
+} from "@/actions/agenda/reminders";
 
 interface Props {
   initialAppointments: Appointment[];
@@ -92,10 +101,21 @@ export function AgendaPageClient({
     [router, refetch, currentUserId],
   );
 
-  // Esconde so 'settings' agora — Disponibilidade e Paginas habilitadas no PR5b.
-  const tabHidden: AgendaTab[] = ["settings"];
+  // Todas as tabs habilitadas (PR7 ligou Settings com lembretes WhatsApp).
+  const tabHidden: AgendaTab[] = [];
   const showCalendarHeader =
     activeTab === "calendar" || activeTab === "list";
+
+  const settingsActions: AgendaSettingsActions = useMemo(
+    () => ({
+      list: () => getReminderConfigs(),
+      create: (input) => createReminderConfig(input),
+      update: (id, input) => updateReminderConfig(id, input),
+      remove: (id) => deleteReminderConfig(id),
+      seedDefaults: () => seedDefaultReminderConfigs(),
+    }),
+    [],
+  );
 
   return (
     <AgendaActionsProvider actions={crmAgendaActions} callbacks={callbacks}>
@@ -151,6 +171,10 @@ export function AgendaPageClient({
 
         {activeTab === "booking-pages" && (
           <AgendaBookingPagesList orgSlug={orgSlug} services={services} />
+        )}
+
+        {activeTab === "settings" && (
+          <AgendaSettingsTab actions={settingsActions} />
         )}
 
         <AppointmentDrawer

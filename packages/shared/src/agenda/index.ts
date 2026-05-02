@@ -64,3 +64,7 @@ export * from "./mutations";
 // Labels (PT-BR) + helpers de formato. Usado pela UI pra evitar magic
 // strings e centralizar tradutores dos enums internos snake_case english.
 export * from "./labels";
+
+// Reminders — types, defaults e template renderer pra lembretes WhatsApp.
+// Cron tick + dispatcher vivem em apps/crm/src/lib/agenda/reminders/.
+export * from "./reminders";
