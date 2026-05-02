@@ -4,6 +4,7 @@ import {
   Users,
   UsersRound,
   Kanban,
+  Calendar,
   Zap,
   Megaphone,
   BarChart3,
@@ -57,6 +58,11 @@ export const navigation: NavItem[] = [
     label: "CRM",
     href: "/crm",
     icon: Kanban,
+  },
+  {
+    label: "Agenda",
+    href: "/agenda",
+    icon: Calendar,
   },
   {
     label: "Automacao",
