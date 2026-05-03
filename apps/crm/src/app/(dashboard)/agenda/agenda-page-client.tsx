@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   AgendaActionsProvider,
@@ -24,6 +24,7 @@ import type {
   AgendaService,
   Appointment,
   AppointmentKind,
+  AvailabilityRule,
 } from "@persia/shared/agenda";
 import { crmAgendaActions } from "@/features/agenda/crm-actions";
 import { searchLeadsForAgenda } from "@/actions/agenda/lead-search";
@@ -34,6 +35,7 @@ import {
   seedDefaultReminderConfigs,
   updateReminderConfig,
 } from "@/actions/agenda/reminders";
+import { getDefaultAvailabilityRule } from "@/actions/agenda/availability";
 
 interface Props {
   initialAppointments: Appointment[];
@@ -46,10 +48,6 @@ interface Props {
 /**
  * Wrapper client da Agenda. Monta o AgendaActionsProvider e gerencia o
  * state local (tab ativa, drawers, viewMode, data corrente, modal Novo).
- *
- * PRs proximos:
- *   - PR6: booking publico /agendar/{org}/{slug}
- *   - PR7: lembretes WhatsApp via UAZAPI
  */
 export function AgendaPageClient({
   initialAppointments,
@@ -65,12 +63,33 @@ export function AgendaPageClient({
   );
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [createKind, setCreateKind] = useState<AppointmentKind | null>(null);
+  const [createPrefill, setCreatePrefill] = useState<{
+    start: Date;
+    end: Date;
+  } | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(
     null,
   );
+  const [availabilityRule, setAvailabilityRule] =
+    useState<AvailabilityRule | null>(null);
 
   const filters = useAgendaFilters(new Date());
   const periodTitle = useMemo(() => filters.formatPeriodTitle(), [filters]);
+
+  // Carrega regra default 1x pra Calendar saber min/max time
+  useEffect(() => {
+    let cancelled = false;
+    getDefaultAvailabilityRule(currentUserId)
+      .then((r) => {
+        if (!cancelled) setAvailabilityRule(r);
+      })
+      .catch((err) => {
+        console.warn("[agenda] availability rule load:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId]);
 
   const refetch = useCallback(() => {
     crmAgendaActions
@@ -94,14 +113,11 @@ export function AgendaPageClient({
       searchLeads: (query: string, limit?: number) =>
         searchLeadsForAgenda(query, limit ?? 8),
       currentUserId,
-      // agendaUsers: PR futuro vai popular esta lista (admin pode atribuir
-      // pra terceiros). Por enquanto agent so cria pra si mesmo.
       agendaUsers: [],
     }),
     [router, refetch, currentUserId],
   );
 
-  // Todas as tabs habilitadas (PR7 ligou Settings com lembretes WhatsApp).
   const tabHidden: AgendaTab[] = [];
   const showCalendarHeader =
     activeTab === "calendar" || activeTab === "list";
@@ -117,6 +133,22 @@ export function AgendaPageClient({
     [],
   );
 
+  // Click em slot vazio do calendar → abre Create drawer com data preenchida
+  const handleSelectSlot = useCallback((slot: { start: Date; end: Date }) => {
+    setCreatePrefill(slot);
+    setCreateKind("appointment");
+  }, []);
+
+  const handleCreateClose = useCallback(() => {
+    setCreateKind(null);
+    setCreatePrefill(null);
+  }, []);
+
+  const handleNovoMenuSelect = useCallback((kind: AppointmentKind) => {
+    setCreatePrefill(null);
+    setCreateKind(kind);
+  }, []);
+
   return (
     <AgendaActionsProvider actions={crmAgendaActions} callbacks={callbacks}>
       <div className="space-y-6">
@@ -126,7 +158,7 @@ export function AgendaPageClient({
             onChange={setActiveTab}
             hidden={tabHidden}
           />
-          <AgendaCreateMenu onSelect={setCreateKind} />
+          <AgendaCreateMenu onSelect={handleNovoMenuSelect} />
         </div>
 
         {showCalendarHeader && (
@@ -153,8 +185,11 @@ export function AgendaPageClient({
             viewMode={filters.viewMode === "list" ? "week" : filters.viewMode}
             currentDate={filters.currentDate}
             appointments={appointments}
+            availabilityRule={availabilityRule}
             onSelectAppointment={setSelected}
-            onSelectDay={filters.setCurrentDate}
+            onSelectSlot={handleSelectSlot}
+            onChangeView={filters.setViewMode}
+            onChangeDate={filters.setCurrentDate}
           />
         )}
 
@@ -163,7 +198,9 @@ export function AgendaPageClient({
             viewMode="list"
             currentDate={filters.currentDate}
             appointments={appointments}
+            availabilityRule={availabilityRule}
             onSelectAppointment={setSelected}
+            onChangeDate={filters.setCurrentDate}
           />
         )}
 
@@ -190,7 +227,8 @@ export function AgendaPageClient({
           open={createKind !== null}
           initialKind={createKind ?? "appointment"}
           services={services}
-          onClose={() => setCreateKind(null)}
+          prefillSlot={createPrefill}
+          onClose={handleCreateClose}
         />
 
         <RescheduleAppointmentDrawer

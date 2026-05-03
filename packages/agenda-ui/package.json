@@ -17,7 +17,9 @@
   "dependencies": {
     "@persia/shared": "workspace:*",
     "@persia/ui": "workspace:*",
+    "date-fns": "^4.1.0",
     "lucide-react": "^1.7.0",
+    "react-big-calendar": "^1.13.4",
     "sonner": "^2.0.7"
   },
   "peerDependencies": {
@@ -27,6 +29,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
+    "@types/react-big-calendar": "^1.16.2",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5"
   }
