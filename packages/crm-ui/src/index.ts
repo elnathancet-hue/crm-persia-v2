@@ -20,3 +20,12 @@ export {
 
 export { KanbanBoard, type KanbanBoardProps, type KanbanLead } from "./components/KanbanBoard";
 export { PipelineConfigDrawer } from "./components/PipelineConfigDrawer";
+export {
+  ImportLeadsWizard,
+  type ImportTag,
+  type ImportLeadsInput,
+  type ImportLeadsResult,
+  type ImportFieldMapping,
+  type ImportDestination,
+  type DuplicateStrategy,
+} from "./components/ImportLeadsWizard";

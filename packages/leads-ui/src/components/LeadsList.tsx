@@ -102,6 +102,9 @@ export interface LeadsListProps {
   onEditLead?: (lead: LeadWithTags) => void;
   /** Click em "Excluir" — caller confirma + deleta. */
   onDeleteLead?: (lead: LeadWithTags) => void;
+  /** Slots opcionais no header (ex: botao Importar, Exportar). Renderizam
+   *  ANTES do botao "Novo Lead". Cada app decide o que injetar. */
+  headerActions?: React.ReactNode;
 }
 
 export function LeadsList({
@@ -113,6 +116,7 @@ export function LeadsList({
   onRowClick,
   onEditLead,
   onDeleteLead,
+  headerActions,
 }: LeadsListProps) {
   const actions = useLeadsActions();
   const [leads, setLeads] = React.useState(initialLeads);
@@ -387,15 +391,18 @@ export function LeadsList({
             {total} {total === 1 ? "lead" : "leads"} encontrados
           </p>
         </div>
-        {canEdit && (
-          <Button
-            onClick={() => setIsCreateOpen(true)}
-            className="h-9 rounded-md"
-          >
-            <Plus className="size-4" data-icon="inline-start" />
-            Novo Lead
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {headerActions}
+          {canEdit && (
+            <Button
+              onClick={() => setIsCreateOpen(true)}
+              className="h-9 rounded-md"
+            >
+              <Plus className="size-4" data-icon="inline-start" />
+              Novo Lead
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
