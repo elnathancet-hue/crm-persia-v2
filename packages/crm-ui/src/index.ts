@@ -27,6 +27,19 @@ export {
 } from "./components/KanbanBoard";
 export { PipelineConfigDrawer } from "./components/PipelineConfigDrawer";
 export {
+  MarkAsLostDialog,
+  type MarkAsLostFormValues,
+} from "./components/MarkAsLostDialog";
+export { ExportMenu } from "./components/ExportMenu";
+export {
+  downloadExport,
+  makeExportFilename,
+  EXPORT_MAX_ROWS,
+  type ExportColumn,
+  type ExportFormat,
+  type ExportOptions,
+} from "./lib/export";
+export {
   ImportLeadsWizard,
   type ImportTag,
   type ImportLeadsInput,

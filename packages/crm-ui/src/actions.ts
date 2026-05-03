@@ -10,10 +10,17 @@
 
 import type {
   Deal,
+  DealLossReason,
   Pipeline,
   Stage,
   StageOutcome,
 } from "@persia/shared/crm";
+
+export interface MarkAsLostInput {
+  loss_reason: string;
+  competitor?: string | null;
+  loss_note?: string | null;
+}
 
 export interface CreateStageInput {
   pipelineId: string;
@@ -83,4 +90,19 @@ export interface KanbanActions {
     dealIds: string[],
     tagIds: string[],
   ) => Promise<{ leads_count: number; links_count: number }>;
+
+  /**
+   * Loss tracking (PR-K3) — substitui setStatus(lost) capturando
+   * motivo + concorrente + nota pra analytics. Opcional (admin nao
+   * implementa por enquanto).
+   */
+  getLossReasons?: () => Promise<DealLossReason[]>;
+  markDealAsLost?: (
+    dealId: string,
+    input: MarkAsLostInput,
+  ) => Promise<void>;
+  bulkMarkDealsAsLost?: (
+    dealIds: string[],
+    input: MarkAsLostInput,
+  ) => Promise<{ updated_count: number }>;
 }

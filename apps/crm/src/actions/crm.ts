@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   bulkApplyTagsToDealLeads as bulkApplyTagsShared,
   bulkDeleteDeals as bulkDeleteDealsShared,
+  bulkMarkDealsAsLost as bulkMarkDealsAsLostShared,
   bulkMoveDealsToStage as bulkMoveDealsToStageShared,
   bulkUpdateDealStatus as bulkUpdateDealStatusShared,
   createDeal as createDealShared,
@@ -17,14 +18,17 @@ import {
   findLeadOpenDealWithStages,
   listDeals,
   listLeadsForDealAssignment,
+  listLossReasons as listLossReasonsShared,
   listPipelines,
   listStages,
+  markDealAsLost as markDealAsLostShared,
   moveDealKanban,
   updateDeal as updateDealShared,
   updateDealStatus as updateDealStatusShared,
   updatePipelineName as updatePipelineNameShared,
   updateStage as updateStageShared,
   updateStageOrder as updateStageOrderShared,
+  type MarkDealAsLostInput,
 } from "@persia/shared/crm";
 
 // Logica de pipelines/stages/deals consolidada em @persia/shared/crm.
@@ -297,6 +301,47 @@ export async function bulkApplyTagsToDeals(
     { db: supabase, orgId },
     dealIds,
     tagIds,
+  );
+  revalidatePath("/crm");
+  return result;
+}
+
+// ============ LOSS TRACKING (PR-K3) ============
+
+/**
+ * Lista motivos de perda cadastrados na org. Auto-seeda defaults
+ * se vier vazio (first-touch).
+ */
+export async function getLossReasons() {
+  const { supabase, orgId } = await requireRole("agent");
+  return listLossReasonsShared({ db: supabase, orgId });
+}
+
+/**
+ * Marca um deal como perdido capturando motivo + concorrente + nota
+ * pra analytics. Atualiza status='lost' + closed_at + colunas loss.
+ */
+export async function markDealAsLost(
+  dealId: string,
+  input: MarkDealAsLostInput,
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  await markDealAsLostShared({ db: supabase, orgId }, dealId, input);
+  revalidatePath("/crm");
+}
+
+/**
+ * Marca varios deals como perdidos com mesmo motivo (bulk). Cap 200.
+ */
+export async function bulkMarkDealsAsLost(
+  dealIds: string[],
+  input: MarkDealAsLostInput,
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  const result = await bulkMarkDealsAsLostShared(
+    { db: supabase, orgId },
+    dealIds,
+    input,
   );
   revalidatePath("/crm");
   return result;

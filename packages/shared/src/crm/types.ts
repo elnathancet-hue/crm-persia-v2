@@ -181,6 +181,29 @@ export interface Deal {
   created_at?: string | null;
   /** UUID do responsavel (auth.users.id). Opcional. */
   assigned_to?: string | null;
+  /** Categoria do motivo de perda (PR-K3). Free-form com sugestoes
+   *  vindas de deal_loss_reasons. So preenche quando status='lost'. */
+  loss_reason?: string | null;
+  /** Quando loss_reason indica concorrente, capturar qual. */
+  competitor?: string | null;
+  /** Notas longas de aprendizado / post-mortem. */
+  loss_note?: string | null;
+}
+
+// ============================================================================
+// Deal Loss Reasons (PR-K3) — catalogo cadastravel por org
+// ============================================================================
+
+export interface DealLossReason {
+  id: string;
+  organization_id: string;
+  label: string;
+  /** Se true, UI abre input "Qual concorrente?" ao escolher. */
+  requires_competitor: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Deal com lead embed — usado na página principal do CRM. */

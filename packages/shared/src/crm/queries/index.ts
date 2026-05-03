@@ -23,3 +23,5 @@ export { listTags, listTagsWithCount } from "./tags";
 export { listPipelines, listStages, listStagesForOrg } from "./pipelines";
 
 export { listDeals, findLeadOpenDealWithStages } from "./deals";
+
+export { listLossReasons } from "./loss-reasons";

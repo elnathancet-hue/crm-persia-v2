@@ -70,6 +70,7 @@ import {
   CheckCheck,
 } from "lucide-react";
 import type {
+  DealLossReason,
   DealWithLead,
   LeadTagJoin,
   Pipeline,
@@ -80,7 +81,11 @@ import type {
 } from "@persia/shared/crm";
 
 import { useKanbanActions } from "../context";
+import type { MarkAsLostInput } from "../actions";
+import type { ExportColumn } from "../lib/export";
 import { PipelineConfigDrawer } from "./PipelineConfigDrawer";
+import { MarkAsLostDialog } from "./MarkAsLostDialog";
+import { ExportMenu } from "./ExportMenu";
 
 // Buckets de outcome — define labels, cores e ordem visual dos 3
 // pills do filtro principal. Espelha o design da referencia.
@@ -281,12 +286,31 @@ export function KanbanBoard({
   const [bulkPending, setBulkPending] = React.useState(false);
   const [bulkConfirm, setBulkConfirm] = React.useState<
     | { kind: "delete" }
-    | { kind: "lost" }
     | { kind: "won" }
     | null
   >(null);
   const [bulkMoveOpen, setBulkMoveOpen] = React.useState(false);
   const [bulkTagOpen, setBulkTagOpen] = React.useState(false);
+
+  // ---- MarkAsLost (PR-K3) ----
+  type LossTarget =
+    | { mode: "single"; dealId: string; dealTitle: string | null }
+    | { mode: "bulk"; dealIds: string[] };
+  const [lossTarget, setLossTarget] = React.useState<LossTarget | null>(null);
+  const [lossReasons, setLossReasons] = React.useState<DealLossReason[]>([]);
+  const [lossPending, setLossPending] = React.useState(false);
+  const lossReasonsLoaded = React.useRef(false);
+
+  const loadLossReasons = React.useCallback(async () => {
+    if (lossReasonsLoaded.current || !actions.getLossReasons) return;
+    try {
+      const r = await actions.getLossReasons();
+      setLossReasons(r);
+      lossReasonsLoaded.current = true;
+    } catch {
+      setLossReasons([]);
+    }
+  }, [actions]);
 
   const toggleSelected = React.useCallback((dealId: string) => {
     setSelectedIds((prev) => {
@@ -420,6 +444,70 @@ export function KanbanBoard({
     advancedFilters,
   ]);
 
+  // ---- Export columns (PR-K3) — derivada de filteredDeals + stages ----
+  const stageNameById = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of initialStages) m.set(s.id, s.name);
+    return m;
+  }, [initialStages]);
+  const pipelineNameById = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of pipelines) m.set(p.id, p.name);
+    return m;
+  }, [pipelines]);
+
+  const dealExportColumns = React.useMemo<ExportColumn<Deal>[]>(
+    () => [
+      { header: "Negocio", accessor: (d) => d.title },
+      { header: "Lead", accessor: (d) => d.leads?.name ?? "" },
+      { header: "Telefone", accessor: (d) => d.leads?.phone ?? "" },
+      { header: "Email", accessor: (d) => d.leads?.email ?? "" },
+      { header: "Valor (R$)", accessor: (d) => Number(d.value ?? 0) },
+      {
+        header: "Status",
+        accessor: (d) =>
+          d.status === "won"
+            ? "Ganho"
+            : d.status === "lost"
+              ? "Perdido"
+              : "Em andamento",
+      },
+      {
+        header: "Funil",
+        accessor: (d) => pipelineNameById.get(d.pipeline_id) ?? "",
+      },
+      {
+        header: "Etapa",
+        accessor: (d) => stageNameById.get(d.stage_id) ?? "",
+      },
+      {
+        header: "Responsavel",
+        accessor: (d) => d.leads?.assignee?.full_name ?? "",
+      },
+      {
+        header: "Tags",
+        accessor: (d) =>
+          (d.leads?.lead_tags ?? [])
+            .map((lt: LeadTag) => lt.tags?.name ?? "")
+            .filter(Boolean)
+            .join(", "),
+      },
+      {
+        header: "Motivo da perda",
+        accessor: (d) => d.loss_reason ?? "",
+      },
+      {
+        header: "Concorrente",
+        accessor: (d) => d.competitor ?? "",
+      },
+      {
+        header: "Atualizado em",
+        accessor: (d) => (d.updated_at ? new Date(d.updated_at) : ""),
+      },
+    ],
+    [pipelineNameById, stageNameById],
+  );
+
   const boardMetrics = React.useMemo(() => {
     const total = filteredDeals.reduce(
       (sum, deal) => sum + (deal.value || 0),
@@ -519,6 +607,21 @@ export function KanbanBoard({
     dealId: string,
     outcome: "falha" | "bem_sucedido",
   ) {
+    // PR-K3: ao marcar como perdido, abre MarkAsLostDialog (captura
+    // motivo + concorrente + nota). Fallback no comportamento antigo
+    // (move sem capturar) se a action nao estiver disponivel — mantem
+    // compat retroativa pra clients antigos.
+    if (outcome === "falha" && actions.markDealAsLost) {
+      const deal = localDeals.find((d) => d.id === dealId);
+      void loadLossReasons();
+      setLossTarget({
+        mode: "single",
+        dealId,
+        dealTitle: deal?.title ?? deal?.leads?.name ?? null,
+      });
+      return;
+    }
+
     const terminalStage = stagesByOutcome[outcome][0];
     if (!terminalStage) {
       console.warn(
@@ -549,6 +652,68 @@ export function KanbanBoard({
         );
       }
     });
+  }
+
+  /**
+   * Submit do MarkAsLostDialog — single ou bulk dependendo do mode.
+   * Setado no lossTarget.
+   */
+  async function submitLoss(input: MarkAsLostInput) {
+    if (!lossTarget) return;
+    setLossPending(true);
+    try {
+      if (lossTarget.mode === "single") {
+        if (!actions.markDealAsLost) {
+          throw new Error("Acao indisponivel");
+        }
+        await actions.markDealAsLost(lossTarget.dealId, input);
+        setLocalDeals((prev) =>
+          prev.map((d) =>
+            d.id === lossTarget.dealId
+              ? {
+                  ...d,
+                  status: "lost",
+                  loss_reason: input.loss_reason,
+                  competitor: input.competitor ?? null,
+                  loss_note: input.loss_note ?? null,
+                }
+              : d,
+          ),
+        );
+        toast.success("Negocio marcado como perdido");
+      } else {
+        if (!actions.bulkMarkDealsAsLost) {
+          throw new Error("Acao em massa indisponivel");
+        }
+        const res = await actions.bulkMarkDealsAsLost(
+          lossTarget.dealIds,
+          input,
+        );
+        setLocalDeals((prev) =>
+          prev.map((d) =>
+            lossTarget.dealIds.includes(d.id)
+              ? {
+                  ...d,
+                  status: "lost",
+                  loss_reason: input.loss_reason,
+                  competitor: input.competitor ?? null,
+                  loss_note: input.loss_note ?? null,
+                }
+              : d,
+          ),
+        );
+        clearSelection();
+        toast.success(
+          `${res.updated_count} negocio${res.updated_count === 1 ? "" : "s"} marcado${res.updated_count === 1 ? "" : "s"} como perdido${res.updated_count === 1 ? "" : "s"}`,
+        );
+      }
+      setLossTarget(null);
+      onChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao marcar perda");
+    } finally {
+      setLossPending(false);
+    }
   }
 
   function handleDeleteDeal(dealId: string) {
@@ -804,6 +969,14 @@ export function KanbanBoard({
             assignees={assignees}
           />
 
+          {/* ====== EXPORTAR (PR-K3) ====== */}
+          <ExportMenu
+            rows={filteredDeals}
+            columns={dealExportColumns}
+            filenamePrefix="negocios"
+            sheetName="Negocios"
+          />
+
           {toolbarExtras}
           {canManagePipelines && (
             <Button
@@ -946,7 +1119,19 @@ export function KanbanBoard({
               variant="outline"
               className="h-8 rounded-md text-destructive hover:text-destructive"
               disabled={bulkPending}
-              onClick={() => setBulkConfirm({ kind: "lost" })}
+              onClick={() => {
+                if (actions.bulkMarkDealsAsLost) {
+                  // PR-K3: abre MarkAsLostDialog pra capturar motivo
+                  void loadLossReasons();
+                  setLossTarget({
+                    mode: "bulk",
+                    dealIds: Array.from(selectedIds),
+                  });
+                } else {
+                  // Fallback: comportamento antigo (sem motivo)
+                  void handleBulkSetStatus("lost");
+                }
+              }}
             >
               <X className="size-3.5" />
               Marcar perdido
@@ -1110,6 +1295,24 @@ export function KanbanBoard({
         })}
       </div>
 
+      {/* ====== MARK AS LOST DIALOG (PR-K3) ====== */}
+      <MarkAsLostDialog
+        open={lossTarget !== null}
+        onOpenChange={(o) => !o && setLossTarget(null)}
+        count={
+          lossTarget?.mode === "single"
+            ? 1
+            : (lossTarget?.dealIds.length ?? 0)
+        }
+        reasons={lossReasons}
+        onLoadReasons={loadLossReasons}
+        onConfirm={submitLoss}
+        pending={lossPending}
+        dealTitle={
+          lossTarget?.mode === "single" ? lossTarget.dealTitle : undefined
+        }
+      />
+
       {/* ====== BULK DIALOGS (PR-K2) ====== */}
       <BulkMoveDialog
         open={bulkMoveOpen}
@@ -1136,9 +1339,7 @@ export function KanbanBoard({
             <AlertDialogTitle>
               {bulkConfirm?.kind === "delete"
                 ? `Excluir ${selectedCount} negocio${selectedCount === 1 ? "" : "s"}?`
-                : bulkConfirm?.kind === "won"
-                  ? `Marcar ${selectedCount} como ganho?`
-                  : `Marcar ${selectedCount} como perdido?`}
+                : `Marcar ${selectedCount} como ganho?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {bulkConfirm?.kind === "delete"
@@ -1154,7 +1355,6 @@ export function KanbanBoard({
                 setBulkConfirm(null);
                 if (k === "delete") await handleBulkDelete();
                 else if (k === "won") await handleBulkSetStatus("won");
-                else if (k === "lost") await handleBulkSetStatus("lost");
               }}
               className={
                 bulkConfirm?.kind === "delete"
