@@ -15,10 +15,21 @@ export default async function CrmPage() {
 
   // Garante que existe pelo menos um pipeline (cria com stages padrao
   // na primeira visita). Reusa a logica shared em @persia/shared/crm.
-  let pipelines = await listPipelines({ db: supabase, orgId });
-  if (pipelines.length === 0) {
-    await ensureDefaultPipeline();
+  // HOTFIX: try/catch em volta pra nao crashar a pagina se o ensure
+  // falhar (ex: RLS bloqueando insert; admin nao logado).
+  let pipelines: Awaited<ReturnType<typeof listPipelines>> = [];
+  try {
     pipelines = await listPipelines({ db: supabase, orgId });
+    if (pipelines.length === 0) {
+      try {
+        await ensureDefaultPipeline();
+        pipelines = await listPipelines({ db: supabase, orgId });
+      } catch (err) {
+        console.error("[/crm page] ensureDefaultPipeline falhou:", err);
+      }
+    }
+  } catch (err) {
+    console.error("[/crm page] listPipelines falhou:", err);
   }
 
   if (pipelines.length === 0) {
@@ -27,58 +38,102 @@ export default async function CrmPage() {
         <h1 className="text-2xl font-bold tracking-tight font-heading">
           CRM - Funil de Vendas
         </h1>
-        <p className="text-muted-foreground">Erro ao criar pipeline. Recarregue.</p>
+        <p className="text-muted-foreground">
+          Nenhum funil disponivel. Acesse{" "}
+          <a href="/crm/settings" className="text-primary underline">
+            /crm/settings
+          </a>{" "}
+          pra configurar, ou recarregue a pagina.
+        </p>
       </div>
     );
   }
 
-  // Carrega stages, deals, leads, tags e responsaveis em paralelo. Stages
-  // usa query direta pra trazer todas as stages de TODOS os pipelines do
-  // org de uma vez (UI permite trocar de pipeline no dropdown sem refetch).
-  // tags + assignees alimentam filtros avancados + bulk apply (PR-K2).
-  const [stagesResult, dealsResult, leadsResult, tagsResult, profilesResult] =
-    await Promise.all([
-      supabase
-        .from("pipeline_stages")
-        .select("*")
-        .eq("organization_id", orgId)
-        .order("sort_order", { ascending: true }),
-      listDeals({ db: supabase, orgId }),
-      supabase
-        .from("leads")
-        .select("id, name, phone, email")
-        .eq("organization_id", orgId)
-        .order("name", { ascending: true }),
-      supabase
-        .from("tags")
-        .select("id, name, color")
-        .eq("organization_id", orgId)
-        .order("name", { ascending: true }),
-      // user_ids da org pra resolver profiles em segunda query (sem
-      // depender de FK explicita organization_members -> profiles, que
-      // o supabase nao infere automaticamente).
-      supabase
-        .from("organization_members")
-        .select("user_id")
-        .eq("organization_id", orgId)
-        .eq("is_active", true),
-    ]);
+  // Carrega dados em paralelo. HOTFIX: cada query tem try/catch proprio —
+  // antes era um Promise.all unico que crashava o page inteiro se UMA
+  // query falhasse (ex: tabela faltando, RLS, FK ausente). Agora a
+  // pagina sempre renderiza, com fallback `[]` pros dados que faltarem.
+  // Erros vao pro log do servidor pra diagnostico.
 
-  // Resolve full_name dos profiles em query separada (evita SelectQueryError
-  // do supabase quando a FK nao esta declarada)
-  const memberUserIds = ((profilesResult.data ?? []) as { user_id: string | null }[])
+  async function safeQuery<T>(
+    name: string,
+    fn: () => PromiseLike<{ data: T[] | null }>,
+  ): Promise<T[]> {
+    try {
+      const r = await fn();
+      return r.data ?? [];
+    } catch (err) {
+      console.error(`[/crm page] query "${name}" falhou:`, err);
+      return [];
+    }
+  }
+
+  const [stages, deals, leads, tags, members] = await Promise.all([
+    safeQuery<{ id: string; pipeline_id: string; name: string; color: string | null; sort_order: number }>(
+      "pipeline_stages",
+      () =>
+        supabase
+          .from("pipeline_stages")
+          .select("*")
+          .eq("organization_id", orgId)
+          .order("sort_order", { ascending: true }),
+    ),
+    (async () => {
+      try {
+        return await listDeals({ db: supabase, orgId });
+      } catch (err) {
+        console.error("[/crm page] listDeals falhou:", err);
+        return [];
+      }
+    })(),
+    safeQuery<{ id: string; name: string | null; phone: string | null; email: string | null }>(
+      "leads",
+      () =>
+        supabase
+          .from("leads")
+          .select("id, name, phone, email")
+          .eq("organization_id", orgId)
+          .order("name", { ascending: true }),
+    ),
+    safeQuery<{ id: string; name: string; color: string | null }>(
+      "tags",
+      () =>
+        supabase
+          .from("tags")
+          .select("id, name, color")
+          .eq("organization_id", orgId)
+          .order("name", { ascending: true }),
+    ),
+    safeQuery<{ user_id: string | null }>(
+      "organization_members",
+      () =>
+        supabase
+          .from("organization_members")
+          .select("user_id")
+          .eq("organization_id", orgId)
+          .eq("is_active", true),
+    ),
+  ]);
+
+  // Resolve full_name dos profiles em query separada (defensiva — se
+  // RLS bloquear, retorna [] ao inves de quebrar a pagina).
+  const memberUserIds = members
     .map((m) => m.user_id)
     .filter((id): id is string => Boolean(id));
 
   let assignees: { id: string; name: string }[] = [];
   if (memberUserIds.length > 0) {
-    const { data: profilesData } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", memberUserIds);
-    assignees = ((profilesData ?? []) as { id: string; full_name: string | null }[])
-      .map((p) => ({ id: p.id, name: p.full_name || "Sem nome" }))
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    try {
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", memberUserIds);
+      assignees = ((profilesData ?? []) as { id: string; full_name: string | null }[])
+        .map((p) => ({ id: p.id, name: p.full_name || "Sem nome" }))
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    } catch (err) {
+      console.error("[/crm page] profiles falhou:", err);
+    }
   }
 
   return (
@@ -90,10 +145,10 @@ export default async function CrmPage() {
       </div>
       <CrmClient
         pipelines={pipelines as never}
-        stages={(stagesResult.data || []) as never}
-        deals={dealsResult as never}
-        leads={(leadsResult.data || []) as never}
-        tags={(tagsResult.data || []) as never}
+        stages={stages as never}
+        deals={deals as never}
+        leads={leads as never}
+        tags={tags as never}
         assignees={assignees}
       />
     </div>
