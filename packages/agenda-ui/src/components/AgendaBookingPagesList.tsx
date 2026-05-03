@@ -3,6 +3,17 @@
 import * as React from "react";
 import { Link as LinkIcon, Loader2, Plus } from "lucide-react";
 import type { AgendaService, BookingPage } from "@persia/shared/agenda";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
+import { Button } from "@persia/ui/button";
 import { useBookingPages } from "../hooks/useBookingPages";
 import { BookingPageCard } from "./BookingPageCard";
 import { BookingPageDrawer } from "./BookingPageDrawer";
@@ -22,10 +33,14 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
   services,
   origin,
 }) => {
-  const { pages, loading, error, refresh, duplicate, remove } = useBookingPages();
+  const { pages, loading, error, refresh, duplicate, remove } =
+    useBookingPages();
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<BookingPage | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<BookingPage | null>(
+    null,
+  );
 
   const handleNew = () => {
     setEditing(null);
@@ -40,10 +55,8 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
   const handleDuplicate = async (page: BookingPage) => {
     setActionError(null);
     try {
-      // Slug "-copia" sufixo, com unique check do server
       const baseSlug = page.slug;
       let attempt = `${baseSlug}-copia`;
-      // Tenta ate 3 vezes adicionando sufixos numericos
       for (let i = 0; i < 4; i++) {
         try {
           await duplicate(page.id, attempt);
@@ -62,21 +75,21 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
     }
   };
 
-  const handleDelete = async (page: BookingPage) => {
-    if (!confirm(`Excluir "${page.title}"? Os agendamentos existentes não são afetados.`)) {
-      return;
-    }
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     setActionError(null);
     try {
-      await remove(page.id);
+      await remove(deleteTarget.id);
+      setDeleteTarget(null);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Erro ao excluir");
+      setDeleteTarget(null);
     }
   };
 
   if (loading && pages.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-3xl border border-dashed border-border bg-muted p-12 text-muted-foreground/70">
+      <div className="flex items-center justify-center rounded-md border border-dashed bg-muted/40 p-12 text-muted-foreground">
         <Loader2 size={20} className="mr-2 animate-spin" /> Carregando...
       </div>
     );
@@ -84,7 +97,7 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
 
   if (error) {
     return (
-      <div className="rounded-3xl bg-destructive/10 p-5 text-sm text-destructive ring-1 ring-destructive/30">
+      <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive ring-1 ring-destructive/30">
         {error}
       </div>
     );
@@ -93,36 +106,30 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            {pages.length} {pages.length === 1 ? "página" : "páginas"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={handleNew}
-          className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90"
-        >
-          <Plus size={14} />
+        <p className="text-sm text-muted-foreground">
+          {pages.length} {pages.length === 1 ? "página" : "páginas"}
+        </p>
+        <Button type="button" onClick={handleNew}>
+          <Plus />
           Nova página
-        </button>
+        </Button>
       </div>
 
       {actionError && (
-        <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
           {actionError}
         </div>
       )}
 
       {pages.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-border bg-muted p-12 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
+        <div className="rounded-md border border-dashed bg-muted/40 p-12 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-card text-muted-foreground shadow-sm">
             <LinkIcon size={20} />
           </div>
-          <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <p className="mt-4 text-sm font-medium text-foreground">
             Sem páginas de agendamento
           </p>
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+          <p className="mt-1 text-xs text-muted-foreground">
             Crie um link público pra leads agendarem sozinhos
           </p>
         </div>
@@ -136,7 +143,7 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
               origin={origin}
               onEdit={handleEdit}
               onDuplicate={handleDuplicate}
-              onDelete={handleDelete}
+              onDelete={(p) => setDeleteTarget(p)}
             />
           ))}
         </div>
@@ -151,6 +158,30 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
         onClose={() => setDrawerOpen(false)}
         onSaved={() => refresh()}
       />
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir página de agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget &&
+                `"${deleteTarget.title}" será removida permanentemente. Os agendamentos existentes não são afetados.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

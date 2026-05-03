@@ -4,6 +4,17 @@ import * as React from "react";
 import { Bell, Loader2, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { AgendaReminderConfig } from "@persia/shared/agenda";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
+import { Button } from "@persia/ui/button";
+import {
   ReminderConfigDrawer,
   type ExistingPayload,
 } from "./ReminderConfigDrawer";
@@ -41,6 +52,8 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
   const [editing, setEditing] = React.useState<AgendaReminderConfig | null>(
     null,
   );
+  const [deleteTarget, setDeleteTarget] =
+    React.useState<AgendaReminderConfig | null>(null);
   const [seeding, setSeeding] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
@@ -68,13 +81,15 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
     setEditing(cfg);
     setDrawerOpen(true);
   };
-  const handleDelete = async (cfg: AgendaReminderConfig) => {
-    if (!confirm(`Excluir "${cfg.name}"? Lembretes pendentes não são afetados.`)) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await actions.remove(cfg.id);
+      await actions.remove(deleteTarget.id);
+      setDeleteTarget(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao excluir");
+      setDeleteTarget(null);
     }
   };
   const handleSave = async (input: ExistingPayload) => {
@@ -213,7 +228,7 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(cfg)}
+                      onClick={() => setDeleteTarget(cfg)}
                       className="rounded-lg p-2 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                       aria-label="Excluir"
                     >
@@ -233,6 +248,30 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
         onClose={() => setDrawerOpen(false)}
         onSave={handleSave}
       />
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir lembrete?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget &&
+                `"${deleteTarget.name}" será removido. Lembretes pendentes não são afetados.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

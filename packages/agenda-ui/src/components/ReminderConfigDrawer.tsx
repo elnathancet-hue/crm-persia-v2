@@ -1,21 +1,39 @@
 "use client";
 
 import * as React from "react";
-import { Bell, Loader2, X } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import {
   type AgendaReminderConfig,
   type ReminderTriggerWhen,
   REMINDER_TEMPLATE_VARIABLES,
   renderReminderTemplate,
 } from "@persia/shared/agenda";
+import { Button } from "@persia/ui/button";
+import { Checkbox } from "@persia/ui/checkbox";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@persia/ui/sheet";
+import { Textarea } from "@persia/ui/textarea";
 
 interface ReminderConfigDrawerProps {
   open: boolean;
   existing?: AgendaReminderConfig | null;
   onClose: () => void;
-  onSave: (
-    input: ExistingPayload,
-  ) => Promise<void>;
+  onSave: (input: ExistingPayload) => Promise<void>;
 }
 
 export interface ExistingPayload {
@@ -36,6 +54,8 @@ const PRESETS_MIN: { label: string; value: number }[] = [
   { label: "2 dias antes (48h)", value: 2880 },
   { label: "1 semana antes", value: 10080 },
 ];
+
+const CUSTOM_OFFSET = "__custom__";
 
 const PREVIEW_VARS = {
   lead_name: "Carlos",
@@ -93,9 +113,12 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
   }, [name, text, triggerWhen, offset]);
 
   const isValid = Object.keys(errors).length === 0;
-  const preview = React.useMemo(() => renderReminderTemplate(text, PREVIEW_VARS), [text]);
+  const preview = React.useMemo(
+    () => renderReminderTemplate(text, PREVIEW_VARS),
+    [text],
+  );
 
-  if (!open) return null;
+  const offsetIsPreset = PRESETS_MIN.some((p) => p.value === offset);
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -118,204 +141,191 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-card shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0"
+      >
+        <SheetHeader className="border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
               <Bell size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-foreground">
+              <SheetTitle>
                 {isEdit ? "Editar lembrete" : "Novo lembrete"}
-              </h2>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              </SheetTitle>
+              <SheetDescription>
                 Mensagem automática via WhatsApp
-              </p>
+              </SheetDescription>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
-          >
-            <X size={18} />
-          </button>
-        </header>
+        </SheetHeader>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          <Field label="Nome interno" error={errors.name}>
-            <input
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          <div className="space-y-1.5">
+            <Label htmlFor="rem-name">Nome interno</Label>
+            <Input
+              id="rem-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Lembrete 24h antes"
-              className={inputCls(errors.name)}
+              aria-invalid={Boolean(errors.name)}
             />
-          </Field>
+            {errors.name && (
+              <p className="text-xs text-destructive">{errors.name}</p>
+            )}
+          </div>
 
-          <Field label="Quando enviar">
-            <select
+          <div className="space-y-1.5">
+            <Label htmlFor="rem-when">Quando enviar</Label>
+            <Select
               value={triggerWhen}
-              onChange={(e) =>
-                setTriggerWhen(e.target.value as ReminderTriggerWhen)
+              onValueChange={(v) =>
+                v && setTriggerWhen(v as ReminderTriggerWhen)
               }
-              className={inputCls()}
             >
-              <option value="on_create">Confirmação imediata (logo após o agendamento)</option>
-              <option value="before_start">Antes do horário do compromisso</option>
-            </select>
-          </Field>
+              <SelectTrigger id="rem-when" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="on_create">
+                  Confirmação imediata (logo após o agendamento)
+                </SelectItem>
+                <SelectItem value="before_start">
+                  Antes do horário do compromisso
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
           {triggerWhen === "before_start" && (
-            <Field label="Quanto tempo antes" error={errors.offset}>
-              <div className="space-y-2">
-                <select
-                  value={
-                    PRESETS_MIN.some((p) => p.value === offset) ? offset : "custom"
-                  }
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "custom") return;
-                    setOffset(Number(v));
-                  }}
-                  className={inputCls()}
-                >
+            <div className="space-y-1.5">
+              <Label htmlFor="rem-offset">Quanto tempo antes</Label>
+              <Select
+                value={offsetIsPreset ? String(offset) : CUSTOM_OFFSET}
+                onValueChange={(v) => {
+                  if (!v || v === CUSTOM_OFFSET) return;
+                  setOffset(Number(v));
+                }}
+              >
+                <SelectTrigger id="rem-offset" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
                   {PRESETS_MIN.map((p) => (
-                    <option key={p.value} value={p.value}>
+                    <SelectItem key={p.value} value={String(p.value)}>
                       {p.label}
-                    </option>
+                    </SelectItem>
                   ))}
-                  <option value="custom">Personalizado…</option>
-                </select>
-                {!PRESETS_MIN.some((p) => p.value === offset) && (
-                  <input
-                    type="number"
-                    min={5}
-                    max={10080}
-                    value={offset}
-                    onChange={(e) => setOffset(Number(e.target.value))}
-                    className={inputCls(errors.offset)}
-                    placeholder="Minutos antes"
-                  />
-                )}
-              </div>
-            </Field>
+                  <SelectItem value={CUSTOM_OFFSET}>Personalizado…</SelectItem>
+                </SelectContent>
+              </Select>
+              {!offsetIsPreset && (
+                <Input
+                  type="number"
+                  min={5}
+                  max={10080}
+                  value={offset}
+                  onChange={(e) => setOffset(Number(e.target.value))}
+                  placeholder="Minutos antes"
+                  aria-invalid={Boolean(errors.offset)}
+                />
+              )}
+              {errors.offset && (
+                <p className="text-xs text-destructive">{errors.offset}</p>
+              )}
+            </div>
           )}
 
-          <Field label="Mensagem" error={errors.text}>
-            <textarea
+          <div className="space-y-1.5">
+            <Label htmlFor="rem-text">Mensagem</Label>
+            <Textarea
+              id="rem-text"
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={6}
               placeholder="Olá {{lead_name}}! Lembrete: {{appointment_title}} às {{appointment_time}}."
-              className={inputCls(errors.text)}
+              aria-invalid={Boolean(errors.text)}
             />
-            <p className="mt-1.5 text-[10px] text-muted-foreground">
-              Variáveis disponíveis:{" "}
+            {errors.text && (
+              <p className="text-xs text-destructive">{errors.text}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Variáveis disponíveis (clique pra inserir):
+            </p>
+            <div className="flex flex-wrap gap-1">
               {REMINDER_TEMPLATE_VARIABLES.map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setText((t) => `${t}{{${v}}}`)}
-                  className="mr-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground transition hover:bg-primary/15 hover:text-primary"
+                  className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-xs text-muted-foreground transition hover:bg-primary/10 hover:text-primary hover:border-primary/30"
                 >
                   {`{{${v}}}`}
                 </button>
               ))}
-            </p>
-          </Field>
-
-          {/* Preview */}
-          <div className="rounded-xl bg-muted p-3 ring-1 ring-border">
-            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
-              Preview (com dados de exemplo)
-            </p>
-            <p className="mt-1.5 whitespace-pre-wrap text-xs text-foreground">
-              {preview || (
-                <span className="italic text-muted-foreground/70">
-                  (vazio — a mensagem aparecerá aqui)
-                </span>
-              )}
-            </p>
+            </div>
           </div>
 
-          <label className="inline-flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
+          {/* Preview */}
+          <div className="space-y-1.5">
+            <Label>Preview</Label>
+            <div className="rounded-md border bg-muted/40 p-3">
+              <p className="whitespace-pre-wrap text-sm text-foreground">
+                {preview || (
+                  <span className="italic text-muted-foreground">
+                    (vazio — a mensagem aparecerá aqui)
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="rem-active"
               checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
+              onCheckedChange={(c) => setIsActive(c === true)}
             />
-            <span className="text-sm font-bold text-foreground">
+            <Label
+              htmlFor="rem-active"
+              className="cursor-pointer font-medium"
+            >
               Ativo
-            </span>
+            </Label>
             <span className="text-xs text-muted-foreground">
               (desativado: continua salvo mas não dispara)
             </span>
-          </label>
+          </div>
 
           {error && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
-          <button
+        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+          <Button
             type="button"
+            variant="ghost"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !isValid}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
           >
-            {submitting ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Bell size={14} />
-            )}
+            {submitting ? <Loader2 className="animate-spin" /> : <Bell />}
             {submitting ? "Salvando..." : isEdit ? "Salvar" : "Criar lembrete"}
-          </button>
-        </footer>
-      </aside>
-    </div>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 };
-
-const inputCls = (error?: string) =>
-  `w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-    error
-      ? "border-destructive/50 focus:ring-destructive/30"
-      : "border-border focus:ring-primary/30"
-  }`;
-
-const Field: React.FC<{
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}> = ({ label, error, children }) => (
-  <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-      {label}
-    </label>
-    {children}
-    {error && (
-      <p className="mt-1 text-[11px] font-semibold text-destructive">{error}</p>
-    )}
-  </div>
-);
