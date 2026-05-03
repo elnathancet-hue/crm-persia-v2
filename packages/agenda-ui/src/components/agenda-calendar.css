@@ -1,10 +1,14 @@
 /* Tweaks visuais para react-big-calendar dentro do CRM Persia.
    Aplicado quando o componente AgendaCalendarView monta — o wrapper
-   tem className `agenda-rbc-wrap` para escopar. */
+   tem className `agenda-rbc-wrap` para escopar.
+
+   Usa variáveis HSL do tema (definidas em apps/crm/src/app/globals.css).
+   Light/dark adaptam automaticamente via .dark do tema. */
 
 .agenda-rbc-wrap .rbc-calendar {
   font-family: inherit;
-  color: #0f172a;
+  color: var(--foreground);
+  background-color: transparent;
 }
 
 .agenda-rbc-wrap .rbc-toolbar {
@@ -14,31 +18,35 @@
 }
 
 .agenda-rbc-wrap .rbc-toolbar button {
-  color: #475569;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  font-weight: 700;
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  border-radius: 10px;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  font-size: 12px;
+  border-radius: 6px;
   padding: 6px 12px;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .agenda-rbc-wrap .rbc-toolbar button:hover {
-  background: #e2e8f0;
+  background: var(--muted);
+  color: var(--foreground);
 }
 
 .agenda-rbc-wrap .rbc-toolbar button.rbc-active {
-  background: #4f46e5;
-  color: white;
-  border-color: #4f46e5;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.agenda-rbc-wrap .rbc-toolbar button.rbc-active:hover {
+  background: color-mix(in srgb, var(--primary) 90%, transparent);
+  color: var(--primary-foreground);
 }
 
 .agenda-rbc-wrap .rbc-toolbar-label {
-  font-weight: 800;
-  color: #0f172a;
+  font-weight: 600;
+  color: var(--foreground);
   font-size: 14px;
   text-transform: capitalize;
 }
@@ -47,34 +55,88 @@
   border-radius: 6px;
   padding: 2px 6px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .agenda-rbc-wrap .rbc-today {
-  background-color: #eef2ff;
+  background-color: color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
 .agenda-rbc-wrap .rbc-current-time-indicator {
-  background-color: #ef4444;
+  background-color: var(--destructive);
   height: 2px;
 }
 
 .agenda-rbc-wrap .rbc-header {
   padding: 8px 4px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #475569;
-  border-bottom: 1px solid #e2e8f0;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
 }
 
 .agenda-rbc-wrap .rbc-time-slot {
-  color: #94a3b8;
+  color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
   font-size: 10px;
 }
 
 .agenda-rbc-wrap .rbc-day-slot .rbc-event {
   border: none;
   border-left: 3px solid;
+}
+
+/* Bordas internas do calendar */
+.agenda-rbc-wrap .rbc-time-view,
+.agenda-rbc-wrap .rbc-month-view,
+.agenda-rbc-wrap .rbc-agenda-view {
+  border-color: var(--border);
+  background: var(--card);
+}
+
+.agenda-rbc-wrap .rbc-month-row,
+.agenda-rbc-wrap .rbc-day-bg + .rbc-day-bg,
+.agenda-rbc-wrap .rbc-time-content > * + * > *,
+.agenda-rbc-wrap .rbc-time-header-cell + .rbc-time-header-cell,
+.agenda-rbc-wrap .rbc-time-content,
+.agenda-rbc-wrap .rbc-timeslot-group,
+.agenda-rbc-wrap .rbc-time-header.rbc-overflowing,
+.agenda-rbc-wrap .rbc-time-header-content {
+  border-color: var(--border) !important;
+}
+
+/* Off-range cells (dias do mes anterior/proximo) */
+.agenda-rbc-wrap .rbc-off-range-bg {
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+
+.agenda-rbc-wrap .rbc-off-range {
+  color: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
+}
+
+/* Agenda view (lista) */
+.agenda-rbc-wrap .rbc-agenda-table {
+  background: var(--card);
+}
+
+.agenda-rbc-wrap .rbc-agenda-table tbody > tr > td {
+  border-color: var(--border);
+  padding: 8px 12px;
+}
+
+.agenda-rbc-wrap .rbc-agenda-time-cell,
+.agenda-rbc-wrap .rbc-agenda-date-cell {
+  color: var(--muted-foreground);
+}
+
+.agenda-rbc-wrap .rbc-show-more {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+/* Selection no Day/Week (drag pra criar appointment) */
+.agenda-rbc-wrap .rbc-slot-selecting {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  border: 1px dashed var(--primary);
 }

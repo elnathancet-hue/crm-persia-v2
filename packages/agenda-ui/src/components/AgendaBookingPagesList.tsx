@@ -76,7 +76,7 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
 
   if (loading && pages.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-12 text-slate-400">
+      <div className="flex items-center justify-center rounded-3xl border border-dashed border-border bg-muted p-12 text-muted-foreground/70">
         <Loader2 size={20} className="mr-2 animate-spin" /> Carregando...
       </div>
     );
@@ -84,7 +84,7 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
 
   if (error) {
     return (
-      <div className="rounded-3xl bg-rose-50 p-5 text-sm text-rose-700 ring-1 ring-rose-200">
+      <div className="rounded-3xl bg-destructive/10 p-5 text-sm text-destructive ring-1 ring-destructive/30">
         {error}
       </div>
     );
@@ -94,14 +94,14 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             {pages.length} {pages.length === 1 ? "página" : "páginas"}
           </p>
         </div>
         <button
           type="button"
           onClick={handleNew}
-          className="inline-flex items-center gap-1.5 rounded-2xl bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-200 transition hover:bg-indigo-700"
+          className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90"
         >
           <Plus size={14} />
           Nova página
@@ -109,20 +109,20 @@ export const AgendaBookingPagesList: React.FC<AgendaBookingPagesListProps> = ({
       </div>
 
       {actionError && (
-        <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+        <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
           {actionError}
         </div>
       )}
 
       {pages.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-12 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+        <div className="rounded-3xl border border-dashed border-border bg-muted p-12 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
             <LinkIcon size={20} />
           </div>
-          <p className="mt-4 text-xs font-bold uppercase tracking-widest text-slate-500">
+          <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Sem páginas de agendamento
           </p>
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+          <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
             Crie um link público pra leads agendarem sozinhos
           </p>
         </div>

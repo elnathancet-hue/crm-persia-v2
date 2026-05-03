@@ -50,16 +50,16 @@ export const AvailabilityDayRow: React.FC<AvailabilityDayRowProps> = ({
   };
 
   return (
-    <div className="flex flex-wrap items-start gap-3 border-b border-slate-100 py-3 last:border-b-0">
+    <div className="flex flex-wrap items-start gap-3 border-b border-border/50 py-3 last:border-b-0">
       <div className="flex w-44 shrink-0 items-center gap-3">
         <label className="inline-flex cursor-pointer items-center gap-2">
           <input
             type="checkbox"
             checked={day.enabled}
             onChange={handleToggle}
-            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
           />
-          <span className="text-sm font-bold text-slate-900">
+          <span className="text-sm font-bold text-foreground">
             {WEEKDAY_LABELS[day.day_of_week]}
           </span>
         </label>
@@ -67,11 +67,11 @@ export const AvailabilityDayRow: React.FC<AvailabilityDayRowProps> = ({
 
       <div className="flex flex-1 flex-wrap items-center gap-2">
         {!day.enabled ? (
-          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
             Indisponível
           </span>
         ) : day.intervals.length === 0 ? (
-          <span className="text-xs font-semibold text-slate-400">
+          <span className="text-xs font-semibold text-muted-foreground/70">
             Sem janela configurada
           </span>
         ) : (
@@ -90,7 +90,7 @@ export const AvailabilityDayRow: React.FC<AvailabilityDayRowProps> = ({
           <button
             type="button"
             onClick={handleAddInterval}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest text-indigo-600 transition hover:bg-indigo-50"
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10"
           >
             <Plus size={12} />
             Janela

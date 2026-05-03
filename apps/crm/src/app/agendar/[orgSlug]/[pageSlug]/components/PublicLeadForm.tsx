@@ -74,17 +74,17 @@ export const PublicLeadForm: React.FC<PublicLeadFormProps> = ({
         type="button"
         onClick={onBack}
         disabled={submitting}
-        className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-slate-500 transition hover:text-indigo-600"
+        className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:text-primary"
       >
         <ArrowLeft size={12} />
         Voltar
       </button>
 
-      <div className="rounded-2xl bg-indigo-50 p-4 ring-1 ring-indigo-200">
-        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700">
+      <div className="rounded-2xl bg-primary/10 p-4 ring-1 ring-primary/30">
+        <p className="text-[10px] font-black uppercase tracking-widest text-primary">
           Horário escolhido
         </p>
-        <p className="mt-1 text-sm font-bold text-indigo-950">
+        <p className="mt-1 text-sm font-bold text-primary">
           {formatTimeRange(selectedStartUtc, selectedEndUtc, timezone)}
         </p>
       </div>
@@ -132,7 +132,7 @@ export const PublicLeadForm: React.FC<PublicLeadFormProps> = ({
       </Field>
 
       {error && (
-        <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+        <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
           {error}
         </div>
       )}
@@ -140,7 +140,7 @@ export const PublicLeadForm: React.FC<PublicLeadFormProps> = ({
       <button
         type="submit"
         disabled={submitting || !isValid}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-black uppercase tracking-widest text-white shadow-md shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3 text-sm font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
       >
         {submitting ? (
           <Loader2 size={16} className="animate-spin" />
@@ -154,10 +154,10 @@ export const PublicLeadForm: React.FC<PublicLeadFormProps> = ({
 };
 
 const inputCls = (error?: string) =>
-  `w-full rounded-xl border bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 ${
+  `w-full rounded-xl border bg-card px-3 py-2.5 text-sm focus:outline-none focus:ring-2 ${
     error
-      ? "border-rose-300 focus:ring-rose-200"
-      : "border-slate-200 focus:ring-indigo-200"
+      ? "border-destructive/50 focus:ring-destructive/30"
+      : "border-border focus:ring-primary/30"
   }`;
 
 const Field: React.FC<{
@@ -166,12 +166,12 @@ const Field: React.FC<{
   children: React.ReactNode;
 }> = ({ label, error, children }) => (
   <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
       {label}
     </label>
     {children}
     {error && (
-      <p className="mt-1 text-[11px] font-semibold text-rose-600">{error}</p>
+      <p className="mt-1 text-[11px] font-semibold text-destructive">{error}</p>
     )}
   </div>
 );

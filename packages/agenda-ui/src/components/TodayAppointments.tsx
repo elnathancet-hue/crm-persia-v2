@@ -37,14 +37,14 @@ export const TodayAppointments: React.FC<TodayAppointmentsProps> = ({
 
   if (today.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-10 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+      <div className="rounded-3xl border border-dashed border-border bg-muted p-10 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
           <AlertCircle size={20} />
         </div>
-        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-slate-500">
+        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
           Nenhum agendamento hoje
         </p>
-        <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+        <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
           Aproveite pra organizar a semana
         </p>
       </div>
@@ -53,8 +53,8 @@ export const TodayAppointments: React.FC<TodayAppointmentsProps> = ({
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-700">
-        <CalendarCheck size={14} className="text-indigo-600" />
+      <div className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-foreground">
+        <CalendarCheck size={14} className="text-primary" />
         Hoje · {today.length} {today.length === 1 ? "compromisso" : "compromissos"}
       </div>
       <ul className="space-y-2">
@@ -63,13 +63,13 @@ export const TodayAppointments: React.FC<TodayAppointmentsProps> = ({
             <button
               type="button"
               onClick={() => onSelect?.(appt)}
-              className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-white p-3 text-left ring-1 ring-slate-200 transition hover:ring-indigo-300"
+              className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-card p-3 text-left ring-1 ring-border transition hover:ring-primary/40"
             >
               <div className="flex items-center gap-3">
-                <span className="rounded-xl bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700">
+                <span className="rounded-xl bg-muted px-2.5 py-1 text-xs font-black text-foreground">
                   {formatTime(appt.start_at, timezone)}
                 </span>
-                <span className="truncate text-sm font-bold text-slate-900">
+                <span className="truncate text-sm font-bold text-foreground">
                   {appt.title}
                 </span>
               </div>

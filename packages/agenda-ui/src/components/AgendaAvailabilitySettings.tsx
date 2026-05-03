@@ -80,7 +80,7 @@ export const AgendaAvailabilitySettings: React.FC = () => {
 
   if (loading && rules.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-12 text-slate-400">
+      <div className="flex items-center justify-center rounded-3xl border border-dashed border-border bg-muted p-12 text-muted-foreground/70">
         <Loader2 size={20} className="mr-2 animate-spin" /> Carregando...
       </div>
     );
@@ -88,7 +88,7 @@ export const AgendaAvailabilitySettings: React.FC = () => {
 
   if (error) {
     return (
-      <div className="rounded-3xl bg-rose-50 p-5 text-sm text-rose-700 ring-1 ring-rose-200">
+      <div className="rounded-3xl bg-destructive/10 p-5 text-sm text-destructive ring-1 ring-destructive/30">
         {error}
       </div>
     );
@@ -111,8 +111,8 @@ export const AgendaAvailabilitySettings: React.FC = () => {
     return (
       <div className="space-y-6">
         {rules.length > 0 && (
-          <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 text-xs">
-            <span className="font-semibold text-slate-700">
+          <div className="flex items-center justify-between rounded-xl bg-muted p-3 text-xs">
+            <span className="font-semibold text-foreground">
               Criando nova regra
             </span>
             <button
@@ -121,7 +121,7 @@ export const AgendaAvailabilitySettings: React.FC = () => {
                 setCreating(false);
                 if (rules[0]) setSelectedId(rules[0].id);
               }}
-              className="font-bold text-indigo-600 hover:underline"
+              className="font-bold text-primary hover:underline"
             >
               Cancelar
             </button>
@@ -135,17 +135,17 @@ export const AgendaAvailabilitySettings: React.FC = () => {
   // Sem regras e sem currentUserId → mostra placeholder
   if (rules.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-12 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+      <div className="rounded-3xl border border-dashed border-border bg-muted p-12 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
           <CalendarOff size={20} />
         </div>
-        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-slate-500">
+        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
           Nenhuma regra de disponibilidade
         </p>
         <button
           type="button"
           onClick={handleCreateNew}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
         >
           <Plus size={12} />
           Criar regra padrão
@@ -169,8 +169,8 @@ export const AgendaAvailabilitySettings: React.FC = () => {
               className={[
                 "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition",
                 r.id === selectedId
-                  ? "bg-indigo-600 text-white"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200",
+                  ? "bg-primary text-white"
+                  : "bg-muted text-foreground hover:bg-muted/80",
               ].join(" ")}
             >
               {r.name}
@@ -185,7 +185,7 @@ export const AgendaAvailabilitySettings: React.FC = () => {
         <button
           type="button"
           onClick={handleCreateNew}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-indigo-600 ring-1 ring-indigo-200 transition hover:bg-indigo-50"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-primary ring-1 ring-primary/30 transition hover:bg-primary/10"
         >
           <Plus size={12} />
           Nova regra

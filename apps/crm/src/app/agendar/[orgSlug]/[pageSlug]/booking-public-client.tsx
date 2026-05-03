@@ -63,31 +63,31 @@ export function BookingPagePublicClient({ resolved }: Props) {
   return (
     <div className="space-y-6">
       {/* Header da pagina */}
-      <header className="rounded-3xl bg-white p-6 ring-1 ring-slate-200 shadow-sm">
-        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600">
+      <header className="rounded-3xl bg-card p-6 ring-1 ring-border shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-widest text-primary">
           {organization.name}
         </p>
-        <h1 className="mt-2 text-2xl font-black text-slate-900">
+        <h1 className="mt-2 text-2xl font-black text-foreground">
           {page.title}
         </h1>
         {page.description && (
-          <p className="mt-2 text-sm text-slate-600">{page.description}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{page.description}</p>
         )}
 
-        <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-600">
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
-            <Clock size={12} className="text-slate-400" />
+            <Clock size={12} className="text-muted-foreground/70" />
             {page.duration_minutes} min
           </span>
           {page.location && (
             <span className="inline-flex items-center gap-1.5">
-              <MapPin size={12} className="text-slate-400" />
+              <MapPin size={12} className="text-muted-foreground/70" />
               {page.location}
             </span>
           )}
           {hostName && (
             <span className="inline-flex items-center gap-1.5">
-              <Calendar size={12} className="text-slate-400" />
+              <Calendar size={12} className="text-muted-foreground/70" />
               com {hostName}
             </span>
           )}
@@ -122,7 +122,7 @@ export function BookingPagePublicClient({ resolved }: Props) {
         <BookingConfirmation data={confirmation} />
       )}
 
-      <footer className="pt-4 text-center text-[10px] text-slate-400">
+      <footer className="pt-4 text-center text-[10px] text-muted-foreground/70">
         Agendamento processado por <strong>CRM Persia</strong>
       </footer>
     </div>

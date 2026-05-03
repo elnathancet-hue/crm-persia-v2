@@ -97,7 +97,7 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
   // Sem callback de busca → mostra disabled
   if (!searchLeads) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+      <div className="rounded-xl border border-dashed border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
         Busca de leads não configurada nesta tela.
       </div>
     );
@@ -108,20 +108,20 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
       {selected ? (
         <div
           className={[
-            "flex items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2",
-            invalid ? "border-rose-300" : "border-slate-200",
+            "flex items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2",
+            invalid ? "border-destructive/50" : "border-border",
           ].join(" ")}
         >
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
               <UserIcon size={14} />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-slate-900">
+              <p className="truncate text-sm font-bold text-foreground">
                 {selected.name}
               </p>
               {selected.phone && (
-                <p className="truncate text-[10px] font-semibold text-slate-500">
+                <p className="truncate text-[10px] font-semibold text-muted-foreground">
                   {selected.phone}
                 </p>
               )}
@@ -132,7 +132,7 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
             onClick={handleClear}
             disabled={disabled}
             aria-label="Remover lead"
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+            className="rounded-lg p-1 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground disabled:opacity-50"
           >
             <X size={14} />
           </button>
@@ -140,11 +140,11 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
       ) : (
         <div
           className={[
-            "flex items-center gap-2 rounded-xl border bg-white px-3 py-2",
-            invalid ? "border-rose-300" : "border-slate-200",
+            "flex items-center gap-2 rounded-xl border bg-card px-3 py-2",
+            invalid ? "border-destructive/50" : "border-border",
           ].join(" ")}
         >
-          <Search size={14} className="text-slate-400" />
+          <Search size={14} className="text-muted-foreground/70" />
           <input
             type="text"
             value={query}
@@ -156,21 +156,21 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
             disabled={disabled}
             placeholder={placeholder}
             aria-invalid={invalid}
-            className="flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+            className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70 disabled:cursor-not-allowed"
           />
         </div>
       )}
 
       {open && !selected && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-card shadow-lg">
           {query.trim().length < 2 ? (
-            <p className="px-3 py-3 text-xs text-slate-400">
+            <p className="px-3 py-3 text-xs text-muted-foreground/70">
               Digite ao menos 2 caracteres
             </p>
           ) : loading ? (
-            <p className="px-3 py-3 text-xs text-slate-400">Buscando...</p>
+            <p className="px-3 py-3 text-xs text-muted-foreground/70">Buscando...</p>
           ) : results.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-slate-400">
+            <p className="px-3 py-3 text-xs text-muted-foreground/70">
               Nenhum lead encontrado
             </p>
           ) : (
@@ -182,17 +182,17 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
                     role="option"
                     aria-selected={false}
                     onClick={() => handleSelect(lead)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-muted"
                   >
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                       <UserIcon size={12} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-900">
+                      <p className="truncate text-sm font-bold text-foreground">
                         {lead.name}
                       </p>
                       {lead.phone && (
-                        <p className="truncate text-[10px] font-semibold text-slate-500">
+                        <p className="truncate text-[10px] font-semibold text-muted-foreground">
                           {lead.phone}
                         </p>
                       )}

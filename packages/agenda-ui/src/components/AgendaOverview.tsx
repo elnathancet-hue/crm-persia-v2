@@ -29,14 +29,14 @@ interface MetricCardProps {
 }
 
 const TONE_STYLES: Record<MetricCardProps["tone"], string> = {
-  indigo: "bg-indigo-50 text-indigo-700",
+  indigo: "bg-primary/10 text-primary",
   amber: "bg-amber-50 text-amber-700",
   emerald: "bg-emerald-50 text-emerald-700",
-  rose: "bg-rose-50 text-rose-700",
+  rose: "bg-destructive/10 text-destructive",
 };
 
 const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, tone }) => (
-  <div className="rounded-3xl bg-white p-5 ring-1 ring-slate-200 shadow-sm">
+  <div className="rounded-3xl bg-card p-5 ring-1 ring-border shadow-sm">
     <div className="flex items-center gap-3">
       <div
         className={[
@@ -47,10 +47,10 @@ const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, tone }) => 
         {icon}
       </div>
       <div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
           {label}
         </p>
-        <p className="text-2xl font-black tabular-nums text-slate-900">{value}</p>
+        <p className="text-2xl font-black tabular-nums text-foreground">{value}</p>
       </div>
     </div>
   </div>
@@ -75,7 +75,7 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-3xl bg-slate-100 ring-1 ring-slate-200"
+            className="h-24 animate-pulse rounded-3xl bg-muted ring-1 ring-border"
           />
         ))}
       </div>

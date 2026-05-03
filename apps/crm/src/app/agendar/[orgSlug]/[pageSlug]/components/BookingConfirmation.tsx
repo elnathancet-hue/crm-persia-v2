@@ -34,14 +34,14 @@ export const BookingConfirmation: React.FC<BookingConfirmationProps> = ({
         </p>
       </div>
 
-      <div className="mx-auto max-w-sm space-y-2 rounded-2xl bg-white p-5 ring-1 ring-emerald-200">
-        <p className="flex items-center justify-center gap-2 text-sm font-bold capitalize text-slate-900">
+      <div className="mx-auto max-w-sm space-y-2 rounded-2xl bg-card p-5 ring-1 ring-emerald-200">
+        <p className="flex items-center justify-center gap-2 text-sm font-bold capitalize text-foreground">
           <CalendarCheck size={14} className="text-emerald-600" />
           {formatWeekday(data.start_at, data.timezone)}
           {" · "}
           {formatDate(data.start_at, data.timezone)}
         </p>
-        <p className="flex items-center justify-center gap-2 text-sm font-semibold text-slate-700">
+        <p className="flex items-center justify-center gap-2 text-sm font-semibold text-foreground">
           <Clock size={14} className="text-emerald-600" />
           {formatTimeRange(data.start_at, data.end_at, data.timezone)}
         </p>

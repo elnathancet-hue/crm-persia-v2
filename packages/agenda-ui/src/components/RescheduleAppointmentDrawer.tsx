@@ -109,20 +109,20 @@ export const RescheduleAppointmentDrawer: React.FC<
       aria-modal="true"
     >
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-5">
+      <aside className="relative flex h-full w-full max-w-md flex-col bg-card shadow-2xl">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
               <CalendarClock size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">Reagendar</h2>
-              <p className="truncate text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <h2 className="text-lg font-black text-foreground">Reagendar</h2>
+              <p className="truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 {appointment.title}
               </p>
             </div>
@@ -131,53 +131,53 @@ export const RescheduleAppointmentDrawer: React.FC<
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
           >
             <X size={18} />
           </button>
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-            <p className="font-bold text-slate-700">Horário atual</p>
+          <div className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+            <p className="font-bold text-foreground">Horário atual</p>
             <p className="mt-0.5">
               {formatTimeRange(appointment.start_at, appointment.end_at, tz)}
             </p>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
               Novo início
             </label>
             <input
               type="datetime-local"
               value={startLocal}
               onChange={(e) => setStartLocal(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
               Novo término
             </label>
             <input
               type="datetime-local"
               value={endLocal}
               onChange={(e) => setEndLocal(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
           {agendaUsers.length > 0 && (
             <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 Responsável (opcional — mudar)
               </label>
               <select
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 {agendaUsers.map((u) => (
                   <option key={u.id} value={u.id}>
@@ -188,7 +188,7 @@ export const RescheduleAppointmentDrawer: React.FC<
             </div>
           )}
 
-          <p className="rounded-xl bg-indigo-50 p-3 text-[11px] text-indigo-900 ring-1 ring-indigo-200">
+          <p className="rounded-xl bg-primary/10 p-3 text-[11px] text-primary ring-1 ring-primary/30">
             <strong>Como funciona:</strong> o agendamento atual fica marcado como
             "Reagendado" (audit) e um novo é criado no horário escolhido,
             esperando confirmação.
@@ -201,18 +201,18 @@ export const RescheduleAppointmentDrawer: React.FC<
           )}
 
           {error && (
-            <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+            <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white p-5">
+        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
           </button>
