@@ -12,9 +12,11 @@ interface BookingPageStatusBadgeProps {
 }
 
 const STATUS_CLASSES: Record<BookingPageStatus, string> = {
-  draft: "bg-amber-100 text-amber-800 ring-amber-200",
-  active: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-  inactive: "bg-slate-100 text-slate-700 ring-slate-200",
+  draft:
+    "bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30",
+  active:
+    "bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30",
+  inactive: "bg-muted text-muted-foreground ring-border",
 };
 
 export const BookingPageStatusBadge: React.FC<BookingPageStatusBadgeProps> = ({
@@ -24,7 +26,7 @@ export const BookingPageStatusBadge: React.FC<BookingPageStatusBadgeProps> = ({
   return (
     <span
       className={[
-        "inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ring-1 ring-inset",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset",
         STATUS_CLASSES[status],
         className,
       ].join(" ")}

@@ -120,22 +120,22 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-5">
+      <aside className="relative flex h-full w-full max-w-lg flex-col bg-card shadow-2xl">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <Bell size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">
+              <h2 className="text-lg font-black text-foreground">
                 {isEdit ? "Editar lembrete" : "Novo lembrete"}
               </h2>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Mensagem automática via WhatsApp
               </p>
             </div>
@@ -144,7 +144,7 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
           >
             <X size={18} />
           </button>
@@ -218,14 +218,14 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
               placeholder="Olá {{lead_name}}! Lembrete: {{appointment_title}} às {{appointment_time}}."
               className={inputCls(errors.text)}
             />
-            <p className="mt-1.5 text-[10px] text-slate-500">
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
               Variáveis disponíveis:{" "}
               {REMINDER_TEMPLATE_VARIABLES.map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setText((t) => `${t}{{${v}}}`)}
-                  className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 transition hover:bg-indigo-100 hover:text-indigo-700"
+                  className="mr-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground transition hover:bg-primary/15 hover:text-primary"
                 >
                   {`{{${v}}}`}
                 </button>
@@ -234,13 +234,13 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
           </Field>
 
           {/* Preview */}
-          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+          <div className="rounded-xl bg-muted p-3 ring-1 ring-border">
+            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
               Preview (com dados de exemplo)
             </p>
-            <p className="mt-1.5 whitespace-pre-wrap text-xs text-slate-700">
+            <p className="mt-1.5 whitespace-pre-wrap text-xs text-foreground">
               {preview || (
-                <span className="italic text-slate-400">
+                <span className="italic text-muted-foreground/70">
                   (vazio — a mensagem aparecerá aqui)
                 </span>
               )}
@@ -252,29 +252,29 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
               type="checkbox"
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
             />
-            <span className="text-sm font-bold text-slate-900">
+            <span className="text-sm font-bold text-foreground">
               Ativo
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-muted-foreground">
               (desativado: continua salvo mas não dispara)
             </span>
           </label>
 
           {error && (
-            <div className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+            <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white p-5">
+        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -282,7 +282,7 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !isValid}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
           >
             {submitting ? (
               <Loader2 size={14} className="animate-spin" />
@@ -298,10 +298,10 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
 };
 
 const inputCls = (error?: string) =>
-  `w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+  `w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
     error
-      ? "border-rose-300 focus:ring-rose-200"
-      : "border-slate-200 focus:ring-indigo-200"
+      ? "border-destructive/50 focus:ring-destructive/30"
+      : "border-border focus:ring-primary/30"
   }`;
 
 const Field: React.FC<{
@@ -310,12 +310,12 @@ const Field: React.FC<{
   children: React.ReactNode;
 }> = ({ label, error, children }) => (
   <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
       {label}
     </label>
     {children}
     {error && (
-      <p className="mt-1 text-[11px] font-semibold text-rose-600">{error}</p>
+      <p className="mt-1 text-[11px] font-semibold text-destructive">{error}</p>
     )}
   </div>
 );

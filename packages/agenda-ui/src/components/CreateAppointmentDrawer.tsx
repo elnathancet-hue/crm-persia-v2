@@ -148,20 +148,20 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
       <div
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-white shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-white p-5">
+      <aside className="relative flex h-full w-full max-w-lg flex-col bg-card shadow-2xl">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
               <CalendarPlus size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900">Novo</h2>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <h2 className="text-lg font-black text-foreground">Novo</h2>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                 Adicionar à agenda
               </p>
             </div>
@@ -170,7 +170,7 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
             type="button"
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
           >
             <X size={18} />
           </button>
@@ -192,18 +192,18 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
           )}
 
           {error && (
-            <div className="mt-5 rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+            <div className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white p-5">
+        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
           <button
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-100 disabled:opacity-50"
+            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -211,7 +211,7 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
           >
             <CalendarPlus size={14} />
             {submitting ? "Criando..." : "Criar"}

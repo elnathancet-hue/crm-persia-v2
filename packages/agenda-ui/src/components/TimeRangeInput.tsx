@@ -22,8 +22,8 @@ export const TimeRangeInput: React.FC<TimeRangeInputProps> = ({
   return (
     <div
       className={[
-        "flex items-center gap-2 rounded-xl border bg-white px-2 py-1.5",
-        invalid ? "border-rose-300" : "border-slate-200",
+        "flex items-center gap-2 rounded-xl border bg-card px-2 py-1.5",
+        invalid ? "border-destructive/50" : "border-border",
       ].join(" ")}
     >
       <input
@@ -31,22 +31,22 @@ export const TimeRangeInput: React.FC<TimeRangeInputProps> = ({
         value={start}
         onChange={(e) => onChange(e.target.value, end)}
         aria-label="Início"
-        className="bg-transparent text-sm font-bold tabular-nums text-slate-900 outline-none"
+        className="bg-transparent text-sm font-bold tabular-nums text-foreground outline-none"
       />
-      <span className="text-xs font-bold text-slate-400">—</span>
+      <span className="text-xs font-bold text-muted-foreground/70">—</span>
       <input
         type="time"
         value={end}
         onChange={(e) => onChange(start, e.target.value)}
         aria-label="Término"
-        className="bg-transparent text-sm font-bold tabular-nums text-slate-900 outline-none"
+        className="bg-transparent text-sm font-bold tabular-nums text-foreground outline-none"
       />
       {onRemove && (
         <button
           type="button"
           onClick={onRemove}
           aria-label="Remover janela"
-          className="ml-1 rounded-lg p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+          className="ml-1 rounded-lg p-1 text-muted-foreground/70 transition hover:bg-destructive/10 hover:text-destructive"
         >
           <Trash2 size={12} />
         </button>

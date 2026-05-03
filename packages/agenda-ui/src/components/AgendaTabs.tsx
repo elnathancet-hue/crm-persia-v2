@@ -3,7 +3,6 @@
 import * as React from "react";
 import {
   CalendarDays,
-  CheckSquare,
   Clock as ClockIcon,
   LayoutGrid,
   Link as LinkIcon,
@@ -52,7 +51,7 @@ export const AgendaTabs: React.FC<AgendaTabsProps> = ({
     <nav
       role="tablist"
       aria-label="Seções da Agenda"
-      className="flex flex-wrap items-center gap-1 rounded-2xl bg-slate-100 p-1"
+      className="flex flex-wrap items-center gap-1 rounded-md border bg-muted/40 p-1"
     >
       {visible.map((tab) => {
         const Icon = tab.icon;
@@ -65,10 +64,10 @@ export const AgendaTabs: React.FC<AgendaTabsProps> = ({
             aria-selected={isActive}
             onClick={() => onChange(tab.id)}
             className={[
-              "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-black uppercase tracking-widest transition",
+              "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               isActive
-                ? "bg-white text-indigo-600 shadow-sm"
-                : "text-slate-500 hover:text-slate-900",
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
             ].join(" ")}
           >
             <Icon size={14} />

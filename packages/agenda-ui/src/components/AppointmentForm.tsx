@@ -172,8 +172,8 @@ export const AppointmentForm = React.forwardRef<
 
   const fieldErrorClass = (field: keyof AppointmentFormValues) =>
     touched[field] && errors[field]
-      ? "border-rose-300 focus:ring-rose-200"
-      : "border-slate-200 focus:ring-indigo-200";
+      ? "border-destructive/50 focus:ring-destructive/30"
+      : "border-border focus:ring-primary/30";
 
   return (
     <div className="space-y-5">
@@ -183,7 +183,7 @@ export const AppointmentForm = React.forwardRef<
           <select
             value={values.kind}
             onChange={(e) => update("kind", e.target.value as AppointmentKind)}
-            className={`w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("kind")}`}
+            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("kind")}`}
           >
             <option value="appointment">{APPOINTMENT_KIND_LABELS.appointment}</option>
             <option value="event">{APPOINTMENT_KIND_LABELS.event}</option>
@@ -207,7 +207,7 @@ export const AppointmentForm = React.forwardRef<
                 ? "Ex: Reunião de equipe"
                 : "Ex: Consulta inicial — Carlos"
           }
-          className={`w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("title")}`}
+          className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("title")}`}
         />
       </Field>
 
@@ -228,7 +228,7 @@ export const AppointmentForm = React.forwardRef<
           <select
             value={values.service_id ?? ""}
             onChange={(e) => handleServiceChange(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             <option value="">— Sem serviço —</option>
             {services
@@ -251,7 +251,7 @@ export const AppointmentForm = React.forwardRef<
             onChange={(e) => update("start_local", e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, start_local: true }))}
             aria-invalid={Boolean(touched.start_local && errors.start_local)}
-            className={`w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("start_local")}`}
+            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("start_local")}`}
           />
         </Field>
         <Field label="Término" error={touched.end_local ? errors.end_local : undefined}>
@@ -261,7 +261,7 @@ export const AppointmentForm = React.forwardRef<
             onChange={(e) => update("end_local", e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, end_local: true }))}
             aria-invalid={Boolean(touched.end_local && errors.end_local)}
-            className={`w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("end_local")}`}
+            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("end_local")}`}
           />
         </Field>
       </div>
@@ -274,7 +274,7 @@ export const AppointmentForm = React.forwardRef<
             onChange={(e) => update("user_id", e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, user_id: true }))}
             aria-invalid={Boolean(touched.user_id && errors.user_id)}
-            className={`w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("user_id")}`}
+            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("user_id")}`}
           >
             <option value="">— Selecione —</option>
             {users.map((u) => (
@@ -285,7 +285,7 @@ export const AppointmentForm = React.forwardRef<
             ))}
           </select>
         ) : (
-          <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          <p className="rounded-xl border border-dashed border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
             Você (responsável padrão).
           </p>
         )}
@@ -298,7 +298,7 @@ export const AppointmentForm = React.forwardRef<
             <select
               value={values.channel}
               onChange={(e) => update("channel", e.target.value as AppointmentChannel | "")}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               <option value="">— Selecione —</option>
               {APPOINTMENT_CHANNELS.map((ch) => (
@@ -316,7 +316,7 @@ export const AppointmentForm = React.forwardRef<
                 value={values.location}
                 onChange={(e) => update("location", e.target.value)}
                 placeholder="Endereço, sala, etc."
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </Field>
           )}
@@ -330,7 +330,7 @@ export const AppointmentForm = React.forwardRef<
                 onBlur={() => setTouched((t) => ({ ...t, meeting_url: true }))}
                 aria-invalid={Boolean(touched.meeting_url && errors.meeting_url)}
                 placeholder="https://meet.google.com/..."
-                className={`w-full rounded-xl border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("meeting_url")}`}
+                className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("meeting_url")}`}
               />
             </Field>
           )}
@@ -343,7 +343,7 @@ export const AppointmentForm = React.forwardRef<
           value={values.description}
           onChange={(e) => update("description", e.target.value)}
           rows={3}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+          className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           placeholder="Adicione contexto, lembrete ou observação..."
         />
       </Field>
@@ -359,12 +359,12 @@ interface FieldProps {
 
 const Field: React.FC<FieldProps> = ({ label, error, children }) => (
   <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
       {label}
     </label>
     {children}
     {error && (
-      <p className="mt-1 text-[11px] font-semibold text-rose-600">{error}</p>
+      <p className="mt-1 text-[11px] font-semibold text-destructive">{error}</p>
     )}
   </div>
 );

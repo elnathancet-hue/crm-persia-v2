@@ -54,14 +54,14 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
   };
 
   return (
-    <div className="rounded-3xl bg-white p-5 ring-1 ring-slate-200 shadow-sm transition hover:shadow-md">
+    <div className="rounded-3xl bg-card p-5 ring-1 ring-border shadow-sm transition hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="truncate text-sm font-bold text-slate-900">
+          <h4 className="truncate text-sm font-bold text-foreground">
             {page.title}
           </h4>
           {page.description && (
-            <p className="mt-0.5 line-clamp-2 text-[11px] text-slate-500">
+            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
               {page.description}
             </p>
           )}
@@ -69,11 +69,11 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
         <BookingPageStatusBadge status={page.status} />
       </div>
 
-      <div className="mt-4 space-y-1.5 text-[11px] text-slate-600">
+      <div className="mt-4 space-y-1.5 text-[11px] text-muted-foreground">
         <p>
           <span className="font-bold">Duração:</span> {page.duration_minutes} min
           {page.buffer_minutes > 0 && (
-            <span className="text-slate-400">
+            <span className="text-muted-foreground/70">
               {" "}
               · buffer {page.buffer_minutes} min
             </span>
@@ -90,12 +90,12 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
       </div>
 
       {/* URL preview + copy */}
-      <div className="mt-4 rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200">
-        <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">
+      <div className="mt-4 rounded-xl bg-muted p-3 ring-1 ring-border">
+        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
           URL pública
         </p>
         <div className="mt-1.5 flex items-center justify-between gap-2">
-          <code className="truncate text-[11px] font-mono text-slate-700">
+          <code className="truncate text-[11px] font-mono text-foreground">
             {url}
           </code>
           <div className="flex shrink-0 items-center gap-1">
@@ -103,7 +103,7 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
               type="button"
               onClick={handleCopy}
               aria-label="Copiar URL"
-              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white hover:text-indigo-600"
+              className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-card hover:text-primary"
             >
               {copied ? (
                 <CheckCircle2 size={12} className="text-emerald-600" />
@@ -117,7 +117,7 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Abrir página"
-                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white hover:text-indigo-600"
+                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-card hover:text-primary"
               >
                 <ExternalLink size={12} />
               </a>
@@ -131,7 +131,7 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
           <button
             type="button"
             onClick={() => onDuplicate(page)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-600 transition hover:bg-slate-100"
+            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted"
           >
             <Copy size={11} />
             Duplicar
@@ -141,7 +141,7 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
           <button
             type="button"
             onClick={() => onEdit(page)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 transition hover:bg-indigo-50"
+            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10"
           >
             <Pencil size={11} />
             Editar
@@ -151,7 +151,7 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
           <button
             type="button"
             onClick={() => onDelete(page)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-rose-600 transition hover:bg-rose-50"
+            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-destructive transition hover:bg-destructive/10"
           >
             <Trash2 size={11} />
             Excluir

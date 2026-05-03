@@ -24,7 +24,7 @@ const OPTIONS: OptionDef[] = [
     label: "Agendamento",
     description: "Compromisso com lead",
     icon: Calendar,
-    tone: "text-indigo-600 bg-indigo-50",
+    tone: "text-primary bg-primary/10",
   },
   {
     kind: "event",
@@ -38,7 +38,7 @@ const OPTIONS: OptionDef[] = [
     label: "Bloqueio",
     description: "Folga, almoço ou indisponibilidade",
     icon: Coffee,
-    tone: "text-slate-600 bg-slate-100",
+    tone: "text-muted-foreground bg-muted",
   },
 ];
 
@@ -83,7 +83,7 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-2xl bg-indigo-600 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-200 transition hover:bg-indigo-700"
+        className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90"
       >
         <Plus size={14} />
         Novo
@@ -92,7 +92,7 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg"
+          className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-2xl border border-border bg-card shadow-lg"
         >
           <ul>
             {visible.map((opt) => {
@@ -103,7 +103,7 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
                     type="button"
                     role="menuitem"
                     onClick={() => handlePick(opt.kind)}
-                    className="flex w-full items-start gap-3 px-3 py-3 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-start gap-3 px-3 py-3 text-left transition hover:bg-muted"
                   >
                     <div
                       className={[
@@ -114,10 +114,10 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
                       <Icon size={16} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-900">
+                      <p className="text-sm font-bold text-foreground">
                         {opt.label}
                       </p>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-muted-foreground">
                         {opt.description}
                       </p>
                     </div>

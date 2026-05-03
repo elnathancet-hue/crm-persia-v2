@@ -115,14 +115,14 @@ export const WeeklyAvailabilityEditor: React.FC<
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </Field>
         <Field label="Fuso horário">
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             {COMMON_TIMEZONES.map((tz) => (
               <option key={tz} value={tz}>
@@ -140,7 +140,7 @@ export const WeeklyAvailabilityEditor: React.FC<
             onChange={(e) =>
               setDefaultDuration(Number(e.target.value))
             }
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </Field>
       </div>
@@ -150,21 +150,21 @@ export const WeeklyAvailabilityEditor: React.FC<
           type="checkbox"
           checked={isDefault}
           onChange={(e) => setIsDefault(e.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+          className="h-4 w-4 rounded border-input text-primary focus:ring-ring"
         />
-        <span className="text-sm font-bold text-slate-900">
+        <span className="text-sm font-bold text-foreground">
           Marcar como regra padrão
         </span>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-muted-foreground">
           (a regra padrão é usada pra calcular slots no booking público)
         </span>
       </label>
 
       <section>
-        <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+        <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
           Janela semanal
         </h3>
-        <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+        <div className="rounded-2xl bg-card p-4 ring-1 ring-border">
           {days.map((d, idx) => (
             <AvailabilityDayRow
               key={d.day_of_week}
@@ -176,7 +176,7 @@ export const WeeklyAvailabilityEditor: React.FC<
       </section>
 
       {error && (
-        <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
+        <p className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
           {error}
         </p>
       )}
@@ -191,7 +191,7 @@ export const WeeklyAvailabilityEditor: React.FC<
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? (
             <Loader2 size={14} className="animate-spin" />
@@ -210,7 +210,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({
   children,
 }) => (
   <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-600">
+    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
       {label}
     </label>
     {children}

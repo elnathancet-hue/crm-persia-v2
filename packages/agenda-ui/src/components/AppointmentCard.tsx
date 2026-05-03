@@ -37,16 +37,16 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
       type="button"
       onClick={handleClick}
       className={[
-        "group flex w-full flex-col gap-3 rounded-2xl bg-white p-4 text-left ring-1 ring-slate-200 shadow-sm transition hover:shadow-md hover:ring-indigo-300",
+        "group flex w-full flex-col gap-3 rounded-2xl bg-card p-4 text-left ring-1 ring-border shadow-sm transition hover:shadow-md hover:ring-primary/40",
         className,
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h4 className="truncate text-sm font-bold text-slate-900">
+          <h4 className="truncate text-sm font-bold text-foreground">
             {appointment.title}
           </h4>
-          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
             <Clock size={12} className="shrink-0" />
             {timeRange}
           </p>
@@ -54,16 +54,16 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
         <AppointmentStatusBadge status={appointment.status} />
       </div>
 
-      <div className="space-y-1.5 text-[11px] text-slate-600">
+      <div className="space-y-1.5 text-[11px] text-muted-foreground">
         {appointment.location && (
           <p className="flex items-center gap-1.5">
-            <MapPin size={11} className="shrink-0 text-slate-400" />
+            <MapPin size={11} className="shrink-0 text-muted-foreground/70" />
             <span className="truncate">{appointment.location}</span>
           </p>
         )}
         {appointment.lead_id && showActions && onOpenLead && (
           <p className="flex items-center gap-1.5">
-            <User size={11} className="shrink-0 text-slate-400" />
+            <User size={11} className="shrink-0 text-muted-foreground/70" />
             <span
               role="link"
               tabIndex={0}
@@ -77,7 +77,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
                   onOpenLead(appointment.lead_id!);
                 }
               }}
-              className="font-semibold text-indigo-600 hover:underline focus:underline focus:outline-none"
+              className="font-semibold text-primary hover:underline focus:underline focus:outline-none"
             >
               Abrir lead
             </span>
@@ -85,7 +85,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
         )}
         {appointment.channel === "phone" && (
           <p className="flex items-center gap-1.5">
-            <Phone size={11} className="shrink-0 text-slate-400" />
+            <Phone size={11} className="shrink-0 text-muted-foreground/70" />
             <span>Telefone</span>
           </p>
         )}
