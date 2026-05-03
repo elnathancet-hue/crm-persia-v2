@@ -1,11 +1,26 @@
 "use client";
 
 import * as React from "react";
-import { CalendarClock, X } from "lucide-react";
+import { CalendarClock } from "lucide-react";
+import { type Appointment, formatTimeRange } from "@persia/shared/agenda";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import {
-  type Appointment,
-  formatTimeRange,
-} from "@persia/shared/agenda";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@persia/ui/sheet";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 import { localToUtcIso } from "./CreateAppointmentDrawer";
 
@@ -47,7 +62,6 @@ export const RescheduleAppointmentDrawer: React.FC<
   const [endLocal, setEndLocal] = React.useState(initialEnd);
   const [userId, setUserId] = React.useState(appointment?.user_id ?? "");
 
-  // Sincroniza quando appointment muda
   React.useEffect(() => {
     if (appointment) {
       setStartLocal(isoToLocalInput(appointment.start_at, tz));
@@ -58,9 +72,10 @@ export const RescheduleAppointmentDrawer: React.FC<
     }
   }, [appointment, tz]);
 
-  if (!appointment) return null;
+  const open = appointment !== null;
 
   const formError = (() => {
+    if (!appointment) return null;
     if (!startLocal || !endLocal) return "Início e término obrigatórios";
     if (new Date(endLocal).getTime() <= new Date(startLocal).getTime())
       return "Término deve ser após o início";
@@ -68,11 +83,13 @@ export const RescheduleAppointmentDrawer: React.FC<
   })();
 
   const sameAsCurrent =
+    appointment !== null &&
     startLocal === initialStart &&
     endLocal === initialEnd &&
     userId === appointment.user_id;
 
   const handleSubmit = async () => {
+    if (!appointment) return;
     setError(null);
     setConflict(null);
     if (formError) {
@@ -103,130 +120,116 @@ export const RescheduleAppointmentDrawer: React.FC<
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex justify-end"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-card shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-md overflow-hidden flex flex-col p-0"
+      >
+        <SheetHeader className="border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
               <CalendarClock size={18} />
             </div>
-            <div>
-              <h2 className="text-lg font-black text-foreground">Reagendar</h2>
-              <p className="truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                {appointment.title}
-              </p>
+            <div className="min-w-0">
+              <SheetTitle>Reagendar</SheetTitle>
+              <SheetDescription className="truncate">
+                {appointment?.title ?? ""}
+              </SheetDescription>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
-          >
-            <X size={18} />
-          </button>
-        </header>
+        </SheetHeader>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          <div className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-            <p className="font-bold text-foreground">Horário atual</p>
-            <p className="mt-0.5">
-              {formatTimeRange(appointment.start_at, appointment.end_at, tz)}
-            </p>
-          </div>
+          {appointment && (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="text-xs font-medium text-muted-foreground">
+                Horário atual
+              </p>
+              <p className="mt-0.5 font-medium text-foreground">
+                {formatTimeRange(appointment.start_at, appointment.end_at, tz)}
+              </p>
+            </div>
+          )}
 
-          <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              Novo início
-            </label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="reschedule-start">Novo início</Label>
+            <Input
+              id="reschedule-start"
               type="datetime-local"
               value={startLocal}
               onChange={(e) => setStartLocal(e.target.value)}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              Novo término
-            </label>
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="reschedule-end">Novo término</Label>
+            <Input
+              id="reschedule-end"
               type="datetime-local"
               value={endLocal}
               onChange={(e) => setEndLocal(e.target.value)}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
           {agendaUsers.length > 0 && (
-            <div>
-              <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Responsável (opcional — mudar)
-              </label>
-              <select
+            <div className="space-y-2">
+              <Label htmlFor="reschedule-user">Responsável</Label>
+              <Select
                 value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                onValueChange={(v) => setUserId(v ?? "")}
               >
-                {agendaUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="reschedule-user" className="w-full">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agendaUsers.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
-          <p className="rounded-xl bg-primary/10 p-3 text-[11px] text-primary ring-1 ring-primary/30">
-            <strong>Como funciona:</strong> o agendamento atual fica marcado como
-            "Reagendado" (audit) e um novo é criado no horário escolhido,
-            esperando confirmação.
+          <p className="rounded-md bg-primary/10 p-3 text-sm text-primary ring-1 ring-primary/30">
+            <strong>Como funciona:</strong> o agendamento atual fica marcado
+            como &quot;Reagendado&quot; (audit) e um novo é criado no horário
+            escolhido, esperando confirmação.
           </p>
 
           {conflict && (
-            <div className="rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+            <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
               ⚠ {conflict}
             </div>
           )}
 
           {error && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
-          <button
+        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+          <Button
             type="button"
+            variant="ghost"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={handleSubmit}
             disabled={submitting || sameAsCurrent || Boolean(formError)}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-amber-200 transition hover:bg-amber-700 disabled:opacity-50"
           >
-            <CalendarClock size={14} />
+            <CalendarClock />
             {submitting ? "Reagendando..." : "Confirmar"}
-          </button>
-        </footer>
-      </aside>
-    </div>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 };

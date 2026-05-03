@@ -9,6 +9,16 @@ import {
   APPOINTMENT_CHANNEL_LABELS,
   APPOINTMENT_KIND_LABELS,
 } from "@persia/shared/agenda";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
+import { Textarea } from "@persia/ui/textarea";
 import { useAgendaCallbacks } from "../context";
 import type { LeadOption } from "../actions";
 import { LeadSearchSelect } from "./LeadSearchSelect";
@@ -30,15 +40,10 @@ export interface AppointmentFormValues {
 }
 
 interface AppointmentFormProps {
-  /** Estado inicial. Quando undefined = modo "criar" com defaults. */
   initial?: Partial<AppointmentFormValues>;
-  /** Servicos disponiveis (carregados pela parent). */
   services: readonly AgendaService[];
-  /** Lead pre-selecionado pra mostrar nome (criacao a partir de /leads/[id]). */
   initialLead?: LeadOption | null;
-  /** Esconde o seletor de kind (ex: na criacao especifica de evento ou block). */
   fixedKind?: AppointmentKind;
-  /** Mostra so os campos compativeis com o tipo (event/block escondem lead). */
   onValuesChange?: (values: AppointmentFormValues, isValid: boolean) => void;
 }
 
@@ -48,6 +53,9 @@ export interface AppointmentFormHandle {
 }
 
 const DEFAULT_TZ = "America/Sao_Paulo";
+
+// Sentinela pra Select shadcn — base-ui nao aceita value="" como item.
+const NO_SELECTION = "__none__";
 
 function defaultStartLocal(): string {
   const d = new Date();
@@ -136,7 +144,6 @@ export const AppointmentForm = React.forwardRef<
     ref,
     () => ({
       submit: () => {
-        // Marca tudo como touched pra mostrar erros
         setTouched({
           title: true,
           start_local: true,
@@ -155,13 +162,12 @@ export const AppointmentForm = React.forwardRef<
     val: AppointmentFormValues[K],
   ) => setValues((prev) => ({ ...prev, [key]: val }));
 
-  const handleServiceChange = (id: string) => {
-    if (id === "") {
+  const handleServiceChange = (id: string | null) => {
+    if (!id || id === NO_SELECTION) {
       update("service_id", null);
       return;
     }
     update("service_id", id);
-    // Auto-preenche duracao baseado no servico
     const svc = services.find((s) => s.id === id);
     if (svc && values.start_local) {
       const newEnd = new Date(values.start_local);
@@ -170,31 +176,39 @@ export const AppointmentForm = React.forwardRef<
     }
   };
 
-  const fieldErrorClass = (field: keyof AppointmentFormValues) =>
-    touched[field] && errors[field]
-      ? "border-destructive/50 focus:ring-destructive/30"
-      : "border-border focus:ring-primary/30";
-
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Tipo (kind) — escondido se fixedKind */}
       {!fixedKind && (
-        <Field label="Tipo">
-          <select
+        <div className="space-y-1.5">
+          <Label htmlFor="appt-kind">Tipo</Label>
+          <Select
             value={values.kind}
-            onChange={(e) => update("kind", e.target.value as AppointmentKind)}
-            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("kind")}`}
+            onValueChange={(v) => update("kind", v as AppointmentKind)}
           >
-            <option value="appointment">{APPOINTMENT_KIND_LABELS.appointment}</option>
-            <option value="event">{APPOINTMENT_KIND_LABELS.event}</option>
-            <option value="block">{APPOINTMENT_KIND_LABELS.block}</option>
-          </select>
-        </Field>
+            <SelectTrigger id="appt-kind" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="appointment">
+                {APPOINTMENT_KIND_LABELS.appointment}
+              </SelectItem>
+              <SelectItem value="event">
+                {APPOINTMENT_KIND_LABELS.event}
+              </SelectItem>
+              <SelectItem value="block">
+                {APPOINTMENT_KIND_LABELS.block}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
       {/* Titulo */}
-      <Field label="Título" error={touched.title ? errors.title : undefined}>
-        <input
+      <div className="space-y-1.5">
+        <Label htmlFor="appt-title">Título</Label>
+        <Input
+          id="appt-title"
           type="text"
           value={values.title}
           onChange={(e) => update("title", e.target.value)}
@@ -207,164 +221,197 @@ export const AppointmentForm = React.forwardRef<
                 ? "Ex: Reunião de equipe"
                 : "Ex: Consulta inicial — Carlos"
           }
-          className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("title")}`}
         />
-      </Field>
+        {touched.title && errors.title && (
+          <p className="text-xs text-destructive">{errors.title}</p>
+        )}
+      </div>
 
       {/* Lead (so pra appointment) */}
       {values.kind === "appointment" && (
-        <Field label="Lead (opcional)">
+        <div className="space-y-1.5">
+          <Label>Lead (opcional)</Label>
           <LeadSearchSelect
             value={values.lead_id}
             onChange={(id) => update("lead_id", id)}
             initialSelected={initialLead}
           />
-        </Field>
+        </div>
       )}
 
       {/* Servico (so pra appointment) */}
       {values.kind === "appointment" && services.length > 0 && (
-        <Field label="Serviço (opcional — preenche duração)">
-          <select
-            value={values.service_id ?? ""}
-            onChange={(e) => handleServiceChange(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        <div className="space-y-1.5">
+          <Label htmlFor="appt-service">
+            Serviço{" "}
+            <span className="text-muted-foreground">(preenche duração)</span>
+          </Label>
+          <Select
+            value={values.service_id ?? NO_SELECTION}
+            onValueChange={(v) => handleServiceChange(v ?? NO_SELECTION)}
           >
-            <option value="">— Sem serviço —</option>
-            {services
-              .filter((s) => s.is_active)
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.duration_minutes} min)
-                </option>
-              ))}
-          </select>
-        </Field>
+            <SelectTrigger id="appt-service" className="w-full">
+              <SelectValue placeholder="— Sem serviço —" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_SELECTION}>— Sem serviço —</SelectItem>
+              {services
+                .filter((s) => s.is_active)
+                .map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name} ({s.duration_minutes} min)
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
 
       {/* Datas */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Início" error={touched.start_local ? errors.start_local : undefined}>
-          <input
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="appt-start">Início</Label>
+          <Input
+            id="appt-start"
             type="datetime-local"
             value={values.start_local}
             onChange={(e) => update("start_local", e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, start_local: true }))}
             aria-invalid={Boolean(touched.start_local && errors.start_local)}
-            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("start_local")}`}
           />
-        </Field>
-        <Field label="Término" error={touched.end_local ? errors.end_local : undefined}>
-          <input
+          {touched.start_local && errors.start_local && (
+            <p className="text-xs text-destructive">{errors.start_local}</p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="appt-end">Término</Label>
+          <Input
+            id="appt-end"
             type="datetime-local"
             value={values.end_local}
             onChange={(e) => update("end_local", e.target.value)}
             onBlur={() => setTouched((t) => ({ ...t, end_local: true }))}
             aria-invalid={Boolean(touched.end_local && errors.end_local)}
-            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("end_local")}`}
           />
-        </Field>
+          {touched.end_local && errors.end_local && (
+            <p className="text-xs text-destructive">{errors.end_local}</p>
+          )}
+        </div>
       </div>
 
       {/* Responsavel */}
-      <Field label="Responsável" error={touched.user_id ? errors.user_id : undefined}>
+      <div className="space-y-1.5">
+        <Label htmlFor="appt-user">Responsável</Label>
         {users.length > 0 ? (
-          <select
-            value={values.user_id}
-            onChange={(e) => update("user_id", e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, user_id: true }))}
-            aria-invalid={Boolean(touched.user_id && errors.user_id)}
-            className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("user_id")}`}
-          >
-            <option value="">— Selecione —</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-                {u.email ? ` · ${u.email}` : ""}
-              </option>
-            ))}
-          </select>
+          <>
+            <Select
+              value={values.user_id || NO_SELECTION}
+              onValueChange={(v) =>
+                update("user_id", !v || v === NO_SELECTION ? "" : v)
+              }
+            >
+              <SelectTrigger id="appt-user" className="w-full">
+                <SelectValue placeholder="— Selecione —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SELECTION}>— Selecione —</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name}
+                    {u.email ? ` · ${u.email}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {touched.user_id && errors.user_id && (
+              <p className="text-xs text-destructive">{errors.user_id}</p>
+            )}
+          </>
         ) : (
-          <p className="rounded-xl border border-dashed border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
             Você (responsável padrão).
           </p>
         )}
-      </Field>
+      </div>
 
       {/* Canal + local (so pra appointment/event, nao pra block) */}
       {values.kind !== "block" && (
         <>
-          <Field label="Canal">
-            <select
-              value={values.channel}
-              onChange={(e) => update("channel", e.target.value as AppointmentChannel | "")}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          <div className="space-y-1.5">
+            <Label htmlFor="appt-channel">Canal</Label>
+            <Select
+              value={values.channel || NO_SELECTION}
+              onValueChange={(v) =>
+                update(
+                  "channel",
+                  !v || v === NO_SELECTION ? "" : (v as AppointmentChannel),
+                )
+              }
             >
-              <option value="">— Selecione —</option>
-              {APPOINTMENT_CHANNELS.map((ch) => (
-                <option key={ch} value={ch}>
-                  {APPOINTMENT_CHANNEL_LABELS[ch]}
-                </option>
-              ))}
-            </select>
-          </Field>
+              <SelectTrigger id="appt-channel" className="w-full">
+                <SelectValue placeholder="— Selecione —" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SELECTION}>— Selecione —</SelectItem>
+                {APPOINTMENT_CHANNELS.map((ch) => (
+                  <SelectItem key={ch} value={ch}>
+                    {APPOINTMENT_CHANNEL_LABELS[ch]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {values.channel !== "online" && (
-            <Field label="Local">
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="appt-location">Local</Label>
+              <Input
+                id="appt-location"
                 type="text"
                 value={values.location}
                 onChange={(e) => update("location", e.target.value)}
                 placeholder="Endereço, sala, etc."
-                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
-            </Field>
+            </div>
           )}
 
           {values.channel === "online" && (
-            <Field label="Link da reunião" error={touched.meeting_url ? errors.meeting_url : undefined}>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="appt-meeting-url">Link da reunião</Label>
+              <Input
+                id="appt-meeting-url"
                 type="url"
                 value={values.meeting_url}
                 onChange={(e) => update("meeting_url", e.target.value)}
-                onBlur={() => setTouched((t) => ({ ...t, meeting_url: true }))}
-                aria-invalid={Boolean(touched.meeting_url && errors.meeting_url)}
+                onBlur={() =>
+                  setTouched((t) => ({ ...t, meeting_url: true }))
+                }
+                aria-invalid={Boolean(
+                  touched.meeting_url && errors.meeting_url,
+                )}
                 placeholder="https://meet.google.com/..."
-                className={`w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${fieldErrorClass("meeting_url")}`}
               />
-            </Field>
+              {touched.meeting_url && errors.meeting_url && (
+                <p className="text-xs text-destructive">
+                  {errors.meeting_url}
+                </p>
+              )}
+            </div>
           )}
         </>
       )}
 
       {/* Descricao */}
-      <Field label="Notas (opcional)">
-        <textarea
+      <div className="space-y-1.5">
+        <Label htmlFor="appt-description">Notas (opcional)</Label>
+        <Textarea
+          id="appt-description"
           value={values.description}
           onChange={(e) => update("description", e.target.value)}
           rows={3}
-          className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           placeholder="Adicione contexto, lembrete ou observação..."
         />
-      </Field>
+      </div>
     </div>
   );
 });
-
-interface FieldProps {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}
-
-const Field: React.FC<FieldProps> = ({ label, error, children }) => (
-  <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-      {label}
-    </label>
-    {children}
-    {error && (
-      <p className="mt-1 text-[11px] font-semibold text-destructive">{error}</p>
-    )}
-  </div>
-);

@@ -9,6 +9,7 @@ import {
   List as ListIcon,
   Settings as SettingsIcon,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@persia/ui/tabs";
 
 export type AgendaTab =
   | "overview"
@@ -40,6 +41,11 @@ const TABS: TabDef[] = [
   { id: "settings", label: "Ajustes", icon: SettingsIcon },
 ];
 
+/**
+ * Tabs controlado da Agenda. Wrappa <Tabs> do shadcn (que via base-ui).
+ * O conteudo de cada tab eh renderizado FORA pelo parent (agenda-page-client)
+ * — isso permite render condicional que nao re-monta panels invisiveis.
+ */
 export const AgendaTabs: React.FC<AgendaTabsProps> = ({
   active,
   onChange,
@@ -48,33 +54,22 @@ export const AgendaTabs: React.FC<AgendaTabsProps> = ({
   const visible = TABS.filter((t) => !hidden.includes(t.id));
 
   return (
-    <nav
-      role="tablist"
-      aria-label="Seções da Agenda"
-      className="flex flex-wrap items-center gap-1 rounded-md border bg-muted/40 p-1"
-    >
-      {visible.map((tab) => {
-        const Icon = tab.icon;
-        const isActive = tab.id === active;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onChange(tab.id)}
-            className={[
-              "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              isActive
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-background/60 hover:text-foreground",
-            ].join(" ")}
-          >
-            <Icon size={14} />
-            {tab.label}
-          </button>
-        );
-      })}
-    </nav>
+    <Tabs value={active} onValueChange={(v) => onChange(v as AgendaTab)}>
+      <TabsList className="flex flex-wrap">
+        {visible.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className="inline-flex items-center gap-2"
+            >
+              <Icon size={14} />
+              <span>{tab.label}</span>
+            </TabsTrigger>
+          );
+        })}
+      </TabsList>
+    </Tabs>
   );
 };
