@@ -6,6 +6,10 @@
 
 import type { KanbanActions } from "@persia/crm-ui";
 import {
+  bulkApplyTagsToDeals,
+  bulkMoveDeals,
+  bulkRemoveDeals,
+  bulkSetDealStatus,
   createDeal,
   createPipeline,
   createStage,
@@ -67,4 +71,14 @@ export const crmKanbanActions: KanbanActions = {
   // Rich move — dispara activity log + onStageChanged + sync UAZAPI.
   moveDealStage: (dealId, stageId) => updateDealStage(dealId, stageId),
   deleteDeal: (dealId) => deleteDeal(dealId),
+
+  // ============ BULK (PR-K2) ============
+  // Cap de 200 itens / chamada (validado no shared). Bulk move usa
+  // update plano (sem flow rico) — pra fluxo "ganhei/perdi" individual,
+  // o caller deve usar moveDealStage que dispara activity log + sync.
+  bulkMoveDeals: (dealIds, stageId) => bulkMoveDeals(dealIds, stageId),
+  bulkSetDealStatus: (dealIds, status) => bulkSetDealStatus(dealIds, status),
+  bulkDeleteDeals: (dealIds) => bulkRemoveDeals(dealIds),
+  bulkApplyTagsToDeals: (dealIds, tagIds) =>
+    bulkApplyTagsToDeals(dealIds, tagIds),
 };

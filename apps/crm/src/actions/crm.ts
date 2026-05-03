@@ -3,6 +3,10 @@
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import {
+  bulkApplyTagsToDealLeads as bulkApplyTagsShared,
+  bulkDeleteDeals as bulkDeleteDealsShared,
+  bulkMoveDealsToStage as bulkMoveDealsToStageShared,
+  bulkUpdateDealStatus as bulkUpdateDealStatusShared,
   createDeal as createDealShared,
   createPipeline as createPipelineShared,
   createStage as createStageShared,
@@ -231,4 +235,69 @@ export async function ensureDefaultPipeline() {
   const id = await ensureDefaultPipelineShared({ db: supabase, orgId });
   revalidatePath("/crm");
   return id;
+}
+
+// ============ BULK OPS (PR-K2) ============
+
+/**
+ * Move N deals pra mesma stage. Validacao no shared garante que TODOS
+ * sao do mesmo pipeline da stage de destino. NAO dispara o flow rico
+ * (activity log + onStageChanged + sync UAZAPI) — operacao em massa
+ * usa update plano. Pra side-effects, mover individualmente.
+ */
+export async function bulkMoveDeals(dealIds: string[], stageId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  const result = await bulkMoveDealsToStageShared(
+    { db: supabase, orgId },
+    dealIds,
+    stageId,
+  );
+  revalidatePath("/crm");
+  return result;
+}
+
+/**
+ * Marca N deals como won/lost/open de uma vez. Seta closed_at
+ * automaticamente.
+ */
+export async function bulkSetDealStatus(
+  dealIds: string[],
+  status: "open" | "won" | "lost",
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  const result = await bulkUpdateDealStatusShared(
+    { db: supabase, orgId },
+    dealIds,
+    status,
+  );
+  revalidatePath("/crm");
+  return result;
+}
+
+export async function bulkRemoveDeals(dealIds: string[]) {
+  const { supabase, orgId } = await requireRole("agent");
+  const result = await bulkDeleteDealsShared(
+    { db: supabase, orgId },
+    dealIds,
+  );
+  revalidatePath("/crm");
+  return result;
+}
+
+/**
+ * Aplica tags nas LEADS dos deals selecionados (nao no deal — tag eh
+ * propriedade do lead). Idempotente (UNIQUE em lead_tags).
+ */
+export async function bulkApplyTagsToDeals(
+  dealIds: string[],
+  tagIds: string[],
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  const result = await bulkApplyTagsShared(
+    { db: supabase, orgId },
+    dealIds,
+    tagIds,
+  );
+  revalidatePath("/crm");
+  return result;
 }

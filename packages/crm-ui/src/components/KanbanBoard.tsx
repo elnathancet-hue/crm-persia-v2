@@ -11,10 +11,12 @@
 // (~1255 linhas). Extraido pra resolver drift visual entre os 2 apps.
 
 import * as React from "react";
+import { toast } from "sonner";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
+import { Checkbox } from "@persia/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +25,21 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@persia/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@persia/ui/popover";
 import {
   Select,
   SelectContent,
@@ -46,6 +63,11 @@ import {
   Percent,
   X,
   Check,
+  SlidersHorizontal,
+  Tag as TagIcon,
+  Clock,
+  Move,
+  CheckCheck,
 } from "lucide-react";
 import type {
   DealWithLead,
@@ -140,6 +162,55 @@ function getConversionRate(won: number, lost: number) {
 
 const DEFAULT_PIPELINE_GOAL: PipelineGoal = { revenue: 0, won: 0 };
 
+// ============================================================================
+// Filtros avancados (PR-K2)
+// ============================================================================
+
+export type TagLogic = "any" | "all" | "not";
+
+export interface AdvancedFilters {
+  /** Lista de tag IDs filtradas. Vazio = ignora. */
+  tagIds: string[];
+  /** Logica do filtro de tags. */
+  tagLogic: TagLogic;
+  /** Faixa de valor min (R$). null = sem limite. */
+  valueMin: number | null;
+  /** Faixa de valor max (R$). null = sem limite. */
+  valueMax: number | null;
+  /** Stale: deals com updated_at antes de N dias. null = ignora. */
+  staleDays: number | null;
+  /** Filtra por responsavel do lead (auth.users.id). null = todos. */
+  assigneeId: string | null;
+}
+
+const EMPTY_FILTERS: AdvancedFilters = {
+  tagIds: [],
+  tagLogic: "any",
+  valueMin: null,
+  valueMax: null,
+  staleDays: null,
+  assigneeId: null,
+};
+
+function countActiveFilters(f: AdvancedFilters): number {
+  let count = 0;
+  if (f.tagIds.length > 0) count += 1;
+  if (f.valueMin !== null || f.valueMax !== null) count += 1;
+  if (f.staleDays !== null) count += 1;
+  if (f.assigneeId !== null) count += 1;
+  return count;
+}
+
+const STALE_OPTIONS: { value: number; label: string }[] = [
+  { value: 7, label: "7 dias" },
+  { value: 14, label: "14 dias" },
+  { value: 30, label: "30 dias" },
+  { value: 60, label: "60 dias" },
+];
+
+// Sentinela pra Select shadcn — base-ui nao aceita value="" como item.
+const ALL_ASSIGNEES = "__all__";
+
 export interface KanbanBoardProps {
   pipelines: Pipeline[];
   stages: Stage[];
@@ -159,6 +230,11 @@ export interface KanbanBoardProps {
   /** Slot opcional na toolbar (ex.: botao Importar do CRM, antes do
    *  icone Configurar). Cada app injeta o que precisa. */
   toolbarExtras?: React.ReactNode;
+  /** Tags da org pra filtros avancados + bulk apply. Vazio = filtro
+   *  oculta tag-pickers (mantem outros filtros). */
+  tags?: TagRef[];
+  /** Lista de responsaveis pra filtro 'Atribuido a'. Vazio = oculta. */
+  assignees?: { id: string; name: string }[];
 }
 
 export function KanbanBoard({
@@ -171,6 +247,8 @@ export function KanbanBoard({
   onChange,
   goalsStorageKey = "crm-kanban-goals-v1",
   toolbarExtras,
+  tags: orgTags = [],
+  assignees = [],
 }: KanbanBoardProps) {
   const actions = useKanbanActions();
   const [selectedPipeline, setSelectedPipeline] = React.useState(
@@ -191,6 +269,37 @@ export function KanbanBoard({
   >({});
   const [showGoalsEditor, setShowGoalsEditor] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
+
+  // ---- Filtros avancados (PR-K2) ----
+  const [advancedFilters, setAdvancedFilters] =
+    React.useState<AdvancedFilters>(EMPTY_FILTERS);
+
+  // ---- Bulk selection (PR-K2) ----
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkPending, setBulkPending] = React.useState(false);
+  const [bulkConfirm, setBulkConfirm] = React.useState<
+    | { kind: "delete" }
+    | { kind: "lost" }
+    | { kind: "won" }
+    | null
+  >(null);
+  const [bulkMoveOpen, setBulkMoveOpen] = React.useState(false);
+  const [bulkTagOpen, setBulkTagOpen] = React.useState(false);
+
+  const toggleSelected = React.useCallback((dealId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(dealId)) next.delete(dealId);
+      else next.add(dealId);
+      return next;
+    });
+  }, []);
+
+  const clearSelection = React.useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
 
   React.useEffect(() => {
     setLocalDeals(initialDeals);
@@ -263,8 +372,53 @@ export function KanbanBoard({
     if (statusFilter !== "all") {
       filtered = filtered.filter((d) => d.status === statusFilter);
     }
+
+    // ---- Filtros avancados (PR-K2) ----
+    const af = advancedFilters;
+    if (af.tagIds.length > 0) {
+      filtered = filtered.filter((d) => {
+        const dealTagIds = (d.leads?.lead_tags ?? [])
+          .map((lt: LeadTag) => lt.tags?.id)
+          .filter((id): id is string => Boolean(id));
+        if (af.tagLogic === "all") {
+          return af.tagIds.every((id) => dealTagIds.includes(id));
+        }
+        if (af.tagLogic === "not") {
+          return !af.tagIds.some((id) => dealTagIds.includes(id));
+        }
+        // 'any'
+        return af.tagIds.some((id) => dealTagIds.includes(id));
+      });
+    }
+    if (af.valueMin !== null) {
+      filtered = filtered.filter((d) => (d.value ?? 0) >= af.valueMin!);
+    }
+    if (af.valueMax !== null) {
+      filtered = filtered.filter((d) => (d.value ?? 0) <= af.valueMax!);
+    }
+    if (af.staleDays !== null) {
+      const cutoff = Date.now() - af.staleDays * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((d) => {
+        const ts = d.updated_at ? new Date(d.updated_at).getTime() : null;
+        // Sem updated_at -> trata como velho (conservador)
+        if (ts === null) return true;
+        return ts < cutoff;
+      });
+    }
+    if (af.assigneeId !== null) {
+      filtered = filtered.filter(
+        (d) => d.leads?.assigned_to === af.assigneeId,
+      );
+    }
+
     return filtered;
-  }, [localDeals, searchQuery, selectedPipeline, statusFilter]);
+  }, [
+    localDeals,
+    searchQuery,
+    selectedPipeline,
+    statusFilter,
+    advancedFilters,
+  ]);
 
   const boardMetrics = React.useMemo(() => {
     const total = filteredDeals.reduce(
@@ -422,6 +576,103 @@ export function KanbanBoard({
     );
   }
 
+  // ---- Bulk handlers (PR-K2) ----
+  // Cap conservador (200) ja eh enforced no shared mutation, mas
+  // duplicamos aqui pra feedback imediato sem ida ao server.
+  const BULK_CAP = 200;
+  const selectedCount = selectedIds.size;
+
+  async function runBulk<T>(
+    op: () => Promise<T>,
+    successMsg: (res: T) => string,
+  ) {
+    if (selectedCount === 0) return;
+    if (selectedCount > BULK_CAP) {
+      toast.error(`Maximo ${BULK_CAP} negocios por operacao em massa.`);
+      return;
+    }
+    setBulkPending(true);
+    try {
+      const res = await op();
+      toast.success(successMsg(res));
+      clearSelection();
+      onChange?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha na operacao");
+    } finally {
+      setBulkPending(false);
+    }
+  }
+
+  async function handleBulkMove(stageId: string) {
+    if (!actions.bulkMoveDeals) {
+      toast.error("Mover em massa indisponivel.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    await runBulk(
+      () => actions.bulkMoveDeals!(ids, stageId),
+      (r) =>
+        `${r.moved_count} negocio${r.moved_count === 1 ? "" : "s"} movido${r.moved_count === 1 ? "" : "s"}`,
+    );
+    setBulkMoveOpen(false);
+    // Optimistic local update — o pai vai re-fetchar via onChange
+    setLocalDeals((prev) =>
+      prev.map((d) =>
+        selectedIds.has(d.id) ? { ...d, stage_id: stageId } : d,
+      ),
+    );
+  }
+
+  async function handleBulkSetStatus(status: "won" | "lost") {
+    if (!actions.bulkSetDealStatus) {
+      toast.error("Operacao em massa indisponivel.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    await runBulk(
+      () => actions.bulkSetDealStatus!(ids, status),
+      (r) =>
+        `${r.updated_count} negocio${r.updated_count === 1 ? "" : "s"} marcado${r.updated_count === 1 ? "" : "s"} como ${status === "won" ? "ganho" : "perdido"}`,
+    );
+    setLocalDeals((prev) =>
+      prev.map((d) =>
+        selectedIds.has(d.id) ? { ...d, status } : d,
+      ),
+    );
+  }
+
+  async function handleBulkDelete() {
+    if (!actions.bulkDeleteDeals) {
+      toast.error("Exclusao em massa indisponivel.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    await runBulk(
+      () => actions.bulkDeleteDeals!(ids),
+      (r) =>
+        `${r.deleted_count} negocio${r.deleted_count === 1 ? "" : "s"} excluido${r.deleted_count === 1 ? "" : "s"}`,
+    );
+    setLocalDeals((prev) => prev.filter((d) => !selectedIds.has(d.id)));
+  }
+
+  async function handleBulkApplyTags(tagIds: string[]) {
+    if (!actions.bulkApplyTagsToDeals) {
+      toast.error("Aplicacao em massa indisponivel.");
+      return;
+    }
+    if (tagIds.length === 0) {
+      toast.info("Selecione pelo menos uma tag.");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    await runBulk(
+      () => actions.bulkApplyTagsToDeals!(ids, tagIds),
+      (r) => `${r.leads_count} lead${r.leads_count === 1 ? "" : "s"} marcado${r.leads_count === 1 ? "" : "s"} com ${tagIds.length} tag${tagIds.length === 1 ? "" : "s"}`,
+    );
+    setBulkTagOpen(false);
+  }
+
   return (
     <div className="space-y-4">
       {/* ====== OUTCOME PILLS ====== */}
@@ -544,6 +795,15 @@ export function KanbanBoard({
             <Flag className="size-3.5" />
             Metas
           </Button>
+
+          {/* ====== FILTROS AVANCADOS (PR-K2) ====== */}
+          <AdvancedFiltersPopover
+            value={advancedFilters}
+            onChange={setAdvancedFilters}
+            tags={orgTags}
+            assignees={assignees}
+          />
+
           {toolbarExtras}
           {canManagePipelines && (
             <Button
@@ -621,6 +881,98 @@ export function KanbanBoard({
                   : "Defina uma meta para acompanhar os ganhos"}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====== BULK TOOLBAR (PR-K2) — aparece quando ha selecao ====== */}
+      {selectedCount > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="secondary"
+              className="rounded-full bg-primary text-primary-foreground"
+            >
+              {selectedCount}
+            </Badge>
+            <span className="font-medium">
+              {selectedCount === 1
+                ? "negocio selecionado"
+                : "negocios selecionados"}
+            </span>
+            {selectedCount > BULK_CAP && (
+              <span className="text-xs text-destructive">
+                (max {BULK_CAP} por operacao)
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-md"
+              disabled={bulkPending || sortedStages.length === 0}
+              onClick={() => setBulkMoveOpen(true)}
+              title="Mover selecionados pra outra etapa"
+            >
+              <Move className="size-3.5" />
+              Mover etapa
+            </Button>
+            {orgTags.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-md"
+                disabled={bulkPending}
+                onClick={() => setBulkTagOpen(true)}
+                title="Aplicar tags nos leads dos selecionados"
+              >
+                <TagIcon className="size-3.5" />
+                Aplicar tag
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-md text-emerald-600 hover:text-emerald-700"
+              disabled={bulkPending}
+              onClick={() => setBulkConfirm({ kind: "won" })}
+            >
+              <Check className="size-3.5" />
+              Marcar ganho
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 rounded-md text-destructive hover:text-destructive"
+              disabled={bulkPending}
+              onClick={() => setBulkConfirm({ kind: "lost" })}
+            >
+              <X className="size-3.5" />
+              Marcar perdido
+            </Button>
+            {canEdit && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 rounded-md text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={bulkPending}
+                onClick={() => setBulkConfirm({ kind: "delete" })}
+                title="Excluir negocios selecionados"
+              >
+                <Trash2 className="size-3.5" />
+                Excluir
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 rounded-md"
+              onClick={clearSelection}
+              disabled={bulkPending}
+            >
+              Cancelar selecao
+            </Button>
           </div>
         </div>
       )}
@@ -737,6 +1089,13 @@ export function KanbanBoard({
                         stagesByOutcome.bem_sucedido.length > 0
                       }
                       canEdit={canEdit}
+                      selected={selectedIds.has(deal.id)}
+                      onToggleSelected={
+                        canEdit && actions.bulkMoveDeals
+                          ? () => toggleSelected(deal.id)
+                          : undefined
+                      }
+                      hasActiveSelection={selectedCount > 0}
                     />
                   ))}
                   {stageDeals.length === 0 && (
@@ -750,6 +1109,64 @@ export function KanbanBoard({
           );
         })}
       </div>
+
+      {/* ====== BULK DIALOGS (PR-K2) ====== */}
+      <BulkMoveDialog
+        open={bulkMoveOpen}
+        onOpenChange={setBulkMoveOpen}
+        stages={sortedStages.length > 0 ? sortedStages : initialStages.filter((s) => s.pipeline_id === selectedPipeline)}
+        selectedCount={selectedCount}
+        onConfirm={handleBulkMove}
+        pending={bulkPending}
+      />
+      <BulkApplyTagsDialog
+        open={bulkTagOpen}
+        onOpenChange={setBulkTagOpen}
+        tags={orgTags}
+        selectedCount={selectedCount}
+        onConfirm={handleBulkApplyTags}
+        pending={bulkPending}
+      />
+      <AlertDialog
+        open={bulkConfirm !== null}
+        onOpenChange={(o) => !o && setBulkConfirm(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkConfirm?.kind === "delete"
+                ? `Excluir ${selectedCount} negocio${selectedCount === 1 ? "" : "s"}?`
+                : bulkConfirm?.kind === "won"
+                  ? `Marcar ${selectedCount} como ganho?`
+                  : `Marcar ${selectedCount} como perdido?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkConfirm?.kind === "delete"
+                ? "Os negocios selecionados serao removidos permanentemente. Esta acao nao pode ser desfeita."
+                : "Voce pode reverter individualmente depois, mas a acao em massa nao tem 'desfazer'."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                const k = bulkConfirm?.kind;
+                setBulkConfirm(null);
+                if (k === "delete") await handleBulkDelete();
+                else if (k === "won") await handleBulkSetStatus("won");
+                else if (k === "lost") await handleBulkSetStatus("lost");
+              }}
+              className={
+                bulkConfirm?.kind === "delete"
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : ""
+              }
+            >
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {canManagePipelines && (
         <PipelineConfigDrawer
@@ -776,6 +1193,9 @@ function DealCard({
   hasFailureBucket,
   hasSuccessBucket,
   canEdit,
+  selected,
+  onToggleSelected,
+  hasActiveSelection,
 }: {
   deal: Deal;
   draggedDealId: string | null;
@@ -789,6 +1209,13 @@ function DealCard({
   hasFailureBucket: boolean;
   hasSuccessBucket: boolean;
   canEdit: boolean;
+  /** PR-K2: card selecionado pra bulk op. */
+  selected: boolean;
+  /** PR-K2: callback de toggle. undefined = bulk indisponivel. */
+  onToggleSelected?: () => void;
+  /** PR-K2: ha pelo menos 1 card selecionado em qualquer lugar (mostra
+   *  checkbox sempre, nao so no hover). */
+  hasActiveSelection: boolean;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const isDragging = draggedDealId === deal.id;
@@ -814,17 +1241,60 @@ function DealCard({
 
   const displayName = lead?.name || deal.title;
 
+  // Quando ha selecao ativa (em qualquer card), o click no card faz
+  // toggle ao inves de abrir detalhe. Isso evita acidentes "abri dialog
+  // achando que ia selecionar".
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (onToggleSelected && hasActiveSelection) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggleSelected();
+      return;
+    }
+    setDetailOpen(true);
+  };
+
   return (
     <>
       <div
-        className={`group bg-card border rounded-xl p-3 hover:shadow-sm hover:border-primary/30 transition-all duration-150 ${
+        className={`group relative bg-card border rounded-xl p-3 hover:shadow-sm transition-all duration-150 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-        } ${isDragging ? "opacity-40 ring-2 ring-primary" : ""}`}
-        draggable={canEdit}
-        onDragStart={(e) => canEdit && onDragStart(e, deal.id)}
-        onClick={() => setDetailOpen(true)}
+        } ${isDragging ? "opacity-40 ring-2 ring-primary" : ""} ${
+          selected
+            ? "border-primary ring-2 ring-primary/40 bg-primary/5"
+            : "hover:border-primary/30"
+        }`}
+        draggable={canEdit && !hasActiveSelection}
+        onDragStart={(e) =>
+          canEdit && !hasActiveSelection && onDragStart(e, deal.id)
+        }
+        onClick={handleCardClick}
       >
-        <div className="flex items-center gap-2.5">
+        {/* Checkbox de selecao bulk — aparece no hover, sempre se ha
+            selecao ativa OU se este card ja esta selecionado. */}
+        {onToggleSelected && (
+          <div
+            className={`absolute left-2 top-2 z-10 transition-opacity ${
+              selected || hasActiveSelection
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100"
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelected();
+            }}
+          >
+            <Checkbox
+              checked={selected}
+              aria-label={selected ? "Desmarcar negocio" : "Selecionar negocio"}
+              className="bg-card shadow-sm"
+            />
+          </div>
+        )}
+
+        <div
+          className={`flex items-center gap-2.5 ${onToggleSelected ? "pl-6" : ""}`}
+        >
           <div className="size-9 shrink-0 rounded-full bg-muted overflow-hidden flex items-center justify-center text-xs font-semibold text-muted-foreground">
             {initials ? <span>{initials}</span> : <span aria-hidden>?</span>}
           </div>
@@ -1368,6 +1838,434 @@ function AddDealDialog({
             {isPending ? "Criando..." : "Criar Negócio"}
           </Button>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================================
+// PR-K2 Subcomponentes: AdvancedFiltersPopover + BulkMoveDialog + BulkApplyTagsDialog
+// ============================================================================
+
+function AdvancedFiltersPopover({
+  value,
+  onChange,
+  tags,
+  assignees,
+}: {
+  value: AdvancedFilters;
+  onChange: (next: AdvancedFilters) => void;
+  tags: TagRef[];
+  assignees: { id: string; name: string }[];
+}) {
+  const activeCount = countActiveFilters(value);
+  const [valueMinStr, setValueMinStr] = React.useState(
+    value.valueMin === null ? "" : String(value.valueMin),
+  );
+  const [valueMaxStr, setValueMaxStr] = React.useState(
+    value.valueMax === null ? "" : String(value.valueMax),
+  );
+
+  // Sync local input strings se o filtro for resetado de fora
+  React.useEffect(() => {
+    setValueMinStr(value.valueMin === null ? "" : String(value.valueMin));
+    setValueMaxStr(value.valueMax === null ? "" : String(value.valueMax));
+  }, [value.valueMin, value.valueMax]);
+
+  const toggleTag = (id: string) => {
+    onChange({
+      ...value,
+      tagIds: value.tagIds.includes(id)
+        ? value.tagIds.filter((t) => t !== id)
+        : [...value.tagIds, id],
+    });
+  };
+
+  const clearAll = () => {
+    onChange(EMPTY_FILTERS);
+    setValueMinStr("");
+    setValueMaxStr("");
+  };
+
+  const applyValueRange = () => {
+    const parsedMin =
+      valueMinStr.trim() === "" ? null : Number(valueMinStr.replace(",", "."));
+    const parsedMax =
+      valueMaxStr.trim() === "" ? null : Number(valueMaxStr.replace(",", "."));
+    onChange({
+      ...value,
+      valueMin:
+        parsedMin !== null && Number.isFinite(parsedMin) ? parsedMin : null,
+      valueMax:
+        parsedMax !== null && Number.isFinite(parsedMax) ? parsedMax : null,
+    });
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        render={
+          <Button
+            type="button"
+            variant={activeCount > 0 ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 rounded-md px-2.5"
+          />
+        }
+      >
+        <SlidersHorizontal className="size-3.5" />
+        Filtros
+        {activeCount > 0 && (
+          <Badge
+            variant="secondary"
+            className="ml-1 h-4 min-w-4 rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground"
+          >
+            {activeCount}
+          </Badge>
+        )}
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0" sideOffset={6}>
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <span className="text-sm font-semibold">Filtros avançados</span>
+          {activeCount > 0 && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-[11px] font-medium text-primary hover:underline"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+
+        <div className="max-h-[480px] space-y-4 overflow-y-auto p-3">
+          {/* Tags + lógica */}
+          {tags.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Tags
+                </Label>
+                <Select
+                  value={value.tagLogic}
+                  onValueChange={(v) =>
+                    onChange({ ...value, tagLogic: (v as TagLogic) ?? "any" })
+                  }
+                >
+                  <SelectTrigger className="h-7 w-[110px] text-[11px]">
+                    <SelectValue>
+                      {value.tagLogic === "any"
+                        ? "Qualquer"
+                        : value.tagLogic === "all"
+                          ? "Todas"
+                          : "Nenhuma"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Qualquer</SelectItem>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="not">Nenhuma</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map((tag) => {
+                  const checked = value.tagIds.includes(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => toggleTag(tag.id)}
+                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                        checked
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-muted text-foreground hover:bg-muted/70"
+                      }`}
+                    >
+                      {tag.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {value.tagLogic === "any"
+                  ? "Mostra negócios com pelo menos uma das tags."
+                  : value.tagLogic === "all"
+                    ? "Mostra negócios com TODAS as tags marcadas."
+                    : "Esconde negócios que tenham qualquer tag marcada."}
+              </p>
+            </div>
+          )}
+
+          {/* Faixa de valor */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Faixa de valor (R$)
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="number"
+                inputMode="decimal"
+                placeholder="Mín"
+                value={valueMinStr}
+                onChange={(e) => setValueMinStr(e.target.value)}
+                onBlur={applyValueRange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyValueRange();
+                }}
+                className="h-9"
+              />
+              <Input
+                type="number"
+                inputMode="decimal"
+                placeholder="Máx"
+                value={valueMaxStr}
+                onChange={(e) => setValueMaxStr(e.target.value)}
+                onBlur={applyValueRange}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") applyValueRange();
+                }}
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          {/* Sem atividade */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+              Sem atualização há
+            </Label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => onChange({ ...value, staleDays: null })}
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  value.staleDays === null
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-muted text-foreground hover:bg-muted/70"
+                }`}
+              >
+                Sem filtro
+              </button>
+              {STALE_OPTIONS.map((opt) => {
+                const active = value.staleDays === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onChange({ ...value, staleDays: opt.value })}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      active
+                        ? "border-amber-500 bg-amber-500 text-white"
+                        : "border-border bg-muted text-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    <Clock className="size-3" />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Responsável */}
+          {assignees.length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Responsável
+              </Label>
+              <Select
+                value={value.assigneeId ?? ALL_ASSIGNEES}
+                onValueChange={(v) =>
+                  onChange({
+                    ...value,
+                    assigneeId: !v || v === ALL_ASSIGNEES ? null : v,
+                  })
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue>
+                    {value.assigneeId === null
+                      ? "Todos os responsáveis"
+                      : (assignees.find((a) => a.id === value.assigneeId)
+                          ?.name ?? "Responsável")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_ASSIGNEES}>
+                    Todos os responsáveis
+                  </SelectItem>
+                  {assignees.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function BulkMoveDialog({
+  open,
+  onOpenChange,
+  stages,
+  selectedCount,
+  onConfirm,
+  pending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  stages: Stage[];
+  selectedCount: number;
+  onConfirm: (stageId: string) => Promise<void>;
+  pending: boolean;
+}) {
+  const [stageId, setStageId] = React.useState<string>(stages[0]?.id ?? "");
+
+  React.useEffect(() => {
+    if (open && stages.length > 0 && !stages.some((s) => s.id === stageId)) {
+      setStageId(stages[0].id);
+    }
+  }, [open, stages, stageId]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Mover {selectedCount} negócio{selectedCount === 1 ? "" : "s"} pra
+            outra etapa
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <Label className="text-xs">Etapa de destino</Label>
+          <Select value={stageId} onValueChange={(v) => setStageId(v ?? "")}>
+            <SelectTrigger className="h-10">
+              <SelectValue>
+                {stages.find((s) => s.id === stageId)?.name ?? "Selecione"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {stages.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Os negócios precisam estar todos no mesmo funil. A ação em massa
+            não dispara fluxos automatizados (use mover individual pra isso).
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => stageId && onConfirm(stageId)}
+            disabled={pending || !stageId}
+          >
+            {pending ? "Movendo..." : "Mover"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BulkApplyTagsDialog({
+  open,
+  onOpenChange,
+  tags,
+  selectedCount,
+  onConfirm,
+  pending,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tags: TagRef[];
+  selectedCount: number;
+  onConfirm: (tagIds: string[]) => Promise<void>;
+  pending: boolean;
+}) {
+  const [picked, setPicked] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (!open) setPicked([]);
+  }, [open]);
+
+  const toggle = (id: string) => {
+    setPicked((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            Aplicar tags em {selectedCount} negócio
+            {selectedCount === 1 ? "" : "s"}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <Label className="text-xs">Selecione as tags</Label>
+          <div className="flex max-h-[280px] flex-wrap gap-1.5 overflow-y-auto">
+            {tags.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhuma tag cadastrada. Crie tags em /tags primeiro.
+              </p>
+            ) : (
+              tags.map((t) => {
+                const checked = picked.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggle(t.id)}
+                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      checked
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-muted text-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    {t.name}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            As tags são aplicadas aos LEADS dos negócios selecionados (tag é
+            propriedade do lead). Tags já aplicadas não duplicam.
+          </p>
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={() => onConfirm(picked)}
+            disabled={pending || picked.length === 0}
+          >
+            {pending ? "Aplicando..." : "Aplicar"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

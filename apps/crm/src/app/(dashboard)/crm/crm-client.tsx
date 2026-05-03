@@ -19,6 +19,7 @@ import type {
   DealWithLead,
   Pipeline,
   Stage,
+  TagRef,
 } from "@persia/shared/crm";
 import { useRole } from "@/lib/hooks/use-role";
 import { crmKanbanActions } from "@/features/crm-kanban/crm-kanban-actions";
@@ -30,9 +31,20 @@ interface Props {
   stages: Stage[];
   deals: DealWithLead[];
   leads: { id: string; name: string; phone: string | null; email: string | null }[];
+  /** Tags da org pra filtros + bulk apply (PR-K2). */
+  tags?: TagRef[];
+  /** Responsaveis pra filtro 'Atribuido a' (PR-K2). */
+  assignees?: { id: string; name: string }[];
 }
 
-export function CrmClient({ pipelines, stages, deals, leads }: Props) {
+export function CrmClient({
+  pipelines,
+  stages,
+  deals,
+  leads,
+  tags = [],
+  assignees = [],
+}: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
 
@@ -63,6 +75,8 @@ export function CrmClient({ pipelines, stages, deals, leads }: Props) {
           canManagePipelines={isAdmin}
           onChange={() => router.refresh()}
           goalsStorageKey="crm-kanban-goals-v1"
+          tags={tags}
+          assignees={assignees}
           toolbarExtras={
             isAgent ? (
               <Button
