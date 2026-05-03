@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarPlus, Loader2, X } from "lucide-react";
+import { CalendarPlus, Loader2 } from "lucide-react";
 import {
   type AgendaService,
   type BookingPage,
@@ -9,6 +9,25 @@ import {
   BOOKING_PAGE_STATUSES,
   BOOKING_PAGE_STATUS_LABELS,
 } from "@persia/shared/agenda";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@persia/ui/sheet";
+import { Textarea } from "@persia/ui/textarea";
 import { useAgendaActions } from "../context";
 
 interface BookingPageDrawerProps {
@@ -23,12 +42,13 @@ interface BookingPageDrawerProps {
 }
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{0,49}$/;
+const NO_SERVICE = "__none__";
 
 function slugifyDraft(input: string): string {
   return input
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "") // remove acentos
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 50);
@@ -68,7 +88,6 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Reset state quando trocar entre edit/create ou mudar existing
   React.useEffect(() => {
     setTitle(existing?.title ?? "");
     setSlug(existing?.slug ?? "");
@@ -82,7 +101,6 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
     setError(null);
   }, [existing, open]);
 
-  // Auto-slug enquanto o user nao tocou no campo slug
   const handleTitleChange = (v: string) => {
     setTitle(v);
     if (!slugTouched && !isEdit) {
@@ -90,7 +108,6 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
     }
   };
 
-  // Validacao
   const errors = React.useMemo(() => {
     const e: Record<string, string> = {};
     if (!title.trim()) e.title = "Título obrigatório";
@@ -108,8 +125,6 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
 
   const isValid = Object.keys(errors).length === 0;
   const previewUrl = `${origin ?? (typeof window !== "undefined" ? window.location.origin : "")}/agendar/${orgSlug}/${slug || "..."}`;
-
-  if (!open) return null;
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -144,52 +159,47 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-card shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0"
+      >
+        <SheetHeader className="border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
               <CalendarPlus size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-foreground">
+              <SheetTitle>
                 {isEdit ? "Editar página" : "Nova página de agendamento"}
-              </h2>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              </SheetTitle>
+              <SheetDescription>
                 Link público pra leads agendarem sozinhos
-              </p>
+              </SheetDescription>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
-          >
-            <X size={18} />
-          </button>
-        </header>
+        </SheetHeader>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
-          <Field label="Título" error={errors.title}>
-            <input
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          <div className="space-y-1.5">
+            <Label htmlFor="bp-title">Título</Label>
+            <Input
+              id="bp-title"
               type="text"
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Ex: Consulta inicial"
               aria-invalid={Boolean(errors.title)}
-              className={inputCls(errors.title)}
             />
-          </Field>
+            {errors.title && (
+              <p className="text-xs text-destructive">{errors.title}</p>
+            )}
+          </div>
 
-          <Field label="Slug (URL)" error={errors.slug}>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="bp-slug">Slug (URL)</Label>
+            <Input
+              id="bp-slug"
               type="text"
               value={slug}
               onChange={(e) => {
@@ -198,156 +208,163 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
               }}
               placeholder="consulta-inicial"
               aria-invalid={Boolean(errors.slug)}
-              className={inputCls(errors.slug)}
             />
-            <p className="mt-1.5 break-all rounded-xl bg-muted px-3 py-2 text-[11px] font-mono text-foreground">
+            {errors.slug && (
+              <p className="text-xs text-destructive">{errors.slug}</p>
+            )}
+            <p className="break-all rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
               {previewUrl}
             </p>
-          </Field>
+          </div>
 
-          <Field label="Status">
-            <select
+          <div className="space-y-1.5">
+            <Label htmlFor="bp-status">Status</Label>
+            <Select
               value={status}
-              onChange={(e) => setStatus(e.target.value as BookingPageStatus)}
-              className={inputCls()}
+              onValueChange={(v) =>
+                v && setStatus(v as BookingPageStatus)
+              }
             >
-              {BOOKING_PAGE_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {BOOKING_PAGE_STATUS_LABELS[s]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="bp-status" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BOOKING_PAGE_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {BOOKING_PAGE_STATUS_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {status === "draft" && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Página em rascunho não aceita agendamentos.
               </p>
             )}
-          </Field>
+          </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Duração (min)" error={errors.duration}>
-              <input
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="bp-duration">Duração (min)</Label>
+              <Input
+                id="bp-duration"
                 type="number"
                 min={5}
                 max={1440}
                 value={duration}
                 onChange={(e) => setDuration(Number(e.target.value))}
-                className={inputCls(errors.duration)}
+                aria-invalid={Boolean(errors.duration)}
               />
-            </Field>
-            <Field label="Buffer entre (min)" error={errors.buffer}>
-              <input
+              {errors.duration && (
+                <p className="text-xs text-destructive">{errors.duration}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bp-buffer">Buffer (min)</Label>
+              <Input
+                id="bp-buffer"
                 type="number"
                 min={0}
                 max={1440}
                 value={buffer}
                 onChange={(e) => setBuffer(Number(e.target.value))}
-                className={inputCls(errors.buffer)}
+                aria-invalid={Boolean(errors.buffer)}
               />
-            </Field>
-            <Field label="Janela (dias)" error={errors.lookahead}>
-              <input
+              {errors.buffer && (
+                <p className="text-xs text-destructive">{errors.buffer}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bp-lookahead">Janela (dias)</Label>
+              <Input
+                id="bp-lookahead"
                 type="number"
                 min={1}
                 max={365}
                 value={lookahead}
                 onChange={(e) => setLookahead(Number(e.target.value))}
-                className={inputCls(errors.lookahead)}
+                aria-invalid={Boolean(errors.lookahead)}
               />
-            </Field>
+              {errors.lookahead && (
+                <p className="text-xs text-destructive">{errors.lookahead}</p>
+              )}
+            </div>
           </div>
 
           {services.length > 0 && (
-            <Field label="Serviço (opcional — preenche duração)">
-              <select
-                value={serviceId ?? ""}
-                onChange={(e) => {
-                  const id = e.target.value || null;
-                  setServiceId(id);
-                  if (id) {
-                    const svc = services.find((s) => s.id === id);
-                    if (svc) setDuration(svc.duration_minutes);
+            <div className="space-y-1.5">
+              <Label htmlFor="bp-service">
+                Serviço{" "}
+                <span className="text-muted-foreground">
+                  (preenche duração)
+                </span>
+              </Label>
+              <Select
+                value={serviceId ?? NO_SERVICE}
+                onValueChange={(v) => {
+                  if (!v || v === NO_SERVICE) {
+                    setServiceId(null);
+                    return;
                   }
+                  setServiceId(v);
+                  const svc = services.find((s) => s.id === v);
+                  if (svc) setDuration(svc.duration_minutes);
                 }}
-                className={inputCls()}
               >
-                <option value="">— Sem serviço —</option>
-                {services
-                  .filter((s) => s.is_active)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.duration_minutes} min)
-                    </option>
-                  ))}
-              </select>
-            </Field>
+                <SelectTrigger id="bp-service" className="w-full">
+                  <SelectValue placeholder="— Sem serviço —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SERVICE}>— Sem serviço —</SelectItem>
+                  {services
+                    .filter((s) => s.is_active)
+                    .map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} ({s.duration_minutes} min)
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
-          <Field label="Descrição (opcional)">
-            <textarea
+          <div className="space-y-1.5">
+            <Label htmlFor="bp-description">Descrição (opcional)</Label>
+            <Textarea
+              id="bp-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               placeholder="Mostrada na página pública pro lead..."
-              className={inputCls()}
             />
-          </Field>
+          </div>
 
           {error && (
-            <div className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
-          <button
+        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+          <Button
             type="button"
+            variant="ghost"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !isValid}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
           >
-            {submitting ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <CalendarPlus size={14} />
-            )}
+            {submitting ? <Loader2 className="animate-spin" /> : <CalendarPlus />}
             {submitting ? "Salvando..." : isEdit ? "Salvar" : "Criar página"}
-          </button>
-        </footer>
-      </aside>
-    </div>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 };
-
-const inputCls = (error?: string) =>
-  `w-full rounded-xl border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-    error
-      ? "border-destructive/50 focus:ring-destructive/30"
-      : "border-border focus:ring-primary/30"
-  }`;
-
-interface FieldProps {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}
-const Field: React.FC<FieldProps> = ({ label, error, children }) => (
-  <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-      {label}
-    </label>
-    {children}
-    {error && (
-      <p className="mt-1 text-[11px] font-semibold text-destructive">{error}</p>
-    )}
-  </div>
-);
