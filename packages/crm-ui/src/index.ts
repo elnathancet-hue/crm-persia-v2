@@ -18,7 +18,13 @@ export {
   type KanbanProviderProps,
 } from "./context";
 
-export { KanbanBoard, type KanbanBoardProps, type KanbanLead } from "./components/KanbanBoard";
+export {
+  KanbanBoard,
+  type KanbanBoardProps,
+  type KanbanLead,
+  type AdvancedFilters,
+  type TagLogic,
+} from "./components/KanbanBoard";
 export { PipelineConfigDrawer } from "./components/PipelineConfigDrawer";
 export {
   ImportLeadsWizard,

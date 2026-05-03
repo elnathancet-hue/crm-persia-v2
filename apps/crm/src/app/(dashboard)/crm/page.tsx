@@ -32,22 +32,54 @@ export default async function CrmPage() {
     );
   }
 
-  // Carrega stages, deals e leads em paralelo. Stages usa query direta
-  // pra trazer todas as stages de TODOS os pipelines do org de uma vez
-  // (a UI permite trocar de pipeline no dropdown sem refetch).
-  const [stagesResult, dealsResult, leadsResult] = await Promise.all([
-    supabase
-      .from("pipeline_stages")
-      .select("*")
-      .eq("organization_id", orgId)
-      .order("sort_order", { ascending: true }),
-    listDeals({ db: supabase, orgId }),
-    supabase
-      .from("leads")
-      .select("id, name, phone, email")
-      .eq("organization_id", orgId)
-      .order("name", { ascending: true }),
-  ]);
+  // Carrega stages, deals, leads, tags e responsaveis em paralelo. Stages
+  // usa query direta pra trazer todas as stages de TODOS os pipelines do
+  // org de uma vez (UI permite trocar de pipeline no dropdown sem refetch).
+  // tags + assignees alimentam filtros avancados + bulk apply (PR-K2).
+  const [stagesResult, dealsResult, leadsResult, tagsResult, profilesResult] =
+    await Promise.all([
+      supabase
+        .from("pipeline_stages")
+        .select("*")
+        .eq("organization_id", orgId)
+        .order("sort_order", { ascending: true }),
+      listDeals({ db: supabase, orgId }),
+      supabase
+        .from("leads")
+        .select("id, name, phone, email")
+        .eq("organization_id", orgId)
+        .order("name", { ascending: true }),
+      supabase
+        .from("tags")
+        .select("id, name, color")
+        .eq("organization_id", orgId)
+        .order("name", { ascending: true }),
+      // user_ids da org pra resolver profiles em segunda query (sem
+      // depender de FK explicita organization_members -> profiles, que
+      // o supabase nao infere automaticamente).
+      supabase
+        .from("organization_members")
+        .select("user_id")
+        .eq("organization_id", orgId)
+        .eq("is_active", true),
+    ]);
+
+  // Resolve full_name dos profiles em query separada (evita SelectQueryError
+  // do supabase quando a FK nao esta declarada)
+  const memberUserIds = ((profilesResult.data ?? []) as { user_id: string | null }[])
+    .map((m) => m.user_id)
+    .filter((id): id is string => Boolean(id));
+
+  let assignees: { id: string; name: string }[] = [];
+  if (memberUserIds.length > 0) {
+    const { data: profilesData } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", memberUserIds);
+    assignees = ((profilesData ?? []) as { id: string; full_name: string | null }[])
+      .map((p) => ({ id: p.id, name: p.full_name || "Sem nome" }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }
 
   return (
     <div className="space-y-6">
@@ -61,6 +93,8 @@ export default async function CrmPage() {
         stages={(stagesResult.data || []) as never}
         deals={dealsResult as never}
         leads={(leadsResult.data || []) as never}
+        tags={(tagsResult.data || []) as never}
+        assignees={assignees}
       />
     </div>
   );

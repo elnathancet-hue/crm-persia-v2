@@ -62,4 +62,25 @@ export interface KanbanActions {
    */
   moveDealStage: (dealId: string, stageId: string) => Promise<void>;
   deleteDeal: (dealId: string) => Promise<void>;
+
+  /**
+   * Bulk operations (PR-K2). Opcionais — admin pode nao implementar
+   * (apenas CRM tem UI de selecao multipla por enquanto).
+   * Cada metodo tem cap de 200 itens por chamada no shared.
+   */
+  bulkMoveDeals?: (
+    dealIds: string[],
+    stageId: string,
+  ) => Promise<{ moved_count: number }>;
+  bulkSetDealStatus?: (
+    dealIds: string[],
+    status: "open" | "won" | "lost",
+  ) => Promise<{ updated_count: number }>;
+  bulkDeleteDeals?: (
+    dealIds: string[],
+  ) => Promise<{ deleted_count: number }>;
+  bulkApplyTagsToDeals?: (
+    dealIds: string[],
+    tagIds: string[],
+  ) => Promise<{ leads_count: number; links_count: number }>;
 }

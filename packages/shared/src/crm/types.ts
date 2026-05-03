@@ -175,6 +175,12 @@ export interface Deal {
   pipeline_id: string;
   stage_id: string;
   sort_order: number;
+  /** Timestamp da ultima alteracao do deal — usado pra filtro 'sem
+   *  atividade ha N dias'. Opcional pra retro-compat com queries antigas. */
+  updated_at?: string | null;
+  created_at?: string | null;
+  /** UUID do responsavel (auth.users.id). Opcional. */
+  assigned_to?: string | null;
 }
 
 /** Deal com lead embed — usado na página principal do CRM. */

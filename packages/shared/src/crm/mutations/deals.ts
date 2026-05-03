@@ -189,3 +189,189 @@ export async function deleteDeal(
 
   if (error) throw new Error(error.message);
 }
+
+// ============================================================================
+// Bulk operations (PR-K2)
+// ============================================================================
+
+/**
+ * Move VARIOS deals pra mesma stage. Valida que todos pertencem ao mesmo
+ * pipeline da stage de destino (evita "vazar" deal entre pipelines).
+ * sort_order nao eh tocado aqui — deals sao apendados no fim. Pra bulk
+ * com reordering, fazer drag-drop individual.
+ *
+ * Limite de 200 deals por chamada — protege contra abuso e garante
+ * latencia previsivel.
+ */
+export async function bulkMoveDealsToStage(
+  ctx: CrmMutationContext,
+  dealIds: string[],
+  stageId: string,
+): Promise<{ moved_count: number }> {
+  const { db, orgId } = ctx;
+  if (dealIds.length === 0) return { moved_count: 0 };
+  if (dealIds.length > 200) {
+    throw new Error("Maximo 200 negocios por operacao em massa.");
+  }
+
+  const { data: stage } = await db
+    .from("pipeline_stages")
+    .select("id, pipeline_id")
+    .eq("id", stageId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!stage) throw new Error("Etapa de destino nao encontrada.");
+  const targetPipeline = (stage as { pipeline_id: string }).pipeline_id;
+
+  // Confirma que TODOS os deals sao do mesmo pipeline (evita move
+  // cross-pipeline silencioso). Lista os ids invalidos pra erro util.
+  const { data: deals } = await db
+    .from("deals")
+    .select("id, pipeline_id")
+    .eq("organization_id", orgId)
+    .in("id", dealIds);
+
+  const found = (deals ?? []) as { id: string; pipeline_id: string }[];
+  if (found.length !== dealIds.length) {
+    throw new Error(
+      `${dealIds.length - found.length} negocios nao foram encontrados nesta organizacao.`,
+    );
+  }
+  const wrongPipeline = found.filter((d) => d.pipeline_id !== targetPipeline);
+  if (wrongPipeline.length > 0) {
+    throw new Error(
+      `${wrongPipeline.length} negocio(s) sao de outro funil. Selecione apenas negocios do mesmo funil.`,
+    );
+  }
+
+  const { error } = await db
+    .from("deals")
+    .update({ stage_id: stageId, updated_at: new Date().toISOString() })
+    .eq("organization_id", orgId)
+    .in("id", dealIds);
+  if (error) throw new Error(error.message);
+
+  return { moved_count: dealIds.length };
+}
+
+/**
+ * Atualiza status de varios deals (won/lost/open). Quando muda pra
+ * won/lost, seta closed_at automaticamente; quando volta pra open,
+ * limpa closed_at.
+ */
+export async function bulkUpdateDealStatus(
+  ctx: CrmMutationContext,
+  dealIds: string[],
+  status: DealStatus,
+): Promise<{ updated_count: number }> {
+  const { db, orgId } = ctx;
+  if (dealIds.length === 0) return { updated_count: 0 };
+  if (dealIds.length > 200) {
+    throw new Error("Maximo 200 negocios por operacao em massa.");
+  }
+
+  const closedAt = status === "open" ? null : new Date().toISOString();
+  const { error } = await db
+    .from("deals")
+    .update({
+      status,
+      closed_at: closedAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("organization_id", orgId)
+    .in("id", dealIds);
+  if (error) throw new Error(error.message);
+
+  return { updated_count: dealIds.length };
+}
+
+/**
+ * Deleta varios deals. Cascade pelo schema cuida das related rows.
+ */
+export async function bulkDeleteDeals(
+  ctx: CrmMutationContext,
+  dealIds: string[],
+): Promise<{ deleted_count: number }> {
+  const { db, orgId } = ctx;
+  if (dealIds.length === 0) return { deleted_count: 0 };
+  if (dealIds.length > 200) {
+    throw new Error("Maximo 200 negocios por operacao em massa.");
+  }
+
+  const { error } = await db
+    .from("deals")
+    .delete()
+    .eq("organization_id", orgId)
+    .in("id", dealIds);
+  if (error) throw new Error(error.message);
+
+  return { deleted_count: dealIds.length };
+}
+
+/**
+ * Aplica tags nas LEADS dos deals selecionados. Util pro bulk "Aplicar
+ * tag" no Kanban — usuario seleciona N cards e aplica 1+ tag em todos.
+ *
+ * Detalhes:
+ * - Resolve lead_id de cada deal (alguns podem ser null — pulamos).
+ * - Valida que todas as tags pertencem a org (defense-in-depth).
+ * - Upsert em lead_tags com onConflict ignoreDuplicates (tag ja
+ *   aplicada nao duplica).
+ */
+export async function bulkApplyTagsToDealLeads(
+  ctx: CrmMutationContext,
+  dealIds: string[],
+  tagIds: string[],
+): Promise<{ leads_count: number; links_count: number }> {
+  const { db, orgId } = ctx;
+  if (dealIds.length === 0 || tagIds.length === 0) {
+    return { leads_count: 0, links_count: 0 };
+  }
+  if (dealIds.length > 200) {
+    throw new Error("Maximo 200 negocios por operacao em massa.");
+  }
+
+  // Valida tags da org (evita aplicar tag de outro tenant via id chumbado)
+  const { data: tags } = await db
+    .from("tags")
+    .select("id")
+    .eq("organization_id", orgId)
+    .in("id", tagIds);
+  const validTagIds = ((tags ?? []) as { id: string }[]).map((t) => t.id);
+  if (validTagIds.length === 0) {
+    throw new Error("Nenhuma tag valida encontrada nesta organizacao.");
+  }
+
+  // Resolve lead_id dos deals
+  const { data: deals } = await db
+    .from("deals")
+    .select("id, lead_id")
+    .eq("organization_id", orgId)
+    .in("id", dealIds);
+  const leadIds = Array.from(
+    new Set(
+      ((deals ?? []) as { id: string; lead_id: string | null }[])
+        .map((d) => d.lead_id)
+        .filter((id): id is string => id !== null),
+    ),
+  );
+  if (leadIds.length === 0) return { leads_count: 0, links_count: 0 };
+
+  const links: { organization_id: string; lead_id: string; tag_id: string }[] =
+    [];
+  for (const leadId of leadIds) {
+    for (const tagId of validTagIds) {
+      links.push({ organization_id: orgId, lead_id: leadId, tag_id: tagId });
+    }
+  }
+
+  const { error } = await db
+    .from("lead_tags")
+    .upsert(links, {
+      onConflict: "lead_id,tag_id",
+      ignoreDuplicates: true,
+    });
+  if (error) throw new Error(error.message);
+
+  return { leads_count: leadIds.length, links_count: links.length };
+}

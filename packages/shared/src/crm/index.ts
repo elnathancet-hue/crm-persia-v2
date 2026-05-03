@@ -105,4 +105,8 @@ export {
   updateDealStatus,
   moveDealKanban,
   deleteDeal,
+  bulkMoveDealsToStage,
+  bulkUpdateDealStatus,
+  bulkDeleteDeals,
+  bulkApplyTagsToDealLeads,
 } from "./mutations";
