@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Save, Loader2, Users, MessageSquare, Phone, Smartphone, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, CalendarDays, Save, Loader2, Users, MessageSquare, Phone, Smartphone, CheckCircle2, XCircle } from "lucide-react";
 import { updateOrganization, connectWhatsAppInstance } from "@/actions/admin";
 import { toast } from "sonner";
 
@@ -44,17 +44,26 @@ export function ClientDetail({ data }: { data: any }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href="/clients"><button className="size-8 rounded-md hover:bg-muted flex items-center justify-center"><ArrowLeft className="size-4" /></button></Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-lg font-bold text-primary">{(org.name || "?")[0].toUpperCase()}</span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{org.name}</h1>
-            <p className="text-xs text-muted-foreground">{plan} - {category}</p>
+          <Link href="/clients"><button className="size-8 rounded-md hover:bg-muted flex items-center justify-center"><ArrowLeft className="size-4" /></button></Link>
+          <div className="flex items-center gap-3">
+            <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="text-lg font-bold text-primary">{(org.name || "?")[0].toUpperCase()}</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">{org.name}</h1>
+              <p className="text-xs text-muted-foreground">{plan} - {category}</p>
+            </div>
           </div>
         </div>
+        <Link
+          href={`/clients/${org.id}/agenda`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-muted"
+        >
+          <CalendarDays className="size-4" />
+          Abrir Agenda
+        </Link>
       </div>
 
       {/* Stats */}
