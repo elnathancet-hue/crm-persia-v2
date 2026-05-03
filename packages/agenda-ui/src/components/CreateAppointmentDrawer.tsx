@@ -1,8 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { CalendarPlus, X } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 import type { AgendaService, AppointmentKind } from "@persia/shared/agenda";
+import { Button } from "@persia/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@persia/ui/sheet";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 import type { LeadOption } from "../actions";
 import {
@@ -14,12 +23,9 @@ import {
 interface CreateAppointmentDrawerProps {
   open: boolean;
   onClose: () => void;
-  /** Pre-fixed kind (vindo do dropdown 'Novo'). */
   initialKind?: AppointmentKind;
-  /** Lead pre-selecionado (criacao a partir de /leads/[id] no futuro). */
   initialLead?: LeadOption | null;
   services: readonly AgendaService[];
-  /** Slot pre-preenchido (vindo de click no calendar em horario vazio). */
   prefillSlot?: { start: Date; end: Date } | null;
 }
 
@@ -34,7 +40,6 @@ function dateToLocalInput(d: Date): string {
  * (so pra forms; nao tem DST roundtrip — consideramos negligible no MVP).
  */
 function localToUtcIso(local: string, timezone: string): string {
-  // Aproveita o getTimezoneOffsetMinutes do shared via Intl direto.
   const naive = new Date(`${local}:00Z`);
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
@@ -78,8 +83,6 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
   const [error, setError] = React.useState<string | null>(null);
   const [conflictTitle, setConflictTitle] = React.useState<string | null>(null);
 
-  // Re-key o form quando prefillSlot muda — garante que o initial value
-  // refletir o slot novo (ja que o AppointmentForm usa initial=... so na 1a render).
   const formKey = React.useMemo(
     () => `${prefillSlot?.start.getTime() ?? 0}-${initialKind}`,
     [prefillSlot, initialKind],
@@ -96,8 +99,6 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
     }
     return base;
   }, [prefillSlot, initialKind, initialLead]);
-
-  if (!open) return null;
 
   const handleSubmit = async () => {
     setError(null);
@@ -134,7 +135,6 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao criar agendamento";
-      // Detecta erro de conflito (mensagem do AppointmentConflictError)
       if (msg.startsWith("Conflito com")) {
         setConflictTitle(msg);
       } else {
@@ -146,35 +146,22 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-card shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-card p-5">
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0"
+      >
+        <SheetHeader className="border-b border-border bg-card p-5">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
               <CalendarPlus size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-foreground">Novo</h2>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                Adicionar à agenda
-              </p>
+              <SheetTitle>Novo agendamento</SheetTitle>
+              <SheetDescription>Adicionar à agenda</SheetDescription>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
-          >
-            <X size={18} />
-          </button>
-        </header>
+        </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-5">
           <AppointmentForm
@@ -186,44 +173,36 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
           />
 
           {conflictTitle && (
-            <div className="mt-5 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+            <div className="mt-5 rounded-md bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
               ⚠ {conflictTitle}. Ajuste o horário e tente de novo.
             </div>
           )}
 
           {error && (
-            <div className="mt-5 rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
+            <div className="mt-5 rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
               {error}
             </div>
           )}
         </div>
 
-        <footer className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card p-5">
-          <button
+        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+          <Button
             type="button"
+            variant="ghost"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl px-4 py-2 text-[11px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
-          >
-            <CalendarPlus size={14} />
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={submitting}>
+            <CalendarPlus />
             {submitting ? "Criando..." : "Criar"}
-          </button>
-        </footer>
-      </aside>
-    </div>
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   );
 };
 
-// Pra reusar em outro componente (Reschedule), exportamos o helper.
 export { localToUtcIso };
-
-// Helper de tipo pro RescheduleDrawer
 export type { AppointmentFormValues };

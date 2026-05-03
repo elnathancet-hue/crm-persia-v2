@@ -11,7 +11,6 @@ import {
   MessageSquare,
   Phone,
   User as UserIcon,
-  X,
   XCircle,
 } from "lucide-react";
 import {
@@ -23,6 +22,15 @@ import {
   formatTimeRange,
   formatWeekday,
 } from "@persia/shared/agenda";
+import { Button } from "@persia/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@persia/ui/sheet";
 import { AppointmentStatusBadge } from "./AppointmentStatusBadge";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 
@@ -35,10 +43,35 @@ interface AppointmentDrawerProps {
   onReschedule?: (appointment: Appointment) => void;
 }
 
-const ACTION_BUTTONS: { status: AppointmentStatus; label: string; icon: React.ComponentType<{ size?: number }>; tone: string }[] = [
-  { status: "confirmed", label: "Confirmar", icon: Check, tone: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-  { status: "completed", label: "Marcar como realizado", icon: Check, tone: "bg-primary hover:bg-primary/90 text-white" },
-  { status: "no_show", label: "Não compareceu", icon: XCircle, tone: "bg-secondary hover:bg-secondary/90 text-secondary-foreground" },
+interface ActionDef {
+  status: AppointmentStatus;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+  variant: "default" | "outline" | "secondary";
+  className?: string;
+}
+
+const ACTION_BUTTONS: ActionDef[] = [
+  {
+    status: "confirmed",
+    label: "Confirmar",
+    icon: Check,
+    variant: "default",
+    className:
+      "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30",
+  },
+  {
+    status: "completed",
+    label: "Marcar como realizado",
+    icon: Check,
+    variant: "default",
+  },
+  {
+    status: "no_show",
+    label: "Não compareceu",
+    icon: XCircle,
+    variant: "secondary",
+  },
 ];
 
 export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
@@ -49,14 +82,16 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
 }) => {
   const actions = useAgendaActions();
   const { onOpenLead, onOpenChat, onAppointmentChange } = useAgendaCallbacks();
-  const [busyAction, setBusyAction] = React.useState<AppointmentStatus | "cancel" | null>(null);
+  const [busyAction, setBusyAction] = React.useState<
+    AppointmentStatus | "cancel" | null
+  >(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  if (!appointment) return null;
-
-  const tz = appointment.timezone || "America/Sao_Paulo";
+  const open = appointment !== null;
+  const tz = appointment?.timezone || "America/Sao_Paulo";
 
   const handleStatus = async (status: AppointmentStatus) => {
+    if (!appointment) return;
     setBusyAction(status);
     setError(null);
     try {
@@ -71,6 +106,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
   };
 
   const handleCancel = async () => {
+    if (!appointment) return;
     if (!confirm("Cancelar este agendamento? Você poderá registrar o motivo depois.")) return;
     setBusyAction("cancel");
     setError(null);
@@ -90,221 +126,230 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
   const isMutating = busyAction !== null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Painel */}
-      <aside className="relative flex h-full w-full max-w-md flex-col overflow-y-auto bg-card shadow-2xl">
-        {/* Header */}
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-border bg-card p-5">
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">
-              {APPOINTMENT_KIND_LABELS[appointment.kind]}
-            </p>
-            <h2 className="mt-1 truncate text-lg font-black text-foreground">
-              {appointment.title}
-            </h2>
-            <div className="mt-2">
-              <AppointmentStatusBadge status={appointment.status} />
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-xl p-1.5 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground"
-          >
-            <X size={18} />
-          </button>
-        </header>
-
-        {/* Conteudo */}
-        <div className="flex-1 space-y-6 p-5">
-          {appointment.description && (
-            <p className="rounded-2xl bg-muted p-4 text-sm text-foreground">
-              {appointment.description}
-            </p>
-          )}
-
-          {/* Data e horario */}
-          <section>
-            <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-              Data e horário
-            </h3>
-            <div className="space-y-2 rounded-2xl bg-card p-4 ring-1 ring-border">
-              <p className="flex items-center gap-2 text-sm font-bold text-foreground">
-                <CalendarDays size={14} className="text-muted-foreground/70" />
-                <span className="capitalize">{formatWeekday(appointment.start_at, tz)}</span>
-                <span className="text-muted-foreground/70">·</span>
-                <span>{formatDate(appointment.start_at, tz)}</span>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-md overflow-hidden flex flex-col p-0"
+      >
+        {appointment && (
+          <>
+            <SheetHeader className="border-b border-border bg-card p-5">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {APPOINTMENT_KIND_LABELS[appointment.kind]}
               </p>
-              <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Clock size={14} className="text-muted-foreground/70" />
-                {formatTimeRange(appointment.start_at, appointment.end_at, tz)}
-                <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-                  {appointment.duration_minutes} min
-                </span>
-              </p>
-            </div>
-          </section>
-
-          {/* Local + canal */}
-          {(appointment.location || appointment.channel || appointment.meeting_url) && (
-            <section>
-              <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Local e canal
-              </h3>
-              <div className="space-y-2 rounded-2xl bg-card p-4 ring-1 ring-border text-sm text-foreground">
-                {appointment.channel && (
-                  <p className="flex items-center gap-2">
-                    {appointment.channel === "phone" && <Phone size={14} className="text-muted-foreground/70" />}
-                    {appointment.channel === "whatsapp" && <MessageSquare size={14} className="text-muted-foreground/70" />}
-                    {appointment.channel === "online" && <ExternalLink size={14} className="text-muted-foreground/70" />}
-                    {appointment.channel === "in_person" && <MapPin size={14} className="text-muted-foreground/70" />}
-                    <span className="font-bold">
-                      {APPOINTMENT_CHANNEL_LABELS[appointment.channel]}
-                    </span>
-                  </p>
-                )}
-                {appointment.location && (
-                  <p className="flex items-start gap-2">
-                    <MapPin size={14} className="mt-0.5 shrink-0 text-muted-foreground/70" />
-                    {appointment.location}
-                  </p>
-                )}
-                {appointment.meeting_url && (
-                  <a
-                    href={appointment.meeting_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 break-all font-semibold text-primary hover:underline"
-                  >
-                    <ExternalLink size={14} className="shrink-0" />
-                    {appointment.meeting_url}
-                  </a>
-                )}
+              <SheetTitle className="text-lg leading-snug truncate">
+                {appointment.title}
+              </SheetTitle>
+              <SheetDescription className="sr-only">
+                Detalhes do agendamento
+              </SheetDescription>
+              <div className="mt-1">
+                <AppointmentStatusBadge status={appointment.status} />
               </div>
-            </section>
-          )}
+            </SheetHeader>
 
-          {/* Lead */}
-          {appointment.lead_id && (onOpenLead || onOpenChat) && (
-            <section>
-              <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Lead
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {onOpenLead && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenLead(appointment.lead_id!)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-[11px] font-black uppercase tracking-widest text-foreground transition hover:bg-muted/80"
-                  >
-                    <UserIcon size={12} />
-                    Abrir lead
-                  </button>
-                )}
-                {onOpenChat && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenChat(appointment.lead_id!)}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-[11px] font-black uppercase tracking-widest text-foreground transition hover:bg-muted/80"
-                  >
-                    <MessageSquare size={12} />
-                    Chat
-                  </button>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Info de cancelamento */}
-          {appointment.status === "cancelled" && (
-            <section>
-              <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                Cancelamento
-              </h3>
-              <div className="space-y-1 rounded-2xl bg-destructive/10 p-4 text-sm text-destructive ring-1 ring-destructive/30">
-                {appointment.cancelled_at && (
-                  <p>
-                    <strong>Em:</strong> {formatDate(appointment.cancelled_at, tz)}
-                  </p>
-                )}
-                {appointment.cancellation_reason && (
-                  <p>
-                    <strong>Motivo:</strong> {appointment.cancellation_reason}
-                  </p>
-                )}
-              </div>
-            </section>
-          )}
-
-          {error && (
-            <p className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
-              {error}
-            </p>
-          )}
-        </div>
-
-        {/* Footer com acoes */}
-        {!readOnly && appointment.kind === "appointment" && (
-          <footer className="sticky bottom-0 space-y-2 border-t border-border bg-card p-5">
-            {ACTION_BUTTONS.filter((b) => b.status !== appointment.status).map(
-              (b) => {
-                const Icon = b.icon;
-                return (
-                  <button
-                    key={b.status}
-                    type="button"
-                    disabled={isMutating}
-                    onClick={() => handleStatus(b.status)}
-                    className={[
-                      "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[11px] font-black uppercase tracking-widest transition disabled:opacity-50",
-                      b.tone,
-                    ].join(" ")}
-                  >
-                    <Icon size={14} />
-                    {busyAction === b.status ? "Aguarde..." : b.label}
-                  </button>
-                );
-              },
-            )}
-
-            {/* Reagendar — abre RescheduleAppointmentDrawer no parent */}
-            {onReschedule &&
-              appointment.status !== "cancelled" &&
-              appointment.status !== "completed" && (
-                <button
-                  type="button"
-                  disabled={isMutating}
-                  onClick={() => onReschedule(appointment)}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100 disabled:opacity-50"
-                >
-                  <CalendarClock size={14} />
-                  Reagendar
-                </button>
+            <div className="flex-1 space-y-6 overflow-y-auto p-5">
+              {appointment.description && (
+                <p className="rounded-md bg-muted/40 p-3 text-sm text-foreground">
+                  {appointment.description}
+                </p>
               )}
 
-            {appointment.status !== "cancelled" && (
-              <button
-                type="button"
-                disabled={isMutating}
-                onClick={handleCancel}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-card px-4 py-2.5 text-[11px] font-black uppercase tracking-widest text-destructive ring-1 ring-destructive/30 transition hover:bg-destructive/10 disabled:opacity-50"
-              >
-                <XCircle size={14} />
-                {busyAction === "cancel" ? "Cancelando..." : "Cancelar agendamento"}
-              </button>
+              {/* Data e horario */}
+              <section className="space-y-2">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Data e horário
+                </h3>
+                <div className="space-y-2 rounded-md border bg-card p-3">
+                  <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <CalendarDays size={14} className="text-muted-foreground" />
+                    <span className="capitalize">
+                      {formatWeekday(appointment.start_at, tz)}
+                    </span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>{formatDate(appointment.start_at, tz)}</span>
+                  </p>
+                  <p className="flex items-center gap-2 text-sm text-foreground">
+                    <Clock size={14} className="text-muted-foreground" />
+                    {formatTimeRange(
+                      appointment.start_at,
+                      appointment.end_at,
+                      tz,
+                    )}
+                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {appointment.duration_minutes} min
+                    </span>
+                  </p>
+                </div>
+              </section>
+
+              {(appointment.location ||
+                appointment.channel ||
+                appointment.meeting_url) && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Local e canal
+                  </h3>
+                  <div className="space-y-2 rounded-md border bg-card p-3 text-sm">
+                    {appointment.channel && (
+                      <p className="flex items-center gap-2">
+                        {appointment.channel === "phone" && (
+                          <Phone size={14} className="text-muted-foreground" />
+                        )}
+                        {appointment.channel === "whatsapp" && (
+                          <MessageSquare size={14} className="text-muted-foreground" />
+                        )}
+                        {appointment.channel === "online" && (
+                          <ExternalLink size={14} className="text-muted-foreground" />
+                        )}
+                        {appointment.channel === "in_person" && (
+                          <MapPin size={14} className="text-muted-foreground" />
+                        )}
+                        <span className="font-medium">
+                          {APPOINTMENT_CHANNEL_LABELS[appointment.channel]}
+                        </span>
+                      </p>
+                    )}
+                    {appointment.location && (
+                      <p className="flex items-start gap-2">
+                        <MapPin
+                          size={14}
+                          className="mt-0.5 shrink-0 text-muted-foreground"
+                        />
+                        {appointment.location}
+                      </p>
+                    )}
+                    {appointment.meeting_url && (
+                      <a
+                        href={appointment.meeting_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 break-all font-medium text-primary hover:underline"
+                      >
+                        <ExternalLink size={14} className="shrink-0" />
+                        {appointment.meeting_url}
+                      </a>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {appointment.lead_id && (onOpenLead || onOpenChat) && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Lead
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {onOpenLead && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenLead(appointment.lead_id!)}
+                      >
+                        <UserIcon />
+                        Abrir lead
+                      </Button>
+                    )}
+                    {onOpenChat && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onOpenChat(appointment.lead_id!)}
+                      >
+                        <MessageSquare />
+                        Chat
+                      </Button>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {appointment.status === "cancelled" && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Cancelamento
+                  </h3>
+                  <div className="space-y-1 rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
+                    {appointment.cancelled_at && (
+                      <p>
+                        <strong>Em:</strong>{" "}
+                        {formatDate(appointment.cancelled_at, tz)}
+                      </p>
+                    )}
+                    {appointment.cancellation_reason && (
+                      <p>
+                        <strong>Motivo:</strong>{" "}
+                        {appointment.cancellation_reason}
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {error && (
+                <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive ring-1 ring-destructive/30">
+                  {error}
+                </p>
+              )}
+            </div>
+
+            {!readOnly && appointment.kind === "appointment" && (
+              <SheetFooter className="border-t border-border bg-card p-4 gap-2">
+                {ACTION_BUTTONS.filter((b) => b.status !== appointment.status).map(
+                  (b) => {
+                    const Icon = b.icon;
+                    return (
+                      <Button
+                        key={b.status}
+                        type="button"
+                        variant={b.variant}
+                        disabled={isMutating}
+                        onClick={() => handleStatus(b.status)}
+                        className={["w-full", b.className ?? ""].join(" ")}
+                      >
+                        <Icon />
+                        {busyAction === b.status ? "Aguarde..." : b.label}
+                      </Button>
+                    );
+                  },
+                )}
+
+                {onReschedule &&
+                  appointment.status !== "cancelled" &&
+                  appointment.status !== "completed" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isMutating}
+                      onClick={() => onReschedule(appointment)}
+                      className="w-full"
+                    >
+                      <CalendarClock />
+                      Reagendar
+                    </Button>
+                  )}
+
+                {appointment.status !== "cancelled" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isMutating}
+                    onClick={handleCancel}
+                    className="w-full text-destructive ring-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <XCircle />
+                    {busyAction === "cancel"
+                      ? "Cancelando..."
+                      : "Cancelar agendamento"}
+                  </Button>
+                )}
+              </SheetFooter>
             )}
-          </footer>
+          </>
         )}
-      </aside>
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 };
-
