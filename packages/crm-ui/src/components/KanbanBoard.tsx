@@ -156,6 +156,9 @@ export interface KanbanBoardProps {
   onChange?: () => void;
   /** localStorage key pras metas (uma por app pra nao colidir). */
   goalsStorageKey?: string;
+  /** Slot opcional na toolbar (ex.: botao Importar do CRM, antes do
+   *  icone Configurar). Cada app injeta o que precisa. */
+  toolbarExtras?: React.ReactNode;
 }
 
 export function KanbanBoard({
@@ -167,6 +170,7 @@ export function KanbanBoard({
   canManagePipelines,
   onChange,
   goalsStorageKey = "crm-kanban-goals-v1",
+  toolbarExtras,
 }: KanbanBoardProps) {
   const actions = useKanbanActions();
   const [selectedPipeline, setSelectedPipeline] = React.useState(
@@ -540,6 +544,7 @@ export function KanbanBoard({
             <Flag className="size-3.5" />
             Metas
           </Button>
+          {toolbarExtras}
           {canManagePipelines && (
             <Button
               variant="ghost"
