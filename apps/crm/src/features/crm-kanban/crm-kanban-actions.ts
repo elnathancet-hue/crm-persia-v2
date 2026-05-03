@@ -7,6 +7,7 @@
 import type { KanbanActions } from "@persia/crm-ui";
 import {
   bulkApplyTagsToDeals,
+  bulkMarkDealsAsLost,
   bulkMoveDeals,
   bulkRemoveDeals,
   bulkSetDealStatus,
@@ -16,6 +17,8 @@ import {
   deleteDeal,
   deletePipeline,
   deleteStage,
+  getLossReasons,
+  markDealAsLost,
   updateDeal,
   updateDealStage,
   updatePipelineName,
@@ -81,4 +84,10 @@ export const crmKanbanActions: KanbanActions = {
   bulkDeleteDeals: (dealIds) => bulkRemoveDeals(dealIds),
   bulkApplyTagsToDeals: (dealIds, tagIds) =>
     bulkApplyTagsToDeals(dealIds, tagIds),
+
+  // ============ LOSS TRACKING (PR-K3) ============
+  getLossReasons: () => getLossReasons(),
+  markDealAsLost: (dealId, input) => markDealAsLost(dealId, input),
+  bulkMarkDealsAsLost: (dealIds, input) =>
+    bulkMarkDealsAsLost(dealIds, input),
 };

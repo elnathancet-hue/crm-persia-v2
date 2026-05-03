@@ -33,6 +33,8 @@ export type {
   SegmentCondition,
   SegmentRules,
   Segment,
+  // Deal loss tracking (PR-K3)
+  DealLossReason,
 } from "./types";
 
 // Queries read-only compartilhadas entre apps/crm e apps/admin.
@@ -64,6 +66,7 @@ export {
   listStagesForOrg,
   listDeals,
   findLeadOpenDealWithStages,
+  listLossReasons,
 } from "./queries";
 
 // Mutations CRM compartilhadas (CRUD de leads + tags + pipelines + deals).
@@ -81,6 +84,7 @@ export type {
   CreateDealInput,
   UpdateDealInput,
   DealStatus,
+  MarkDealAsLostInput,
 } from "./mutations";
 
 export {
@@ -109,4 +113,6 @@ export {
   bulkUpdateDealStatus,
   bulkDeleteDeals,
   bulkApplyTagsToDealLeads,
+  markDealAsLost,
+  bulkMarkDealsAsLost,
 } from "./mutations";

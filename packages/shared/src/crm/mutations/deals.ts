@@ -191,6 +191,86 @@ export async function deleteDeal(
 }
 
 // ============================================================================
+// Loss tracking (PR-K3)
+// ============================================================================
+
+export interface MarkDealAsLostInput {
+  loss_reason: string;
+  competitor?: string | null;
+  loss_note?: string | null;
+}
+
+/**
+ * Marca um deal como perdido capturando motivo, concorrente e nota
+ * pra analytics. Seta status='lost' + closed_at = now() + colunas
+ * de loss tracking. Idempotente — se ja for lost, atualiza apenas
+ * os campos de motivo.
+ */
+export async function markDealAsLost(
+  ctx: CrmMutationContext,
+  dealId: string,
+  input: MarkDealAsLostInput,
+): Promise<void> {
+  const { db, orgId } = ctx;
+
+  if (!input.loss_reason || input.loss_reason.trim().length === 0) {
+    throw new Error("Motivo da perda eh obrigatorio.");
+  }
+
+  const { error } = await db
+    .from("deals")
+    .update({
+      status: "lost",
+      closed_at: new Date().toISOString(),
+      loss_reason: input.loss_reason.trim(),
+      competitor: input.competitor ? input.competitor.trim() : null,
+      loss_note: input.loss_note ? input.loss_note.trim() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", dealId)
+    .eq("organization_id", orgId);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Marca varios deals como perdidos com mesmo motivo (bulk). UI typica:
+ * usuario seleciona N deals, escolhe motivo + concorrente uma vez,
+ * aplica em todos. Cap de 200.
+ */
+export async function bulkMarkDealsAsLost(
+  ctx: CrmMutationContext,
+  dealIds: string[],
+  input: MarkDealAsLostInput,
+): Promise<{ updated_count: number }> {
+  const { db, orgId } = ctx;
+  if (dealIds.length === 0) return { updated_count: 0 };
+  if (dealIds.length > 200) {
+    throw new Error("Maximo 200 negocios por operacao em massa.");
+  }
+  if (!input.loss_reason || input.loss_reason.trim().length === 0) {
+    throw new Error("Motivo da perda eh obrigatorio.");
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from("deals")
+    .update({
+      status: "lost",
+      closed_at: now,
+      loss_reason: input.loss_reason.trim(),
+      competitor: input.competitor ? input.competitor.trim() : null,
+      loss_note: input.loss_note ? input.loss_note.trim() : null,
+      updated_at: now,
+    })
+    .eq("organization_id", orgId)
+    .in("id", dealIds);
+
+  if (error) throw new Error(error.message);
+  return { updated_count: dealIds.length };
+}
+
+// ============================================================================
 // Bulk operations (PR-K2)
 // ============================================================================
 
