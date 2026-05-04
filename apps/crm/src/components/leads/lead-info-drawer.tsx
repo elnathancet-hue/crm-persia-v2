@@ -282,9 +282,9 @@ export function LeadInfoDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-2xl overflow-y-auto p-0 flex flex-col"
+        className="w-full sm:max-w-2xl overflow-hidden p-0 flex flex-col"
       >
-        <SheetHeader className="px-5 pt-5 pb-2 border-b">
+        <SheetHeader className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
           <SheetTitle>Informações do lead</SheetTitle>
           {currentStageObj ? (
             <SheetDescription className="flex items-center gap-1.5 text-xs">
@@ -551,19 +551,26 @@ export function LeadInfoDrawer({
           </form>
         </Tabs>
 
-        <SheetFooter className="px-5 py-3 border-t">
+        <SheetFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex-row justify-end gap-2 sm:space-x-0">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
+            Fechar
+          </Button>
           <Button
             type="submit"
             form="lead-info-form"
             disabled={isPending}
-            className="w-full"
           >
             {isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Save className="size-4" />
             )}
-            Salvar e fechar
+            Salvar
           </Button>
         </SheetFooter>
       </SheetContent>

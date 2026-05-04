@@ -24,13 +24,14 @@ import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
+import { Layers } from "lucide-react";
 import { useAgentActions } from "../context";
 import { renderToolIcon } from "../icon-map";
 
@@ -85,17 +86,21 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
     });
   };
 
+  const dialogTitle = mode === "create" ? "Nova etapa" : "Editar etapa";
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col">
-        <SheetHeader>
-          <SheetTitle>{mode === "create" ? "Nova etapa" : "Editar etapa"}</SheetTitle>
-          <SheetDescription>
-            A etapa descreve uma situação específica da conversa. O agente segue a instrução ate detectar a transição.
-          </SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 overflow-y-auto">
-          <form onSubmit={handleSave} className="space-y-4 px-4" id="stage-form">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          <DialogHero
+            icon={<Layers className="size-5" />}
+            title={dialogTitle}
+            tagline="Situação específica da conversa + instrução do agente"
+          />
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-5">
+          <form onSubmit={handleSave} className="space-y-4" id="stage-form">
             <div className="space-y-2">
               <Label htmlFor="situation">Situação</Label>
               <Input
@@ -188,22 +193,22 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
           </form>
 
           {mode === "edit" && stage ? (
-            <div className="px-4 pt-4 mt-4 border-t">
+            <div className="pt-4 mt-4 border-t border-border">
               <StageToolsAllowlist stageId={stage.id} tools={tools} />
             </div>
           ) : null}
         </div>
-        <SheetFooter className="flex-row justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
+        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
             Cancelar
           </Button>
           <Button type="submit" form="stage-form" disabled={isPending || formInvalid}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             {mode === "create" ? "Criar etapa" : "Salvar"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

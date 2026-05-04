@@ -25,11 +25,11 @@ import { Textarea } from "@persia/ui/textarea";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -213,16 +213,18 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Novo agente</DialogTitle>
-            <DialogDescription>
-              Você podera refinar prompt e etapas depois. Ele começa como rascunho.
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Novo agente</DialogTitle>
+            <DialogHero
+              icon={<Sparkles className="size-5" />}
+              title="Novo agente"
+              tagline="Você poderá refinar prompt e etapas depois"
+            />
           </DialogHeader>
           <form
             action={handleCreate}
-            className="space-y-4"
+            className="flex-1 space-y-4 overflow-y-auto p-5"
             id="create-agent-form"
           >
             <div className="space-y-2">
@@ -308,8 +310,8 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
               </p>
             </div>
           </form>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={isPending}>
+          <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+            <Button variant="ghost" onClick={() => setCreateOpen(false)} disabled={isPending}>
               Cancelar
             </Button>
             <Button type="submit" form="create-agent-form" disabled={isPending}>
