@@ -20,13 +20,13 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { Textarea } from "@persia/ui/textarea";
 import { useAgendaActions } from "../context";
 
@@ -158,27 +158,18 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
     }
   };
 
+  const dialogTitle = isEdit ? "Editar página" : "Nova página de agendamento";
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0"
-      >
-        <SheetHeader className="border-b border-border bg-card p-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <CalendarPlus size={18} />
-            </div>
-            <div>
-              <SheetTitle>
-                {isEdit ? "Editar página" : "Nova página de agendamento"}
-              </SheetTitle>
-              <SheetDescription>
-                Link público pra leads agendarem sozinhos
-              </SheetDescription>
-            </div>
-          </div>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          <DialogHero
+            icon={<CalendarPlus className="size-5" />}
+            title={dialogTitle}
+            tagline="Link público pra leads agendarem sozinhos"
+          />
+        </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           <div className="space-y-1.5">
@@ -346,7 +337,7 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
           )}
         </div>
 
-        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -363,8 +354,8 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
             {submitting ? <Loader2 className="animate-spin" /> : <CalendarPlus />}
             {submitting ? "Salvando..." : isEdit ? "Salvar" : "Criar página"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

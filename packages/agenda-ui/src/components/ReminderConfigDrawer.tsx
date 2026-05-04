@@ -20,13 +20,13 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { Textarea } from "@persia/ui/textarea";
 
 interface ReminderConfigDrawerProps {
@@ -140,27 +140,18 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
     }
   };
 
+  const dialogTitle = isEdit ? "Editar lembrete" : "Novo lembrete";
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0"
-      >
-        <SheetHeader className="border-b border-border bg-card p-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <Bell size={18} />
-            </div>
-            <div>
-              <SheetTitle>
-                {isEdit ? "Editar lembrete" : "Novo lembrete"}
-              </SheetTitle>
-              <SheetDescription>
-                Mensagem automática via WhatsApp
-              </SheetDescription>
-            </div>
-          </div>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          <DialogHero
+            icon={<Bell className="size-5" />}
+            title={dialogTitle}
+            tagline="Mensagem automática via WhatsApp"
+          />
+        </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           <div className="space-y-1.5">
@@ -307,7 +298,7 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
           )}
         </div>
 
-        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -324,8 +315,8 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
             {submitting ? <Loader2 className="animate-spin" /> : <Bell />}
             {submitting ? "Salvando..." : isEdit ? "Salvar" : "Criar lembrete"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
