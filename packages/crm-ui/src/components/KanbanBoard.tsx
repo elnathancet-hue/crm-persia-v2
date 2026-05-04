@@ -577,10 +577,15 @@ export function KanbanBoard({
 
   // ---- DRAG & DROP ----
 
-  function handleDragStart(e: React.DragEvent, dealId: string) {
-    setDraggedDealId(dealId);
-    e.dataTransfer.effectAllowed = "move";
-  }
+  // PR-AUD4: useCallback (deps vazias). Estavel entre renders -> permite
+  // que DealCard (React.memo) nao re-renderize por causa dessa prop.
+  const handleDragStart = React.useCallback(
+    (e: React.DragEvent, dealId: string) => {
+      setDraggedDealId(dealId);
+      e.dataTransfer.effectAllowed = "move";
+    },
+    [],
+  );
 
   function handleDragOver(e: React.DragEvent, stageId: string) {
     e.preventDefault();
@@ -592,35 +597,57 @@ export function KanbanBoard({
     setDragOverStageId(null);
   }
 
+  // PR-AUD5: dedup de drag-drop. Sem isso, se o usuario arrasta o
+  // MESMO card 2x rapidamente (drag pra A, depois pra B antes da
+  // request da A terminar), 2 requests racem no server e o estado
+  // final da `deals.stage_id` depende de qual chega ultimo. UI fica
+  // potencialmente desincronizada com servidor.
+  // Solucao: enquanto ha move em flight pro mesmo dealId, ignora
+  // tentativas subsequentes. Conservador (perde 1 drag se acontecer)
+  // mas nunca causa estado inconsistente.
+  const pendingMovesRef = React.useRef<Set<string>>(new Set());
+
   function handleDrop(stageId: string) {
     setDragOverStageId(null);
     if (!draggedDealId) return;
 
-    const deal = localDeals.find((d) => d.id === draggedDealId);
+    const dealId = draggedDealId;
+    const deal = localDeals.find((d) => d.id === dealId);
     if (!deal || deal.stage_id === stageId) {
       setDraggedDealId(null);
       return;
     }
 
+    // PR-AUD5: ja tem outra move em flight pro mesmo deal? Pula sem
+    // aplicar optimistic. UI fica como esta + usuario pode retentar.
+    if (pendingMovesRef.current.has(dealId)) {
+      setDraggedDealId(null);
+      toast.info("Aguarde a movimentacao anterior terminar.");
+      return;
+    }
+
     const previousStageId = deal.stage_id;
+    pendingMovesRef.current.add(dealId);
 
     setLocalDeals((prev) =>
       prev.map((d) =>
-        d.id === draggedDealId ? { ...d, stage_id: stageId } : d,
+        d.id === dealId ? { ...d, stage_id: stageId } : d,
       ),
     );
     setDraggedDealId(null);
 
     startTransition(async () => {
       try {
-        await actions.moveDealStage(draggedDealId, stageId);
+        await actions.moveDealStage(dealId, stageId);
         onChange?.();
       } catch {
         setLocalDeals((prev) =>
           prev.map((d) =>
-            d.id === draggedDealId ? { ...d, stage_id: previousStageId } : d,
+            d.id === dealId ? { ...d, stage_id: previousStageId } : d,
           ),
         );
+      } finally {
+        pendingMovesRef.current.delete(dealId);
       }
     });
   }
@@ -757,11 +784,15 @@ export function KanbanBoard({
     onChange?.();
   }
 
-  function handleDealUpdated(dealId: string, updates: Partial<Deal>) {
-    setLocalDeals((prev) =>
-      prev.map((d) => (d.id === dealId ? { ...d, ...updates } : d)),
-    );
-  }
+  // PR-AUD4: useCallback (deps vazias).
+  const handleDealUpdated = React.useCallback(
+    (dealId: string, updates: Partial<Deal>) => {
+      setLocalDeals((prev) =>
+        prev.map((d) => (d.id === dealId ? { ...d, ...updates } : d)),
+      );
+    },
+    [],
+  );
 
   // ---- Bulk handlers (PR-K2) ----
   // Cap conservador (200) ja eh enforced no shared mutation, mas
@@ -1341,9 +1372,13 @@ export function KanbanBoard({
                       }
                       canEdit={canEdit}
                       selected={selectedIds.has(deal.id)}
+                      // PR-AUD4: passa o callback estavel direto. DealCard
+                      // chama internamente com deal.id. Sem isso, lambda
+                      // inline criava nova ref em todo render -> 50+ cards
+                      // re-renderizavam mesmo se nada mudasse.
                       onToggleSelected={
                         canEdit && actions.bulkMoveDeals
-                          ? () => toggleSelected(deal.id)
+                          ? toggleSelected
                           : undefined
                       }
                       hasActiveSelection={selectedCount > 0}
@@ -1469,8 +1504,13 @@ export function KanbanBoard({
 }
 
 // ============ DEAL CARD ============
-
-function DealCard({
+//
+// PR-AUD4: wrappado em React.memo. Sem isso, qualquer re-render do
+// KanbanBoard (filtro, busca, optimistic update) re-renderiza TODOS
+// os cards (50-200+ na maioria dos casos). Com memo + props estaveis
+// (useCallback nos handlers, toggleSelected sem lambda inline), so
+// cards cuja prop mudou re-renderizam.
+const DealCard = React.memo(function DealCardImpl({
   deal,
   draggedDealId,
   onDragStart,
@@ -1498,8 +1538,12 @@ function DealCard({
   canEdit: boolean;
   /** PR-K2: card selecionado pra bulk op. */
   selected: boolean;
-  /** PR-K2: callback de toggle. undefined = bulk indisponivel. */
-  onToggleSelected?: () => void;
+  /**
+   * PR-K2: callback de toggle. undefined = bulk indisponivel.
+   * PR-AUD4: assinatura mudou pra receber dealId — permite passar
+   * referencia estavel em vez de lambda inline (perf).
+   */
+  onToggleSelected?: (dealId: string) => void;
   /** PR-K2: ha pelo menos 1 card selecionado em qualquer lugar (mostra
    *  checkbox sempre, nao so no hover). */
   hasActiveSelection: boolean;
@@ -1540,7 +1584,7 @@ function DealCard({
     if (onToggleSelected && hasActiveSelection) {
       e.preventDefault();
       e.stopPropagation();
-      onToggleSelected();
+      onToggleSelected(deal.id);
       return;
     }
     setDetailOpen(true);
@@ -1639,7 +1683,7 @@ function DealCard({
             }`}
             onClick={(e) => {
               e.stopPropagation();
-              onToggleSelected();
+              onToggleSelected(deal.id);
             }}
           >
             <Checkbox
@@ -1864,7 +1908,7 @@ function DealCard({
       />
     </>
   );
-}
+});
 
 // ============ METRIC CHIP (PR-D) ============
 //
@@ -2032,6 +2076,18 @@ function DealDetailDialog({
   const [value, setValue] = React.useState(String(deal.value || 0));
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
+  // PR-AUD5: mountedRef pra guardar setState apos unmount. Sem isso, se
+  // o usuario fecha o dialog antes do updateDeal terminar, onOpenChange
+  // dispara setState em componente desmontado (warning + memory leak
+  // potencial). Setado false no cleanup.
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   function setError(field: string, msg: string) {
     setErrors((prev) => ({ ...prev, [field]: msg }));
   }
@@ -2050,6 +2106,7 @@ function DealDetailDialog({
   }, [deal.title, deal.value]);
 
   function handleSave() {
+    if (isPending) return; // PR-AUD5: dedup contra double-submit
     let valid = true;
     if (!title.trim()) {
       setError("detail_title", "Campo obrigatório");
@@ -2077,9 +2134,13 @@ function DealDetailDialog({
           title: newTitle,
           value: newValue,
         });
-        onOpenChange(false);
+        // PR-AUD5: so fecha se ainda montado (usuario nao fechou
+        // antes da response).
+        if (mountedRef.current) onOpenChange(false);
       } catch {
-        onUpdate(deal.id, { title: deal.title, value: deal.value });
+        if (mountedRef.current) {
+          onUpdate(deal.id, { title: deal.title, value: deal.value });
+        }
       }
     });
   }
@@ -2117,6 +2178,10 @@ function DealDetailDialog({
                 else clearError("detail_title");
               }}
               disabled={!canEdit}
+              // PR-AUD5: cap defensivo. Schema do banco tem limite — sem
+              // maxLength no input, usuario pode colar 5k chars e so
+              // descobrir o erro depois do submit (toast generico).
+              maxLength={200}
               className={`h-10 rounded-md ${
                 errors.detail_title
                   ? "border-destructive focus-visible:ring-destructive/50"
@@ -2291,6 +2356,7 @@ function AddDealDialog({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isPending) return; // PR-AUD5: dedup contra double-submit
     let valid = true;
     if (!titleInput.trim()) {
       setAddError("add_title", "Campo obrigatório");
@@ -2378,6 +2444,7 @@ function AddDealDialog({
               }}
               required
               placeholder="Nome do negócio"
+              maxLength={200}
               onBlur={(e) => {
                 if (!e.target.value.trim())
                   setAddError("add_title", "Campo obrigatório");
