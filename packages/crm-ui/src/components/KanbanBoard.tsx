@@ -1219,39 +1219,49 @@ export function KanbanBoard({
                     : ""
                 }`}
               >
-                <div
-                  className="px-3 py-2.5 flex items-center justify-between rounded-t-xl bg-card border-b"
-                  style={{ borderTop: `3px solid ${stage.color}` }}
-                >
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-sm">{stage.name}</h3>
-                      <Badge
-                        variant="secondary"
-                        className="h-5 px-1.5 text-[10px] font-bold"
-                      >
-                        {metrics.count}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <span>R$ {formatCurrency(metrics.total)}</span>
-                      <span>
-                        Ticket medio: R$ {formatCurrency(metrics.average)}
-                      </span>
-                      {index > 0 && (
-                        <span>Conv: {stageConversion.toFixed(1)}%</span>
+                {/* Header da coluna — bullet colorido + nome + count
+                    + total na linha de baixo. PR-K6: limpa o overload
+                    de info (Ticket medio + Conv vai pro tooltip). */}
+                <div className="px-3 py-3 rounded-t-xl bg-card/80 border-b border-border">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="inline-block size-2 rounded-full shrink-0"
+                          style={{ backgroundColor: stage.color }}
+                          aria-hidden
+                        />
+                        <h3 className="truncate font-semibold text-sm text-foreground">
+                          {stage.name}
+                        </h3>
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto h-5 px-1.5 text-[10px] font-bold"
+                          title={
+                            index > 0
+                              ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
+                              : `Ticket médio R$ ${formatCurrency(metrics.average)}`
+                          }
+                        >
+                          {metrics.count}
+                        </Badge>
+                      </div>
+                      {metrics.total > 0 && (
+                        <p className="mt-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                          R$ {formatCurrency(metrics.total)}
+                        </p>
                       )}
                     </div>
+                    {canEdit && (
+                      <AddDealDialog
+                        pipelineId={selectedPipeline}
+                        stageId={stage.id}
+                        leads={leads}
+                        onCreated={handleDealCreated}
+                        buttonColor="currentColor"
+                      />
+                    )}
                   </div>
-                  {canEdit && (
-                    <AddDealDialog
-                      pipelineId={selectedPipeline}
-                      stageId={stage.id}
-                      leads={leads}
-                      onCreated={handleDealCreated}
-                      buttonColor="currentColor"
-                    />
-                  )}
                 </div>
 
                 <div className="p-2 space-y-2 flex-1 overflow-y-auto">
@@ -1283,10 +1293,26 @@ export function KanbanBoard({
                       hasActiveSelection={selectedCount > 0}
                     />
                   ))}
+                  {/* Empty state colorido (PR-K6) */}
                   {stageDeals.length === 0 && (
-                    <div className="flex items-center justify-center h-20 border-dashed border-2 rounded-lg m-2 text-xs text-muted-foreground">
-                      Nenhum negócio
-                    </div>
+                    <button
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() =>
+                        canEdit &&
+                        document
+                          .getElementById(`add-deal-${stage.id}`)
+                          ?.click()
+                      }
+                      className="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border/60 bg-muted/20 px-4 py-8 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:cursor-default disabled:hover:border-border/60 disabled:hover:bg-muted/20 disabled:hover:text-muted-foreground"
+                    >
+                      <span className="inline-flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                        <Plus className="size-4" />
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest">
+                        Etapa vazia
+                      </span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -1501,15 +1527,40 @@ function DealCard({
     }
   };
 
+  // PR-K6: subtitulo do card — usa email se nao tiver outro contexto.
+  // Studio coloca empresa em uppercase pequena; sem campo "company"
+  // no schema, usamos email (ou telefone formatado) como fallback.
+  const subtitle =
+    lead?.email || (phone ? `Tel: ${phone}` : null);
+
+  // Avatar inicial colorido — hash do nome -> 1 de 8 paletas saturadas
+  // (espelha o "avatar colorido" do studio).
+  const avatarColor = React.useMemo(() => {
+    const palette = [
+      "bg-blue-500",
+      "bg-emerald-500",
+      "bg-amber-500",
+      "bg-rose-500",
+      "bg-violet-500",
+      "bg-cyan-500",
+      "bg-orange-500",
+      "bg-pink-500",
+    ];
+    const seed = (lead?.name || deal.title || "?")
+      .split("")
+      .reduce((a, c) => a + c.charCodeAt(0), 0);
+    return palette[seed % palette.length];
+  }, [lead?.name, deal.title]);
+
   return (
     <>
       <div
-        className={`group relative bg-card border rounded-xl p-3 hover:shadow-sm transition-all duration-150 ${
+        className={`group relative bg-card border rounded-xl p-3.5 hover:shadow-md transition-all duration-150 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
         } ${isDragging ? "opacity-40 ring-2 ring-primary" : ""} ${
           selected
             ? "border-primary ring-2 ring-primary/40 bg-primary/5"
-            : "hover:border-primary/30"
+            : "hover:border-primary/40"
         }`}
         draggable={canEdit && !hasActiveSelection}
         onDragStart={(e) =>
@@ -1517,8 +1568,7 @@ function DealCard({
         }
         onClick={handleCardClick}
       >
-        {/* Checkbox de selecao bulk — aparece no hover, sempre se ha
-            selecao ativa OU se este card ja esta selecionado. */}
+        {/* Checkbox de selecao bulk — hover ou ativo. */}
         {onToggleSelected && (
           <div
             className={`absolute left-2 top-2 z-10 transition-opacity ${
@@ -1539,43 +1589,60 @@ function DealCard({
           </div>
         )}
 
+        {/* Linha 1: Titulo (bold dark) + WhatsApp shortcut */}
         <div
-          className={`flex items-center gap-2.5 ${onToggleSelected ? "pl-6" : ""}`}
+          className={`flex items-start justify-between gap-2 ${onToggleSelected ? "pl-6" : ""}`}
         >
-          <div className="size-9 shrink-0 rounded-full bg-muted overflow-hidden flex items-center justify-center text-xs font-semibold text-muted-foreground">
-            {initials ? <span>{initials}</span> : <span aria-hidden>?</span>}
+          <div className="min-w-0 flex-1">
+            {editingField === "title" && canEdit ? (
+              <InlineEdit
+                initialValue={deal.title}
+                type="text"
+                ariaLabel="Editar titulo"
+                pending={editPending}
+                onCommit={(v) => saveEdit("title", v)}
+                onCancel={() => setEditingField(null)}
+                className="text-sm font-bold text-foreground"
+              />
+            ) : (
+              <h4
+                className={`truncate text-sm font-bold text-foreground ${
+                  canEdit ? "cursor-text" : ""
+                }`}
+                title={canEdit ? "Duplo-click para editar" : displayName}
+                onDoubleClick={(e) => {
+                  if (!canEdit) return;
+                  e.stopPropagation();
+                  setEditingField("title");
+                }}
+              >
+                {displayName}
+              </h4>
+            )}
+            {/* Subtitulo: avatar colorido + label uppercase (ex: empresa/email) */}
+            {(initials || subtitle) && (
+              <div className="mt-1 flex items-center gap-1.5">
+                {initials && (
+                  <span
+                    className={`inline-flex size-5 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white ${avatarColor}`}
+                    aria-hidden
+                  >
+                    {initials}
+                  </span>
+                )}
+                {subtitle && (
+                  <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {subtitle}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-
-          {editingField === "title" && canEdit ? (
-            <InlineEdit
-              initialValue={deal.title}
-              type="text"
-              ariaLabel="Editar titulo"
-              pending={editPending}
-              onCommit={(v) => saveEdit("title", v)}
-              onCancel={() => setEditingField(null)}
-              className="flex-1 min-w-0 text-sm font-semibold text-cyan-600"
-            />
-          ) : (
-            <p
-              className={`flex-1 min-w-0 text-sm font-semibold truncate text-cyan-600 ${
-                canEdit ? "cursor-text" : ""
-              }`}
-              title={canEdit ? "Duplo-click para editar" : undefined}
-              onDoubleClick={(e) => {
-                if (!canEdit) return;
-                e.stopPropagation();
-                setEditingField("title");
-              }}
-            >
-              {displayName}
-            </p>
-          )}
 
           {phone && (
             <button
               type="button"
-              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-green-500/15 text-green-600 hover:bg-green-500/25 transition-colors"
+              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 transition-colors"
               title="Abrir WhatsApp"
               onClick={(e) => {
                 e.stopPropagation();
@@ -1590,26 +1657,99 @@ function DealCard({
           )}
         </div>
 
+        {/* Tags coloridas (saturadas usando tag.color) */}
         {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2 ml-11.5">
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
             {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-cyan-50 text-cyan-700"
-              >
-                {tag.name}
-              </span>
+              <ColoredTagPill key={tag.id} tag={tag} />
             ))}
           </div>
         )}
 
-        <p className="mt-2 text-xs text-muted-foreground">
-          {lead?.assignee?.full_name
-            ? `Responsável: ${lead.assignee.full_name}`
-            : "Sem responsável"}
-        </p>
+        {/* Pill VALOR ESTIMADO (verde) */}
+        <div className="mt-3">
+          {editingField === "value" && canEdit ? (
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 dark:bg-emerald-500/10">
+              <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
+                  Valor estimado
+                </div>
+                <div className="flex items-center gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                  <span>R$</span>
+                  <InlineEdit
+                    initialValue={String(deal.value ?? 0)}
+                    type="number"
+                    ariaLabel="Editar valor"
+                    pending={editPending}
+                    onCommit={(v) => saveEdit("value", v)}
+                    onCancel={() => setEditingField(null)}
+                    className="flex-1 text-emerald-800 dark:text-emerald-200"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-left transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
+              title={canEdit ? "Duplo-click para editar valor" : undefined}
+              onDoubleClick={(e) => {
+                if (!canEdit) return;
+                e.stopPropagation();
+                setEditingField("value");
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
+                  Valor estimado
+                </div>
+                <div className="text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                  {deal.value > 0 ? (
+                    `R$ ${formatCurrency(deal.value)}`
+                  ) : (
+                    <span className="opacity-70">
+                      R$ — {canEdit ? "(duplo-click)" : ""}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          )}
+        </div>
 
-        <div className="flex items-center gap-1.5 mt-2.5">
+        {/* Pill RESPONSÁVEL (azul) */}
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 dark:bg-blue-500/10">
+          <span
+            className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
+              lead?.assignee?.full_name ? "bg-blue-600" : "bg-muted-foreground/40"
+            }`}
+            aria-hidden
+          >
+            {lead?.assignee?.full_name
+              ? lead.assignee.full_name
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((p: string) => p[0])
+                  .join("")
+                  .toUpperCase()
+              : "?"}
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
+              Responsável
+            </div>
+            <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
+              {lead?.assignee?.full_name || "Sem responsável"}
+            </div>
+          </div>
+        </div>
+
+        {/* Botoes terminais (Descartado / Fechado) — discretos, so no hover */}
+        <div className="mt-3 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
             disabled={!canEdit || !hasFailureBucket}
@@ -1619,13 +1759,13 @@ function DealCard({
             }}
             title={
               hasFailureBucket
-                ? "Mover pra etapa de falha"
-                : "Sem etapa de falha configurada neste funil"
+                ? "Marcar como perdido (registra motivo)"
+                : "Sem etapa de falha configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium bg-red-500 text-white hover:bg-red-600 disabled:bg-red-200 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-red-500/30 dark:bg-card dark:hover:bg-red-500/10"
           >
             <X className="size-3" />
-            Negócio descartado
+            Descartar
           </button>
           <button
             type="button"
@@ -1636,51 +1776,15 @@ function DealCard({
             }}
             title={
               hasSuccessBucket
-                ? "Mover pra etapa de sucesso"
-                : "Sem etapa de sucesso configurada neste funil"
+                ? "Marcar como ganho"
+                : "Sem etapa de sucesso configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-emerald-200 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-emerald-500/30 dark:bg-card dark:hover:bg-emerald-500/10"
           >
             <Check className="size-3" />
-            Negócio fechado
+            Fechar
           </button>
         </div>
-
-        {editingField === "value" && canEdit ? (
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <span>R$</span>
-            <InlineEdit
-              initialValue={String(deal.value ?? 0)}
-              type="number"
-              ariaLabel="Editar valor"
-              pending={editPending}
-              onCommit={(v) => saveEdit("value", v)}
-              onCancel={() => setEditingField(null)}
-              className="flex-1"
-            />
-          </div>
-        ) : (
-          <p
-            className={`text-[11px] font-medium text-muted-foreground mt-2 ${
-              canEdit ? "cursor-text" : ""
-            }`}
-            title={canEdit ? "Duplo-click para editar" : undefined}
-            onDoubleClick={(e) => {
-              if (!canEdit) return;
-              e.stopPropagation();
-              setEditingField("value");
-            }}
-          >
-            R${" "}
-            {deal.value > 0
-              ? formatCurrency(deal.value)
-              : (
-                  <span className="opacity-60">
-                    {canEdit ? "—  (duplo-click pra editar)" : "—"}
-                  </span>
-                )}
-          </p>
-        )}
       </div>
 
       <DealDetailDialog
@@ -1694,6 +1798,39 @@ function DealCard({
         canEdit={canEdit}
       />
     </>
+  );
+}
+
+// ============ COLORED TAG PILL (PR-K6) ============
+//
+// Tag colorida saturada usando tag.color. Espelha o visual do studio
+// onde "QUENTE" (vermelho), "RECORRENTE" (verde), "IMPORTANTE" (rosa)
+// aparecem com fundo saturado + texto branco. Calculo de contraste
+// garante legibilidade (texto branco em cor escura, texto escuro em
+// cor clara).
+
+function ColoredTagPill({ tag }: { tag: Tag }) {
+  // Helper de contraste — calcula luminance pra decidir cor do texto
+  const textOnColor = React.useMemo(() => {
+    const c = (tag.color || "#6366f1").replace("#", "");
+    if (c.length !== 6) return "#ffffff";
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.6 ? "#1A1A1A" : "#FFFFFF";
+  }, [tag.color]);
+
+  return (
+    <span
+      className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm"
+      style={{
+        backgroundColor: tag.color || "#6366f1",
+        color: textOnColor,
+      }}
+    >
+      {tag.name}
+    </span>
   );
 }
 
