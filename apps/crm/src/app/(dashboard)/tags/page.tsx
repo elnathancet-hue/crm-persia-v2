@@ -1,20 +1,11 @@
-import { getTagsWithCount } from "@/actions/tags";
-import { TagsPageClient } from "./tags-client";
+// PR-K10: A pagina /tags agora vive como sub-tab de /crm/settings.
+// Mantemos a rota /tags como REDIRECT pra preservar bookmarks +
+// links externos.
 
-export default async function TagsPage() {
-  const tags = await getTagsWithCount();
+import { redirect } from "next/navigation";
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight font-heading">Tags</h1>
-          <p className="text-sm text-muted-foreground">
-            Organize seus leads com tags coloridas
-          </p>
-        </div>
-      </div>
-      <TagsPageClient initialTags={(tags || []) as never} />
-    </div>
-  );
+export const metadata = { title: "Etiquetas" };
+
+export default function TagsRedirect() {
+  redirect("/crm/settings?tab=etiquetas");
 }
