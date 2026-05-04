@@ -33,12 +33,12 @@ import { Textarea } from "@persia/ui/textarea";
 import { Checkbox } from "@persia/ui/checkbox";
 import { Badge } from "@persia/ui/badge";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "./DialogHero";
 import {
   Select,
   SelectContent,
@@ -453,19 +453,20 @@ export function ImportLeadsWizard({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
       >
-        <SheetHeader className="border-b border-border px-6 py-4">
-          <SheetTitle>Importar leads</SheetTitle>
-          <SheetDescription>
-            Upload de CSV ou XLSX, com auto-mapeamento, detecção de duplicatas e
-            criação automática de segmento.
-          </SheetDescription>
+        <DialogHeader className="border-b border-border px-6 py-5">
+          {/* DialogTitle invisivel pra a11y; o titulo visivel vem do hero. */}
+          <DialogTitle className="sr-only">Importar leads</DialogTitle>
+          <DialogHero
+            icon={<Upload className="size-5" />}
+            title="Importar leads"
+            tagline="Upload de CSV ou XLSX com auto-mapeamento"
+          />
           <StepIndicator current={step} />
-        </SheetHeader>
+        </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {step === 1 && (
@@ -589,8 +590,8 @@ export function ImportLeadsWizard({
             </>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
