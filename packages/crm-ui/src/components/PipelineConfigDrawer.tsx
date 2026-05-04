@@ -7,17 +7,17 @@
 // agora compartilhado via @persia/crm-ui.
 
 import * as React from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Kanban } from "lucide-react";
 import { toast } from "sonner";
 import type { Pipeline, Stage, StageOutcome } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -310,31 +310,32 @@ export function PipelineConfigDrawer({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-3xl overflow-y-auto"
-        >
-          <SheetHeader>
-            <div className="flex items-center justify-between gap-3 pr-8">
-              <SheetTitle>Configurar funis</SheetTitle>
-              <Button
-                size="sm"
-                onClick={handleCreatePipeline}
-                disabled={isPending}
-              >
-                <Plus className="size-4" />
-                Novo funil
-              </Button>
-            </div>
-            <SheetDescription>
-              Arraste as etapas entre as colunas pra reclassificá-las.
-            </SheetDescription>
-          </SheetHeader>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Configurar funis</DialogTitle>
+            <DialogHero
+              icon={<Kanban className="size-5" />}
+              title="Configurar funis"
+              tagline="Arraste etapas entre as colunas pra reclassificá-las"
+              trailing={
+                <Button
+                  size="sm"
+                  onClick={handleCreatePipeline}
+                  disabled={isPending}
+                  className="rounded-md"
+                >
+                  <Plus className="size-4" />
+                  Novo funil
+                </Button>
+              }
+            />
+          </DialogHeader>
 
-          <div className="flex flex-col gap-6 px-4 pb-6">
+          <div className="flex flex-col gap-6 overflow-y-auto p-5">
             {pipelines.length === 0 ? (
-              <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+              <div className="rounded-xl border border-dashed bg-muted/20 p-12 text-center text-sm text-muted-foreground">
+                <Kanban className="mx-auto mb-3 size-8 opacity-50" />
                 Nenhum funil ainda. Clique em &ldquo;Novo funil&rdquo; pra
                 começar.
               </div>
@@ -381,8 +382,8 @@ export function PipelineConfigDrawer({
               ))
             )}
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={stagedDelete !== null}
@@ -452,12 +453,12 @@ function PipelineCard({
   dragOverOutcome: StageOutcome | null;
 }) {
   return (
-    <div className="rounded-xl border bg-card">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <h3 className="text-base font-semibold tracking-tight">
+    <div className="group/pipeline rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3">
+        <h3 className="text-sm font-semibold tracking-tight text-foreground">
           {pipeline.name}
         </h3>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/pipeline:opacity-100 focus-within:opacity-100">
           <Button
             type="button"
             variant="ghost"
@@ -465,8 +466,9 @@ function PipelineCard({
             onClick={onRename}
             disabled={isPending}
             title="Renomear funil"
+            className="size-7"
           >
-            <Pencil className="size-4 text-muted-foreground" />
+            <Pencil className="size-3.5 text-muted-foreground" />
           </Button>
           <Button
             type="button"
@@ -475,8 +477,9 @@ function PipelineCard({
             onClick={onAskDelete}
             disabled={isPending}
             title="Remover funil"
+            className="size-7 hover:bg-destructive/10 hover:text-destructive"
           >
-            <Trash2 className="size-4 text-destructive" />
+            <Trash2 className="size-3.5" />
           </Button>
         </div>
       </div>
@@ -490,11 +493,13 @@ function PipelineCard({
               onDragOver={(e) => onDragOver(e, bucket.outcome)}
               onDragLeave={onDragLeave}
               onDrop={() => onDrop(bucket.outcome)}
-              className={`flex flex-col gap-2 rounded-lg p-2 transition-colors ${
-                isDropTarget ? "bg-muted/40 ring-2 ring-primary/30" : ""
+              className={`flex flex-col gap-2 rounded-lg border border-transparent p-2 transition-colors ${
+                isDropTarget
+                  ? "bg-primary/5 ring-2 ring-primary/30 border-primary/30"
+                  : "bg-muted/20"
               }`}
             >
-              <div className="flex items-center justify-between gap-2 px-1">
+              <div className="flex items-center justify-between gap-2 px-1.5">
                 <span
                   className={`text-[10px] font-bold uppercase tracking-wider ${bucket.headerColor}`}
                 >
@@ -514,7 +519,7 @@ function PipelineCard({
                   </Button>
                 )}
               </div>
-              <div className="flex flex-col gap-2 min-h-[60px]">
+              <div className="flex flex-col gap-1.5 min-h-[80px]">
                 {bucketStages.map((stage) => (
                   <StagePill
                     key={stage.id}
@@ -527,7 +532,13 @@ function PipelineCard({
                   />
                 ))}
                 {bucketStages.length === 0 ? (
-                  <div className="rounded-md border border-dashed border-muted-foreground/20 p-3 text-center text-[11px] text-muted-foreground/60">
+                  <div
+                    className={`flex items-center justify-center rounded-md border-2 border-dashed py-5 text-center text-[10px] font-medium uppercase tracking-wider transition-colors ${
+                      isDropTarget
+                        ? "border-primary/50 bg-primary/5 text-primary"
+                        : "border-border/40 text-muted-foreground/50"
+                    }`}
+                  >
                     Arraste uma etapa aqui
                   </div>
                 ) : null}

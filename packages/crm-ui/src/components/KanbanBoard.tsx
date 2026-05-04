@@ -69,6 +69,24 @@ import {
   Move,
   CheckCheck,
 } from "lucide-react";
+
+// Formata "ha X" curto pra footer do card (PR-D).
+function formatRelativeShort(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d`;
+  return d.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+}
 import type {
   DealLossReason,
   DealWithLead,
@@ -105,26 +123,29 @@ const OUTCOME_BUCKETS: Array<{
   {
     outcome: "em_andamento",
     label: "Em andamento",
-    activeClass: "bg-purple-600 text-white",
-    inactiveClass: "border border-purple-300 text-purple-700 hover:bg-purple-50",
+    activeClass: "bg-purple-600 text-white shadow-md shadow-purple-600/20",
+    inactiveClass:
+      "border border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-500/30 dark:text-purple-300 dark:hover:bg-purple-500/10",
     headerBg: "bg-blue-500",
-    columnBg: "bg-sky-50/60",
+    columnBg: "bg-muted/30 dark:bg-muted/20",
   },
   {
     outcome: "falha",
     label: "Falha",
-    activeClass: "bg-red-500 text-white",
-    inactiveClass: "border border-red-300 text-red-700 hover:bg-red-50",
+    activeClass: "bg-red-500 text-white shadow-md shadow-red-500/20",
+    inactiveClass:
+      "border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-500/10",
     headerBg: "bg-red-500",
-    columnBg: "bg-red-50/50",
+    columnBg: "bg-red-50/30 dark:bg-red-500/5",
   },
   {
     outcome: "bem_sucedido",
     label: "Bem-sucedido",
-    activeClass: "bg-emerald-500 text-white",
-    inactiveClass: "border border-emerald-300 text-emerald-700 hover:bg-emerald-50",
+    activeClass: "bg-emerald-500 text-white shadow-md shadow-emerald-500/20",
+    inactiveClass:
+      "border border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10",
     headerBg: "bg-emerald-500",
-    columnBg: "bg-emerald-50/50",
+    columnBg: "bg-emerald-50/30 dark:bg-emerald-500/5",
   },
 ];
 
@@ -872,42 +893,61 @@ export function KanbanBoard({
       </div>
 
       {/* ====== TOP BAR ====== */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {pipelines.length > 1 && (
+      {/* Layout: linha 1 (filtros + busca) | linha 2 (metricas + acoes).
+          Em desktop largo, fica em linha unica via flex-wrap natural. */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Grupo 1: filtros principais (pipeline + status) */}
+        <div className="flex items-center gap-2">
+          {pipelines.length > 1 && (
+            <Select
+              value={selectedPipeline}
+              onValueChange={(v) => setSelectedPipeline(v ?? "")}
+            >
+              <SelectTrigger className="w-48 h-9 rounded-md">
+                <SelectValue placeholder="Selecione o funil">
+                  {pipelines.find((p) => p.id === selectedPipeline)?.name ??
+                    "Selecione o funil"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {pipelines.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Select
-            value={selectedPipeline}
-            onValueChange={(v) => setSelectedPipeline(v ?? "")}
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v ?? "all")}
           >
-            <SelectTrigger className="w-48 h-9 rounded-md">
-              <SelectValue placeholder="Selecione o funil" />
+            <SelectTrigger className="w-40 h-9 rounded-md">
+              <SelectValue placeholder="Status">
+                {statusFilter === "all"
+                  ? "Todos"
+                  : statusFilter === "open"
+                    ? "Em andamento"
+                    : statusFilter === "won"
+                      ? "Ganho"
+                      : statusFilter === "lost"
+                        ? "Perdido"
+                        : "Status"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {pipelines.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="open">Em andamento</SelectItem>
+              <SelectItem value="won">Ganho</SelectItem>
+              <SelectItem value="lost">Perdido</SelectItem>
             </SelectContent>
           </Select>
-        )}
+        </div>
 
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v ?? "all")}
-        >
-          <SelectTrigger className="w-40 h-9 rounded-md">
-            <SelectValue placeholder="Filtrar status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="open">Em andamento</SelectItem>
-            <SelectItem value="won">Ganho</SelectItem>
-            <SelectItem value="lost">Perdido</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        {/* Busca — flex-1 pra ocupar espaco disponivel */}
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -916,51 +956,46 @@ export function KanbanBoard({
           />
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-xs font-medium gap-1.5"
-          >
-            <Target className="size-3.5" />
-            {boardMetrics.count} negocios
-          </Badge>
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-xs font-medium gap-1.5"
-          >
-            <CircleDollarSign className="size-3.5" />
-            R$ {formatCurrency(boardMetrics.total)}
-          </Badge>
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-xs font-medium gap-1.5"
-          >
-            <TrendingUp className="size-3.5" />
-            {boardMetrics.won} ganhos
-          </Badge>
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-xs font-medium gap-1.5"
-          >
-            <Percent className="size-3.5" />
-            {boardMetrics.conversionRate.toFixed(1)}% conv.
-          </Badge>
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-xs font-medium"
-          >
-            {boardMetrics.lost} perdidos
-          </Badge>
+        {/* Grupo 2: metricas (so leitura, visualmente sutis) */}
+        <div className="flex items-center gap-1.5">
+          <MetricChip icon={<Target className="size-3.5" />}>
+            <strong className="font-semibold">{boardMetrics.count}</strong>{" "}
+            <span className="text-muted-foreground">negócios</span>
+          </MetricChip>
+          <MetricChip icon={<CircleDollarSign className="size-3.5" />}>
+            <strong className="font-semibold">
+              R$ {formatCurrency(boardMetrics.total)}
+            </strong>
+          </MetricChip>
+          <MetricChip icon={<TrendingUp className="size-3.5" />}>
+            <strong className="font-semibold text-emerald-600 dark:text-emerald-400">
+              {boardMetrics.won}
+            </strong>{" "}
+            <span className="text-muted-foreground">ganhos</span>
+          </MetricChip>
+          <MetricChip icon={<Percent className="size-3.5" />}>
+            <strong className="font-semibold">
+              {boardMetrics.conversionRate.toFixed(1)}%
+            </strong>{" "}
+            <span className="text-muted-foreground">conv.</span>
+          </MetricChip>
+        </div>
+
+        {/* Grupo 3: acoes (alinhado a direita) */}
+        <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
           <Button
             type="button"
             variant={showGoalsEditor ? "secondary" : "ghost"}
             size="sm"
-            className="h-8 rounded-md px-2.5"
+            className="h-7 rounded-md px-2.5"
             onClick={() => setShowGoalsEditor((prev) => !prev)}
+            title="Metas do funil"
           >
             <Flag className="size-3.5" />
-            Metas
+            <span className="hidden md:inline">Metas</span>
           </Button>
+
+          <span className="h-5 w-px bg-border" aria-hidden />
 
           {/* ====== FILTROS AVANCADOS (PR-K2) ====== */}
           <AdvancedFiltersPopover
@@ -980,15 +1015,18 @@ export function KanbanBoard({
 
           {toolbarExtras}
           {canManagePipelines && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="size-8 rounded-md"
-              title="Configurar funis"
-              onClick={() => setConfigDrawerOpen(true)}
-            >
-              <Settings className="size-4" />
-            </Button>
+            <>
+              <span className="h-5 w-px bg-border" aria-hidden />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-7 rounded-md"
+                title="Configurar funis"
+                onClick={() => setConfigDrawerOpen(true)}
+              >
+                <Settings className="size-4" />
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1208,50 +1246,42 @@ export function KanbanBoard({
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-80"
+              className="flex-shrink-0 w-[320px]"
               onDragOver={(e) => handleDragOver(e, stage.id)}
               onDragLeave={handleDragLeave}
               onDrop={() => handleDrop(stage.id)}
             >
               <div
-                className={`rounded-xl ${columnBgClass} transition-all duration-200 min-h-[500px] flex flex-col ${
+                className={`rounded-2xl ${columnBgClass} transition-all duration-200 min-h-[420px] flex flex-col border border-transparent ${
                   isOver
-                    ? "ring-2 ring-primary/50 bg-primary/5 -translate-y-0.5"
+                    ? "ring-2 ring-primary/40 border-primary/30 bg-primary/5 -translate-y-0.5 shadow-md"
                     : ""
                 }`}
               >
-                {/* Header da coluna — bullet colorido + nome + count
-                    + total na linha de baixo. PR-K6: limpa o overload
-                    de info (Ticket medio + Conv vai pro tooltip). */}
-                <div className="px-3 py-3 rounded-t-xl bg-card/80 border-b border-border">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="inline-block size-2 rounded-full shrink-0"
-                          style={{ backgroundColor: stage.color }}
-                          aria-hidden
-                        />
-                        <h3 className="truncate font-semibold text-sm text-foreground">
-                          {stage.name}
-                        </h3>
-                        <Badge
-                          variant="secondary"
-                          className="ml-auto h-5 px-1.5 text-[10px] font-bold"
-                          title={
-                            index > 0
-                              ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
-                              : `Ticket médio R$ ${formatCurrency(metrics.average)}`
-                          }
-                        >
-                          {metrics.count}
-                        </Badge>
-                      </div>
-                      {metrics.total > 0 && (
-                        <p className="mt-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                          R$ {formatCurrency(metrics.total)}
-                        </p>
-                      )}
+                {/* Header da coluna — bullet colorido + nome + count.
+                    Bullet com tamanho maior + ring sutil pra destaque. */}
+                <div className="px-4 py-3 rounded-t-2xl bg-card/60 border-b border-border/60 backdrop-blur-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span
+                        className="inline-block size-2.5 rounded-full shrink-0 ring-2 ring-card"
+                        style={{ backgroundColor: stage.color }}
+                        aria-hidden
+                      />
+                      <h3 className="truncate font-semibold text-sm text-foreground">
+                        {stage.name}
+                      </h3>
+                      <Badge
+                        variant="secondary"
+                        className="h-5 min-w-5 px-1.5 text-[10px] font-bold tabular-nums"
+                        title={
+                          index > 0
+                            ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
+                            : `Ticket médio R$ ${formatCurrency(metrics.average)}`
+                        }
+                      >
+                        {metrics.count}
+                      </Badge>
                     </div>
                     {canEdit && (
                       <AddDealDialog
@@ -1263,9 +1293,14 @@ export function KanbanBoard({
                       />
                     )}
                   </div>
+                  {metrics.total > 0 && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      R$ {formatCurrency(metrics.total)}
+                    </p>
+                  )}
                 </div>
 
-                <div className="p-2 space-y-2 flex-1 overflow-y-auto">
+                <div className="px-2.5 py-2.5 space-y-2 flex-1 overflow-y-auto">
                   {isOver && draggedDealId && (
                     <div className="border border-dashed border-primary/60 bg-primary/5 text-primary rounded-md py-2 text-center text-[11px]">
                       Solte aqui para mover
@@ -1294,7 +1329,7 @@ export function KanbanBoard({
                       hasActiveSelection={selectedCount > 0}
                     />
                   ))}
-                  {/* Empty state colorido (PR-K6) */}
+                  {/* Empty state — discreto + clicavel pra adicionar deal */}
                   {stageDeals.length === 0 && (
                     <button
                       type="button"
@@ -1305,14 +1340,19 @@ export function KanbanBoard({
                           .getElementById(`add-deal-${stage.id}`)
                           ?.click()
                       }
-                      className="flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border/60 bg-muted/20 px-4 py-8 text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:cursor-default disabled:hover:border-border/60 disabled:hover:bg-muted/20 disabled:hover:text-muted-foreground"
+                      className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/50 bg-card/40 px-4 py-10 text-muted-foreground transition-all hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:cursor-default disabled:opacity-60 disabled:hover:border-border/50 disabled:hover:bg-card/40 disabled:hover:text-muted-foreground"
                     >
-                      <span className="inline-flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                      <span className="inline-flex size-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
                         <Plus className="size-4" />
                       </span>
-                      <span className="text-[10px] font-bold uppercase tracking-widest">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider">
                         Etapa vazia
                       </span>
+                      {canEdit && (
+                        <span className="text-[10px] text-muted-foreground/70 normal-case tracking-normal">
+                          clique para adicionar
+                        </span>
+                      )}
                     </button>
                   )}
                 </div>
@@ -1556,11 +1596,11 @@ function DealCard({
   return (
     <>
       <div
-        className={`group relative bg-card border rounded-xl p-3.5 hover:shadow-md transition-all duration-150 ${
+        className={`group relative bg-card border border-border/60 rounded-xl p-3.5 transition-all duration-200 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
-        } ${isDragging ? "opacity-40 ring-2 ring-primary" : ""} ${
+        } ${isDragging ? "opacity-40 ring-2 ring-primary scale-[0.98]" : "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-foreground/5"} ${
           selected
-            ? "border-primary ring-2 ring-primary/40 bg-primary/5"
+            ? "border-primary ring-2 ring-primary/30 bg-primary/[0.03]"
             : "hover:border-primary/40"
         }`}
         draggable={canEdit && !hasActiveSelection}
@@ -1590,10 +1630,19 @@ function DealCard({
           </div>
         )}
 
-        {/* Linha 1: Titulo (bold dark) + WhatsApp shortcut */}
+        {/* Linha 1: Avatar maior + Titulo (bold dark) + WhatsApp shortcut */}
         <div
-          className={`flex items-start justify-between gap-2 ${onToggleSelected ? "pl-6" : ""}`}
+          className={`flex items-start gap-2.5 ${onToggleSelected ? "pl-6" : ""}`}
         >
+          {/* Avatar maior (8x8) com cor saturada — destaque visual principal */}
+          {initials && (
+            <span
+              className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-sm ${avatarColor}`}
+              aria-hidden
+            >
+              {initials}
+            </span>
+          )}
           <div className="min-w-0 flex-1">
             {editingField === "title" && canEdit ? (
               <InlineEdit
@@ -1607,7 +1656,7 @@ function DealCard({
               />
             ) : (
               <h4
-                className={`truncate text-sm font-bold text-foreground ${
+                className={`truncate text-sm font-bold leading-tight text-foreground ${
                   canEdit ? "cursor-text" : ""
                 }`}
                 title={canEdit ? "Duplo-click para editar" : displayName}
@@ -1620,26 +1669,12 @@ function DealCard({
                 {displayName}
               </h4>
             )}
-            {/* Subtitulo: avatar colorido + label uppercase (ex: empresa/email) */}
-            {(initials || subtitle) && (
-              <div className="mt-1 flex items-center gap-1.5">
-                {initials && (
-                  <span
-                    className={`inline-flex size-5 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white ${avatarColor}`}
-                    aria-hidden
-                  >
-                    {initials}
-                  </span>
-                )}
-                {subtitle && (
-                  <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    {subtitle}
-                  </span>
-                )}
-              </div>
+            {subtitle && (
+              <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {subtitle}
+              </p>
             )}
           </div>
-
           {phone && (
             <button
               type="button"
@@ -1749,8 +1784,17 @@ function DealCard({
           </div>
         </div>
 
+        {/* Footer: horario relativo da ultima atividade (discreto).
+            Usa deal.updated_at que JA EXISTE — sem logica nova. */}
+        {deal.updated_at && (
+          <div className="mt-3 flex items-center gap-1 border-t border-border/40 pt-2 text-[10px] text-muted-foreground/80">
+            <Clock className="size-3" />
+            <span>{formatRelativeShort(deal.updated_at)}</span>
+          </div>
+        )}
+
         {/* Botoes terminais (Descartado / Fechado) — discretos, so no hover */}
-        <div className="mt-3 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+        <div className="mt-2.5 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
             disabled={!canEdit || !hasFailureBucket}
@@ -1799,6 +1843,29 @@ function DealCard({
         canEdit={canEdit}
       />
     </>
+  );
+}
+
+// ============ METRIC CHIP (PR-D) ============
+//
+// Pill compacta de metrica do board (count negocios, total, ganhos,
+// conversao). Visual sutil: bg-muted/40 + border-border + radius
+// arredondado. Numero em strong, label em muted.
+
+function MetricChip({
+  icon,
+  children,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs">
+      <span className="text-muted-foreground" aria-hidden>
+        {icon}
+      </span>
+      <span>{children}</span>
+    </span>
   );
 }
 
