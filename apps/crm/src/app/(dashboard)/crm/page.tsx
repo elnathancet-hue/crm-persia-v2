@@ -97,7 +97,13 @@ export default async function CrmPage() {
           .from("leads")
           .select("id, name, phone, email")
           .eq("organization_id", orgId)
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })
+          // PR-AUD4: cap defensivo. O picker de "Atribuir lead" no
+          // dialog de criar/editar deal nao precisa carregar 5k+ leads
+          // de orgs grandes — degrada page load + memory bloat.
+          // Cap em 500 cobre 99% dos casos; pra orgs maiores cabe um
+          // search async no futuro.
+          .limit(500),
     ),
     safeQuery<{ id: string; name: string; color: string | null }>(
       "tags",

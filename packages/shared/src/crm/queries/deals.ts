@@ -20,10 +20,29 @@ export async function listDeals(
   // Embed do responsavel via assigned_to -> profiles(full_name).
   // Mostrado na linha "Responsavel" do card do Kanban (sem precisar
   // de query extra).
+  //
+  // PR-AUD4: select com colunas explicitas (era `*`). Tira colunas
+  // pesadas que o Kanban nao renderiza (loss_reason, competitor,
+  // loss_note, closed_at, archived_at). Reduz payload em ~30-50%
+  // pra orgs com muitos deals.
   let query = db
     .from("deals")
     .select(
-      "*, leads(id, name, phone, email, status, assigned_to, lead_tags(tags(id, name, color)), assignee:profiles!leads_assigned_to_fkey(id, full_name))",
+      [
+        "id",
+        "title",
+        "value",
+        "status",
+        "lead_id",
+        "pipeline_id",
+        "stage_id",
+        "sort_order",
+        "updated_at",
+        "created_at",
+        "assigned_to",
+        // Embed do lead (com tags + responsavel) — necessario pro card
+        "leads(id, name, phone, email, status, assigned_to, lead_tags(tags(id, name, color)), assignee:profiles!leads_assigned_to_fkey(id, full_name))",
+      ].join(", "),
     )
     .eq("organization_id", orgId)
     .order("sort_order", { ascending: true });
