@@ -14,13 +14,13 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 import { localToUtcIso } from "./CreateAppointmentDrawer";
 
@@ -120,24 +120,17 @@ export const RescheduleAppointmentDrawer: React.FC<
   };
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-md overflow-hidden flex flex-col p-0"
-      >
-        <SheetHeader className="border-b border-border bg-card p-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-              <CalendarClock size={18} />
-            </div>
-            <div className="min-w-0">
-              <SheetTitle>Reagendar</SheetTitle>
-              <SheetDescription className="truncate">
-                {appointment?.title ?? ""}
-              </SheetDescription>
-            </div>
-          </div>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">Reagendar</DialogTitle>
+          <DialogHero
+            icon={<CalendarClock className="size-5" />}
+            title="Reagendar"
+            tagline={appointment?.title ?? "Selecione novo horário"}
+            tone="warning"
+          />
+        </DialogHeader>
 
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
           {appointment && (
@@ -211,7 +204,7 @@ export const RescheduleAppointmentDrawer: React.FC<
           )}
         </div>
 
-        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -228,8 +221,8 @@ export const RescheduleAppointmentDrawer: React.FC<
             <CalendarClock />
             {submitting ? "Reagendando..." : "Confirmar"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

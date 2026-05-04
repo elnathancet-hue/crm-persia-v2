@@ -5,13 +5,13 @@ import { CalendarPlus } from "lucide-react";
 import type { AgendaService, AppointmentKind } from "@persia/shared/agenda";
 import { Button } from "@persia/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 import type { LeadOption } from "../actions";
 import {
@@ -146,22 +146,16 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
   };
 
   return (
-    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0"
-      >
-        <SheetHeader className="border-b border-border bg-card p-5">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <CalendarPlus size={18} />
-            </div>
-            <div>
-              <SheetTitle>Novo agendamento</SheetTitle>
-              <SheetDescription>Adicionar à agenda</SheetDescription>
-            </div>
-          </div>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">Novo agendamento</DialogTitle>
+          <DialogHero
+            icon={<CalendarPlus className="size-5" />}
+            title="Novo agendamento"
+            tagline="Adicionar à agenda"
+          />
+        </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-5">
           <AppointmentForm
@@ -185,7 +179,7 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
           )}
         </div>
 
-        <SheetFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -198,9 +192,9 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
             <CalendarPlus />
             {submitting ? "Criando..." : "Criar"}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

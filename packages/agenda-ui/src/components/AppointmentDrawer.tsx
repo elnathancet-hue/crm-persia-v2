@@ -24,13 +24,13 @@ import {
 } from "@persia/shared/agenda";
 import { Button } from "@persia/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { AppointmentStatusBadge } from "./AppointmentStatusBadge";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 
@@ -126,27 +126,21 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
   const isMutating = busyAction !== null;
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-md overflow-hidden flex flex-col p-0"
-      >
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         {appointment && (
           <>
-            <SheetHeader className="border-b border-border bg-card p-5">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {APPOINTMENT_KIND_LABELS[appointment.kind]}
-              </p>
-              <SheetTitle className="text-lg leading-snug truncate">
+            <DialogHeader className="border-b border-border bg-card p-5">
+              <DialogTitle className="sr-only">
                 {appointment.title}
-              </SheetTitle>
-              <SheetDescription className="sr-only">
-                Detalhes do agendamento
-              </SheetDescription>
-              <div className="mt-1">
-                <AppointmentStatusBadge status={appointment.status} />
-              </div>
-            </SheetHeader>
+              </DialogTitle>
+              <DialogHero
+                icon={<CalendarDays className="size-5" />}
+                title={appointment.title}
+                tagline={APPOINTMENT_KIND_LABELS[appointment.kind]}
+                trailing={<AppointmentStatusBadge status={appointment.status} />}
+              />
+            </DialogHeader>
 
             <div className="flex-1 space-y-6 overflow-y-auto p-5">
               {appointment.description && (
@@ -296,7 +290,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
             </div>
 
             {!readOnly && appointment.kind === "appointment" && (
-              <SheetFooter className="border-t border-border bg-card p-4 gap-2">
+              <DialogFooter className="border-t border-border bg-card p-4 gap-2 flex-col sm:flex-col sm:items-stretch sm:space-x-0">
                 {ACTION_BUTTONS.filter((b) => b.status !== appointment.status).map(
                   (b) => {
                     const Icon = b.icon;
@@ -345,11 +339,11 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
                       : "Cancelar agendamento"}
                   </Button>
                 )}
-              </SheetFooter>
+              </DialogFooter>
             )}
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 };
