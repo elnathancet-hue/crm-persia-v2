@@ -320,16 +320,16 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
             <RangeSlider
               id="debounce_window_ms"
               label="Agregar mensagens por"
-              valueLabel={`${(debounceMs / 1000).toFixed(0)}s`}
+              valueLabel={debounceMs === 0 ? "Imediato" : `${(debounceMs / 1000).toFixed(0)}s`}
               min={DEBOUNCE_WINDOW_MS_MIN}
               max={DEBOUNCE_WINDOW_MS_MAX}
               step={1000}
               value={debounceMs}
               onChange={(v) => setDebounceMs(clampDebounceWindowMs(v))}
-              minLabel={`${DEBOUNCE_WINDOW_MS_MIN / 1000}s`}
+              minLabel="0s"
               midLabel={`Padrão ${DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s`}
               maxLabel={`${DEBOUNCE_WINDOW_MS_MAX / 1000}s`}
-              help="Espera esse tempo por novas mensagens do mesmo lead antes de responder. Evita respostas fragmentadas quando o lead digita em pedaços curtos."
+              help="Espera esse tempo por novas mensagens do mesmo lead antes de responder. Evita respostas fragmentadas quando o lead digita em pedaços curtos. 0 = responde a cada mensagem (use só pra fluxos transacionais como cobrança ou OTP)."
             />
             <RangeSlider
               id="context_summary_turn_threshold"
