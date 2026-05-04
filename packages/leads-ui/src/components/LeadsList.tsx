@@ -30,8 +30,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import {
   Empty,
   EmptyHeader,
@@ -676,20 +676,22 @@ export function LeadsList({
 
       {/* Create Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">
-              Novo Lead
-            </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              Preencha os dados do novo lead.
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Novo lead</DialogTitle>
+            <DialogHero
+              icon={<Plus className="size-5" />}
+              title="Novo lead"
+              tagline="Preencha os dados abaixo"
+            />
           </DialogHeader>
-          <LeadForm
-            onSubmit={handleCreate}
-            onCancel={() => setIsCreateOpen(false)}
-            submitLabel="Criar Lead"
-          />
+          <div className="flex-1 overflow-y-auto p-5">
+            <LeadForm
+              onSubmit={handleCreate}
+              onCancel={() => setIsCreateOpen(false)}
+              submitLabel="Criar lead"
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

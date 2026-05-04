@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Globe, Info, Loader2, Save, ShieldCheck } from "lucide-react";
+import { Info, Loader2, Save, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import type {
   AgentTool,
@@ -15,13 +15,14 @@ import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { cn } from "@persia/ui/utils";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
+import { Webhook } from "lucide-react";
 import { useAgentActions } from "../context";
 
 interface Props {
@@ -121,21 +122,20 @@ export function CustomWebhookToolSheet({
     !isPending;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg flex flex-col">
-        <SheetHeader>
-          <div className="flex items-center gap-2">
-            <Globe className="size-4 text-primary" />
-            <SheetTitle>Webhook customizado</SheetTitle>
-          </div>
-          <SheetDescription>
-            Integra o agente com um endpoint HTTPS externo (n8n, Make, API própria). A requisição leva HMAC sha256 + timestamp; respostas sao limitadas a 256 KB.
-          </SheetDescription>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">Webhook customizado</DialogTitle>
+          <DialogHero
+            icon={<Webhook className="size-5" />}
+            title="Webhook customizado"
+            tagline="Integração HTTPS com HMAC sha256 + timestamp"
+          />
+        </DialogHeader>
 
         <form
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto space-y-4 px-4"
+          className="flex-1 overflow-y-auto space-y-4 p-5"
           id="custom-webhook-form"
         >
           <div className="space-y-2">
@@ -240,10 +240,10 @@ export function CustomWebhookToolSheet({
           </div>
         </form>
 
-        <SheetFooter className="flex-row justify-end gap-2">
+        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
@@ -257,8 +257,8 @@ export function CustomWebhookToolSheet({
             )}
             Criar webhook
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
