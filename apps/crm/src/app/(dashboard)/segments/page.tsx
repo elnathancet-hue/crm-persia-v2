@@ -1,20 +1,11 @@
-import { getSegments } from "@/actions/segments";
-import { SegmentList } from "@/components/segments/segment-list";
+// PR-K10: A pagina /segments agora vive como sub-tab de /crm/settings.
+// Mantemos a rota /segments como REDIRECT pra preservar bookmarks +
+// links externos.
 
-export default async function SegmentsPage() {
-  const segments = await getSegments();
+import { redirect } from "next/navigation";
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight font-heading">Segmentações</h1>
-          <p className="text-sm text-muted-foreground">
-            Crie grupos dinamicos de leads baseados em regras
-          </p>
-        </div>
-      </div>
-      <SegmentList segments={(segments || []) as never} />
-    </div>
-  );
+export const metadata = { title: "Segmentos" };
+
+export default function SegmentsRedirect() {
+  redirect("/crm/settings?tab=segmentos");
 }
