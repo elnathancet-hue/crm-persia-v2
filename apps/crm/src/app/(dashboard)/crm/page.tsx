@@ -2,7 +2,7 @@ export const metadata = { title: "CRM" };
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { ensureDefaultPipeline } from "@/actions/crm";
-import { getLeads } from "@/actions/leads";
+import { getLeads, getOrgActivities } from "@/actions/leads";
 import { listPipelines, listDeals } from "@persia/shared/crm";
 import { CrmShell } from "./crm-shell";
 
@@ -71,6 +71,7 @@ export default async function CrmPage() {
     tags,
     members,
     leadsListResult,
+    activitiesResult,
   ] = await Promise.all([
     safeQuery<{ id: string; pipeline_id: string; name: string; color: string | null; sort_order: number }>(
       "pipeline_stages",
@@ -125,6 +126,15 @@ export default async function CrmPage() {
         return { leads: [], total: 0, page: 1, totalPages: 0 };
       }
     })(),
+    // PR-K7: timeline pra alimentar a tab "Atividades"
+    (async () => {
+      try {
+        return await getOrgActivities({ page: 1, limit: 30 });
+      } catch (err) {
+        console.error("[/crm page] getOrgActivities falhou:", err);
+        return { activities: [], total: 0, page: 1, totalPages: 0 };
+      }
+    })(),
   ]);
 
   // Resolve nomes dos responsaveis em query separada (RLS pode bloquear —
@@ -162,8 +172,15 @@ export default async function CrmPage() {
         initialPage: leadsListResult.page,
         initialTotalPages: leadsListResult.totalPages,
       }}
+      activitiesData={{
+        initialActivities: activitiesResult.activities as never,
+        initialTotal: activitiesResult.total,
+        initialPage: activitiesResult.page,
+        initialTotalPages: activitiesResult.totalPages,
+      }}
       leadCount={leadsListResult.total}
       dealCount={deals.length}
+      activityCount={activitiesResult.total}
     />
   );
 }
