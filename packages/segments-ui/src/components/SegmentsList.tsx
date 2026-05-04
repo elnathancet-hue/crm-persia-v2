@@ -10,6 +10,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
+import { EmptyState } from "@persia/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -336,30 +337,23 @@ export function SegmentsList({
 
       {/* Conteúdo */}
       {segments.length === 0 ? (
-        <Card className="border border-dashed border-border/60 bg-muted/20">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="mb-3 flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-              <Filter className="size-6" />
-            </div>
-            <p className="text-base font-semibold text-foreground">
-              Nenhuma segmentação ainda
-            </p>
-            <p className="mt-1 max-w-sm text-center text-sm text-muted-foreground">
-              Crie grupos dinâmicos de leads baseados em regras (tags,
-              status, origem) pra acionar campanhas e follow-ups.
-            </p>
-            {canManage && (
+        <EmptyState
+          icon={<Filter />}
+          title="Nenhuma segmentação ainda"
+          description="Crie grupos dinâmicos de leads baseados em regras (tags, status, origem) pra acionar campanhas e follow-ups."
+          action={
+            canManage ? (
               <Button
                 onClick={openCreateDialog}
-                className="mt-4 rounded-md"
+                className="rounded-md"
                 variant="outline"
               >
                 <Plus className="size-4" data-icon="inline-start" />
                 Criar primeira segmentação
               </Button>
-            )}
-          </CardContent>
-        </Card>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {segments.map((segment) => {

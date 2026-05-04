@@ -35,6 +35,7 @@ import {
 import { toast } from "sonner";
 import type { OrgActivityRow } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
+import { EmptyState } from "@persia/ui/empty-state";
 import { getOrgActivities } from "@/actions/leads";
 
 interface ActivitiesTabProps {
@@ -302,19 +303,15 @@ export function ActivitiesTab({
           <Loader2 className="size-5 animate-spin text-muted-foreground" />
         </div>
       ) : activities.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-            <Activity className="size-6" />
-          </div>
-          <h3 className="mt-3 text-base font-semibold text-foreground">
-            Nenhuma atividade
-          </h3>
-          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            {activeFilter === "all"
+        <EmptyState
+          icon={<Activity />}
+          title="Nenhuma atividade"
+          description={
+            activeFilter === "all"
               ? "Quando seus leads tiverem atividades (mensagens, mudanças, tags), elas aparecem aqui."
-              : "Nenhuma atividade dessa categoria. Tente outro filtro."}
-          </p>
-        </div>
+              : "Nenhuma atividade dessa categoria. Tente outro filtro."
+          }
+        />
       ) : (
         <ol className="relative space-y-3 border-l border-border pl-6 ml-3">
           {activities.map((item) => {
