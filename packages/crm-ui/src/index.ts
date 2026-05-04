@@ -32,6 +32,11 @@ export {
 } from "./components/MarkAsLostDialog";
 export { ExportMenu } from "./components/ExportMenu";
 export {
+  DialogHero,
+  type DialogHeroProps,
+  type DialogHeroTone,
+} from "./components/DialogHero";
+export {
   downloadExport,
   makeExportFilename,
   EXPORT_MAX_ROWS,

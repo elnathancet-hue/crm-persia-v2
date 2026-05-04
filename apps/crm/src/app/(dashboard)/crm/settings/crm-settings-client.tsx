@@ -24,8 +24,11 @@ import {
   AlertDialogTrigger,
 } from "@persia/ui/alert-dialog";
 import { Textarea } from "@persia/ui/textarea";
+import { DialogHero } from "@persia/crm-ui";
 import {
   ArrowLeft,
+  Kanban,
+  Layers,
   Pencil,
   Plus,
   Trash2,
@@ -564,7 +567,12 @@ function EditPipelineNameDialog({
       />
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Renomear Pipeline</DialogTitle>
+          <DialogTitle className="sr-only">Renomear Pipeline</DialogTitle>
+          <DialogHero
+            icon={<Pencil className="size-5" />}
+            title="Renomear pipeline"
+            tagline="Atualize o nome do funil"
+          />
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -636,7 +644,12 @@ function EditStageDialog({
       />
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Editar Etapa</DialogTitle>
+          <DialogTitle className="sr-only">Editar Etapa</DialogTitle>
+          <DialogHero
+            icon={<Pencil className="size-5" />}
+            title="Editar etapa"
+            tagline="Personalize cor, nome e regras"
+          />
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -729,7 +742,12 @@ function AddStageDialog({
       />
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Nova Etapa</DialogTitle>
+          <DialogTitle className="sr-only">Nova Etapa</DialogTitle>
+          <DialogHero
+            icon={<Layers className="size-5" />}
+            title="Nova etapa"
+            tagline="Adicione uma fase ao funil"
+          />
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -805,7 +823,12 @@ function AddPipelineDialog({
       />
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle>Novo Pipeline</DialogTitle>
+          <DialogTitle className="sr-only">Novo Pipeline</DialogTitle>
+          <DialogHero
+            icon={<Kanban className="size-5" />}
+            title="Novo pipeline"
+            tagline="Personalize seu funil"
+          />
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
