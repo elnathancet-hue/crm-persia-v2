@@ -2,8 +2,9 @@ export const metadata = { title: "CRM" };
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { ensureDefaultPipeline } from "@/actions/crm";
+import { getLeads } from "@/actions/leads";
 import { listPipelines, listDeals } from "@persia/shared/crm";
-import { CrmClient } from "./crm-client";
+import { CrmShell } from "./crm-shell";
 
 export default async function CrmPage() {
   // Usa o helper centralizado em vez de query direta com `.single()` —
@@ -14,9 +15,7 @@ export default async function CrmPage() {
   if (!orgId) redirect("/login");
 
   // Garante que existe pelo menos um pipeline (cria com stages padrao
-  // na primeira visita). Reusa a logica shared em @persia/shared/crm.
-  // HOTFIX: try/catch em volta pra nao crashar a pagina se o ensure
-  // falhar (ex: RLS bloqueando insert; admin nao logado).
+  // na primeira visita). HOTFIX (#100): try/catch defensivo.
   let pipelines: Awaited<ReturnType<typeof listPipelines>> = [];
   try {
     pipelines = await listPipelines({ db: supabase, orgId });
@@ -36,25 +35,22 @@ export default async function CrmPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight font-heading">
-          CRM - Funil de Vendas
+          CRM Kanban
         </h1>
         <p className="text-muted-foreground">
           Nenhum funil disponivel. Acesse{" "}
           <a href="/crm/settings" className="text-primary underline">
             /crm/settings
           </a>{" "}
-          pra configurar, ou recarregue a pagina.
+          pra configurar.
         </p>
       </div>
     );
   }
 
-  // Carrega dados em paralelo. HOTFIX: cada query tem try/catch proprio —
-  // antes era um Promise.all unico que crashava o page inteiro se UMA
-  // query falhasse (ex: tabela faltando, RLS, FK ausente). Agora a
-  // pagina sempre renderiza, com fallback `[]` pros dados que faltarem.
-  // Erros vao pro log do servidor pra diagnostico.
-
+  // Carrega TUDO em paralelo (pipeline data + leads list + tags + assignees)
+  // pro CrmShell distribuir entre as 4 tabs. Cada query isolada em try/catch
+  // pra nao crashar o page se uma falhar (PR #100 hardening).
   async function safeQuery<T>(
     name: string,
     fn: () => PromiseLike<{ data: T[] | null }>,
@@ -68,7 +64,14 @@ export default async function CrmPage() {
     }
   }
 
-  const [stages, deals, leads, tags, members] = await Promise.all([
+  const [
+    stages,
+    deals,
+    pipelineLeads,
+    tags,
+    members,
+    leadsListResult,
+  ] = await Promise.all([
     safeQuery<{ id: string; pipeline_id: string; name: string; color: string | null; sort_order: number }>(
       "pipeline_stages",
       () =>
@@ -87,7 +90,7 @@ export default async function CrmPage() {
       }
     })(),
     safeQuery<{ id: string; name: string | null; phone: string | null; email: string | null }>(
-      "leads",
+      "leads_for_picker",
       () =>
         supabase
           .from("leads")
@@ -113,10 +116,19 @@ export default async function CrmPage() {
           .eq("organization_id", orgId)
           .eq("is_active", true),
     ),
+    // PR-K5: lista paginada pra alimentar a tab "Leads"
+    (async () => {
+      try {
+        return await getLeads({ page: 1, limit: 20 });
+      } catch (err) {
+        console.error("[/crm page] getLeads (tab Leads) falhou:", err);
+        return { leads: [], total: 0, page: 1, totalPages: 0 };
+      }
+    })(),
   ]);
 
-  // Resolve full_name dos profiles em query separada (defensiva — se
-  // RLS bloquear, retorna [] ao inves de quebrar a pagina).
+  // Resolve nomes dos responsaveis em query separada (RLS pode bloquear —
+  // try/catch defensivo).
   const memberUserIds = members
     .map((m) => m.user_id)
     .filter((id): id is string => Boolean(id));
@@ -137,20 +149,21 @@ export default async function CrmPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight font-heading">
-          CRM - Funil de Vendas
-        </h1>
-      </div>
-      <CrmClient
-        pipelines={pipelines as never}
-        stages={stages as never}
-        deals={deals as never}
-        leads={leads as never}
-        tags={tags as never}
-        assignees={assignees}
-      />
-    </div>
+    <CrmShell
+      pipelines={pipelines as never}
+      stages={stages as never}
+      deals={deals as never}
+      pipelineLeads={pipelineLeads as never}
+      tags={tags as never}
+      assignees={assignees}
+      leadsListData={{
+        initialLeads: leadsListResult.leads as never,
+        initialTotal: leadsListResult.total,
+        initialPage: leadsListResult.page,
+        initialTotalPages: leadsListResult.totalPages,
+      }}
+      leadCount={leadsListResult.total}
+      dealCount={deals.length}
+    />
   );
 }
