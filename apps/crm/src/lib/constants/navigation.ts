@@ -1,7 +1,6 @@
 import {
   LayoutDashboard,
   MessageSquare,
-  Users,
   UsersRound,
   Kanban,
   Calendar,
@@ -44,16 +43,9 @@ export const navigation: NavItem[] = [
     icon: UsersRound,
     minRole: "admin",
   },
-  {
-    label: "Leads",
-    href: "/leads",
-    icon: Users,
-    children: [
-      { label: "Base de Leads", href: "/leads" },
-      { label: "Tags", href: "/tags" },
-      { label: "Segmentacoes", href: "/segments" },
-    ],
-  },
+  // PR-K5: item "Leads" foi removido — agora vive como tab dentro de /crm.
+  // /tags e /segments continuam acessiveis via URL direta (e podem virar
+  // sub-tabs no PR-K8, junto com a aba Ajustes).
   {
     label: "CRM",
     href: "/crm",
