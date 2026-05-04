@@ -601,42 +601,50 @@ export function ImportLeadsWizard({
 
 function StepIndicator({ current }: { current: Step }) {
   const labels = ["Arquivo", "Mapear", "Destino", "Revisar", "Pronto"];
+  // Progresso visual em barra contínua atrás dos números
+  const progressPercent = ((current - 1) / (labels.length - 1)) * 100;
   return (
-    <ol className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
-      {labels.map((label, i) => {
-        const num = (i + 1) as Step;
-        const active = num === current;
-        const done = num < current;
-        return (
-          <React.Fragment key={label}>
+    <div className="mt-3">
+      {/* Barra de progresso */}
+      <div className="relative mb-2 h-1 rounded-full bg-muted">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-primary transition-all duration-300"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      <ol className="flex items-center justify-between text-[11px] text-muted-foreground">
+        {labels.map((label, i) => {
+          const num = (i + 1) as Step;
+          const active = num === current;
+          const done = num < current;
+          return (
             <li
-              className={[
-                "flex items-center gap-1.5",
-                active ? "font-semibold text-foreground" : "",
-                done ? "text-primary" : "",
-              ].join(" ")}
+              key={label}
+              className={`flex items-center gap-1.5 transition-colors ${
+                active
+                  ? "font-semibold text-foreground"
+                  : done
+                    ? "text-primary"
+                    : ""
+              }`}
             >
               <span
-                className={[
-                  "inline-flex size-5 items-center justify-center rounded-full text-[10px] font-semibold",
+                className={`inline-flex size-5 items-center justify-center rounded-full text-[10px] font-bold transition-all ${
                   active
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/30 scale-110"
                     : done
-                      ? "bg-primary/15 text-primary"
-                      : "bg-muted text-muted-foreground",
-                ].join(" ")}
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                }`}
               >
                 {done ? "✓" : num}
               </span>
               <span className="hidden sm:inline">{label}</span>
             </li>
-            {i < labels.length - 1 && (
-              <span className="h-px w-3 bg-border sm:w-6" aria-hidden />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </ol>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -752,9 +760,14 @@ function Step1Upload({
       />
 
       {parseError && (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>{parseError}</span>
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-3.5 text-sm text-destructive dark:bg-destructive/10">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-full bg-destructive/15">
+            <AlertCircle className="size-4" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold">Não consegui ler o arquivo</p>
+            <p className="mt-0.5 text-xs opacity-90">{parseError}</p>
+          </div>
         </div>
       )}
     </div>

@@ -83,18 +83,23 @@ export function DataTable<T extends { id: string }>({
   return (
     <Table>
       <TableHeader>
-        <TableRow>
+        <TableRow className="border-b-border/60 hover:bg-transparent">
           {columns.map((col) => (
-            <TableHead key={col.key} className={col.className}>
+            <TableHead
+              key={col.key}
+              className={`h-11 text-[10px] font-bold uppercase tracking-wider text-muted-foreground ${col.className ?? ""}`}
+            >
               {col.sortable ? (
                 <Button
                   variant="ghost"
                   size="xs"
-                  className="-ml-2 gap-1"
+                  className="-ml-2 gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
                   onClick={() => handleSort(col.key)}
                 >
                   {col.header}
-                  {getSortIcon(col.key)}
+                  <span className="text-muted-foreground/60">
+                    {getSortIcon(col.key)}
+                  </span>
                 </Button>
               ) : (
                 col.header
@@ -107,11 +112,14 @@ export function DataTable<T extends { id: string }>({
         {sortedData.map((row) => (
           <TableRow
             key={row.id}
-            className={onRowClick ? "cursor-pointer" : ""}
+            className={`border-b-border/40 transition-colors ${onRowClick ? "cursor-pointer hover:bg-muted/40" : ""}`}
             onClick={() => onRowClick?.(row)}
           >
             {columns.map((col) => (
-              <TableCell key={col.key} className={col.className}>
+              <TableCell
+                key={col.key}
+                className={`py-3 ${col.className ?? ""}`}
+              >
                 {col.render(row)}
               </TableCell>
             ))}

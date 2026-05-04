@@ -89,6 +89,17 @@ const STATUS_FILTER_OPTIONS = [
   { value: "lost", label: "Perdido" },
 ];
 
+// Calcula cor de texto (branco/escuro) baseado na luminance da cor de fundo
+function getContrastTextColor(hex: string | null | undefined): string {
+  const c = (hex || "#6366f1").replace("#", "");
+  if (c.length !== 6) return "#ffffff";
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "#1A1A1A" : "#FFFFFF";
+}
+
 export interface LeadsListProps {
   initialLeads: LeadWithTags[];
   initialTotal: number;
@@ -245,19 +256,60 @@ export function LeadsList({
       key: "name",
       header: "Nome",
       sortable: true,
-      render: (row) => (
-        <span className="font-medium text-sm">{row.name || "Sem nome"}</span>
-      ),
+      render: (row) => {
+        const name = row.name?.trim() || "Sem nome";
+        const initials = name
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((p) => p[0])
+          .join("")
+          .toUpperCase();
+        // Hash → cor saturada (8 paletas) — mesmo padrao do KanbanBoard
+        const palette = [
+          "bg-blue-500",
+          "bg-emerald-500",
+          "bg-amber-500",
+          "bg-rose-500",
+          "bg-violet-500",
+          "bg-cyan-500",
+          "bg-orange-500",
+          "bg-pink-500",
+        ];
+        const seed = name
+          .split("")
+          .reduce((a, c) => a + c.charCodeAt(0), 0);
+        const avatarColor = palette[seed % palette.length];
+        return (
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ${avatarColor}`}
+              aria-hidden
+            >
+              {initials || "?"}
+            </span>
+            <span className="font-semibold text-sm text-foreground">{name}</span>
+          </div>
+        );
+      },
     },
     {
       key: "phone",
       header: "Telefone",
-      render: (row) => <span className="text-sm">{row.phone || "-"}</span>,
+      render: (row) => (
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {row.phone || "—"}
+        </span>
+      ),
     },
     {
       key: "email",
       header: "E-mail",
-      render: (row) => <span className="text-sm">{row.email || "-"}</span>,
+      render: (row) => (
+        <span className="text-sm text-muted-foreground">
+          {row.email || "—"}
+        </span>
+      ),
     },
     {
       key: "status",
@@ -268,13 +320,27 @@ export function LeadsList({
           label: row.status,
           variant: "outline" as const,
         };
+        // Bullet de cor baseado no status (visual mais consistente)
+        const dotColor =
+          row.status === "new"
+            ? "bg-blue-500"
+            : row.status === "contacted"
+              ? "bg-amber-500"
+              : row.status === "qualified"
+                ? "bg-violet-500"
+                : row.status === "customer"
+                  ? "bg-emerald-500"
+                  : row.status === "lost"
+                    ? "bg-red-500"
+                    : "bg-muted-foreground";
         return (
-          <Badge
-            variant={s.variant}
-            className="rounded-full px-3 py-1 text-xs"
-          >
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-0.5 text-xs font-medium">
+            <span
+              className={`inline-block size-1.5 rounded-full ${dotColor}`}
+              aria-hidden
+            />
             {s.label}
-          </Badge>
+          </span>
         );
       },
     },
@@ -283,7 +349,9 @@ export function LeadsList({
       header: "Origem",
       sortable: true,
       render: (row) => (
-        <span className="text-sm capitalize">{row.source}</span>
+        <span className="text-xs text-muted-foreground capitalize">
+          {row.source}
+        </span>
       ),
     },
     {
@@ -291,23 +359,25 @@ export function LeadsList({
       header: "Tags",
       render: (row) => (
         <div className="flex flex-wrap gap-1">
-          {row.lead_tags?.map((lt) => (
-            <Badge
+          {row.lead_tags?.slice(0, 3).map((lt) => (
+            <span
               key={lt.tag_id}
-              variant="secondary"
-              className="rounded-full text-xs px-2 py-0.5"
+              className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm"
               style={{
-                backgroundColor: lt.tags?.color
-                  ? `${lt.tags.color}20`
-                  : undefined,
-                color: lt.tags?.color || undefined,
+                backgroundColor: lt.tags?.color || "#6366f1",
+                color: getContrastTextColor(lt.tags?.color),
               }}
             >
               {lt.tags?.name}
-            </Badge>
+            </span>
           ))}
+          {row.lead_tags && row.lead_tags.length > 3 && (
+            <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              +{row.lead_tags.length - 3}
+            </span>
+          )}
           {(!row.lead_tags || row.lead_tags.length === 0) && (
-            <span className="text-xs text-muted-foreground">-</span>
+            <span className="text-xs text-muted-foreground/60">—</span>
           )}
         </div>
       ),
@@ -317,7 +387,7 @@ export function LeadsList({
       header: "Última interação",
       sortable: true,
       render: (row) => (
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs text-muted-foreground tabular-nums">
           {formatDate(row.last_interaction_at)}
         </span>
       ),
@@ -334,6 +404,7 @@ export function LeadsList({
                 variant="ghost"
                 size="icon-xs"
                 aria-label="Mais opções"
+                className="text-muted-foreground hover:bg-muted hover:text-foreground"
               />
             }
             onClick={(e) => e.stopPropagation()}
@@ -381,37 +452,53 @@ export function LeadsList({
     },
   ];
 
+  const activeFilterCount =
+    (search ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0) +
+    selectedTagIds.length;
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {total} {total === 1 ? "lead" : "leads"} encontrados
-          </p>
+    <div className="flex flex-col gap-5">
+      {/* Header — titulo + contador + acoes alinhadas */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
+            <Users className="size-6" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground font-heading leading-none">
+              Leads
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground tabular-nums">
+                {total.toLocaleString("pt-BR")}
+              </span>{" "}
+              {total === 1 ? "lead encontrado" : "leads encontrados"}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* headerActions vem do app: Importar + Exportar (secundarios) */}
           {headerActions}
           {canEdit && (
             <Button
               onClick={() => setIsCreateOpen(true)}
-              className="h-9 rounded-md"
+              className="h-9 rounded-md shadow-sm"
             >
               <Plus className="size-4" data-icon="inline-start" />
-              Novo Lead
+              Novo lead
             </Button>
           )}
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      {/* Filters bar — busca + select status agrupados */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="relative flex-1 min-w-[260px] max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome, telefone ou e-mail..."
-            className="pl-9 h-10 rounded-md"
+            className="h-10 rounded-md pl-9"
             value={search}
             onChange={(e) =>
               handleSearchChange((e.target as HTMLInputElement).value)
@@ -419,8 +506,17 @@ export function LeadsList({
           />
         </div>
         <Select value={statusFilter} onValueChange={handleStatusChange}>
-          <SelectTrigger className="h-10 rounded-md">
-            <SelectValue />
+          <SelectTrigger
+            className={`h-10 w-44 rounded-md ${
+              statusFilter !== "all"
+                ? "border-primary/40 bg-primary/5 text-primary"
+                : ""
+            }`}
+          >
+            <SelectValue>
+              {STATUS_FILTER_OPTIONS.find((o) => o.value === statusFilter)
+                ?.label ?? "Status"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {STATUS_FILTER_OPTIONS.map((opt) => (
@@ -430,10 +526,35 @@ export function LeadsList({
             ))}
           </SelectContent>
         </Select>
+
+        {activeFilterCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 rounded-md text-xs"
+            onClick={() => {
+              setSelectedTagIds([]);
+              setSearch("");
+              setStatusFilter("all");
+              fetchLeads({
+                search: "",
+                status: "all",
+                tags: [],
+                page: 1,
+              });
+            }}
+          >
+            Limpar filtros ({activeFilterCount})
+          </Button>
+        )}
       </div>
 
+      {/* Tags chips — só renderiza se tem tags */}
       {orgTags.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mr-1">
+            Etiquetas:
+          </span>
           {orgTags.map((tag) => {
             const active = selectedTagIds.includes(tag.id);
             return (
@@ -441,16 +562,17 @@ export function LeadsList({
                 key={tag.id}
                 type="button"
                 onClick={() => handleTagToggle(tag.id)}
-                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                aria-pressed={active}
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-all ${
                   active
-                    ? "border-transparent"
-                    : "border-border hover:bg-muted"
+                    ? "border-transparent shadow-sm"
+                    : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
                 style={
                   active
                     ? {
-                        backgroundColor: `${tag.color}20`,
-                        color: tag.color,
+                        backgroundColor: tag.color,
+                        color: getContrastTextColor(tag.color),
                       }
                     : undefined
                 }
@@ -459,30 +581,12 @@ export function LeadsList({
               </button>
             );
           })}
-          {selectedTagIds.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => {
-                setSelectedTagIds([]);
-                fetchLeads({
-                  search,
-                  status: statusFilter,
-                  tags: [],
-                  page: 1,
-                });
-              }}
-            >
-              Limpar tags
-            </Button>
-          )}
         </div>
       )}
 
       {/* Content */}
       <Card
-        className={`border rounded-xl ${
+        className={`border border-border/60 rounded-xl shadow-sm overflow-hidden ${
           isLoading ? "opacity-60 transition-opacity" : ""
         }`}
       >
