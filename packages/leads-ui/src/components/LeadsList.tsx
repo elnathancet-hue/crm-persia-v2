@@ -32,13 +32,7 @@ import {
   DialogTitle,
 } from "@persia/ui/dialog";
 import { DialogHero } from "@persia/ui/dialog-hero";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from "@persia/ui/empty";
+import { EmptyState } from "@persia/ui/empty-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -584,41 +578,45 @@ export function LeadsList({
         </div>
       )}
 
-      {/* Content */}
+      {/* Content — overflow-x-auto pra tabela em telas estreitas */}
       <Card
-        className={`border border-border/60 rounded-xl shadow-sm overflow-hidden ${
-          isLoading ? "opacity-60 transition-opacity" : ""
+        className={`border border-border/60 rounded-xl shadow-sm overflow-hidden transition-opacity ${
+          isLoading ? "opacity-60" : ""
         }`}
       >
         {leads.length === 0 ? (
-          <Empty className="py-12">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Users />
-              </EmptyMedia>
-              <EmptyTitle>Nenhum lead encontrado</EmptyTitle>
-              <EmptyDescription>
-                {search || statusFilter !== "all"
-                  ? "Tente ajustar os filtros de busca."
-                  : "Cadastre seu primeiro lead para comecar."}
-              </EmptyDescription>
-            </EmptyHeader>
-            {!search && statusFilter === "all" && canEdit && (
-              <Button
-                onClick={() => setIsCreateOpen(true)}
-                className="rounded-md"
-              >
-                <Plus className="size-4" data-icon="inline-start" />
-                Novo Lead
-              </Button>
-            )}
-          </Empty>
+          <EmptyState
+            variant="subtle"
+            icon={<Users />}
+            title="Nenhum lead encontrado"
+            description={
+              search || statusFilter !== "all" || selectedTagIds.length > 0
+                ? "Tente ajustar os filtros de busca."
+                : "Cadastre seu primeiro lead para começar."
+            }
+            action={
+              !search &&
+              statusFilter === "all" &&
+              selectedTagIds.length === 0 &&
+              canEdit ? (
+                <Button
+                  onClick={() => setIsCreateOpen(true)}
+                  className="rounded-md"
+                >
+                  <Plus className="size-4" data-icon="inline-start" />
+                  Novo lead
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
+          <div className="overflow-x-auto">
           <DataTable
             columns={columns}
             data={leads}
             onRowClick={onRowClick}
           />
+          </div>
         )}
       </Card>
 
