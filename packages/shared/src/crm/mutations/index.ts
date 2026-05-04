@@ -8,6 +8,7 @@
 // retorno historico de cada um (CRM: throw direto, admin: { data, error }).
 
 export type { CrmMutationContext } from "./context";
+export { sanitizeMutationError } from "./errors";
 
 export type {
   CreateLeadInput,

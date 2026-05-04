@@ -769,14 +769,33 @@ export function KanbanBoard({
   const BULK_CAP = 200;
   const selectedCount = selectedIds.size;
 
+  /**
+   * PR-AUDX: runBulk agora aceita um optimistic update OPCIONAL com
+   * revert. Antes os handlers aplicavam setLocalDeals depois do
+   * `runBulk(...)`, mesmo se falhasse — UI ficava inconsistente
+   * (cards na coluna errada ate o re-fetch do pai). Agora:
+   *   1. snapshot do estado anterior
+   *   2. optimisticUpdate aplicado ANTES do op()
+   *   3. se op() throw, restaura snapshot
+   */
   async function runBulk<T>(
     op: () => Promise<T>,
     successMsg: (res: T) => string,
+    optimisticUpdate?: (prev: Deal[]) => Deal[],
   ) {
     if (selectedCount === 0) return;
     if (selectedCount > BULK_CAP) {
       toast.error(`Maximo ${BULK_CAP} negocios por operacao em massa.`);
       return;
+    }
+    let snapshot: Deal[] | null = null;
+    if (optimisticUpdate) {
+      // Captura estado anterior pra eventual revert. Usamos o callback
+      // pattern do setState pra ler o valor mais recente sem race.
+      setLocalDeals((prev) => {
+        snapshot = prev;
+        return optimisticUpdate(prev);
+      });
     }
     setBulkPending(true);
     try {
@@ -785,6 +804,8 @@ export function KanbanBoard({
       clearSelection();
       onChange?.();
     } catch (err) {
+      // Reverte UI antes de avisar o usuario.
+      if (snapshot !== null) setLocalDeals(snapshot);
       toast.error(err instanceof Error ? err.message : "Falha na operacao");
     } finally {
       setBulkPending(false);
@@ -797,17 +818,15 @@ export function KanbanBoard({
       return;
     }
     const ids = Array.from(selectedIds);
+    setBulkMoveOpen(false);
     await runBulk(
       () => actions.bulkMoveDeals!(ids, stageId),
       (r) =>
         `${r.moved_count} negocio${r.moved_count === 1 ? "" : "s"} movido${r.moved_count === 1 ? "" : "s"}`,
-    );
-    setBulkMoveOpen(false);
-    // Optimistic local update — o pai vai re-fetchar via onChange
-    setLocalDeals((prev) =>
-      prev.map((d) =>
-        selectedIds.has(d.id) ? { ...d, stage_id: stageId } : d,
-      ),
+      (prev) =>
+        prev.map((d) =>
+          selectedIds.has(d.id) ? { ...d, stage_id: stageId } : d,
+        ),
     );
   }
 
@@ -821,11 +840,10 @@ export function KanbanBoard({
       () => actions.bulkSetDealStatus!(ids, status),
       (r) =>
         `${r.updated_count} negocio${r.updated_count === 1 ? "" : "s"} marcado${r.updated_count === 1 ? "" : "s"} como ${status === "won" ? "ganho" : "perdido"}`,
-    );
-    setLocalDeals((prev) =>
-      prev.map((d) =>
-        selectedIds.has(d.id) ? { ...d, status } : d,
-      ),
+      (prev) =>
+        prev.map((d) =>
+          selectedIds.has(d.id) ? { ...d, status } : d,
+        ),
     );
   }
 
@@ -839,8 +857,8 @@ export function KanbanBoard({
       () => actions.bulkDeleteDeals!(ids),
       (r) =>
         `${r.deleted_count} negocio${r.deleted_count === 1 ? "" : "s"} excluido${r.deleted_count === 1 ? "" : "s"}`,
+      (prev) => prev.filter((d) => !selectedIds.has(d.id)),
     );
-    setLocalDeals((prev) => prev.filter((d) => !selectedIds.has(d.id)));
   }
 
   async function handleBulkApplyTags(tagIds: string[]) {
@@ -853,11 +871,13 @@ export function KanbanBoard({
       return;
     }
     const ids = Array.from(selectedIds);
+    setBulkTagOpen(false);
+    // Tags aplicadas no LEAD, nao no Deal — nao ha optimistic update visivel
+    // no Kanban (cards nao mudam). onChange cuida do refresh.
     await runBulk(
       () => actions.bulkApplyTagsToDeals!(ids, tagIds),
       (r) => `${r.leads_count} lead${r.leads_count === 1 ? "" : "s"} marcado${r.leads_count === 1 ? "" : "s"} com ${tagIds.length} tag${tagIds.length === 1 ? "" : "s"}`,
     );
-    setBulkTagOpen(false);
   }
 
   return (
@@ -1927,12 +1947,25 @@ function InlineEdit({
 }) {
   const [value, setValue] = React.useState(initialValue);
   const cancelledRef = React.useRef(false);
+  // PR-AUDX: dedup de commit. Sem isso, Enter dispara onCommit e o
+  // blur que vem em seguida (input perde foco) tambem dispara —
+  // resultado: 2 PATCHs em sequencia, race no servidor.
+  const submittedRef = React.useRef(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     // Auto-select texto inteiro pra facilitar substituicao
     inputRef.current?.select();
   }, []);
+
+  const safeCommit = React.useCallback(
+    (next: string) => {
+      if (submittedRef.current || cancelledRef.current) return;
+      submittedRef.current = true;
+      onCommit(next);
+    },
+    [onCommit],
+  );
 
   return (
     <input
@@ -1947,7 +1980,7 @@ function InlineEdit({
         if (e.key === "Enter") {
           e.preventDefault();
           e.stopPropagation();
-          onCommit(value);
+          safeCommit(value);
         } else if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
@@ -1959,7 +1992,7 @@ function InlineEdit({
       }}
       onBlur={() => {
         if (cancelledRef.current) return;
-        onCommit(value);
+        safeCommit(value);
       }}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
