@@ -15,9 +15,11 @@ import {
   deleteLead as deleteLeadShared,
   fetchLead,
   listLeads,
+  listOrgActivities,
   listTags,
   removeTagFromLead as removeTagFromLeadShared,
   updateLead as updateLeadShared,
+  type ListOrgActivitiesOptions,
 } from "@persia/shared/crm";
 
 // Re-exporta tipos canônicos. Fonte da verdade: @persia/shared/crm.
@@ -51,6 +53,17 @@ export async function getLead(id: string) {
 export async function getOrgTags() {
   const { supabase, orgId } = await requireRole("agent");
   return listTags({ db: supabase, orgId }, { orderBy: "name" });
+}
+
+/**
+ * PR-K7: timeline global de activities da org pra tab "Atividades"
+ * do CRM. Aceita filtros por tipo + lead + paginacao.
+ */
+export async function getOrgActivities(
+  options: ListOrgActivitiesOptions = {},
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  return listOrgActivities({ db: supabase, orgId }, options);
 }
 
 // ============================================================================

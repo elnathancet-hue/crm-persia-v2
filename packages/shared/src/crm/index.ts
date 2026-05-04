@@ -46,6 +46,9 @@ export type {
   PaginatedLeads,
   LeadForDealAssignment,
   ListTagsOptions,
+  OrgActivityRow,
+  OrgActivitiesResult,
+  ListOrgActivitiesOptions,
 } from "./queries";
 
 export type {
@@ -67,6 +70,7 @@ export {
   listDeals,
   findLeadOpenDealWithStages,
   listLossReasons,
+  listOrgActivities,
 } from "./queries";
 
 // Mutations CRM compartilhadas (CRUD de leads + tags + pipelines + deals).

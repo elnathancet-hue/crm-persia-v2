@@ -6,7 +6,13 @@
 // uma unica vez.
 
 export type { CrmQueryContext, CrmQueryDb } from "./context";
-export type { PaginatedLeads, LeadForDealAssignment } from "./leads";
+export type {
+  PaginatedLeads,
+  LeadForDealAssignment,
+  OrgActivityRow,
+  OrgActivitiesResult,
+  ListOrgActivitiesOptions,
+} from "./leads";
 export type { ListTagsOptions } from "./tags";
 export type { ListPipelinesOptions } from "./pipelines";
 export type { ListDealsOptions, LeadOpenDealWithStages } from "./deals";
@@ -16,6 +22,7 @@ export {
   fetchLead,
   fetchLeadActivities,
   listLeadsForDealAssignment,
+  listOrgActivities,
 } from "./leads";
 
 export { listTags, listTagsWithCount } from "./tags";

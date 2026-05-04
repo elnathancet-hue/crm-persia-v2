@@ -212,6 +212,95 @@ export async function fetchLeadActivities(
   return (data ?? []) as LeadActivity[];
 }
 
+// ============================================================================
+// listOrgActivities (PR-K7) — timeline global da org
+// ============================================================================
+
+export interface OrgActivityRow {
+  id: string;
+  lead_id: string;
+  type: string;
+  description: string | null;
+  metadata: unknown;
+  performed_by: string | null;
+  created_at: string | null;
+  /** Lead embed (nome + phone) — null se lead foi excluido. */
+  leads: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
+}
+
+export interface OrgActivitiesResult {
+  activities: OrgActivityRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface ListOrgActivitiesOptions {
+  /** Paginacao (1-based). Default 1. */
+  page?: number;
+  /** Itens por pagina. Default 30, max 100. */
+  limit?: number;
+  /** Filtra por lista de tipos. Vazio/undefined = todos. */
+  types?: string[];
+  /** Filtra por lead especifico. */
+  leadId?: string;
+}
+
+/**
+ * Lista activities de TODOS os leads da org pra timeline global do
+ * Atividades tab (PR-K7). Pagina em order DESC por created_at.
+ *
+ * Embed do lead via select join (id, name, phone, email) — lead pode
+ * vir null se foi excluido apos a activity ter sido criada.
+ *
+ * Multi-tenant: filtra organization_id explicito (defesa em
+ * profundidade alem do RLS).
+ */
+export async function listOrgActivities(
+  ctx: CrmQueryContext,
+  opts: ListOrgActivitiesOptions = {},
+): Promise<OrgActivitiesResult> {
+  const { db, orgId } = ctx;
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 30));
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = db
+    .from("lead_activities")
+    .select(
+      "id, lead_id, type, description, metadata, performed_by, created_at, leads(id, name, phone, email)",
+      { count: "exact" },
+    )
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (opts.types && opts.types.length > 0) {
+    query = query.in("type", opts.types);
+  }
+  if (opts.leadId) {
+    query = query.eq("lead_id", opts.leadId);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw new Error(error.message);
+
+  const total = count ?? 0;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
+  return {
+    activities: (data ?? []) as OrgActivityRow[],
+    total,
+    page,
+    totalPages,
+  };
+}
+
 export interface LeadForDealAssignment {
   id: string;
   name: string | null;

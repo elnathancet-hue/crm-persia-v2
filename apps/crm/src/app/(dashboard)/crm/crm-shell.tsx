@@ -25,6 +25,7 @@ import { Badge } from "@persia/ui/badge";
 import type {
   DealWithLead,
   LeadWithTags,
+  OrgActivityRow,
   Pipeline,
   Stage,
   TagRef,
@@ -32,6 +33,7 @@ import type {
 
 import { CrmClient } from "./crm-client";
 import { LeadList } from "@/components/leads/lead-list";
+import { ActivitiesTab } from "@/components/crm/activities-tab";
 
 type CrmTab = "pipeline" | "leads" | "atividades" | "ajustes";
 
@@ -63,9 +65,18 @@ interface CrmShellProps {
     initialTotalPages: number;
   };
 
+  // Dados das Atividades (timeline) — PR-K7
+  activitiesData: {
+    initialActivities: OrgActivityRow[];
+    initialTotal: number;
+    initialPage: number;
+    initialTotalPages: number;
+  };
+
   // Contadores no badge das tabs (totais para hint visual)
   leadCount: number;
   dealCount: number;
+  activityCount: number;
 }
 
 export function CrmShell(props: CrmShellProps) {
@@ -98,6 +109,7 @@ export function CrmShell(props: CrmShellProps) {
         onChange={setTab}
         leadCount={props.leadCount}
         dealCount={props.dealCount}
+        activityCount={props.activityCount}
       />
 
       {/* Conteudo da tab ativa */}
@@ -119,7 +131,14 @@ export function CrmShell(props: CrmShellProps) {
           initialTotalPages={props.leadsListData.initialTotalPages}
         />
       )}
-      {activeTab === "atividades" && <AtividadesPlaceholder />}
+      {activeTab === "atividades" && (
+        <ActivitiesTab
+          initialActivities={props.activitiesData.initialActivities}
+          initialTotal={props.activitiesData.initialTotal}
+          initialPage={props.activitiesData.initialPage}
+          initialTotalPages={props.activitiesData.initialTotalPages}
+        />
+      )}
       {activeTab === "ajustes" && <AjustesEntry />}
     </div>
   );
@@ -159,11 +178,13 @@ function CrmTabs({
   onChange,
   leadCount,
   dealCount,
+  activityCount,
 }: {
   active: CrmTab;
   onChange: (next: CrmTab) => void;
   leadCount: number;
   dealCount: number;
+  activityCount: number;
 }) {
   return (
     <div className="flex gap-1 border-b border-border">
@@ -175,7 +196,9 @@ function CrmTabs({
             ? dealCount
             : tab.key === "leads"
               ? leadCount
-              : null;
+              : tab.key === "atividades"
+                ? activityCount
+                : null;
         return (
           <button
             key={tab.key}
@@ -212,28 +235,6 @@ function CrmTabs({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-// ============================================================================
-// Atividades — stub visual (PR-K7 implementa funcional)
-// ============================================================================
-
-function AtividadesPlaceholder() {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center">
-      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-        <Activity className="size-6" />
-      </div>
-      <h3 className="mt-3 text-base font-semibold text-foreground">
-        Timeline de Atividades
-      </h3>
-      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-        Em breve: histórico cronológico de todas as interações com leads
-        (ligações, e-mails, WhatsApp, reuniões), filtrável por tipo e
-        responsável.
-      </p>
     </div>
   );
 }
