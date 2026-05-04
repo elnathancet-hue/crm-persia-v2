@@ -432,7 +432,12 @@ describe("ai-agent PR5.5 runtime", () => {
       errors: 0,
       details: [],
     });
-    createAdminClientMock.mockReturnValue(createSupabaseMock());
+    // PR-AGENT1: a route faz um head() probe em agent_conversations antes de
+    // chamar flushReadyConversations. Enfileira count > 0 pra simular "ha
+    // trabalho" e cair no caminho real.
+    const supabase = createSupabaseMock();
+    supabase.queue("agent_conversations", { data: [], error: null, count: 2 });
+    createAdminClientMock.mockReturnValue(supabase);
 
     const request = new NextRequest("https://crm.funilpersia.top/api/ai-agent/debounce-flush", {
       method: "POST",
@@ -448,6 +453,38 @@ describe("ai-agent PR5.5 runtime", () => {
       runs_created: 2,
       errors: 0,
     });
+  });
+
+  it("debounce flush endpoint short-circuits when probe finds no pending work", async () => {
+    debounceMock.flushReadyConversations.mockResolvedValue({
+      flushed_conversations: 0,
+      runs_created: 0,
+      errors: 0,
+      details: [],
+    });
+    // Probe sem trabalho: count=0 (default do mock quando nao enfileira nada
+    // tambem cai aqui, mas explicitamos pra clareza).
+    const supabase = createSupabaseMock();
+    supabase.queue("agent_conversations", { data: [], error: null, count: 0 });
+    createAdminClientMock.mockReturnValue(supabase);
+
+    const request = new NextRequest("https://crm.funilpersia.top/api/ai-agent/debounce-flush", {
+      method: "POST",
+      headers: { "X-Persia-Cron-Secret": "flush-secret-123" },
+    });
+
+    const response = await debounceFlushPost(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      flushed_conversations: 0,
+      runs_created: 0,
+      errors: 0,
+      idle: true,
+    });
+    // Confirma que o caminho caro nao foi acionado.
+    expect(debounceMock.flushReadyConversations).not.toHaveBeenCalled();
   });
 
   it("UAZAPI webhook returns debounced response when native enqueue handles the message", async () => {
