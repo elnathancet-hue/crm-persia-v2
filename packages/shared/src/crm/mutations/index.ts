@@ -46,6 +46,8 @@ export type {
   UpdateDealInput,
   DealStatus,
   MarkDealAsLostInput,
+  CreateLossReasonInput,
+  UpdateLossReasonInput,
 } from "./deals";
 export {
   createDeal,
@@ -59,4 +61,7 @@ export {
   bulkApplyTagsToDealLeads,
   markDealAsLost,
   bulkMarkDealsAsLost,
+  createLossReason,
+  updateLossReason,
+  deleteLossReason,
 } from "./deals";

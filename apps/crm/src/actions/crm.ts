@@ -9,9 +9,11 @@ import {
   bulkMoveDealsToStage as bulkMoveDealsToStageShared,
   bulkUpdateDealStatus as bulkUpdateDealStatusShared,
   createDeal as createDealShared,
+  createLossReason as createLossReasonShared,
   createPipeline as createPipelineShared,
   createStage as createStageShared,
   deleteDeal as deleteDealShared,
+  deleteLossReason as deleteLossReasonShared,
   deletePipeline as deletePipelineShared,
   deleteStage as deleteStageShared,
   ensureDefaultPipeline as ensureDefaultPipelineShared,
@@ -25,10 +27,13 @@ import {
   moveDealKanban,
   updateDeal as updateDealShared,
   updateDealStatus as updateDealStatusShared,
+  updateLossReason as updateLossReasonShared,
   updatePipelineName as updatePipelineNameShared,
   updateStage as updateStageShared,
   updateStageOrder as updateStageOrderShared,
+  type CreateLossReasonInput,
   type MarkDealAsLostInput,
+  type UpdateLossReasonInput,
 } from "@persia/shared/crm";
 
 // Logica de pipelines/stages/deals consolidada em @persia/shared/crm.
@@ -345,4 +350,35 @@ export async function bulkMarkDealsAsLost(
   );
   revalidatePath("/crm");
   return result;
+}
+
+// ============ LOSS REASONS CRUD (PR-K4) ============
+// Cadastro de motivos de perda — owner/admin gerenciam em /crm/settings.
+
+export async function createLossReason(input: CreateLossReasonInput) {
+  const { supabase, orgId } = await requireRole("admin");
+  const result = await createLossReasonShared(
+    { db: supabase, orgId },
+    input,
+  );
+  revalidatePath("/crm/settings");
+  revalidatePath("/crm");
+  return result;
+}
+
+export async function updateLossReason(
+  reasonId: string,
+  input: UpdateLossReasonInput,
+) {
+  const { supabase, orgId } = await requireRole("admin");
+  await updateLossReasonShared({ db: supabase, orgId }, reasonId, input);
+  revalidatePath("/crm/settings");
+  revalidatePath("/crm");
+}
+
+export async function deleteLossReason(reasonId: string) {
+  const { supabase, orgId } = await requireRole("admin");
+  await deleteLossReasonShared({ db: supabase, orgId }, reasonId);
+  revalidatePath("/crm/settings");
+  revalidatePath("/crm");
 }

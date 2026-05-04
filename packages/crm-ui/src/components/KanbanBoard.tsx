@@ -1444,7 +1444,12 @@ function DealCard({
   // Quando ha selecao ativa (em qualquer card), o click no card faz
   // toggle ao inves de abrir detalhe. Isso evita acidentes "abri dialog
   // achando que ia selecionar".
+  // PR-K4: ignora click se estamos editando inline (input dentro do card)
   const handleCardClick = (e: React.MouseEvent) => {
+    if (editingField !== null) {
+      e.stopPropagation();
+      return;
+    }
     if (onToggleSelected && hasActiveSelection) {
       e.preventDefault();
       e.stopPropagation();
@@ -1452,6 +1457,48 @@ function DealCard({
       return;
     }
     setDetailOpen(true);
+  };
+
+  // ---- Inline edit (PR-K4) ----
+  // Duplo-click no titulo ou no valor abre input com autoFocus.
+  // Enter = salva. Escape = cancela. Blur = salva (a menos que cancelado).
+  const actionsRef = useKanbanActions();
+  type EditableField = "title" | "value";
+  const [editingField, setEditingField] = React.useState<EditableField | null>(
+    null,
+  );
+  const [editPending, setEditPending] = React.useState(false);
+
+  const saveEdit = async (field: EditableField, raw: string) => {
+    setEditPending(true);
+    try {
+      if (field === "title") {
+        const trimmed = raw.trim();
+        if (!trimmed || trimmed === deal.title) {
+          setEditingField(null);
+          return;
+        }
+        await actionsRef.updateDeal(deal.id, { title: trimmed });
+        onUpdate(deal.id, { title: trimmed });
+      } else {
+        const parsed = Number(raw.replace(",", "."));
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          toast.error("Valor invalido");
+          return;
+        }
+        if (parsed === deal.value) {
+          setEditingField(null);
+          return;
+        }
+        await actionsRef.updateDeal(deal.id, { value: parsed });
+        onUpdate(deal.id, { value: parsed });
+      }
+      setEditingField(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao salvar");
+    } finally {
+      setEditPending(false);
+    }
   };
 
   return (
@@ -1499,9 +1546,31 @@ function DealCard({
             {initials ? <span>{initials}</span> : <span aria-hidden>?</span>}
           </div>
 
-          <p className="flex-1 min-w-0 text-sm font-semibold truncate text-cyan-600">
-            {displayName}
-          </p>
+          {editingField === "title" && canEdit ? (
+            <InlineEdit
+              initialValue={deal.title}
+              type="text"
+              ariaLabel="Editar titulo"
+              pending={editPending}
+              onCommit={(v) => saveEdit("title", v)}
+              onCancel={() => setEditingField(null)}
+              className="flex-1 min-w-0 text-sm font-semibold text-cyan-600"
+            />
+          ) : (
+            <p
+              className={`flex-1 min-w-0 text-sm font-semibold truncate text-cyan-600 ${
+                canEdit ? "cursor-text" : ""
+              }`}
+              title={canEdit ? "Duplo-click para editar" : undefined}
+              onDoubleClick={(e) => {
+                if (!canEdit) return;
+                e.stopPropagation();
+                setEditingField("title");
+              }}
+            >
+              {displayName}
+            </p>
+          )}
 
           {phone && (
             <button
@@ -1577,9 +1646,39 @@ function DealCard({
           </button>
         </div>
 
-        {deal.value > 0 && (
-          <p className="text-[11px] font-medium text-muted-foreground mt-2">
-            R$ {formatCurrency(deal.value)}
+        {editingField === "value" && canEdit ? (
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span>R$</span>
+            <InlineEdit
+              initialValue={String(deal.value ?? 0)}
+              type="number"
+              ariaLabel="Editar valor"
+              pending={editPending}
+              onCommit={(v) => saveEdit("value", v)}
+              onCancel={() => setEditingField(null)}
+              className="flex-1"
+            />
+          </div>
+        ) : (
+          <p
+            className={`text-[11px] font-medium text-muted-foreground mt-2 ${
+              canEdit ? "cursor-text" : ""
+            }`}
+            title={canEdit ? "Duplo-click para editar" : undefined}
+            onDoubleClick={(e) => {
+              if (!canEdit) return;
+              e.stopPropagation();
+              setEditingField("value");
+            }}
+          >
+            R${" "}
+            {deal.value > 0
+              ? formatCurrency(deal.value)
+              : (
+                  <span className="opacity-60">
+                    {canEdit ? "—  (duplo-click pra editar)" : "—"}
+                  </span>
+                )}
           </p>
         )}
       </div>
@@ -1595,6 +1694,76 @@ function DealCard({
         canEdit={canEdit}
       />
     </>
+  );
+}
+
+// ============ INLINE EDIT (PR-K4) ============
+//
+// Input compacto pra edicao inline de campo no card. autoFocus +
+// select all ao montar. Enter = commit. Escape = cancel. Blur =
+// commit (a menos que Escape tenha sido apertado antes).
+
+function InlineEdit({
+  initialValue,
+  type,
+  ariaLabel,
+  pending,
+  onCommit,
+  onCancel,
+  className,
+}: {
+  initialValue: string;
+  type: "text" | "number";
+  ariaLabel: string;
+  pending: boolean;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+  className?: string;
+}) {
+  const [value, setValue] = React.useState(initialValue);
+  const cancelledRef = React.useRef(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    // Auto-select texto inteiro pra facilitar substituicao
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <input
+      ref={inputRef}
+      type={type}
+      autoFocus
+      value={value}
+      disabled={pending}
+      aria-label={ariaLabel}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          onCommit(value);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelledRef.current = true;
+          onCancel();
+        }
+        // Bloqueia outros keystrokes propagarem (evita drag handlers)
+        e.stopPropagation();
+      }}
+      onBlur={() => {
+        if (cancelledRef.current) return;
+        onCommit(value);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      className={`w-full bg-background border border-primary/40 rounded px-1.5 py-0.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 disabled:opacity-50 ${className ?? ""}`}
+      step={type === "number" ? "0.01" : undefined}
+      min={type === "number" ? 0 : undefined}
+      inputMode={type === "number" ? "decimal" : undefined}
+    />
   );
 }
 

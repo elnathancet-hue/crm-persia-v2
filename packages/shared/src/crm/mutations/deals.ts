@@ -191,6 +191,96 @@ export async function deleteDeal(
 }
 
 // ============================================================================
+// Loss reasons CRUD (PR-K4) — gerencia o catalogo cadastravel
+// ============================================================================
+
+export interface CreateLossReasonInput {
+  label: string;
+  requires_competitor?: boolean;
+  sort_order?: number;
+}
+
+export interface UpdateLossReasonInput {
+  label?: string;
+  requires_competitor?: boolean;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export async function createLossReason(
+  ctx: CrmMutationContext,
+  input: CreateLossReasonInput,
+): Promise<{ id: string }> {
+  const { db, orgId } = ctx;
+  const trimmedLabel = input.label.trim();
+  if (!trimmedLabel) throw new Error("Nome do motivo eh obrigatorio.");
+
+  const { data, error } = await db
+    .from("deal_loss_reasons")
+    .insert({
+      organization_id: orgId,
+      label: trimmedLabel,
+      requires_competitor: input.requires_competitor ?? false,
+      sort_order: input.sort_order ?? 100,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    // Violacao de UNIQUE(org, label) — mensagem amigavel
+    if (error.message.includes("duplicate key")) {
+      throw new Error(`Ja existe um motivo "${trimmedLabel}".`);
+    }
+    throw new Error(error.message);
+  }
+  return data as { id: string };
+}
+
+export async function updateLossReason(
+  ctx: CrmMutationContext,
+  reasonId: string,
+  input: UpdateLossReasonInput,
+): Promise<void> {
+  const { db, orgId } = ctx;
+  const patch: Record<string, unknown> = {};
+  if (input.label !== undefined) {
+    const t = input.label.trim();
+    if (!t) throw new Error("Nome do motivo nao pode ser vazio.");
+    patch.label = t;
+  }
+  if (input.requires_competitor !== undefined) {
+    patch.requires_competitor = input.requires_competitor;
+  }
+  if (input.sort_order !== undefined) patch.sort_order = input.sort_order;
+  if (input.is_active !== undefined) patch.is_active = input.is_active;
+  if (Object.keys(patch).length === 0) return;
+
+  const { error } = await db
+    .from("deal_loss_reasons")
+    .update(patch)
+    .eq("id", reasonId)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Soft delete: marca is_active=false. Mantem historico nos deals
+ * que ja foram marcados com esse motivo.
+ */
+export async function deleteLossReason(
+  ctx: CrmMutationContext,
+  reasonId: string,
+): Promise<void> {
+  const { db, orgId } = ctx;
+  const { error } = await db
+    .from("deal_loss_reasons")
+    .update({ is_active: false })
+    .eq("id", reasonId)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+}
+
+// ============================================================================
 // Loss tracking (PR-K3)
 // ============================================================================
 
