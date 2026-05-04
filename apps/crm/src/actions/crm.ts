@@ -283,8 +283,13 @@ export async function bulkSetDealStatus(
   return result;
 }
 
+/**
+ * PR-AUDX: bulk delete e operacao critica + irreversivel. Eleva pra
+ * `admin` (era `agent`) — agentes regulares nao deletam em massa.
+ * Pra excluir 1 deal individual, continua via deleteDeal (agent).
+ */
 export async function bulkRemoveDeals(dealIds: string[]) {
-  const { supabase, orgId } = await requireRole("agent");
+  const { supabase, orgId } = await requireRole("admin");
   const result = await bulkDeleteDealsShared(
     { db: supabase, orgId },
     dealIds,
@@ -337,12 +342,16 @@ export async function markDealAsLost(
 
 /**
  * Marca varios deals como perdidos com mesmo motivo (bulk). Cap 200.
+ *
+ * PR-AUDX: operacao destrutiva pro funil (fecha N deals como lost,
+ * impacta relatorios e taxa de conversao). Eleva pra `admin` —
+ * agentes regulares marcam 1 a 1 via markDealAsLost.
  */
 export async function bulkMarkDealsAsLost(
   dealIds: string[],
   input: MarkDealAsLostInput,
 ) {
-  const { supabase, orgId } = await requireRole("agent");
+  const { supabase, orgId } = await requireRole("admin");
   const result = await bulkMarkDealsAsLostShared(
     { db: supabase, orgId },
     dealIds,

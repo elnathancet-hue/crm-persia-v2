@@ -5,6 +5,7 @@
 
 import type { Pipeline, Stage, StageOutcome } from "../types";
 import type { CrmMutationContext } from "./context";
+import { sanitizeMutationError } from "./errors";
 
 // Stages padrao criadas pra todo pipeline novo. Cobre os 3 outcomes:
 // 4 estagios "em andamento" (ciclo de vendas tipico), 1 "falha"
@@ -56,7 +57,7 @@ export async function createPipeline(
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao criar funil");
   if (!pipeline) throw new Error("Pipeline nao foi criado");
 
   const created = pipeline as Pipeline;
@@ -115,7 +116,7 @@ export async function updatePipelineName(
     .eq("id", pipelineId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao renomear funil");
 }
 
 /**
@@ -170,7 +171,7 @@ export async function deletePipeline(
     .eq("id", pipelineId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao excluir funil");
 }
 
 // ============================================================================
@@ -226,7 +227,7 @@ export async function createStage(
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao criar etapa");
   if (!data) throw new Error("Stage nao foi criada");
   return data as Stage;
 }
@@ -263,7 +264,7 @@ export async function updateStage(
     .eq("id", stageId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao atualizar etapa");
 }
 
 /**
@@ -317,5 +318,5 @@ export async function deleteStage(
     .eq("id", stageId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao excluir etapa");
 }
