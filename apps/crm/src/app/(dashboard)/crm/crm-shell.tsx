@@ -151,16 +151,16 @@ export function CrmShell(props: CrmShellProps) {
 
 function CrmPageHeader() {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <div className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex items-start gap-3.5">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
           <Kanban className="size-6" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight font-heading">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground font-heading leading-none">
             CRM Kanban
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1.5 text-sm text-muted-foreground">
             Gerencie oportunidades comerciais por etapa
           </p>
         </div>
@@ -187,7 +187,7 @@ function CrmTabs({
   activityCount: number;
 }) {
   return (
-    <div className="flex gap-1 border-b border-border">
+    <div className="flex gap-0.5 border-b border-border overflow-x-auto">
       {TABS.map((tab) => {
         const Icon = tab.icon;
         const isActive = active === tab.key;
@@ -205,30 +205,26 @@ function CrmTabs({
             type="button"
             onClick={() => onChange(tab.key)}
             aria-pressed={isActive}
-            className={`relative inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            className={`relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-md px-4 py-3 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               isActive
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
+                ? "text-primary bg-primary/5"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             }`}
           >
-            <Icon className="size-4" />
+            <Icon className={`size-4 ${isActive ? "text-primary" : ""}`} />
             <span>{tab.label}</span>
             {badgeValue !== null && badgeValue > 0 && (
               <Badge
                 variant="secondary"
-                className={`h-5 min-w-5 rounded-full px-1.5 text-[10px] font-bold ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}
+                className="ml-0.5 h-5 min-w-[20px] rounded-full bg-muted/80 px-1.5 text-[10px] font-semibold text-muted-foreground"
               >
                 {badgeValue}
               </Badge>
             )}
-            {/* Underline da tab ativa */}
+            {/* Underline da tab ativa — mais marcado */}
             {isActive && (
               <span
-                className="absolute inset-x-0 -bottom-px h-0.5 rounded-t-full bg-primary"
+                className="absolute inset-x-2 -bottom-px h-0.5 rounded-t-full bg-primary"
                 aria-hidden
               />
             )}
