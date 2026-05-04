@@ -86,6 +86,7 @@ import type { ExportColumn } from "../lib/export";
 import { PipelineConfigDrawer } from "./PipelineConfigDrawer";
 import { MarkAsLostDialog } from "./MarkAsLostDialog";
 import { ExportMenu } from "./ExportMenu";
+import { DialogHero } from "./DialogHero";
 
 // Buckets de outcome — define labels, cores e ordem visual dos 3
 // pills do filtro principal. Espelha o design da referencia.
@@ -1992,9 +1993,12 @@ function DealDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Detalhes do Negócio
-          </DialogTitle>
+          <DialogTitle className="sr-only">Detalhes do Negócio</DialogTitle>
+          <DialogHero
+            icon={<CircleDollarSign className="size-5" />}
+            title="Detalhes do negócio"
+            tagline={lead?.name ? `Lead: ${lead.name}` : "Edite os campos abaixo"}
+          />
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -2254,11 +2258,14 @@ function AddDealDialog({
           </button>
         }
       />
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Novo Negócio
-          </DialogTitle>
+          <DialogTitle className="sr-only">Novo Negócio</DialogTitle>
+          <DialogHero
+            icon={<Plus className="size-5" />}
+            title="Novo negócio"
+            tagline="Preencha os detalhes abaixo"
+          />
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -2639,17 +2646,22 @@ function BulkMoveDialog({
     }
   }, [open, stages, stageId]);
 
+  const dialogTitle = `Mover ${selectedCount} negócio${selectedCount === 1 ? "" : "s"} pra outra etapa`;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            Mover {selectedCount} negócio{selectedCount === 1 ? "" : "s"} pra
-            outra etapa
-          </DialogTitle>
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          <DialogHero
+            icon={<Move className="size-5" />}
+            title={dialogTitle}
+            tagline="Selecione a etapa de destino"
+          />
         </DialogHeader>
         <div className="space-y-3 py-2">
-          <Label className="text-xs">Etapa de destino</Label>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Etapa de destino
+          </Label>
           <Select value={stageId} onValueChange={(v) => setStageId(v ?? "")}>
             <SelectTrigger className="h-10">
               <SelectValue>
@@ -2716,17 +2728,22 @@ function BulkApplyTagsDialog({
     );
   };
 
+  const dialogTitle = `Aplicar tags em ${selectedCount} negócio${selectedCount === 1 ? "" : "s"}`;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            Aplicar tags em {selectedCount} negócio
-            {selectedCount === 1 ? "" : "s"}
-          </DialogTitle>
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          <DialogHero
+            icon={<TagIcon className="size-5" />}
+            title={dialogTitle}
+            tagline="Tags aplicadas aos leads desses negócios"
+          />
         </DialogHeader>
         <div className="space-y-3 py-2">
-          <Label className="text-xs">Selecione as tags</Label>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+            Selecione as tags
+          </Label>
           <div className="flex max-h-[280px] flex-wrap gap-1.5 overflow-y-auto">
             {tags.length === 0 ? (
               <p className="text-xs text-muted-foreground">

@@ -9,9 +9,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { Pencil, Plus, Trash2, AlertTriangle, Ban } from "lucide-react";
 import { toast } from "sonner";
 import type { DealLossReason } from "@persia/shared/crm";
+import { DialogHero } from "@persia/crm-ui";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -300,7 +301,19 @@ function ReasonFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Editar motivo" : "Novo motivo"}</DialogTitle>
+          <DialogTitle className="sr-only">
+            {isEdit ? "Editar motivo" : "Novo motivo"}
+          </DialogTitle>
+          <DialogHero
+            icon={<Ban className="size-5" />}
+            title={isEdit ? "Editar motivo" : "Novo motivo"}
+            tagline={
+              isEdit
+                ? "Atualize os dados abaixo"
+                : "Cadastre um novo motivo de perda"
+            }
+            tone="destructive"
+          />
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">

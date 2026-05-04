@@ -16,10 +16,10 @@ import { Textarea } from "@persia/ui/textarea";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@persia/ui/dialog";
+import { DialogHero } from "./DialogHero";
 
 export interface MarkAsLostFormValues {
   loss_reason: string;
@@ -98,27 +98,28 @@ export function MarkAsLostDialog({
     });
   };
 
+  const dialogTitle =
+    count === 1
+      ? "Marcar como perdido"
+      : `Marcar ${count} negócios como perdidos`;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertTriangle className="size-5" />
-            </div>
-            <div className="flex-1 space-y-1">
-              <DialogTitle>
-                {count === 1
-                  ? "Marcar como perdido"
-                  : `Marcar ${count} negócios como perdidos`}
-              </DialogTitle>
-              <DialogDescription>
-                {count === 1 && dealTitle
-                  ? `"${dealTitle}" — registre o motivo pra acompanhar nos relatórios.`
-                  : "Capture o motivo pra alimentar relatórios de perda e identificar padrões."}
-              </DialogDescription>
-            </div>
-          </div>
+          {/* DialogTitle invisivel pra a11y do Radix; o titulo visivel
+              vem do DialogHero. */}
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          <DialogHero
+            icon={<AlertTriangle className="size-5" />}
+            title={dialogTitle}
+            tagline={
+              count === 1 && dealTitle
+                ? `"${dealTitle}"`
+                : "Registre o motivo pra alimentar relatórios"
+            }
+            tone="destructive"
+          />
         </DialogHeader>
 
         <div className="space-y-4 py-2">
