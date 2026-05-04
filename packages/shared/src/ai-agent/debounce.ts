@@ -14,9 +14,18 @@
 //   - agent_configs.debounce_window_ms INTEGER       (default 10000)
 //   - pending_messages(id, organization_id, agent_conversation_id, ...)
 
+// Range expandido em PR-AGENT1 (mai/2026):
+//   - MIN = 0  : permite "responde imediatamente, sem agregar". Útil pra
+//                fluxos transacionais (cobrança, OTP) que precisam responder
+//                a cada mensagem sem esperar.
+//   - MAX = 40_000 (40s) : dá folga pra leads que digitam em pedaços muito
+//                curtos. Custo: lead espera até 40s pelo "Visualizado" do
+//                bot. Vale em horário comercial pra reduzir runs/dia.
+//   - DEFAULT = 10_000 : não mexido, é o valor que ficou bom em prod.
+// O CHECK constraint no banco (migration 034) bate com este range.
 export const DEBOUNCE_WINDOW_MS_DEFAULT = 10_000;
-export const DEBOUNCE_WINDOW_MS_MIN = 3_000;
-export const DEBOUNCE_WINDOW_MS_MAX = 30_000;
+export const DEBOUNCE_WINDOW_MS_MIN = 0;
+export const DEBOUNCE_WINDOW_MS_MAX = 40_000;
 
 // Shape of a pending_messages row (PR5.5 migration 019).
 export interface PendingMessage {
