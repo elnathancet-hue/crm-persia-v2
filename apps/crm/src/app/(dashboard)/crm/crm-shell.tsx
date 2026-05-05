@@ -1,25 +1,27 @@
 "use client";
 
-// CrmShell (PR-K5) — invólucro da rota /crm com tabs internas:
-// Pipeline · Leads · Atividades · Ajustes
+// CrmShell — invólucro da rota /crm com tabs internas:
+// Pipeline · Leads · Atividades
+//
+// PR-CRMCFG (mai/2026): tab "Ajustes" REMOVIDA. A configuração do CRM
+// virou rota dedicada (/settings/crm) acessível pela sidebar geral —
+// ela tinha um único card "Abrir configurações" com link, então virou
+// link mesmo, sem precisar de tab inteira ocupando espaço.
 //
 // Decisões:
 // - Pipeline (default) = renderiza o KanbanBoard atual (CrmClient)
 // - Leads = embed do LeadsList (vinha de /leads que agora redireciona pra cá)
-// - Atividades = stub visual (PR-K7 vai implementar timeline funcional)
-// - Ajustes = link pra /crm/settings (mantém a página standalone)
+// - Atividades = timeline (PR-K7)
 //
-// Tab ativa controlada por ?tab=pipeline|leads|atividades|ajustes
-// (default: pipeline). useSearchParams pra deep link funcionar.
+// Tab ativa controlada por ?tab=pipeline|leads|atividades (default:
+// pipeline). useSearchParams pra deep link funcionar.
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Kanban,
   Users,
   Activity,
-  Settings,
 } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
 import type {
@@ -35,7 +37,9 @@ import { CrmClient } from "./crm-client";
 import { LeadList } from "@/components/leads/lead-list";
 import { ActivitiesTab } from "@/components/crm/activities-tab";
 
-type CrmTab = "pipeline" | "leads" | "atividades" | "ajustes";
+// PR-CRMCFG: removida tab "ajustes" — configuracao agora vive em
+// /settings/crm acessada via sidebar geral (regra 1).
+type CrmTab = "pipeline" | "leads" | "atividades";
 
 const TABS: {
   key: CrmTab;
@@ -45,7 +49,6 @@ const TABS: {
   { key: "pipeline", label: "Pipeline", icon: Kanban },
   { key: "leads", label: "Leads", icon: Users },
   { key: "atividades", label: "Atividades", icon: Activity },
-  { key: "ajustes", label: "Ajustes", icon: Settings },
 ];
 
 interface CrmShellProps {
@@ -139,7 +142,10 @@ export function CrmShell(props: CrmShellProps) {
           initialTotalPages={props.activitiesData.initialTotalPages}
         />
       )}
-      {activeTab === "ajustes" && <AjustesEntry />}
+      {/* PR-CRMCFG: <AjustesEntry/> removido. Configuracao virou rota
+          dedicada /settings/crm — atalho discreto fica na toolbar do
+          KanbanBoard (via prop `configHref`) e a sidebar geral lista
+          todas as configs do sistema (Org, Equipe, CRM, etc). */}
     </div>
   );
 }
@@ -235,33 +241,5 @@ function CrmTabs({
   );
 }
 
-// ============================================================================
-// Ajustes — link pra /crm/settings (mantém a pagina standalone)
-// ============================================================================
-
-function AjustesEntry() {
-  return (
-    <div className="rounded-xl border border-border bg-card p-6">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Settings className="size-5" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-base font-semibold text-foreground">
-            Configurações do CRM
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            Pipelines, etapas, motivos de perda e mais.
-          </p>
-        </div>
-        <Link
-          href="/crm/settings"
-          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          Abrir configurações
-          <Settings className="size-4" />
-        </Link>
-      </div>
-    </div>
-  );
-}
+// PR-CRMCFG: AjustesEntry removida — virou link discreto na toolbar
+// do KanbanBoard (prop `configHref`) + tab "CRM" na sidebar geral.

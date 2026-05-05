@@ -46,6 +46,16 @@ export interface UpdateDealInput {
 export interface UpdateStageInput {
   name?: string;
   outcome?: StageOutcome;
+  /** PR-CRMCFG: campos extras pra editor de configuracao. */
+  color?: string;
+  description?: string | null;
+  sortOrder?: number;
+}
+
+/** PR-CRMCFG: reorder em batch usado pelo PipelineSettingsClient. */
+export interface ReorderStageInput {
+  id: string;
+  position: number;
 }
 
 export interface KanbanActions {
@@ -58,6 +68,13 @@ export interface KanbanActions {
   createStage: (input: CreateStageInput) => Promise<Stage>;
   updateStage: (stageId: string, data: UpdateStageInput) => Promise<void>;
   deleteStage: (stageId: string) => Promise<void>;
+  /**
+   * PR-CRMCFG: reorder em batch (drag-drop ou setas no editor de
+   * configuracao). Opcional pra retro-compat com adapters antigos
+   * que ainda nao implementam — UI degrada pra "1 update por etapa"
+   * ao invez de batch nesse caso.
+   */
+  reorderStages?: (stages: ReorderStageInput[]) => Promise<void>;
 
   // Deals
   createDeal: (input: CreateDealInput) => Promise<Deal>;

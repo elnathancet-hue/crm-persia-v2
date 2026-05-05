@@ -16,6 +16,7 @@ import {
   updateDeal,
   updatePipelineName,
   updateStage,
+  updateStageOrder,
 } from "@/actions/pipelines";
 import type { Pipeline, Stage } from "@persia/shared/crm";
 
@@ -40,9 +41,21 @@ export const adminKanbanActions: KanbanActions = {
     }
     return stage as Stage;
   },
+  // PR-CRMCFG: passa todos os campos do UpdateStageInput. Antes
+  // ignorava color/description/sortOrder porque o KanbanBoard nao
+  // usava — o editor de configuracao novo precisa.
   updateStage: (stageId, data) =>
-    updateStage(stageId, { name: data.name, outcome: data.outcome }),
+    updateStage(stageId, {
+      name: data.name,
+      color: data.color,
+      description: data.description,
+      sort_order: data.sortOrder,
+      outcome: data.outcome,
+    }),
   deleteStage: (stageId) => deleteStage(stageId),
+  // PR-CRMCFG: reorder em batch (compartilhado com /crm/configurar).
+  reorderStages: (stages) =>
+    updateStageOrder(stages.map((s) => ({ id: s.id, position: s.position }))),
 
   // ============ DEALS ============
   createDeal: async ({ pipelineId, stageId, title, value, leadId }) => {

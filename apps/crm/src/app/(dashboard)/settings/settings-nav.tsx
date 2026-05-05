@@ -2,11 +2,24 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Users, ListChecks, Webhook, Smartphone, CreditCard } from "lucide-react";
+import {
+  Building2,
+  CreditCard,
+  Kanban,
+  ListChecks,
+  Smartphone,
+  Users,
+  Webhook,
+} from "lucide-react";
 
+// PR-CRMCFG: aba "CRM" inclui as 4 sub-tabs (Funis | Etiquetas | Motivos
+// | Segmentos). Antes estavam em /crm/settings, atrelado visualmente ao
+// Kanban via tab "Ajustes". Centralizado aqui pra ter 1 unico lugar
+// onde se configura qualquer parte do sistema.
 const tabs = [
   { label: "Organização", href: "/settings", icon: Building2 },
   { label: "Equipe", href: "/settings/team", icon: Users },
+  { label: "CRM", href: "/settings/crm", icon: Kanban },
   { label: "Filas", href: "/settings/queues", icon: ListChecks },
   { label: "Webhooks", href: "/settings/webhooks", icon: Webhook },
   { label: "WhatsApp", href: "/settings/whatsapp", icon: Smartphone },

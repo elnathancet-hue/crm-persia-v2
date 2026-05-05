@@ -1,13 +1,17 @@
 "use client";
 
-// SettingsShell (PR-K10) — invólucro de /crm/settings com sub-tabs
-// internas: Funis · Etiquetas · Motivos · Segmentos
+// SettingsShell — wrapper de /settings/crm com sub-tabs:
+// Funis · Etiquetas · Motivos · Segmentos
 //
-// Decisões:
-// - Funis = renderiza CrmSettingsClient (pipelines + stages, ja existente)
-// - Etiquetas = embed do TagsPageClient (vinha de /tags que agora redireciona)
-// - Motivos = renderiza LossReasonsManager (PR-K4)
-// - Segmentos = embed do SegmentList (vinha de /segments que agora redireciona)
+// PR-CRMCFG (mai/2026): renomeado de "Configurações do CRM" para
+// "Configurar funis" no header (alinhado com regra de nomenclatura
+// unica — "Funis" pra configuracao, "Pipeline" so na tela operacional).
+// Antes vivia em /crm/settings; movido pra /settings/crm pra unificar
+// com /settings/* (org, equipe, whatsapp, etc).
+//
+// PR-K10 (origem): cada sub-tab embute um componente existente
+// (TagsPageClient, LossReasonsManager, SegmentList) — nada de logica
+// duplicada.
 //
 // Tab ativa controlada por ?tab=funis|etiquetas|motivos|segmentos
 // (default: funis). Deep link funciona.
@@ -25,7 +29,11 @@ import {
 } from "lucide-react";
 import type { DealLossReason, Pipeline, Stage, TagWithCount } from "@persia/shared/crm";
 
-import { CrmSettingsClient } from "./crm-settings-client";
+// PR-CRMCFG: aba Funis virou master-detail compartilhado em
+// packages/crm-ui (PipelineSettingsClient). O wrapper local injeta as
+// actions do CRM. A pagina vertical antiga (CrmSettingsClient) foi
+// REMOVIDA — toda a funcionalidade migrou pro shared.
+import { FunisTab } from "./funis-tab";
 import { LossReasonsManager } from "@/components/crm/loss-reasons-manager";
 import { TagsPageClient } from "@/app/(dashboard)/tags/tags-client";
 import { SegmentList } from "@/components/segments/segment-list";
@@ -37,7 +45,9 @@ const TABS: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { key: "funis", label: "Funis e etapas", icon: Kanban },
+  // PR-CRMCFG: simplificado de "Funis e etapas" pra "Funis" — etapas
+  // sao gerenciadas dentro do funil, nao precisa repetir no rotulo.
+  { key: "funis", label: "Funis", icon: Kanban },
   { key: "etiquetas", label: "Etiquetas", icon: TagIcon },
   { key: "motivos", label: "Motivos de perda", icon: Ban },
   { key: "segmentos", label: "Segmentos", icon: FilterIcon },
@@ -67,7 +77,7 @@ export function SettingsShell(props: SettingsShellProps) {
       params.set("tab", next);
     }
     const qs = params.toString();
-    router.push(qs ? `/crm/settings?${qs}` : "/crm/settings", {
+    router.push(qs ? `/settings/crm?${qs}` : "/settings/crm", {
       scroll: false,
     });
   };
@@ -82,9 +92,10 @@ export function SettingsShell(props: SettingsShellProps) {
 
       {/* Conteudo da tab ativa */}
       {activeTab === "funis" && (
-        <CrmSettingsClient
+        <FunisTab
           pipelines={props.pipelines}
           stages={props.stages as never}
+          initialPipelineId={searchParams.get("pipeline") ?? undefined}
         />
       )}
       {activeTab === "etiquetas" && (
@@ -107,7 +118,7 @@ export function SettingsShell(props: SettingsShellProps) {
 }
 
 // ============================================================================
-// Header da pagina /crm/settings — espelha o pattern do CRM Shell (PR-K5)
+// Header da pagina /settings/crm — espelha o pattern do CRM Shell (PR-K5)
 // ============================================================================
 
 function SettingsPageHeader() {
@@ -125,11 +136,14 @@ function SettingsPageHeader() {
           <SettingsIcon className="size-6" />
         </div>
         <div>
+          {/* PR-CRMCFG: nomenclatura unica "Configurar funis" — substitui
+              "Configurações do CRM" / "Configurar Negócios" / "Configurar funis"
+              que coexistiam em pontos diferentes do app. */}
           <h1 className="text-2xl font-bold tracking-tight font-heading">
-            Configurações do CRM
+            Configurar funis
           </h1>
           <p className="text-sm text-muted-foreground">
-            Personalize funis, etiquetas, motivos e segmentos
+            Funis, etiquetas, motivos de perda e segmentos do CRM
           </p>
         </div>
       </div>

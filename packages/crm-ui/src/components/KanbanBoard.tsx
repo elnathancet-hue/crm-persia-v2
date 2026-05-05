@@ -98,10 +98,14 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 
+import Link from "next/link";
+
 import { useKanbanActions } from "../context";
 import type { MarkAsLostInput } from "../actions";
 import type { ExportColumn } from "../lib/export";
-import { PipelineConfigDrawer } from "./PipelineConfigDrawer";
+// PR-CRMCFG: PipelineConfigDrawer foi removido (modal "Configurar funis").
+// Configuracao de funis agora vive em rota dedicada — ver
+// PipelineSettingsClient + prop `configHref` abaixo.
 import { MarkAsLostDialog } from "./MarkAsLostDialog";
 import { ExportMenu } from "./ExportMenu";
 import { DialogHero } from "./DialogHero";
@@ -262,6 +266,19 @@ export interface KanbanBoardProps {
   tags?: TagRef[];
   /** Lista de responsaveis pra filtro 'Atribuido a'. Vazio = oculta. */
   assignees?: { id: string; name: string }[];
+  /**
+   * PR-CRMCFG: rota onde o usuario configura funis. Quando setado +
+   * `canManagePipelines`, mostra atalho discreto "Configurar funis"
+   * na toolbar (linka pra essa rota). Quando null/undefined, NAO
+   * mostra atalho — util pra contextos onde a config nao e acessivel.
+   *
+   * CRM passa `/settings/crm?tab=funis`. Admin passa `/crm/configurar`.
+   *
+   * Substituiu o modal "Configurar funis" (PipelineConfigDrawer) que
+   * vivia inline. Decisao: 1 lugar so pra configurar (rota dedicada),
+   * sem modal inline competindo.
+   */
+  configHref?: string;
 }
 
 export function KanbanBoard({
@@ -276,6 +293,7 @@ export function KanbanBoard({
   toolbarExtras,
   tags: orgTags = [],
   assignees = [],
+  configHref,
 }: KanbanBoardProps) {
   const actions = useKanbanActions();
   const [selectedPipeline, setSelectedPipeline] = React.useState(
@@ -283,7 +301,8 @@ export function KanbanBoard({
   );
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
-  const [configDrawerOpen, setConfigDrawerOpen] = React.useState(false);
+  // PR-CRMCFG: configDrawerOpen state removido junto com o modal —
+  // configuracao agora e rota dedicada (ver prop `configHref`).
   const [activeOutcome, setActiveOutcome] =
     React.useState<StageOutcome>("em_andamento");
   const [draggedDealId, setDraggedDealId] = React.useState<string | null>(null);
@@ -1065,18 +1084,23 @@ export function KanbanBoard({
           />
 
           {toolbarExtras}
-          {canManagePipelines && (
+          {/* PR-CRMCFG: ícone engrenagem que abria o modal `PipelineConfigDrawer`
+              foi REMOVIDO. Agora a configuração de funis vive em rota dedicada
+              (configurada por `configHref`). Se admin/owner e o app passou
+              `configHref`, mostra atalho discreto que leva pra essa rota.
+              Mantém o usuário informado de que existe configuração disponível,
+              sem competir com o modal antigo. */}
+          {canManagePipelines && configHref && (
             <>
               <span className="h-5 w-px bg-border" aria-hidden />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-7 rounded-md"
+              <Link
+                href={configHref}
                 title="Configurar funis"
-                onClick={() => setConfigDrawerOpen(true)}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <Settings className="size-4" />
-              </Button>
+                <Settings className="size-3.5" aria-hidden />
+                <span>Configurar funis</span>
+              </Link>
             </>
           )}
         </div>
@@ -1490,15 +1514,9 @@ export function KanbanBoard({
         </AlertDialogContent>
       </AlertDialog>
 
-      {canManagePipelines && (
-        <PipelineConfigDrawer
-          open={configDrawerOpen}
-          onOpenChange={setConfigDrawerOpen}
-          pipelines={pipelines}
-          stages={initialStages}
-          onChange={onChange}
-        />
-      )}
+      {/* PR-CRMCFG: <PipelineConfigDrawer> removido. Configuracao agora
+          vive em rota dedicada (ver `configHref` na toolbar acima).
+          Decisao: 1 lugar so, sem modal inline competindo. */}
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   updateDealStatus as updateDealStatusShared,
   updatePipelineName as updatePipelineNameShared,
   updateStage as updateStageShared,
+  updateStageOrder as updateStageOrderShared,
 } from "@persia/shared/crm";
 
 // Logica de pipelines/stages/deals consolidada em @persia/shared/crm.
@@ -162,6 +163,24 @@ export async function deleteStage(stageId: string) {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await deleteStageShared({ db: admin, orgId }, stageId);
+    revalidatePath("/crm");
+  } catch {
+    // noop
+  }
+}
+
+/**
+ * PR-CRMCFG: reorder em batch — usado pelo PipelineSettingsClient
+ * (editor de configuracao em /crm/configurar). Reusa o shared mutation
+ * (`updateStageOrder`) que ja serializa updates e e org-scoped via
+ * defense-in-depth.
+ */
+export async function updateStageOrder(
+  stages: { id: string; position: number }[],
+) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    await updateStageOrderShared({ db: admin, orgId }, stages);
     revalidatePath("/crm");
   } catch {
     // noop
