@@ -320,10 +320,19 @@ export function SegmentsList({
                   </div>
                 </div>
               </div>
-              {/* PR-CRMUI: footer mais respiravel (era p-4, agora px-6 py-4
-                  + gap-3 + min-w-32 nos botoes). Botao primario nao
-                  encosta na borda direita. */}
-              <DialogFooter className="flex-row justify-end gap-3 border-t border-border bg-card px-6 py-4">
+              {/* PR-HOTFIX-FOOTER: o DialogFooter base tem `-mx-4 -mb-4`
+                  (margens negativas) pra "encostar" nas bordas do
+                  DialogContent quando ele tem padding p-4. Aqui o
+                  DialogContent usa `p-0` (full-bleed custom), entao as
+                  margens negativas empurravam o footer PRA FORA do
+                  dialog — o botao "Criar segmentacao" ficava colado/
+                  saindo da borda direita.
+
+                  Fix: `mx-0 mb-0` cancela as margens negativas do base
+                  (cn + tailwind-merge resolve o conflito, ultima
+                  classe vence). px-6 py-4 + gap-3 + min-w nos botoes
+                  garantem respiro confortavel. */}
+              <DialogFooter className="mx-0 mb-0 flex-row justify-end gap-3 border-t border-border bg-card px-6 py-4">
                 <Button
                   type="button"
                   variant="ghost"

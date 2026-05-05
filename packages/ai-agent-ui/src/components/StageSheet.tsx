@@ -199,7 +199,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
           ) : null}
         </div>
         {/* PR-CRMUI: footer respiravel — px-6 py-4 + gap-3 + min-w. */}
-        <DialogFooter className="border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
+        <DialogFooter className="mx-0 mb-0 border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
           <Button
             type="button"
             variant="ghost"

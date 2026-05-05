@@ -299,7 +299,7 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
         </div>
 
         {/* PR-NAVUI: footer padrao consistente (px-6 py-4 + gap-3). */}
-        <DialogFooter className="border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
+        <DialogFooter className="mx-0 mb-0 border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
           <Button
             type="button"
             variant="ghost"
