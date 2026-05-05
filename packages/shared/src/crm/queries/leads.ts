@@ -12,6 +12,7 @@ import type {
   LeadWithTags,
 } from "../types";
 import type { CrmQueryContext } from "./context";
+import { findMatchingLeadIds } from "../segments/match-leads";
 
 export interface PaginatedLeads {
   leads: LeadWithTags[];
@@ -32,11 +33,38 @@ export async function listLeads(
   filters: LeadFilters = {},
 ): Promise<PaginatedLeads> {
   const { db, orgId } = ctx;
-  const { search, status, tags, page = 1, limit = 20 } = filters;
+  const { search, status, tags, segmentId, page = 1, limit = 20 } = filters;
 
   const from = (page - 1) * limit;
   const to = from + limit - 1;
   let leadIdsFromTags: string[] | null = null;
+  let leadIdsFromSegment: string[] | null = null;
+
+  // PR-CRMOPS3: pre-filter via segmento. Resolve as regras em IDs e
+  // aplica `.in('id', ids)` adiante. Se segmento tem 0 matches,
+  // retorna vazio sem fazer a query principal.
+  if (segmentId) {
+    const segmentRow = await db
+      .from("segments")
+      .select("rules")
+      .eq("organization_id", orgId)
+      .eq("id", segmentId)
+      .maybeSingle();
+    const rules = (segmentRow.data as { rules: unknown } | null)?.rules;
+    if (rules) {
+      const matched = await findMatchingLeadIds(
+        db as never,
+        orgId,
+        rules as never,
+      );
+      // null = regras malformadas/vazias → ignora filtro
+      // []   = regras validas mas zero leads bateram → resultado vazio
+      if (matched && matched.length === 0) {
+        return { leads: [], total: 0, page, limit, totalPages: 0 };
+      }
+      leadIdsFromSegment = matched ?? null;
+    }
+  }
 
   // Pre-filter via lead_tags se foi pedido por tags.
   if (tags && tags.length > 0) {
@@ -95,8 +123,23 @@ export async function listLeads(
     query = query.eq("status", status);
   }
 
-  if (leadIdsFromTags) {
-    query = query.in("id", leadIdsFromTags);
+  // PR-CRMOPS3: combina filtros de tags + segmento via intersect quando
+  // ambos presentes. Se so um, usa direto.
+  let combinedIds: string[] | null = null;
+  if (leadIdsFromTags && leadIdsFromSegment) {
+    const segSet = new Set(leadIdsFromSegment);
+    combinedIds = leadIdsFromTags.filter((id) => segSet.has(id));
+    if (combinedIds.length === 0) {
+      return { leads: [], total: 0, page, limit, totalPages: 0 };
+    }
+  } else if (leadIdsFromTags) {
+    combinedIds = leadIdsFromTags;
+  } else if (leadIdsFromSegment) {
+    combinedIds = leadIdsFromSegment;
+  }
+
+  if (combinedIds) {
+    query = query.in("id", combinedIds);
   }
 
   const { data, error, count } = await query;

@@ -24,6 +24,13 @@ export interface LeadFilters {
   search?: string;
   status?: string;
   tags?: string[];
+  /**
+   * PR-CRMOPS3: filtra por leads que batem nas regras do segmento
+   * informado. Resolve via `findMatchingLeadIds` antes da query e
+   * aplica como `.in('id', leadIds)`. Se segmento nao existe ou
+   * tem 0 matches, retorna lista vazia.
+   */
+  segmentId?: string;
   page?: number;
   limit?: number;
 }

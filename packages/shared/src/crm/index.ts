@@ -73,6 +73,11 @@ export {
   listOrgActivities,
 } from "./queries";
 
+// PR-CRMOPS3: helper que resolve regras de segmento em IDs de leads.
+// Usado pelo listLeads pra aplicar filtro de segmento (segmentId ->
+// pre-fetcha matching leads -> aplica .in('id', leadIds) na query).
+export { findMatchingLeadIds } from "./segments/match-leads";
+
 // Mutations CRM compartilhadas (CRUD de leads + tags + pipelines + deals).
 // Cada app passa { db, orgId, onLeadChanged? } depois de fazer auth.
 export type {

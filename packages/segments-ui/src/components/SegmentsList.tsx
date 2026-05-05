@@ -8,6 +8,7 @@
 // Originalmente em apps/crm/src/components/segments/segment-list.tsx.
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import { EmptyState } from "@persia/ui/empty-state";
@@ -42,7 +43,7 @@ import {
 } from "lucide-react";
 import type { Segment, SegmentRules } from "@persia/shared/crm";
 
-import { ConditionBuilder } from "./ConditionBuilder";
+import { ConditionBuilder, type AssigneeOption } from "./ConditionBuilder";
 import { useSegmentsActions } from "../context";
 
 interface RulesShape {
@@ -56,11 +57,26 @@ export interface SegmentsListProps {
   initialSegments: Segment[];
   /** admin+: pode criar/editar/deletar segmentos. CRM = admin+; admin app = sempre true. */
   canManage: boolean;
+  /**
+   * PR-CRMOPS3: lista de responsaveis pra dropdown do criterio
+   * "Responsavel" no ConditionBuilder. Quando vazio, o builder usa
+   * Input texto (degradacao graciosa).
+   */
+  assigneeOptions?: AssigneeOption[];
+  /**
+   * PR-CRMOPS3: URL pra ver os leads de um segmento (botao "Ver
+   * leads" no card). Quando ausente, o botao nao aparece. CRM passa
+   * `(seg) => '/crm?tab=leads&segment=${seg.id}'`. Admin pode passar
+   * undefined ou rota propria.
+   */
+  viewLeadsHref?: (segment: Segment) => string;
 }
 
 export function SegmentsList({
   initialSegments,
   canManage,
+  assigneeOptions = [],
+  viewLeadsHref,
 }: SegmentsListProps) {
   const actions = useSegmentsActions();
   const [segments, setSegments] = useState<Segment[]>(initialSegments);
@@ -274,6 +290,7 @@ export function SegmentsList({
                   <div className="rounded-xl border border-border bg-muted/20 p-3">
                     <ConditionBuilder
                       rules={rules}
+                      assigneeOptions={assigneeOptions}
                       onChange={(next) =>
                         setRules({
                           operator: next.operator === "OR" ? "OR" : "AND",
@@ -405,21 +422,35 @@ export function SegmentsList({
                     )}
                   </div>
 
-                  {/* Footer com métricas */}
-                  <div className="flex items-center justify-between border-t border-border/40 pt-3 text-[11px]">
-                    <span className="inline-flex items-center gap-1 font-semibold text-foreground">
-                      <Users className="size-3.5 text-muted-foreground" />
-                      <span className="tabular-nums">
-                        {segment.lead_count.toLocaleString("pt-BR")}
+                  {/* Footer com métricas + acao "Ver leads" */}
+                  <div className="border-t border-border/40 pt-3">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                        <Users className="size-3.5 text-muted-foreground" />
+                        <span className="tabular-nums">
+                          {segment.lead_count.toLocaleString("pt-BR")}
+                        </span>
+                        <span className="font-normal text-muted-foreground">
+                          {segment.lead_count === 1 ? "lead" : "leads"}
+                        </span>
                       </span>
-                      <span className="font-normal text-muted-foreground">
-                        {segment.lead_count === 1 ? "lead" : "leads"}
+                      <span className="text-muted-foreground">
+                        {conditionsCount} regra
+                        {conditionsCount === 1 ? "" : "s"}
                       </span>
-                    </span>
-                    <span className="text-muted-foreground">
-                      {conditionsCount} regra
-                      {conditionsCount === 1 ? "" : "s"}
-                    </span>
+                    </div>
+                    {/* PR-CRMOPS3: acao principal — ve os leads do
+                        segmento aplicado como filtro na tab Leads.
+                        Visivel sempre (nao depende do hover). */}
+                    {viewLeadsHref && (
+                      <Link
+                        href={viewLeadsHref(segment)}
+                        className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-border bg-card text-xs font-medium text-foreground transition-colors hover:bg-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      >
+                        <Users className="size-3.5" aria-hidden />
+                        Ver leads
+                      </Link>
+                    )}
                   </div>
                 </CardContent>
               </Card>
