@@ -7,6 +7,7 @@
 // re-fetch do server component pai depois do drawer salvar.
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LeadsList, LeadsProvider } from "@persia/leads-ui";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@persia/crm-ui";
 import type { LeadWithTags } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
-import { Upload } from "lucide-react";
+import { Filter, Upload, X } from "lucide-react";
 import { useRole } from "@/lib/hooks/use-role";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
@@ -29,6 +30,12 @@ interface Props {
   initialTotal: number;
   initialPage: number;
   initialTotalPages: number;
+  /**
+   * PR-CRMOPS3: quando setado, mostra hint visual no topo da lista
+   * indicando que o resultado esta filtrado pelo segmento. Botao
+   * "Limpar" remove o filtro (limpa ?segment=... da URL).
+   */
+  activeSegment?: { id: string; name: string } | null;
 }
 
 export function LeadList(props: Props) {
@@ -98,9 +105,40 @@ export function LeadList(props: Props) {
 
   return (
     <>
+      {/* PR-CRMOPS3: hint de filtro ativo. Quando o usuario chega via
+          "Ver leads" do card de segmento, mostra a pilula com nome
+          do segmento + botao "x" pra limpar. DesignFlow: bg-primary/10
+          + text-primary + rounded-full. */}
+      {props.activeSegment && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Filter className="size-4 text-primary shrink-0" aria-hidden />
+            <span className="text-sm text-foreground truncate">
+              Filtrado por segmento:{" "}
+              <span className="font-semibold text-primary">
+                {props.activeSegment.name}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground shrink-0">
+              · {props.initialTotal} lead{props.initialTotal === 1 ? "" : "s"}
+            </span>
+          </div>
+          <Link
+            href="/crm?tab=leads"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-card hover:text-foreground"
+            title="Limpar filtro"
+          >
+            <X className="size-3.5" aria-hidden />
+            Limpar
+          </Link>
+        </div>
+      )}
       <LeadsProvider actions={crmLeadsActions}>
         <LeadsList
-          {...props}
+          initialLeads={props.initialLeads}
+          initialTotal={props.initialTotal}
+          initialPage={props.initialPage}
+          initialTotalPages={props.initialTotalPages}
           canEdit={isAgent}
           onRowClick={(lead) => setInfoDrawerLead(lead)}
           onEditLead={(lead) => router.push(`/leads/${lead.id}`)}

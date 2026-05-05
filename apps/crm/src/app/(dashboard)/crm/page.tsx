@@ -8,7 +8,16 @@ import { getSegments } from "@/actions/segments";
 import { listPipelines, listDeals } from "@persia/shared/crm";
 import { CrmShell } from "./crm-shell";
 
-export default async function CrmPage() {
+interface CrmPageProps {
+  // PR-CRMOPS3: o page lê ?segment={id} pra filtrar a tab Leads
+  // (botao "Ver leads" do segment card aponta pra ca).
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function CrmPage({ searchParams }: CrmPageProps) {
+  const params = await searchParams;
+  const segmentIdFilter = typeof params.segment === "string" ? params.segment : null;
+
   // Usa o helper centralizado em vez de query direta com `.single()` —
   // .single() throwa quando o user e membro de >1 org (caso real do
   // superadmin testando varias contas), o que disparava redirect pra
@@ -129,9 +138,14 @@ export default async function CrmPage() {
           .eq("is_active", true),
     ),
     // PR-K5: lista paginada pra alimentar a tab "Leads"
+    // PR-CRMOPS3: aplica filtro de segmento quando ?segment={id} na URL
     (async () => {
       try {
-        return await getLeads({ page: 1, limit: 20 });
+        return await getLeads({
+          page: 1,
+          limit: 20,
+          ...(segmentIdFilter ? { segmentId: segmentIdFilter } : {}),
+        });
       } catch (err) {
         console.error("[/crm page] getLeads (tab Leads) falhou:", err);
         return { leads: [], total: 0, page: 1, totalPages: 0 };
@@ -190,6 +204,15 @@ export default async function CrmPage() {
     }
   }
 
+  // PR-CRMOPS3: nome do segmento ativo pra mostrar no hint da tab Leads
+  // ("Filtrado por: <nome> · Limpar"). Resolve do array ja carregado em
+  // segmentsResult, sem query extra.
+  const activeSegmentName =
+    segmentIdFilter && Array.isArray(segmentsResult)
+      ? ((segmentsResult as { id: string; name: string }[])
+          .find((s) => s.id === segmentIdFilter)?.name ?? null)
+      : null;
+
   return (
     <CrmShell
       pipelines={pipelines as never}
@@ -204,6 +227,11 @@ export default async function CrmPage() {
         initialPage: leadsListResult.page,
         initialTotalPages: leadsListResult.totalPages,
       }}
+      activeSegment={
+        segmentIdFilter && activeSegmentName
+          ? { id: segmentIdFilter, name: activeSegmentName }
+          : null
+      }
       activitiesData={{
         initialActivities: activitiesResult.activities as never,
         initialTotal: activitiesResult.total,

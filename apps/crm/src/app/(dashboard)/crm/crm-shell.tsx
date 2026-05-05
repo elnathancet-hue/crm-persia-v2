@@ -84,6 +84,12 @@ interface CrmShellProps {
   };
   segments: unknown[];
   tagsList: TagWithCount[];
+  /**
+   * PR-CRMOPS3: segmento ativo aplicado como filtro na tab Leads
+   * (vem da URL `?segment={id}`). Quando setado, LeadList mostra hint
+   * "Filtrado por: <nome> · Limpar".
+   */
+  activeSegment?: { id: string; name: string } | null;
   activitiesData: {
     initialActivities: OrgActivityRow[];
     initialTotal: number;
@@ -225,10 +231,14 @@ export function CrmShell(props: CrmShellProps) {
             initialTotal={props.leadsListData.initialTotal}
             initialPage={props.leadsListData.initialPage}
             initialTotalPages={props.leadsListData.initialTotalPages}
+            activeSegment={props.activeSegment ?? null}
           />
         )}
         {activeTab === "segmentos" && canManageSegments && (
-          <SegmentList segments={props.segments as never} />
+          <SegmentList
+            segments={props.segments as never}
+            assignees={props.assignees}
+          />
         )}
         {activeTab === "tags" && canManageTags && (
           <TagsPageClient initialTags={props.tagsList as never} />

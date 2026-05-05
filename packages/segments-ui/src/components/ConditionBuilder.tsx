@@ -23,12 +23,17 @@ interface Rules {
   conditions: Condition[];
 }
 
+// PR-CRMOPS3: campo `assigned_to` adicionado pra cobrir o briefing
+// (criterios: tags, etapa, responsavel, dados do lead). "etapa"
+// (stage_id) ainda nao — precisa join via deals e fica em iteracao
+// futura.
 const FIELDS = [
   { value: "status", label: "Status" },
   { value: "source", label: "Origem" },
   { value: "channel", label: "Canal" },
   { value: "score", label: "Score" },
   { value: "tags", label: "Tags" },
+  { value: "assigned_to", label: "Responsável" },
   { value: "created_at", label: "Data de criação" },
   { value: "last_interaction_at", label: "Última interação" },
 ];
@@ -53,6 +58,11 @@ const OPERATORS: Record<string, { value: string; label: string }[]> = {
     { value: "contains", label: "contem" },
     { value: "not_contains", label: "nao contem" },
   ],
+  assigned_to: [
+    { value: "eq", label: "é" },
+    { value: "neq", label: "não é" },
+    { value: "is_null", label: "sem responsável" },
+  ],
   created_at: [
     { value: "older_than_days", label: "ha mais de X dias" },
     { value: "newer_than_days", label: "ha menos de X dias" },
@@ -70,12 +80,24 @@ function genId(): string {
     : `${Date.now()}-${Math.random()}`;
 }
 
+/**
+ * PR-CRMOPS3: opcoes dinamicas pro campo "Responsavel" — caller passa
+ * a lista de members da org. Quando ausente, o input de valor cai pra
+ * Input texto (degradacao graciosa).
+ */
+export interface AssigneeOption {
+  id: string;
+  name: string;
+}
+
 export function ConditionBuilder({
   rules,
   onChange,
+  assigneeOptions = [],
 }: {
   rules: Rules;
   onChange: (r: Rules) => void;
+  assigneeOptions?: AssigneeOption[];
 }) {
   const [ids, setIds] = useState<string[]>(() =>
     rules.conditions.map(() => genId()),
@@ -190,14 +212,36 @@ export function ConditionBuilder({
           </Select>
 
           {condition.op !== "is_null" && (
-            <Input
-              value={condition.value}
-              onChange={(e) =>
-                updateCondition(index, { value: e.target.value })
-              }
-              placeholder="Valor"
-              className="flex-1"
-            />
+            condition.field === "assigned_to" && assigneeOptions.length > 0 ? (
+              // PR-CRMOPS3: dropdown dinamico de responsaveis. Quando o
+              // caller nao passa options, cai no Input texto (else).
+              <Select
+                value={condition.value}
+                onValueChange={(v) =>
+                  updateCondition(index, { value: v ?? "" })
+                }
+              >
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Selecione responsável" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assigneeOptions.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={condition.value}
+                onChange={(e) =>
+                  updateCondition(index, { value: e.target.value })
+                }
+                placeholder="Valor"
+                className="flex-1"
+              />
+            )
           )}
 
           <Button
