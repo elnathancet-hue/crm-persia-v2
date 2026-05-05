@@ -198,11 +198,23 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
             </div>
           ) : null}
         </div>
-        <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
+        {/* PR-CRMUI: footer respiravel — px-6 py-4 + gap-3 + min-w. */}
+        <DialogFooter className="border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+            className="min-w-24"
+          >
             Cancelar
           </Button>
-          <Button type="submit" form="stage-form" disabled={isPending || formInvalid}>
+          <Button
+            type="submit"
+            form="stage-form"
+            disabled={isPending || formInvalid}
+            className="min-w-28"
+          >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             {mode === "create" ? "Criar etapa" : "Salvar"}
           </Button>

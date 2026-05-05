@@ -310,11 +310,23 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
               </p>
             </div>
           </form>
-          <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
-            <Button variant="ghost" onClick={() => setCreateOpen(false)} disabled={isPending}>
+          {/* PR-CRMUI: footer com mais respiro (px-6 py-4 + gap-3 +
+              min-w nos botoes). Padrao consistente com SegmentsList. */}
+          <DialogFooter className="border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setCreateOpen(false)}
+              disabled={isPending}
+              className="min-w-24"
+            >
               Cancelar
             </Button>
-            <Button type="submit" form="create-agent-form" disabled={isPending}>
+            <Button
+              type="submit"
+              form="create-agent-form"
+              disabled={isPending}
+              className="min-w-24"
+            >
               {isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
               Criar
             </Button>

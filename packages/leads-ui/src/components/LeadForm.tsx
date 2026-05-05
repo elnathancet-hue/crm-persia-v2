@@ -124,7 +124,7 @@ export function LeadForm({
           defaultValue={defaultValues?.name ?? ""}
           onBlur={(e) => validateField("name", e.target.value, { required: true })}
           onChange={() => clearError("name")}
-          className={errors.name ? "border-destructive focus-visible:ring-destructive/50" : ""}
+          className={errors.name ? "border-destructive/40" : ""}
         />
         {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
       </div>
@@ -137,7 +137,7 @@ export function LeadForm({
           placeholder="(11) 99999-9999"
           defaultValue={defaultValues?.phone ?? ""}
           onChange={() => { clearError("phone"); clearError("email"); }}
-          className={errors.phone ? "border-destructive focus-visible:ring-destructive/50" : ""}
+          className={errors.phone ? "border-destructive/40" : ""}
         />
         {errors.phone && <p className="text-xs text-destructive mt-1">{errors.phone}</p>}
       </div>
@@ -152,7 +152,7 @@ export function LeadForm({
           defaultValue={defaultValues?.email ?? ""}
           onBlur={(e) => validateField("email", e.target.value, { email: true })}
           onChange={() => { clearError("email"); clearError("phone"); }}
-          className={errors.email ? "border-destructive focus-visible:ring-destructive/50" : ""}
+          className={errors.email ? "border-destructive/40" : ""}
         />
         {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
       </div>

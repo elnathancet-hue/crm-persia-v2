@@ -87,6 +87,10 @@ export function SegmentsList({
   const [description, setDescription] = useState("");
   const [rules, setRules] = useState<RulesShape>(EMPTY_RULES);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // PR-CRMUI: validação só agressiva depois da 1a tentativa de submit.
+  // Antes, onBlur no campo Nome ja pintava de vermelho no primeiro
+  // foco perdido — UX ruim. Agora: o erro so e setado dentro do
+  // handleSubmit (apos o usuario clicar "Criar"). Limpa quando digita.
 
   // Sync com prop quando o pai re-fetcha.
   useEffect(() => {
@@ -130,7 +134,7 @@ export function SegmentsList({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("segment_name", "Campo obrigatório");
+      setError("segment_name", "Informe um nome pra esta segmentação");
       return;
     }
     clearError("segment_name");
@@ -230,10 +234,13 @@ export function SegmentsList({
               onSubmit={handleSubmit}
               className="flex flex-1 flex-col overflow-hidden"
             >
-              <div className="flex-1 space-y-5 overflow-y-auto p-5">
+              <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
                 <div className="space-y-1.5">
-                  <Label htmlFor="seg-name" className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Nome *
+                  <Label
+                    htmlFor="seg-name"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    Nome <span className="text-muted-foreground/60">*</span>
                   </Label>
                   <Input
                     id="seg-name"
@@ -242,30 +249,35 @@ export function SegmentsList({
                       setName(e.target.value);
                       clearError("segment_name");
                     }}
-                    required
                     placeholder="Ex: Leads inativos há 30 dias"
-                    onBlur={(e) => {
-                      if (!e.target.value.trim())
-                        setError("segment_name", "Campo obrigatório");
-                      else clearError("segment_name");
-                    }}
                     aria-invalid={Boolean(errors.segment_name)}
+                    aria-describedby={
+                      errors.segment_name ? "seg-name-error" : undefined
+                    }
+                    /* PR-CRMUI: borda de erro suave (era /60 + ring/20).
+                       Subtle, nao agressiva. Aparece so apos submit. */
                     className={
                       errors.segment_name
-                        ? "border-destructive/60 ring-1 ring-destructive/20"
+                        ? "border-destructive/40"
                         : ""
                     }
                   />
                   {errors.segment_name && (
-                    <p className="text-xs text-destructive">
+                    <p
+                      id="seg-name-error"
+                      className="text-xs text-destructive/80"
+                    >
                       {errors.segment_name}
                     </p>
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="seg-desc" className="text-xs uppercase tracking-wide text-muted-foreground">
+                  <Label
+                    htmlFor="seg-desc"
+                    className="text-sm font-medium text-foreground"
+                  >
                     Descrição{" "}
-                    <span className="normal-case tracking-normal text-muted-foreground/70">
+                    <span className="font-normal text-muted-foreground/70">
                       (opcional)
                     </span>
                   </Label>
@@ -278,16 +290,23 @@ export function SegmentsList({
                   />
                 </div>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Regras de inclusão
-                    </Label>
-                    <span className="text-[10px] text-muted-foreground">
-                      {rules.conditions.length} regra
-                      {rules.conditions.length === 1 ? "" : "s"}
-                    </span>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div>
+                      <Label className="text-sm font-medium text-foreground">
+                        Regras de inclusão
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Defina critérios para agrupar leads automaticamente.
+                      </p>
+                    </div>
+                    {rules.conditions.length > 0 && (
+                      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                        {rules.conditions.length} regra
+                        {rules.conditions.length === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </div>
-                  <div className="rounded-xl border border-border bg-muted/20 p-3">
+                  <div className="rounded-xl border border-border bg-muted/20 p-3 sm:p-4">
                     <ConditionBuilder
                       rules={rules}
                       assigneeOptions={assigneeOptions}
@@ -301,16 +320,24 @@ export function SegmentsList({
                   </div>
                 </div>
               </div>
-              <DialogFooter className="border-t border-border bg-card p-4 flex-row justify-end gap-2">
+              {/* PR-CRMUI: footer mais respiravel (era p-4, agora px-6 py-4
+                  + gap-3 + min-w-32 nos botoes). Botao primario nao
+                  encosta na borda direita. */}
+              <DialogFooter className="flex-row justify-end gap-3 border-t border-border bg-card px-6 py-4">
                 <Button
                   type="button"
                   variant="ghost"
                   onClick={() => setOpen(false)}
                   disabled={isPending}
+                  className="min-w-24"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={isPending}>
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  className="min-w-32"
+                >
                   {isPending
                     ? editingSegment
                       ? "Salvando..."
