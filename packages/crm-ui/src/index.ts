@@ -11,6 +11,7 @@ export type {
   CreateDealInput,
   UpdateDealInput,
   UpdateStageInput,
+  ReorderStageInput,
 } from "./actions";
 export {
   KanbanProvider,
@@ -25,7 +26,15 @@ export {
   type AdvancedFilters,
   type TagLogic,
 } from "./components/KanbanBoard";
-export { PipelineConfigDrawer } from "./components/PipelineConfigDrawer";
+// PR-CRMCFG: PipelineConfigDrawer foi REMOVIDO. Configuracao de funis
+// agora vive em /settings/crm (CRM) e /crm/configurar (admin), via
+// PipelineSettingsClient. Se voce esta lendo isto procurando uma forma
+// de embedar config de funis num modal, NAO recrie — leve o usuario pra
+// rota dedicada (regra: 1 lugar so pra configurar).
+export {
+  PipelineSettingsClient,
+  type PipelineSettingsClientProps,
+} from "./components/PipelineSettingsClient";
 export {
   MarkAsLostDialog,
   type MarkAsLostFormValues,

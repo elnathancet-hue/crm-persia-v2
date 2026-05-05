@@ -115,6 +115,10 @@ export function CrmPage() {
               });
             }}
             goalsStorageKey="admin-kanban-goals-v1"
+            // PR-CRMCFG: substitui o modal "Configurar funis" (removido).
+            // Admin tambem ganha rota dedicada — ver
+            // apps/admin/src/app/(dashboard)/crm/configurar/page.tsx.
+            configHref="/crm/configurar"
           />
         </KanbanProvider>
       )}

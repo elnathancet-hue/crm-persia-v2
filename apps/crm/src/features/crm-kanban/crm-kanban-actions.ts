@@ -23,6 +23,7 @@ import {
   updateDealStage,
   updatePipelineName,
   updateStage,
+  updateStageOrder,
 } from "@/actions/crm";
 
 export const crmKanbanActions: KanbanActions = {
@@ -52,12 +53,23 @@ export const crmKanbanActions: KanbanActions = {
     }
     return stage;
   },
+  // PR-CRMCFG: passa todos os campos do UpdateStageInput (color,
+  // description, sortOrder, outcome) — o action server ja aceita todos
+  // desde o PR-K4. Antes o adapter ignorava silenciosamente cor + desc
+  // porque o KanbanBoard nao usava (so o modal de config usava).
   updateStage: (stageId, data) =>
     updateStage(stageId, {
       name: data.name,
+      color: data.color,
+      description: data.description,
+      sort_order: data.sortOrder,
       outcome: data.outcome,
     }),
   deleteStage: (stageId) => deleteStage(stageId),
+  // PR-CRMCFG: reorder em batch (drag-drop ou setas no editor de
+  // configuracao). Reusa o `updateStageOrder` do shared mutations.
+  reorderStages: (stages) =>
+    updateStageOrder(stages.map((s) => ({ id: s.id, position: s.position }))),
 
   // ============ DEALS ============
   createDeal: async ({ pipelineId, stageId, title, value, leadId }) => {
