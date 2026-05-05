@@ -26,15 +26,29 @@ export {
   type AdvancedFilters,
   type TagLogic,
 } from "./components/KanbanBoard";
-// PR-CRMCFG: PipelineConfigDrawer foi REMOVIDO. Configuracao de funis
-// agora vive em /settings/crm (CRM) e /crm/configurar (admin), via
-// PipelineSettingsClient. Se voce esta lendo isto procurando uma forma
-// de embedar config de funis num modal, NAO recrie — leve o usuario pra
-// rota dedicada (regra: 1 lugar so pra configurar).
+// PR-CRMOPS: configuracao do Kanban voltou pra dentro do CRM via
+// drawer + dialog inline (regra do briefing: usuario nao deve sair
+// do CRM pra mexer em nada do CRM).
+//
+// Historico:
+//   - PR-K10 (abr): Modal "Configurar funis" no Kanban + pagina
+//     /crm/settings convivendo (duplicidade).
+//   - PR-CRMCFG (mai): tentou unificar movendo tudo pra /settings/crm
+//     com componente PipelineSettingsClient master-detail.
+//   - PR-CRMOPS (mai, este): produto reverteu — volta tudo pro CRM,
+//     drawer inline edita SO o Kanban ativo, sem master-detail.
+//
+// Os 3 componentes abaixo formam o fluxo completo:
+//   - PipelineStagesEditor: 3 colunas por outcome, drag entre elas,
+//     reorder com setas, cor + IA inline. Uso interno do drawer.
+//   - CreateKanbanDialog: dialog simples (nome) -> cria + seleciona.
+//   - EditKanbanStructureDrawer: Sheet 720px que abre dentro do CRM.
 export {
-  PipelineSettingsClient,
-  type PipelineSettingsClientProps,
-} from "./components/PipelineSettingsClient";
+  PipelineStagesEditor,
+  type PipelineStagesEditorProps,
+} from "./components/PipelineStagesEditor";
+export { CreateKanbanDialog } from "./components/CreateKanbanDialog";
+export { EditKanbanStructureDrawer } from "./components/EditKanbanStructureDrawer";
 export {
   MarkAsLostDialog,
   type MarkAsLostFormValues,

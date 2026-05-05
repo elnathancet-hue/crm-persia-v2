@@ -56,6 +56,7 @@ import {
   Search,
   MessageCircle,
   Settings,
+  Settings2,
   CircleDollarSign,
   Target,
   TrendingUp,
@@ -98,14 +99,13 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 
-import Link from "next/link";
-
 import { useKanbanActions } from "../context";
 import type { MarkAsLostInput } from "../actions";
 import type { ExportColumn } from "../lib/export";
-// PR-CRMCFG: PipelineConfigDrawer foi removido (modal "Configurar funis").
-// Configuracao de funis agora vive em rota dedicada — ver
-// PipelineSettingsClient + prop `configHref` abaixo.
+// PR-CRMOPS: configuracao do Kanban volta pra inline (sem rota
+// separada). Drawer + dialog renderizados no proprio componente.
+import { CreateKanbanDialog } from "./CreateKanbanDialog";
+import { EditKanbanStructureDrawer } from "./EditKanbanStructureDrawer";
 import { MarkAsLostDialog } from "./MarkAsLostDialog";
 import { ExportMenu } from "./ExportMenu";
 import { DialogHero } from "./DialogHero";
@@ -267,18 +267,17 @@ export interface KanbanBoardProps {
   /** Lista de responsaveis pra filtro 'Atribuido a'. Vazio = oculta. */
   assignees?: { id: string; name: string }[];
   /**
-   * PR-CRMCFG: rota onde o usuario configura funis. Quando setado +
-   * `canManagePipelines`, mostra atalho discreto "Configurar funis"
-   * na toolbar (linka pra essa rota). Quando null/undefined, NAO
-   * mostra atalho — util pra contextos onde a config nao e acessivel.
-   *
-   * CRM passa `/settings/crm?tab=funis`. Admin passa `/crm/configurar`.
-   *
-   * Substituiu o modal "Configurar funis" (PipelineConfigDrawer) que
-   * vivia inline. Decisao: 1 lugar so pra configurar (rota dedicada),
-   * sem modal inline competindo.
+   * PR-CRMOPS: permite criar novo Kanban inline (botao "+ Criar novo
+   * Kanban" na toolbar). Default: derivado de `canManagePipelines`.
+   * Pode ser explicitamente desativado (ex: tela de Kanban so-leitura).
    */
-  configHref?: string;
+  canCreateKanban?: boolean;
+  /**
+   * PR-CRMOPS: permite editar estrutura do Kanban inline (botao
+   * "Editar estrutura" abre Sheet/Drawer com PipelineStagesEditor).
+   * Default: derivado de `canManagePipelines`.
+   */
+  canEditStages?: boolean;
 }
 
 export function KanbanBoard({
@@ -293,16 +292,24 @@ export function KanbanBoard({
   toolbarExtras,
   tags: orgTags = [],
   assignees = [],
-  configHref,
+  canCreateKanban,
+  canEditStages,
 }: KanbanBoardProps) {
+  // PR-CRMOPS: defaults derivados de `canManagePipelines` pra preservar
+  // compat com call-sites que ainda nao foram atualizados (admin etc).
+  const effectiveCanCreateKanban = canCreateKanban ?? canManagePipelines;
+  const effectiveCanEditStages = canEditStages ?? canManagePipelines;
   const actions = useKanbanActions();
   const [selectedPipeline, setSelectedPipeline] = React.useState(
     pipelines[0]?.id || "",
   );
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
-  // PR-CRMCFG: configDrawerOpen state removido junto com o modal —
-  // configuracao agora e rota dedicada (ver prop `configHref`).
+  // PR-CRMOPS: dialog "Criar novo Kanban" + drawer "Editar estrutura"
+  // ambos abertos inline via toolbar. O usuario nao sai do CRM pra
+  // mexer em nenhum dos dois.
+  const [createKanbanOpen, setCreateKanbanOpen] = React.useState(false);
+  const [editStructureOpen, setEditStructureOpen] = React.useState(false);
   const [activeOutcome, setActiveOutcome] =
     React.useState<StageOutcome>("em_andamento");
   const [draggedDealId, setDraggedDealId] = React.useState<string | null>(null);
@@ -1084,23 +1091,43 @@ export function KanbanBoard({
           />
 
           {toolbarExtras}
-          {/* PR-CRMCFG: ícone engrenagem que abria o modal `PipelineConfigDrawer`
-              foi REMOVIDO. Agora a configuração de funis vive em rota dedicada
-              (configurada por `configHref`). Se admin/owner e o app passou
-              `configHref`, mostra atalho discreto que leva pra essa rota.
-              Mantém o usuário informado de que existe configuração disponível,
-              sem competir com o modal antigo. */}
-          {canManagePipelines && configHref && (
+          {/* PR-CRMOPS: configuracao volta pro contexto do CRM via 2 botoes
+              inline. Antes (PR-CRMCFG) era atalho que linkava pra
+              /settings/crm — abandonado por decisao de produto: usuario
+              nao deve sair do CRM pra editar Kanban.
+
+              - "+ Criar novo Kanban" (primario): dialog simples (nome).
+              - "Editar estrutura" (ghost): Sheet/Drawer 720px com o
+                PipelineStagesEditor pro funil ATIVO. */}
+          {(effectiveCanCreateKanban || effectiveCanEditStages) && (
             <>
               <span className="h-5 w-px bg-border" aria-hidden />
-              <Link
-                href={configHref}
-                title="Configurar funis"
-                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <Settings className="size-3.5" aria-hidden />
-                <span>Configurar funis</span>
-              </Link>
+              {effectiveCanCreateKanban && (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="h-8 rounded-md px-2.5 gap-1.5"
+                  onClick={() => setCreateKanbanOpen(true)}
+                  title="Criar novo Kanban"
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                  <span>Criar novo Kanban</span>
+                </Button>
+              )}
+              {effectiveCanEditStages && selectedPipeline && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-md px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
+                  onClick={() => setEditStructureOpen(true)}
+                  title="Editar estrutura do Kanban (etapas, cores, regras)"
+                >
+                  <Settings2 className="size-3.5" aria-hidden />
+                  <span>Editar estrutura</span>
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -1514,9 +1541,40 @@ export function KanbanBoard({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* PR-CRMCFG: <PipelineConfigDrawer> removido. Configuracao agora
-          vive em rota dedicada (ver `configHref` na toolbar acima).
-          Decisao: 1 lugar so, sem modal inline competindo. */}
+      {/* PR-CRMOPS: dialog "Criar novo Kanban" + drawer "Editar estrutura".
+          Ambos abrem dentro do contexto do CRM (sem navegar). O drawer
+          edita SO o pipeline ativo (selectedPipeline) — pra trocar de
+          Kanban, usuario usa o select da toolbar (decisao do briefing
+          PR-CRMOPS). */}
+      {effectiveCanCreateKanban && (
+        <CreateKanbanDialog
+          open={createKanbanOpen}
+          onOpenChange={setCreateKanbanOpen}
+          onCreated={(newPipelineId) => {
+            setSelectedPipeline(newPipelineId);
+            onChange?.();
+          }}
+        />
+      )}
+      {effectiveCanEditStages && selectedPipeline && (
+        <EditKanbanStructureDrawer
+          open={editStructureOpen}
+          onOpenChange={setEditStructureOpen}
+          pipelineId={selectedPipeline}
+          pipelineName={
+            pipelines.find((p) => p.id === selectedPipeline)?.name ?? "Kanban"
+          }
+          stages={initialStages.filter((s) => s.pipeline_id === selectedPipeline)}
+          canDeleteKanban={pipelines.length > 1}
+          onChange={onChange}
+          onDeleted={() => {
+            // Auto-seleciona outro funil se o atual foi excluido
+            const remaining = pipelines.filter((p) => p.id !== selectedPipeline);
+            setSelectedPipeline(remaining[0]?.id ?? "");
+            onChange?.();
+          }}
+        />
+      )}
     </div>
   );
 }
