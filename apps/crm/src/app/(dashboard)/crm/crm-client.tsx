@@ -77,11 +77,11 @@ export function CrmClient({
           goalsStorageKey="crm-kanban-goals-v1"
           tags={tags}
           assignees={assignees}
-          // PR-CRMCFG: atalho discreto pra rota dedicada de configuracao
-          // (substitui o modal "Configurar funis" que era inline). So
-          // aparece pra admin+, e abre a tab Funis com o pipeline atual
-          // pre-selecionado se disponivel.
-          configHref="/settings/crm?tab=funis"
+          // PR-CRMOPS: configuracao volta pra inline (drawer + dialog
+          // dentro do KanbanBoard). Defaults derivados de
+          // canManagePipelines — admin manage = pode tudo.
+          // canCreateKanban e canEditStages podem ser desativadas por
+          // contexto (ex: usuario read-only).
           toolbarExtras={
             isAgent ? (
               <Button

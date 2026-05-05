@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { ensureDefaultPipeline } from "@/actions/crm";
 import { getLeads, getOrgActivities } from "@/actions/leads";
+import { getTagsWithCount } from "@/actions/tags";
+import { getSegments } from "@/actions/segments";
 import { listPipelines, listDeals } from "@persia/shared/crm";
 import { CrmShell } from "./crm-shell";
 
@@ -31,19 +33,22 @@ export default async function CrmPage() {
     console.error("[/crm page] listPipelines falhou:", err);
   }
 
+  // PR-CRMOPS: ja garantimos pipeline default acima. Se ainda chega
+  // aqui sem nenhum, mostra empty state direto (briefing: usuario nao
+  // sai do CRM pra criar Kanban — mas tambem nao precisa de mensagem
+  // apontando pra /crm/settings que nao existe mais).
   if (pipelines.length === 0) {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold tracking-tight font-heading">
-          CRM Kanban
+          CRM
         </h1>
-        <p className="text-muted-foreground">
-          Nenhum funil disponivel. Acesse{" "}
-          <a href="/crm/settings" className="text-primary underline">
-            /crm/settings
-          </a>{" "}
-          pra configurar.
-        </p>
+        <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-12 text-center">
+          <h2 className="text-base font-semibold">Nenhum Kanban disponivel</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Tente recarregar a pagina. Se persistir, contate o suporte.
+          </p>
+        </div>
       </div>
     );
   }
@@ -72,6 +77,8 @@ export default async function CrmPage() {
     members,
     leadsListResult,
     activitiesResult,
+    segmentsResult,
+    tagsWithCountResult,
   ] = await Promise.all([
     safeQuery<{ id: string; pipeline_id: string; name: string; color: string | null; sort_order: number }>(
       "pipeline_stages",
@@ -141,6 +148,27 @@ export default async function CrmPage() {
         return { activities: [], total: 0, page: 1, totalPages: 0 };
       }
     })(),
+    // PR-CRMOPS: tab "Segmentação" — embed do SegmentList que vivia em
+    // /segments. Reusa a action getSegments existente (regra 11: nao
+    // criar logica paralela).
+    (async () => {
+      try {
+        return await getSegments();
+      } catch (err) {
+        console.error("[/crm page] getSegments falhou:", err);
+        return [] as unknown[];
+      }
+    })(),
+    // PR-CRMOPS: tab "Tags" — embed do TagsPageClient que vivia em /tags.
+    // Reusa getTagsWithCount.
+    (async () => {
+      try {
+        return await getTagsWithCount();
+      } catch (err) {
+        console.error("[/crm page] getTagsWithCount falhou:", err);
+        return [] as unknown[];
+      }
+    })(),
   ]);
 
   // Resolve nomes dos responsaveis em query separada (RLS pode bloquear —
@@ -184,9 +212,14 @@ export default async function CrmPage() {
         initialPage: activitiesResult.page,
         initialTotalPages: activitiesResult.totalPages,
       }}
+      // PR-CRMOPS: dados pras tabs novas (Segmentação + Tags)
+      segments={segmentsResult as never}
+      tagsList={tagsWithCountResult as never}
       leadCount={leadsListResult.total}
       dealCount={deals.length}
       activityCount={activitiesResult.total}
+      segmentCount={(segmentsResult as unknown[]).length}
+      tagCount={(tagsWithCountResult as unknown[]).length}
     />
   );
 }

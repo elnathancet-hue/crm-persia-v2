@@ -1,27 +1,30 @@
 "use client";
 
-// CrmShell — invólucro da rota /crm com tabs internas:
-// Pipeline · Leads · Atividades
+// CrmShell — invólucro da rota /crm com 5 tabs internas:
+// Pipeline · Leads · Segmentação · Tags · Atividades
 //
-// PR-CRMCFG (mai/2026): tab "Ajustes" REMOVIDA. A configuração do CRM
-// virou rota dedicada (/settings/crm) acessível pela sidebar geral —
-// ela tinha um único card "Abrir configurações" com link, então virou
-// link mesmo, sem precisar de tab inteira ocupando espaço.
+// PR-CRMOPS (mai/2026): nova direção de produto.
+//   - Removida tab "Ajustes" (era em PR-K5; PR-CRMCFG já tinha tirado).
+//   - Removida rota dedicada /settings/crm (PR-CRMCFG, agora deletado).
+//   - Configuração do Kanban volta pra inline (drawer "Editar estrutura"
+//     dentro do KanbanBoard).
+//   - Segmentação e Tags viraram tabs próprias do CRM (eram sub-tabs
+//     escondidas em /settings/crm).
+//   - Motivos de perda removido — quando precisar capturar motivo de
+//     deal perdido, vai ser via input livre direto no fluxo (sem área
+//     de configuração dedicada).
 //
-// Decisões:
-// - Pipeline (default) = renderiza o KanbanBoard atual (CrmClient)
-// - Leads = embed do LeadsList (vinha de /leads que agora redireciona pra cá)
-// - Atividades = timeline (PR-K7)
-//
-// Tab ativa controlada por ?tab=pipeline|leads|atividades (default:
-// pipeline). useSearchParams pra deep link funcionar.
+// Tab ativa controlada por ?tab=pipeline|leads|segmentos|tags|atividades
+// (default: pipeline). useSearchParams pra deep link funcionar.
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Kanban,
-  Users,
   Activity,
+  Filter as FilterIcon,
+  Kanban,
+  Tag as TagIcon,
+  Users,
 } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
 import type {
@@ -31,16 +34,19 @@ import type {
   Pipeline,
   Stage,
   TagRef,
+  TagWithCount,
 } from "@persia/shared/crm";
 
 import { CrmClient } from "./crm-client";
 import { LeadList } from "@/components/leads/lead-list";
 import { ActivitiesTab } from "@/components/crm/activities-tab";
+import { SegmentList } from "@/components/segments/segment-list";
+import { TagsPageClient } from "@/app/(dashboard)/tags/tags-client";
 
-// PR-CRMCFG: removida tab "ajustes" — configuracao agora vive em
-// /settings/crm acessada via sidebar geral (regra 1).
-type CrmTab = "pipeline" | "leads" | "atividades";
+type CrmTab = "pipeline" | "leads" | "segmentos" | "tags" | "atividades";
 
+// PR-CRMOPS: 5 tabs na ordem exata do briefing (Pipeline · Leads ·
+// Segmentação · Tags · Atividades).
 const TABS: {
   key: CrmTab;
   label: string;
@@ -48,6 +54,8 @@ const TABS: {
 }[] = [
   { key: "pipeline", label: "Pipeline", icon: Kanban },
   { key: "leads", label: "Leads", icon: Users },
+  { key: "segmentos", label: "Segmentação", icon: FilterIcon },
+  { key: "tags", label: "Tags", icon: TagIcon },
   { key: "atividades", label: "Atividades", icon: Activity },
 ];
 
@@ -68,7 +76,11 @@ interface CrmShellProps {
     initialTotalPages: number;
   };
 
-  // Dados das Atividades (timeline) — PR-K7
+  // PR-CRMOPS: dados das tabs novas (Segmentação + Tags)
+  segments: unknown[];
+  tagsList: TagWithCount[];
+
+  // Dados das Atividades (timeline)
   activitiesData: {
     initialActivities: OrgActivityRow[];
     initialTotal: number;
@@ -80,6 +92,14 @@ interface CrmShellProps {
   leadCount: number;
   dealCount: number;
   activityCount: number;
+  segmentCount: number;
+  tagCount: number;
+
+  // PR-CRMOPS: props condicionais pra controle de permissão (regra 12
+  // do briefing — manter compat com Admin que pode passar valores
+  // diferentes). Defaults true; cada caller decide.
+  canManageTags?: boolean;
+  canManageSegments?: boolean;
 }
 
 export function CrmShell(props: CrmShellProps) {
@@ -89,6 +109,9 @@ export function CrmShell(props: CrmShellProps) {
   const activeTab: CrmTab = TABS.some((t) => t.key === tabParam)
     ? tabParam
     : "pipeline";
+
+  const canManageTags = props.canManageTags ?? true;
+  const canManageSegments = props.canManageSegments ?? true;
 
   const setTab = (next: CrmTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -101,6 +124,13 @@ export function CrmShell(props: CrmShellProps) {
     router.push(qs ? `/crm?${qs}` : "/crm", { scroll: false });
   };
 
+  // Filtra tabs visíveis baseado nas permissões. Default: todas.
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.key === "tags" && !canManageTags) return false;
+    if (tab.key === "segmentos" && !canManageSegments) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-6">
       {/* Header da pagina */}
@@ -108,11 +138,14 @@ export function CrmShell(props: CrmShellProps) {
 
       {/* Tabs */}
       <CrmTabs
+        tabs={visibleTabs}
         active={activeTab}
         onChange={setTab}
         leadCount={props.leadCount}
         dealCount={props.dealCount}
         activityCount={props.activityCount}
+        segmentCount={props.segmentCount}
+        tagCount={props.tagCount}
       />
 
       {/* Conteudo da tab ativa */}
@@ -134,6 +167,12 @@ export function CrmShell(props: CrmShellProps) {
           initialTotalPages={props.leadsListData.initialTotalPages}
         />
       )}
+      {activeTab === "segmentos" && canManageSegments && (
+        <SegmentList segments={props.segments as never} />
+      )}
+      {activeTab === "tags" && canManageTags && (
+        <TagsPageClient initialTags={props.tagsList as never} />
+      )}
       {activeTab === "atividades" && (
         <ActivitiesTab
           initialActivities={props.activitiesData.initialActivities}
@@ -142,17 +181,12 @@ export function CrmShell(props: CrmShellProps) {
           initialTotalPages={props.activitiesData.initialTotalPages}
         />
       )}
-      {/* PR-CRMCFG: <AjustesEntry/> removido. Configuracao virou rota
-          dedicada /settings/crm — atalho discreto fica na toolbar do
-          KanbanBoard (via prop `configHref`) e a sidebar geral lista
-          todas as configs do sistema (Org, Equipe, CRM, etc). */}
     </div>
   );
 }
 
 // ============================================================================
-// Header da pagina /crm — logo box + titulo + tagline + acao primaria
-// (botao "Novo lead" ainda nao integrado — PR-K6 vai polir)
+// Header da pagina /crm
 // ============================================================================
 
 function CrmPageHeader() {
@@ -164,10 +198,10 @@ function CrmPageHeader() {
         </div>
         <div className="min-w-0">
           <h1 className="text-3xl font-bold tracking-tight text-foreground font-heading leading-none">
-            CRM Kanban
+            CRM
           </h1>
           <p className="mt-1.5 text-sm text-muted-foreground">
-            Gerencie oportunidades comerciais por etapa
+            Pipeline, leads, segmentação, tags e atividades — tudo num lugar só.
           </p>
         </div>
       </div>
@@ -176,25 +210,31 @@ function CrmPageHeader() {
 }
 
 // ============================================================================
-// Sub-nav com 4 tabs
+// Sub-nav com 5 tabs (PR-CRMOPS — adicionadas Segmentação + Tags)
 // ============================================================================
 
 function CrmTabs({
+  tabs,
   active,
   onChange,
   leadCount,
   dealCount,
   activityCount,
+  segmentCount,
+  tagCount,
 }: {
+  tabs: typeof TABS;
   active: CrmTab;
   onChange: (next: CrmTab) => void;
   leadCount: number;
   dealCount: number;
   activityCount: number;
+  segmentCount: number;
+  tagCount: number;
 }) {
   return (
     <div className="flex gap-0.5 border-b border-border overflow-x-auto">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = active === tab.key;
         const badgeValue =
@@ -204,7 +244,11 @@ function CrmTabs({
               ? leadCount
               : tab.key === "atividades"
                 ? activityCount
-                : null;
+                : tab.key === "segmentos"
+                  ? segmentCount
+                  : tab.key === "tags"
+                    ? tagCount
+                    : null;
         return (
           <button
             key={tab.key}
@@ -227,7 +271,6 @@ function CrmTabs({
                 {badgeValue}
               </Badge>
             )}
-            {/* Underline da tab ativa — mais marcado */}
             {isActive && (
               <span
                 className="absolute inset-x-2 -bottom-px h-0.5 rounded-t-full bg-primary"
@@ -240,6 +283,3 @@ function CrmTabs({
     </div>
   );
 }
-
-// PR-CRMCFG: AjustesEntry removida — virou link discreto na toolbar
-// do KanbanBoard (prop `configHref`) + tab "CRM" na sidebar geral.

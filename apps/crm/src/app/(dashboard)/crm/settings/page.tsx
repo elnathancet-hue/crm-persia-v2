@@ -1,30 +1,30 @@
-// PR-CRMCFG: rota legada — redireciona pra /settings/crm.
+// PR-CRMOPS: rota legada — redireciona pra /crm.
 //
-// Antes /crm/settings era a rota canonica de configuracao do CRM
-// (atrelada visualmente ao Kanban via tab "Ajustes"). Movida pra
-// /settings/crm pra unificar com /settings/* (org, equipe, etc) e
-// resolver a duplicidade com o modal "Configurar funis".
+// /crm/settings era a rota canonica de configuracao do CRM antes do
+// PR-CRMCFG (que moveu pra /settings/crm). Agora o produto reverteu
+// a direcao: configuracao volta pra dentro do CRM (drawer inline +
+// tabs Segmentacao/Tags). Nao ha mais rota dedicada de config CRM.
 //
 // Mantem aqui apenas o redirect 308 pra preservar bookmarks externos
-// + qualquer link interno que ainda escape. Pode ser removido em
-// alguns sprints quando confirmar que nao tem trafego.
+// que ainda apontem pra /crm/settings ou /crm/settings?tab=*.
 //
-// Importante: preserva ?tab=funis|etiquetas|motivos|segmentos pra
-// deep links continuarem funcionando.
+// Pode ser removido em alguns sprints quando confirmar que nao tem
+// trafego (ver Logs Explorer).
 
-import { redirect, permanentRedirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 
-export default async function CrmSettingsLegacyPage({
-  searchParams,
+export default function CrmSettingsLegacyPage({
+  searchParams: _searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const params = await searchParams;
-  const tab = typeof params.tab === "string" ? params.tab : null;
-  const dest = tab ? `/settings/crm?tab=${encodeURIComponent(tab)}` : "/settings/crm";
-  // permanentRedirect = 308. Preserva metodo + body, ideal pra
-  // bookmarks/links externos.
-  permanentRedirect(dest);
-  // Linha defensiva (TS ja sabe que permanentRedirect throws):
-  redirect(dest);
+  // Mapeia tabs legadas pra estrutura nova:
+  //   ?tab=funis      → /crm (Pipeline tab) — usuario edita via "Editar estrutura"
+  //   ?tab=etiquetas  → /crm?tab=tags
+  //   ?tab=segmentos  → /crm?tab=segmentos
+  //   ?tab=motivos    → /crm (motivos foram removidos)
+  // Por simplicidade, redireciona TUDO pra /crm na raiz; quem
+  // precisar de uma sub-tab especifica chega la 1 clique depois.
+  void _searchParams;
+  permanentRedirect("/crm");
 }
