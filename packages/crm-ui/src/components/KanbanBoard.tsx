@@ -55,6 +55,7 @@ import {
   Mail,
   Search,
   MessageCircle,
+  ChevronLeft,
   Settings,
   Settings2,
   CircleDollarSign,
@@ -105,6 +106,7 @@ import type { ExportColumn } from "../lib/export";
 // PR-CRMOPS: configuracao do Kanban volta pra inline (sem rota
 // separada). Drawer + dialog renderizados no proprio componente.
 import { CreateKanbanDialog } from "./CreateKanbanDialog";
+import { CreateLeadFromKanbanDialog } from "./CreateLeadFromKanbanDialog";
 import { EditKanbanStructureDrawer } from "./EditKanbanStructureDrawer";
 import { MarkAsLostDialog } from "./MarkAsLostDialog";
 import { ExportMenu } from "./ExportMenu";
@@ -278,6 +280,19 @@ export interface KanbanBoardProps {
    * Default: derivado de `canManagePipelines`.
    */
   canEditStages?: boolean;
+  /**
+   * PR-CRMOPS2: quando setado, KanbanBoard fica em modo "controlled" —
+   * renderiza so esse funil, esconde o select de funis (caller decide
+   * via biblioteca de funis). Quando undefined, comportamento legado
+   * (state interno + select).
+   */
+  pipelineId?: string;
+  /**
+   * PR-CRMOPS2: callback "voltar pra biblioteca de funis". Quando setado,
+   * mostra um botao "← Funis" no header do board. Usado pelo CrmShell
+   * que controla a navegacao biblioteca <-> kanban.
+   */
+  onBack?: () => void;
 }
 
 export function KanbanBoard({
@@ -294,15 +309,26 @@ export function KanbanBoard({
   assignees = [],
   canCreateKanban,
   canEditStages,
+  pipelineId: controlledPipelineId,
+  onBack,
 }: KanbanBoardProps) {
   // PR-CRMOPS: defaults derivados de `canManagePipelines` pra preservar
   // compat com call-sites que ainda nao foram atualizados (admin etc).
   const effectiveCanCreateKanban = canCreateKanban ?? canManagePipelines;
   const effectiveCanEditStages = canEditStages ?? canManagePipelines;
   const actions = useKanbanActions();
-  const [selectedPipeline, setSelectedPipeline] = React.useState(
-    pipelines[0]?.id || "",
+  // PR-CRMOPS2: modo controlled (CrmShell passa pipelineId). Senao, usa
+  // state interno (compat com admin que nao tem biblioteca).
+  const [internalPipeline, setInternalPipeline] = React.useState(
+    controlledPipelineId ?? (pipelines[0]?.id || ""),
   );
+  const isControlled = controlledPipelineId !== undefined;
+  const selectedPipeline = isControlled ? controlledPipelineId : internalPipeline;
+  const setSelectedPipeline = (next: string) => {
+    if (!isControlled) setInternalPipeline(next);
+    // Em modo controlled, o caller decide quando trocar (via onBack -> volta
+    // pra biblioteca). O select interno fica escondido.
+  };
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
   // PR-CRMOPS: dialog "Criar novo Kanban" + drawer "Editar estrutura"
@@ -310,6 +336,13 @@ export function KanbanBoard({
   // mexer em nenhum dos dois.
   const [createKanbanOpen, setCreateKanbanOpen] = React.useState(false);
   const [editStructureOpen, setEditStructureOpen] = React.useState(false);
+
+  // PR-CRMOPS2: dialog do "+" da coluna. Controlado pelo board pra ter
+  // 1 unico dialog renderizado (em vez de 1 por stage). Quando setado,
+  // abre o CreateLeadFromKanbanDialog com a stage correspondente.
+  const [addLeadStage, setAddLeadStage] = React.useState<
+    { id: string; name: string } | null
+  >(null);
   const [activeOutcome, setActiveOutcome] =
     React.useState<StageOutcome>("em_andamento");
   const [draggedDealId, setDraggedDealId] = React.useState<string | null>(null);
@@ -971,11 +1004,29 @@ export function KanbanBoard({
 
       {/* ====== TOP BAR ====== */}
       {/* Layout: linha 1 (filtros + busca) | linha 2 (metricas + acoes).
-          Em desktop largo, fica em linha unica via flex-wrap natural. */}
+          Em desktop largo, fica em linha unica via flex-wrap natural.
+
+          PR-CRMOPS2: quando em modo controlled (CrmShell controla o
+          pipelineId via biblioteca de funis), esconde o select de funis
+          e mostra botao "← Funis" no inicio. Pra trocar de funil,
+          usuario volta pra biblioteca. */}
       <div className="flex items-center gap-2.5 flex-wrap">
-        {/* Grupo 1: filtros principais (pipeline + status) */}
+        {/* Grupo 1: filtros principais (back/pipeline + status) */}
         <div className="flex items-center gap-2">
-          {pipelines.length > 1 && (
+          {onBack && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
+              onClick={onBack}
+              title="Voltar para os funis"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+              <span>Funis</span>
+            </Button>
+          )}
+          {!isControlled && pipelines.length > 1 && (
             <Select
               value={selectedPipeline}
               onValueChange={(v) => setSelectedPipeline(v ?? "")}
@@ -994,6 +1045,11 @@ export function KanbanBoard({
                 ))}
               </SelectContent>
             </Select>
+          )}
+          {isControlled && (
+            <h2 className="text-base font-semibold text-foreground truncate max-w-xs">
+              {pipelines.find((p) => p.id === selectedPipeline)?.name ?? ""}
+            </h2>
           )}
 
           <Select
@@ -1099,20 +1155,25 @@ export function KanbanBoard({
               - "+ Criar novo Kanban" (primario): dialog simples (nome).
               - "Editar estrutura" (ghost): Sheet/Drawer 720px com o
                 PipelineStagesEditor pro funil ATIVO. */}
+          {/* PR-CRMOPS2: "Criar novo funil" so renderiza em modo
+              uncontrolled (admin antigo). Em modo controlled, o
+              CrmShell tem esse botao no header da pagina (canto
+              superior direito). "Editar estrutura" continua aqui
+              porque e operacao do funil ATIVO. */}
           {(effectiveCanCreateKanban || effectiveCanEditStages) && (
             <>
               <span className="h-5 w-px bg-border" aria-hidden />
-              {effectiveCanCreateKanban && (
+              {!isControlled && effectiveCanCreateKanban && (
                 <Button
                   type="button"
                   variant="default"
                   size="sm"
                   className="h-8 rounded-md px-2.5 gap-1.5"
                   onClick={() => setCreateKanbanOpen(true)}
-                  title="Criar novo Kanban"
+                  title="Criar novo funil"
                 >
                   <Plus className="size-3.5" aria-hidden />
-                  <span>Criar novo Kanban</span>
+                  <span>Criar novo funil</span>
                 </Button>
               )}
               {effectiveCanEditStages && selectedPipeline && (
@@ -1122,7 +1183,7 @@ export function KanbanBoard({
                   size="sm"
                   className="h-8 rounded-md px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
                   onClick={() => setEditStructureOpen(true)}
-                  title="Editar estrutura do Kanban (etapas, cores, regras)"
+                  title="Editar estrutura do funil (etapas, cores, regras)"
                 >
                   <Settings2 className="size-3.5" aria-hidden />
                   <span>Editar estrutura</span>
@@ -1386,13 +1447,31 @@ export function KanbanBoard({
                       </Badge>
                     </div>
                     {canEdit && (
-                      <AddDealDialog
-                        pipelineId={selectedPipeline}
-                        stageId={stage.id}
-                        leads={leads}
-                        onCreated={handleDealCreated}
-                        buttonColor="currentColor"
-                      />
+                      // PR-CRMOPS2: o "+" agora abre o form de Lead
+                      // (briefing C). Se actions.createLeadWithDeal nao
+                      // estiver setado (admin antigo), cai no fluxo
+                      // antigo de "Novo negocio".
+                      actions.createLeadWithDeal ? (
+                        <button
+                          type="button"
+                          aria-label={`Adicionar lead em ${stage.name}`}
+                          onClick={() => {
+                            setAddLeadStage({ id: stage.id, name: stage.name });
+                          }}
+                          className="inline-flex items-center justify-center size-7 rounded-md transition-colors hover:bg-black/10"
+                          style={{ color: "currentColor" }}
+                        >
+                          <Plus className="size-4" />
+                        </button>
+                      ) : (
+                        <AddDealDialog
+                          pipelineId={selectedPipeline}
+                          stageId={stage.id}
+                          leads={leads}
+                          onCreated={handleDealCreated}
+                          buttonColor="currentColor"
+                        />
+                      )
                     )}
                   </div>
                   {metrics.total > 0 && (
@@ -1552,6 +1631,21 @@ export function KanbanBoard({
           onOpenChange={setCreateKanbanOpen}
           onCreated={(newPipelineId) => {
             setSelectedPipeline(newPipelineId);
+            onChange?.();
+          }}
+        />
+      )}
+      {/* PR-CRMOPS2: dialog do "+" das colunas. So renderiza quando ha
+          uma stage selecionada (controlado por estado do board). */}
+      {canEdit && actions.createLeadWithDeal && addLeadStage && (
+        <CreateLeadFromKanbanDialog
+          open={true}
+          onOpenChange={(open) => !open && setAddLeadStage(null)}
+          pipelineId={selectedPipeline}
+          stageId={addLeadStage.id}
+          stageName={addLeadStage.name}
+          onCreated={() => {
+            // Pai re-fetcha; card aparece com embed `leads` completo.
             onChange?.();
           }}
         />

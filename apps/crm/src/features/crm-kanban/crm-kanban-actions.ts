@@ -12,6 +12,7 @@ import {
   bulkRemoveDeals,
   bulkSetDealStatus,
   createDeal,
+  createLeadWithDeal,
   createPipeline,
   createStage,
   deleteDeal,
@@ -81,6 +82,11 @@ export const crmKanbanActions: KanbanActions = {
     if (leadId) fd.set("lead_id", leadId);
     return createDeal(fd);
   },
+  // PR-CRMOPS2: novo fluxo do "+" da coluna do Kanban — cria lead +
+  // deal numa unica acao. Reusa server action createLeadWithDeal que
+  // por sua vez chama createLead + createDeal do shared.
+  createLeadWithDeal: ({ lead, pipelineId, stageId, dealTitle, dealValue }) =>
+    createLeadWithDeal({ lead, pipelineId, stageId, dealTitle, dealValue }),
   updateDeal: (dealId, data) =>
     updateDeal(dealId, { title: data.title, value: data.value }),
   // Rich move — dispara activity log + onStageChanged + sync UAZAPI.

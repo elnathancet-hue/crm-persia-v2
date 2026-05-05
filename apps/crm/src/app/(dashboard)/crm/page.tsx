@@ -34,9 +34,7 @@ export default async function CrmPage() {
   }
 
   // PR-CRMOPS: ja garantimos pipeline default acima. Se ainda chega
-  // aqui sem nenhum, mostra empty state direto (briefing: usuario nao
-  // sai do CRM pra criar Kanban — mas tambem nao precisa de mensagem
-  // apontando pra /crm/settings que nao existe mais).
+  // aqui sem nenhum, mostra empty state direto.
   if (pipelines.length === 0) {
     return (
       <div className="space-y-6">
@@ -44,7 +42,7 @@ export default async function CrmPage() {
           CRM
         </h1>
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-12 text-center">
-          <h2 className="text-base font-semibold">Nenhum Kanban disponivel</h2>
+          <h2 className="text-base font-semibold">Nenhum funil disponivel</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Tente recarregar a pagina. Se persistir, contate o suporte.
           </p>

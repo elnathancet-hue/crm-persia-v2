@@ -2,14 +2,19 @@
 
 // Thin wrapper: o KanbanBoard real vive em @persia/crm-ui (compartilhado
 // com apps/admin). Aqui resolvemos role (useRole) + revalidacao
-// (router.refresh) + botao Importar (PR-K1, CRM-only) e injetamos as
-// server actions via <KanbanProvider>.
+// (router.refresh) + botao Importar (PR-K1, CRM-only).
+//
+// PR-CRMOPS2: KanbanProvider subiu pro CrmShell — pra o botao "Criar
+// novo funil" do header poder usar useKanbanActions. CrmClient agora
+// assume estar dentro do provider.
+//
+// PR-CRMOPS2: aceita props `pipelineId` (controlled, vem do CrmShell
+// via biblioteca de funis) + `onBack` (volta pra biblioteca).
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   KanbanBoard,
-  KanbanProvider,
   ImportLeadsWizard,
   type ImportTag,
 } from "@persia/crm-ui";
@@ -22,7 +27,6 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 import { useRole } from "@/lib/hooks/use-role";
-import { crmKanbanActions } from "@/features/crm-kanban/crm-kanban-actions";
 import { importLeads } from "@/actions/leads-import";
 import { getOrgTags } from "@/actions/leads";
 
@@ -35,6 +39,10 @@ interface Props {
   tags?: TagRef[];
   /** Responsaveis pra filtro 'Atribuido a' (PR-K2). */
   assignees?: { id: string; name: string }[];
+  /** PR-CRMOPS2: funil controlado externamente pelo CrmShell (biblioteca). */
+  pipelineId?: string;
+  /** PR-CRMOPS2: callback "voltar pra biblioteca de funis". */
+  onBack?: () => void;
 }
 
 export function CrmClient({
@@ -44,6 +52,8 @@ export function CrmClient({
   leads,
   tags = [],
   assignees = [],
+  pipelineId,
+  onBack,
 }: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
@@ -65,40 +75,39 @@ export function CrmClient({
 
   return (
     <>
-      <KanbanProvider actions={crmKanbanActions}>
-        <KanbanBoard
-          pipelines={pipelines}
-          stages={stages}
-          deals={deals}
-          leads={leads}
-          canEdit={isAgent}
-          canManagePipelines={isAdmin}
-          onChange={() => router.refresh()}
-          goalsStorageKey="crm-kanban-goals-v1"
-          tags={tags}
-          assignees={assignees}
-          // PR-CRMOPS: configuracao volta pra inline (drawer + dialog
-          // dentro do KanbanBoard). Defaults derivados de
-          // canManagePipelines — admin manage = pode tudo.
-          // canCreateKanban e canEditStages podem ser desativadas por
-          // contexto (ex: usuario read-only).
-          toolbarExtras={
-            isAgent ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 rounded-md px-2.5"
-                onClick={openImport}
-                title="Importar leads"
-              >
-                <Upload className="size-3.5" />
-                Importar
-              </Button>
-            ) : undefined
-          }
-        />
-      </KanbanProvider>
+      <KanbanBoard
+        pipelines={pipelines}
+        stages={stages}
+        deals={deals}
+        leads={leads}
+        canEdit={isAgent}
+        canManagePipelines={isAdmin}
+        // PR-CRMOPS2: "Criar novo funil" foi pro header do CrmShell.
+        // Aqui desligamos pra evitar duplicar o botao na toolbar.
+        canCreateKanban={false}
+        canEditStages={isAdmin}
+        onChange={() => router.refresh()}
+        goalsStorageKey="crm-kanban-goals-v1"
+        tags={tags}
+        assignees={assignees}
+        pipelineId={pipelineId}
+        onBack={onBack}
+        toolbarExtras={
+          isAgent ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 rounded-md px-2.5"
+              onClick={openImport}
+              title="Importar leads"
+            >
+              <Upload className="size-3.5" />
+              Importar
+            </Button>
+          ) : undefined
+        }
+      />
 
       <ImportLeadsWizard
         open={importOpen}
