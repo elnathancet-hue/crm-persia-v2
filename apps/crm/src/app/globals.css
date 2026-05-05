@@ -92,15 +92,29 @@
 
   --radius: 0.5rem;
 
-  /* Sidebar */
-  --sidebar: hsl(30, 15%, 95%);            /* warm off-white */
-  --sidebar-foreground: hsl(0, 0%, 5%);    /* #0D0D0D */
-  --sidebar-primary: hsl(217, 91%, 60%);   /* #3B82F6 blue */
+  /* Sidebar — PR-NAVUI (mai/2026): tema Clean ganhou sidebar PRETA com
+     icones em branco off + cor primary azul (DesignFlow Kit). Decisao
+     de produto: a sidebar destacada do conteudo melhora hierarquia
+     visual e ja prepara o app pra o tema Black (que fica intacto, com
+     navy + dourado).
+
+     Como e definido APENAS via CSS variables, qualquer componente novo
+     que use `bg-sidebar`, `text-sidebar-foreground`, etc, herda
+     automaticamente — sem precisar atualizar componente individual.
+
+     Tokens DesignFlow:
+       - bg #141414      = `hsl(0, 0%, 8%)` (Dark Background do kit)
+       - foreground off  = `hsl(0, 0%, 96%)` (off-white, regra "sem cor crua")
+       - primary azul    = `hsl(217, 91%, 60%)` (#3B82F6, mantido)
+       - hover bg        = `hsl(0, 0%, 14%)` (#242424, leve elevacao do bg) */
+  --sidebar: hsl(0, 0%, 8%);               /* #141414 preto */
+  --sidebar-foreground: hsl(0, 0%, 96%);   /* off-white pros icones inativos */
+  --sidebar-primary: hsl(217, 91%, 60%);   /* #3B82F6 azul (item ativo) */
   --sidebar-primary-foreground: hsl(0, 0%, 100%);
-  --sidebar-accent: hsl(0, 0%, 92%);       /* #EBEBEB */
-  --sidebar-accent-foreground: hsl(0, 0%, 5%);
-  --sidebar-border: hsl(0, 0%, 92%);
-  --sidebar-ring: hsl(217, 91%, 60%);      /* blue */
+  --sidebar-accent: hsl(0, 0%, 14%);       /* #242424 hover bg */
+  --sidebar-accent-foreground: hsl(0, 0%, 96%);
+  --sidebar-border: hsl(0, 0%, 14%);
+  --sidebar-ring: hsl(217, 91%, 60%);      /* azul (focus ring) */
 }
 
 .dark {
