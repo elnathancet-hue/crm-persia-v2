@@ -312,7 +312,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           </form>
           {/* PR-CRMUI: footer com mais respiro (px-6 py-4 + gap-3 +
               min-w nos botoes). Padrao consistente com SegmentsList. */}
-          <DialogFooter className="border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
+          <DialogFooter className="mx-0 mb-0 border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
             <Button
               variant="ghost"
               onClick={() => setCreateOpen(false)}
