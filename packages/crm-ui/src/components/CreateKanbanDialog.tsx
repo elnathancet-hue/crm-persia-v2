@@ -1,12 +1,14 @@
 "use client";
 
-// PR-CRMOPS: Dialog simples pra "+ Criar novo Kanban".
+// PR-CRMOPS: Dialog simples pra "+ Criar novo funil".
 //
-// Briefing: "abrir um dialog simples: Nome do Kanban + Criar. Depois
-// de criar, selecionar automaticamente o novo Kanban."
+// PR-CRMOPS2 (mai/2026): nomenclatura padronizada — "Funil" em vez de
+// "Kanban" no UI (decisao de produto: "Funil" e mais familiar pro
+// usuario brasileiro). Nome do componente preserva "Kanban" porque e
+// codigo interno + chama a area visual onde o funil aparece.
 //
 // Reusa createPipeline do KanbanActions (que ja existe). Nao cria
-// logica paralela (regra 11 do briefing).
+// logica paralela.
 
 import * as React from "react";
 import { Plus } from "lucide-react";
@@ -67,17 +69,17 @@ export function CreateKanbanDialog({ open, onOpenChange, onCreated }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="sr-only">Novo Kanban</DialogTitle>
+          <DialogTitle className="sr-only">Novo funil</DialogTitle>
           <DialogHero
             icon={<Plus className="size-5" />}
-            title="Novo Kanban"
+            title="Novo funil"
             tagline="Crie um novo funil de vendas"
           />
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="kanban-name" className="text-sm font-medium">
-              Nome do Kanban
+              Nome do funil
             </Label>
             <Input
               id="kanban-name"

@@ -355,6 +355,9 @@ importers:
 
   packages/crm-ui:
     dependencies:
+      '@persia/leads-ui':
+        specifier: workspace:*
+        version: link:../leads-ui
       '@persia/shared':
         specifier: workspace:*
         version: link:../shared

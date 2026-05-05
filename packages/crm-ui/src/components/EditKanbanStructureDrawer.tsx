@@ -1,34 +1,35 @@
 "use client";
 
-// PR-CRMOPS: Sheet/Drawer lateral pra "Editar estrutura" do Kanban.
+// PR-CRMOPS2: Modal centralizado pra "Editar estrutura" do Kanban.
+//
+// Mudou de Sheet lateral 720px (PR-CRMOPS) pra Dialog centralizado
+// max-w-5xl — feedback do usuario foi "está bem apertado" no drawer
+// lateral, as 3 colunas (Em andamento / Falha / Bem-sucedido) nao
+// tinham espaco confortavel.
+//
+// O nome do componente continua "Drawer" pra preservar imports
+// existentes — internamente virou Modal.
 //
 // Briefing:
 //   - Abre dentro do contexto do CRM (sem navegar).
-//   - Kanban continua visivel atras (backdrop leve, regra do design).
+//   - Kanban fica atras com overlay (sem ver, mas sem perder rota).
 //   - Edita SO o Kanban ativo (sem master-detail interno).
 //   - Permite: criar/renomear/excluir etapa, mudar cor, reordenar,
 //     definir tipo (em_andamento/falha/bem_sucedido), editar regra IA.
-//   - Permite renomear/excluir o proprio Kanban (header do drawer).
+//   - Permite renomear/excluir o proprio Kanban (header).
 //
 // DesignFlow Kit aplicado:
-//   - Largura 720px desktop / full mobile (briefing aprovado).
-//   - Header: titulo Space Grotesk, subtitulo muted.
-//   - Body: scroll interno, padding 24px.
-//   - Footer minimalista (so botao "Fechar"; mutations acontecem
-//     inline no editor — sem botao "Salvar" porque tudo eh
-//     auto-save no blur/change).
+//   - Largura max-w-5xl (~1024px) desktop / full mobile.
+//   - Altura max-h-[85vh] com scroll interno.
+//   - Header: titulo Space Grotesk, subtitulo muted, padding 24px.
+//   - Body scroll interno padding 24px.
+//   - Auto-save inline no editor — sem footer "Salvar".
 
 import * as React from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -94,20 +95,22 @@ export function EditKanbanStructureDrawer({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-[720px] flex flex-col gap-0 p-0"
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          // PR-CRMOPS2: max-w-5xl (~1024px) pra dar espaco confortavel
+          // pras 3 colunas. Antes era Sheet 720px lateral — apertado.
+          // max-h-85vh com flex column pra header fixo + body scrollavel.
+          className="sm:max-w-5xl max-h-[85vh] flex flex-col gap-0 p-0 rounded-2xl"
         >
           {/* Header — DesignFlow: Space Grotesk titulo, muted subtitulo */}
-          <SheetHeader className="border-b border-border bg-card px-6 py-4">
+          <DialogHeader className="border-b border-border bg-card px-6 py-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <SheetTitle className="text-xl font-bold tracking-tight font-heading truncate">
+                <DialogTitle className="text-xl font-bold tracking-tight font-heading truncate">
                   {pipelineName}
-                </SheetTitle>
+                </DialogTitle>
                 <p className="mt-0.5 text-sm text-muted-foreground">
-                  Editar estrutura do Kanban
+                  Editar estrutura do funil
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -117,7 +120,7 @@ export function EditKanbanStructureDrawer({
                   size="sm"
                   className="h-8 px-2 gap-1.5"
                   onClick={() => setRenameOpen(true)}
-                  title="Renomear Kanban"
+                  title="Renomear funil"
                 >
                   <Pencil className="size-3.5" aria-hidden />
                   <span className="hidden sm:inline">Renomear</span>
@@ -130,7 +133,7 @@ export function EditKanbanStructureDrawer({
                 )}
               </div>
             </div>
-          </SheetHeader>
+          </DialogHeader>
 
           {/* Body — scroll interno, padding 24px */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -140,10 +143,10 @@ export function EditKanbanStructureDrawer({
               onChange={onChange}
             />
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
-      {/* Rename dialog (separado pra nao competir com o Sheet) */}
+      {/* Rename dialog (separado pra nao competir com o Dialog principal) */}
       <RenameKanbanDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}
@@ -200,10 +203,10 @@ function RenameKanbanDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl">
         <DialogHeader>
-          <DialogTitle className="sr-only">Renomear Kanban</DialogTitle>
+          <DialogTitle className="sr-only">Renomear funil</DialogTitle>
           <DialogHero
             icon={<Pencil className="size-5" />}
-            title="Renomear Kanban"
+            title="Renomear funil"
             tagline="Atualize o nome do funil"
           />
         </DialogHeader>
@@ -255,7 +258,7 @@ function DeleteKanbanButton({
             variant="ghost"
             size="sm"
             className="h-8 px-2 gap-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title="Excluir Kanban"
+            title="Excluir funil"
           >
             <Trash2 className="size-3.5" aria-hidden />
             <span className="hidden sm:inline">Excluir</span>
@@ -264,10 +267,10 @@ function DeleteKanbanButton({
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Excluir Kanban</AlertDialogTitle>
+          <AlertDialogTitle>Excluir funil</AlertDialogTitle>
           <AlertDialogDescription>
             Tem certeza que deseja excluir &quot;{name}&quot;? Todos os
-            negocios e etapas deste Kanban serao removidos. Esta acao
+            negocios e etapas deste funil serao removidos. Esta acao
             nao pode ser desfeita.
           </AlertDialogDescription>
         </AlertDialogHeader>

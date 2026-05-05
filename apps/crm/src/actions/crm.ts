@@ -9,6 +9,7 @@ import {
   bulkMoveDealsToStage as bulkMoveDealsToStageShared,
   bulkUpdateDealStatus as bulkUpdateDealStatusShared,
   createDeal as createDealShared,
+  createLead as createLeadShared,
   createLossReason as createLossReasonShared,
   createPipeline as createPipelineShared,
   createStage as createStageShared,
@@ -31,6 +32,7 @@ import {
   updatePipelineName as updatePipelineNameShared,
   updateStage as updateStageShared,
   updateStageOrder as updateStageOrderShared,
+  type CreateLeadInput,
   type CreateLossReasonInput,
   type MarkDealAsLostInput,
   type UpdateLossReasonInput,
@@ -161,6 +163,50 @@ export async function createDeal(formData: FormData) {
   );
   revalidatePath("/crm");
   return deal;
+}
+
+/**
+ * PR-CRMOPS2: cria lead + deal vinculado de uma vez. Usado pelo "+" das
+ * colunas do Kanban (briefing C: o "+" deve abrir form de Lead, nao de
+ * Negocio; ao salvar o lead deve aparecer imediatamente naquela coluna).
+ *
+ * Reusa createLeadShared + createDealShared do @persia/shared/crm. Zero
+ * logica nova de DB. Se voce esta lendo isto pra criar uma terceira
+ * forma de criar deal — pare e use esta. Caso falhe a criacao do deal
+ * apos o lead ja ter sido criado, o erro vaza pro caller mas o lead
+ * fica. Idempotency parcial: createLead ja faz upsert por phone.
+ */
+export interface CreateLeadWithDealInput {
+  /** Campos do lead — mesmos que CreateLeadInput. */
+  lead: CreateLeadInput;
+  /** Onde criar o deal vinculado. */
+  pipelineId: string;
+  stageId: string;
+  /** Titulo do deal. Default: nome do lead. */
+  dealTitle?: string;
+  /** Valor inicial do deal (R$). Default 0. */
+  dealValue?: number;
+}
+
+export async function createLeadWithDeal(input: CreateLeadWithDealInput) {
+  const { supabase, orgId } = await requireRole("agent");
+  const ctx = { db: supabase, orgId };
+
+  // 1. Cria (ou atualiza) o lead — createLead ja faz upsert por phone.
+  const lead = await createLeadShared(ctx, input.lead);
+
+  // 2. Cria o deal vinculado ao lead na etapa escolhida.
+  const dealTitle = (input.dealTitle ?? input.lead.name ?? "Novo lead").trim();
+  const deal = await createDealShared(ctx, {
+    pipelineId: input.pipelineId,
+    stageId: input.stageId,
+    leadId: lead.id,
+    title: dealTitle || "Novo lead",
+    value: input.dealValue ?? 0,
+  });
+
+  revalidatePath("/crm");
+  return { lead, deal };
 }
 
 export async function updateDealStage(dealId: string, stageId: string) {

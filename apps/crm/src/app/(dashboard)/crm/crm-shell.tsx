@@ -3,30 +3,41 @@
 // CrmShell — invólucro da rota /crm com 5 tabs internas:
 // Pipeline · Leads · Segmentação · Tags · Atividades
 //
-// PR-CRMOPS (mai/2026): nova direção de produto.
-//   - Removida tab "Ajustes" (era em PR-K5; PR-CRMCFG já tinha tirado).
-//   - Removida rota dedicada /settings/crm (PR-CRMCFG, agora deletado).
-//   - Configuração do Kanban volta pra inline (drawer "Editar estrutura"
-//     dentro do KanbanBoard).
-//   - Segmentação e Tags viraram tabs próprias do CRM (eram sub-tabs
-//     escondidas em /settings/crm).
-//   - Motivos de perda removido — quando precisar capturar motivo de
-//     deal perdido, vai ser via input livre direto no fluxo (sem área
-//     de configuração dedicada).
+// PR-CRMOPS2 (mai/2026):
+//   - Botão "+ Criar novo funil" sempre visível no canto superior
+//     direito do header (briefing item B). Antes ficava escondido na
+//     toolbar de filtros do KanbanBoard.
+//   - Tab Pipeline virou "biblioteca de funis": lista os funis
+//     configurados como cards clicáveis. Selecionar abre o Kanban
+//     daquele funil. Quando 0 funis, mostra empty state com botão
+//     "Criar primeiro funil".
+//   - KanbanProvider subiu pro CrmShell pra o botão do header
+//     conseguir chamar createPipeline.
+//
+// PR-CRMOPS (mai/2026): tab "Ajustes" REMOVIDA, /settings/crm
+// REMOVIDO, configuração inline via drawer.
 //
 // Tab ativa controlada por ?tab=pipeline|leads|segmentos|tags|atividades
 // (default: pipeline). useSearchParams pra deep link funcionar.
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import {
   Activity,
+  ChevronRight,
   Filter as FilterIcon,
   Kanban,
+  Plus,
   Tag as TagIcon,
   Users,
 } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
+import { Button } from "@persia/ui/button";
+import {
+  CreateKanbanDialog,
+  KanbanProvider,
+} from "@persia/crm-ui";
 import type {
   DealWithLead,
   LeadWithTags,
@@ -42,11 +53,10 @@ import { LeadList } from "@/components/leads/lead-list";
 import { ActivitiesTab } from "@/components/crm/activities-tab";
 import { SegmentList } from "@/components/segments/segment-list";
 import { TagsPageClient } from "@/app/(dashboard)/tags/tags-client";
+import { crmKanbanActions } from "@/features/crm-kanban/crm-kanban-actions";
 
 type CrmTab = "pipeline" | "leads" | "segmentos" | "tags" | "atividades";
 
-// PR-CRMOPS: 5 tabs na ordem exata do briefing (Pipeline · Leads ·
-// Segmentação · Tags · Atividades).
 const TABS: {
   key: CrmTab;
   label: string;
@@ -60,44 +70,33 @@ const TABS: {
 ];
 
 interface CrmShellProps {
-  // Dados do Pipeline (Kanban)
   pipelines: Pipeline[];
   stages: Stage[];
   deals: DealWithLead[];
   pipelineLeads: { id: string; name: string; phone: string | null; email: string | null }[];
   tags: TagRef[];
   assignees: { id: string; name: string }[];
-
-  // Dados do Leads (lista)
   leadsListData: {
     initialLeads: LeadWithTags[];
     initialTotal: number;
     initialPage: number;
     initialTotalPages: number;
   };
-
-  // PR-CRMOPS: dados das tabs novas (Segmentação + Tags)
   segments: unknown[];
   tagsList: TagWithCount[];
-
-  // Dados das Atividades (timeline)
   activitiesData: {
     initialActivities: OrgActivityRow[];
     initialTotal: number;
     initialPage: number;
     initialTotalPages: number;
   };
-
-  // Contadores no badge das tabs (totais para hint visual)
   leadCount: number;
   dealCount: number;
   activityCount: number;
   segmentCount: number;
   tagCount: number;
-
-  // PR-CRMOPS: props condicionais pra controle de permissão (regra 12
-  // do briefing — manter compat com Admin que pode passar valores
-  // diferentes). Defaults true; cada caller decide.
+  /** PR-CRMOPS2: permite criar novo funil via header. Default true. */
+  canCreateFunil?: boolean;
   canManageTags?: boolean;
   canManageSegments?: boolean;
 }
@@ -110,8 +109,24 @@ export function CrmShell(props: CrmShellProps) {
     ? tabParam
     : "pipeline";
 
+  const canCreateFunil = props.canCreateFunil ?? true;
   const canManageTags = props.canManageTags ?? true;
   const canManageSegments = props.canManageSegments ?? true;
+
+  // PR-CRMOPS2: estado da biblioteca de funis. Sincronizado com URL
+  // (?pipeline={id}) pra deep-link e refresh preservarem selecao.
+  const pipelineParam = searchParams.get("pipeline");
+  const [selectedPipelineId, setSelectedPipelineId] = React.useState<string | null>(
+    pipelineParam,
+  );
+  // Mantem em sync se URL mudar (back/forward do browser).
+  React.useEffect(() => {
+    setSelectedPipelineId(pipelineParam);
+  }, [pipelineParam]);
+
+  // PR-CRMOPS2: dialog "Criar novo funil" — vive no shell pra ficar
+  // disponivel em qualquer tab via botao do header.
+  const [createFunilOpen, setCreateFunilOpen] = React.useState(false);
 
   const setTab = (next: CrmTab) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -120,11 +135,32 @@ export function CrmShell(props: CrmShellProps) {
     } else {
       params.set("tab", next);
     }
+    // Quando troca de tab, limpa selecao de funil (evita estado meio
+    // que sobra: "estou em Leads mas selectedPipeline ainda esta setado").
+    if (next !== "pipeline") {
+      params.delete("pipeline");
+    }
     const qs = params.toString();
     router.push(qs ? `/crm?${qs}` : "/crm", { scroll: false });
   };
 
-  // Filtra tabs visíveis baseado nas permissões. Default: todas.
+  const selectFunil = (funilId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("pipeline", funilId);
+    params.delete("tab"); // garante tab=pipeline
+    router.push(`/crm?${params.toString()}`, { scroll: false });
+    setSelectedPipelineId(funilId);
+  };
+
+  const backToBiblioteca = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("pipeline");
+    params.delete("tab");
+    const qs = params.toString();
+    router.push(qs ? `/crm?${qs}` : "/crm", { scroll: false });
+    setSelectedPipelineId(null);
+  };
+
   const visibleTabs = TABS.filter((tab) => {
     if (tab.key === "tags" && !canManageTags) return false;
     if (tab.key === "segmentos" && !canManageSegments) return false;
@@ -132,66 +168,111 @@ export function CrmShell(props: CrmShellProps) {
   });
 
   return (
-    <div className="space-y-6">
-      {/* Header da pagina */}
-      <CrmPageHeader />
+    <KanbanProvider actions={crmKanbanActions}>
+      <div className="space-y-6">
+        {/* Header da pagina — botao "Criar novo funil" no canto direito */}
+        <CrmPageHeader
+          canCreateFunil={canCreateFunil}
+          onCreateFunilClick={() => setCreateFunilOpen(true)}
+        />
 
-      {/* Tabs */}
-      <CrmTabs
-        tabs={visibleTabs}
-        active={activeTab}
-        onChange={setTab}
-        leadCount={props.leadCount}
-        dealCount={props.dealCount}
-        activityCount={props.activityCount}
-        segmentCount={props.segmentCount}
-        tagCount={props.tagCount}
-      />
+        {/* Tabs */}
+        <CrmTabs
+          tabs={visibleTabs}
+          active={activeTab}
+          onChange={setTab}
+          leadCount={props.leadCount}
+          dealCount={props.dealCount}
+          activityCount={props.activityCount}
+          segmentCount={props.segmentCount}
+          tagCount={props.tagCount}
+        />
 
-      {/* Conteudo da tab ativa */}
-      {activeTab === "pipeline" && (
-        <CrmClient
-          pipelines={props.pipelines}
-          stages={props.stages}
-          deals={props.deals}
-          leads={props.pipelineLeads}
-          tags={props.tags}
-          assignees={props.assignees}
-        />
-      )}
-      {activeTab === "leads" && (
-        <LeadList
-          initialLeads={props.leadsListData.initialLeads}
-          initialTotal={props.leadsListData.initialTotal}
-          initialPage={props.leadsListData.initialPage}
-          initialTotalPages={props.leadsListData.initialTotalPages}
-        />
-      )}
-      {activeTab === "segmentos" && canManageSegments && (
-        <SegmentList segments={props.segments as never} />
-      )}
-      {activeTab === "tags" && canManageTags && (
-        <TagsPageClient initialTags={props.tagsList as never} />
-      )}
-      {activeTab === "atividades" && (
-        <ActivitiesTab
-          initialActivities={props.activitiesData.initialActivities}
-          initialTotal={props.activitiesData.initialTotal}
-          initialPage={props.activitiesData.initialPage}
-          initialTotalPages={props.activitiesData.initialTotalPages}
-        />
-      )}
-    </div>
+        {/* Conteudo da tab ativa */}
+        {activeTab === "pipeline" && (
+          props.pipelines.length === 0 ? (
+            <FunisEmptyState
+              canCreate={canCreateFunil}
+              onCreate={() => setCreateFunilOpen(true)}
+            />
+          ) : selectedPipelineId === null ? (
+            <FunisLibrary
+              pipelines={props.pipelines}
+              stages={props.stages}
+              dealsCount={(funilId) =>
+                props.deals.filter((d) => d.pipeline_id === funilId).length
+              }
+              onSelect={selectFunil}
+              canCreate={canCreateFunil}
+              onCreate={() => setCreateFunilOpen(true)}
+            />
+          ) : (
+            <CrmClient
+              pipelines={props.pipelines}
+              stages={props.stages}
+              deals={props.deals}
+              leads={props.pipelineLeads}
+              tags={props.tags}
+              assignees={props.assignees}
+              pipelineId={selectedPipelineId}
+              onBack={backToBiblioteca}
+            />
+          )
+        )}
+        {activeTab === "leads" && (
+          <LeadList
+            initialLeads={props.leadsListData.initialLeads}
+            initialTotal={props.leadsListData.initialTotal}
+            initialPage={props.leadsListData.initialPage}
+            initialTotalPages={props.leadsListData.initialTotalPages}
+          />
+        )}
+        {activeTab === "segmentos" && canManageSegments && (
+          <SegmentList segments={props.segments as never} />
+        )}
+        {activeTab === "tags" && canManageTags && (
+          <TagsPageClient initialTags={props.tagsList as never} />
+        )}
+        {activeTab === "atividades" && (
+          <ActivitiesTab
+            initialActivities={props.activitiesData.initialActivities}
+            initialTotal={props.activitiesData.initialTotal}
+            initialPage={props.activitiesData.initialPage}
+            initialTotalPages={props.activitiesData.initialTotalPages}
+          />
+        )}
+
+        {/* Dialog "Criar novo funil" — global ao shell */}
+        {canCreateFunil && (
+          <CreateKanbanDialog
+            open={createFunilOpen}
+            onOpenChange={setCreateFunilOpen}
+            onCreated={(newPipelineId) => {
+              toast.success("Funil criado");
+              // Auto-seleciona o novo funil (vai pra view do Kanban dele).
+              selectFunil(newPipelineId);
+              router.refresh();
+            }}
+          />
+        )}
+      </div>
+    </KanbanProvider>
   );
 }
 
 // ============================================================================
-// Header da pagina /crm
+// Header da pagina — titulo + tagline + botao "Criar novo funil" (canto direito)
 // ============================================================================
 
-function CrmPageHeader() {
+function CrmPageHeader({
+  canCreateFunil,
+  onCreateFunilClick,
+}: {
+  canCreateFunil: boolean;
+  onCreateFunilClick: () => void;
+}) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-start gap-3.5">
         <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
           <Kanban className="size-6" />
@@ -205,12 +286,23 @@ function CrmPageHeader() {
           </p>
         </div>
       </div>
+      {canCreateFunil && (
+        <Button
+          type="button"
+          onClick={onCreateFunilClick}
+          className="h-9 gap-1.5 shrink-0"
+          title="Criar novo funil"
+        >
+          <Plus className="size-4" aria-hidden />
+          Criar novo funil
+        </Button>
+      )}
     </div>
   );
 }
 
 // ============================================================================
-// Sub-nav com 5 tabs (PR-CRMOPS — adicionadas Segmentação + Tags)
+// Sub-nav com 5 tabs
 // ============================================================================
 
 function CrmTabs({
@@ -280,6 +372,137 @@ function CrmTabs({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ============================================================================
+// Biblioteca de funis — PR-CRMOPS2
+// Lista os funis configurados como cards clicaveis. Click = abre o Kanban.
+// ============================================================================
+
+function FunisLibrary({
+  pipelines,
+  stages,
+  dealsCount,
+  onSelect,
+  canCreate,
+  onCreate,
+}: {
+  pipelines: Pipeline[];
+  stages: Stage[];
+  dealsCount: (funilId: string) => number;
+  onSelect: (funilId: string) => void;
+  canCreate: boolean;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-base font-semibold text-foreground">
+          Funis configurados
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          {pipelines.length} funil{pipelines.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {pipelines.map((p) => {
+          const pStages = stages.filter((s) => s.pipeline_id === p.id);
+          const deals = dealsCount(p.id);
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onSelect(p.id)}
+              className="group rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                    {p.name}
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {pStages.length} etapa{pStages.length === 1 ? "" : "s"}
+                    {deals > 0 && ` · ${deals} negócio${deals === 1 ? "" : "s"}`}
+                  </p>
+                </div>
+                <ChevronRight className="size-4 text-muted-foreground/60 group-hover:text-primary transition-colors shrink-0" aria-hidden />
+              </div>
+
+              {/* Preview: bolinhas das etapas */}
+              {pStages.length > 0 && (
+                <div className="mt-3 flex items-center gap-1 flex-wrap">
+                  {pStages.slice(0, 8).map((s) => (
+                    <span
+                      key={s.id}
+                      title={s.name}
+                      className="inline-block size-2.5 rounded-full ring-1 ring-black/5"
+                      style={{ backgroundColor: s.color || "#6366f1" }}
+                    />
+                  ))}
+                  {pStages.length > 8 && (
+                    <span className="text-[10px] text-muted-foreground/70 ml-0.5">
+                      +{pStages.length - 8}
+                    </span>
+                  )}
+                </div>
+              )}
+            </button>
+          );
+        })}
+
+        {canCreate && (
+          <button
+            type="button"
+            onClick={onCreate}
+            className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span className="inline-flex size-7 items-center justify-center rounded-md bg-card">
+                <Plus className="size-4" aria-hidden />
+              </span>
+              <span className="text-sm font-medium">Criar novo funil</span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground/80">
+              Configure etapas e regras para um novo fluxo de vendas.
+            </p>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FunisEmptyState({
+  canCreate,
+  onCreate,
+}: {
+  canCreate: boolean;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-12 text-center">
+      <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+        <Kanban className="size-6" aria-hidden />
+      </div>
+      <h2 className="mt-3 text-base font-semibold">
+        Nenhum funil configurado ainda
+      </h2>
+      <p className="mt-1 text-sm text-muted-foreground max-w-md mx-auto">
+        Crie seu primeiro funil pra começar a organizar oportunidades por etapa.
+      </p>
+      {canCreate && (
+        <Button
+          type="button"
+          onClick={onCreate}
+          className="mt-5 h-10 gap-1.5"
+        >
+          <Plus className="size-4" aria-hidden />
+          Criar primeiro funil
+        </Button>
+      )}
     </div>
   );
 }

@@ -78,6 +78,29 @@ export interface KanbanActions {
 
   // Deals
   createDeal: (input: CreateDealInput) => Promise<Deal>;
+  /**
+   * PR-CRMOPS2: cria lead + deal vinculado de uma vez. Usado pelo "+"
+   * das colunas do Kanban — briefing: o usuario nao adiciona "negocio"
+   * direto, ele adiciona um LEAD que aparece como card no Pipeline.
+   *
+   * Opcional pra preservar compat com adapters antigos (admin nao
+   * implementa por enquanto — la o "+" continua abrindo "Novo
+   * negocio"). Quando setado, a UI usa esse fluxo.
+   */
+  createLeadWithDeal?: (input: {
+    lead: {
+      name?: string | null;
+      phone?: string | null;
+      email?: string | null;
+      source?: string;
+      status?: string;
+      channel?: string;
+    };
+    pipelineId: string;
+    stageId: string;
+    dealTitle?: string;
+    dealValue?: number;
+  }) => Promise<{ lead: { id: string }; deal: Deal }>;
   updateDeal: (dealId: string, data: UpdateDealInput) => Promise<void>;
   /**
    * Move a deal pra outra stage. CRM dispara activity log + onStageChanged

@@ -49,6 +49,9 @@ export {
 } from "./components/PipelineStagesEditor";
 export { CreateKanbanDialog } from "./components/CreateKanbanDialog";
 export { EditKanbanStructureDrawer } from "./components/EditKanbanStructureDrawer";
+// PR-CRMOPS2: dialog do "+" das colunas — cria lead vinculado a deal
+// na etapa selecionada (substitui o "Novo negocio" antigo).
+export { CreateLeadFromKanbanDialog } from "./components/CreateLeadFromKanbanDialog";
 export {
   MarkAsLostDialog,
   type MarkAsLostFormValues,

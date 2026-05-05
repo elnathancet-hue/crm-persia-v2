@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@persia/leads-ui": "workspace:*",
     "@persia/shared": "workspace:*",
     "@persia/ui": "workspace:*",
     "lucide-react": "^1.7.0",
