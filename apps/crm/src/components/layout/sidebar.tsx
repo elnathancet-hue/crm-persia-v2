@@ -68,7 +68,13 @@ export function Sidebar() {
       {/* Brand — PérsiaCRM */}
       <div className="py-4 w-full flex justify-center">
         <Link href="/dashboard">
-          <div className="size-10 rounded-xl flex items-center justify-center hover:opacity-90 transition-opacity bg-sidebar-accent text-[#090B1A] dark:text-[#C9A84C]">
+          {/* PR-NAVUI: cor do logo agora vem do token `--primary` em vez
+              de hex hardcoded. No tema Clean (light) primary e azul
+              (#3B82F6) e no tema Black (dark) primary e dourado
+              (#C9A84C) — variavel CSS resolve automatico, sem precisar
+              `dark:` override. Mais resiliente: qualquer mudanca
+              futura de paleta acompanha. */}
+          <div className="size-10 rounded-xl flex items-center justify-center hover:opacity-90 transition-opacity bg-sidebar-accent text-primary">
             <svg width="24" height="24" viewBox="0 0 40 40" fill="none">
               <path d="M20 2L32 14L20 26L8 14Z" fill="none" stroke="currentColor" strokeWidth="1.8"/>
               <path d="M20 14L32 26L20 38L8 26Z" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.5"/>
