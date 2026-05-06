@@ -118,6 +118,40 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         error: errorMessage(err),
       });
     }
+
+    // PR-CRMOPS4: cria deal automatico no funil principal pra que o
+    // lead apareca no Kanban. Antes desse fix, lead chegava por
+    // WhatsApp, virava conversa, mas ficava invisivel na aba Pipeline.
+    //
+    // CRITICO: fire-and-forget (sem await) — pipeline UAZAPI NAO pode
+    // esperar por isso. Se a criacao demorar/falhar, o webhook ja
+    // respondeu OK ha tempos. O pior caso degradado e o mesmo de
+    // antes do fix (lead sem card no Kanban — usuario adiciona
+    // manualmente). NUNCA bloqueia mensagem entrando.
+    const leadIdForDeal = lead.id;
+    void (async () => {
+      try {
+        const { getDefaultPipelineStage, createDeal: createDealShared } =
+          await import("@persia/shared/crm");
+        const ctx = { db: supabase, orgId };
+        const defaults = await getDefaultPipelineStage(ctx);
+        if (defaults) {
+          await createDealShared(ctx, {
+            pipelineId: defaults.pipelineId,
+            stageId: defaults.stageId,
+            leadId: leadIdForDeal,
+            title: msg.pushName || msg.phone,
+            value: 0,
+          });
+        }
+      } catch (err: unknown) {
+        logError("incoming_pipeline_auto_deal_failed", {
+          ...baseLogContext,
+          lead_id: leadIdForDeal,
+          error: errorMessage(err),
+        });
+      }
+    })();
   }
 
   // 4) Keyword triggers (before AI)

@@ -67,6 +67,7 @@ export {
   listPipelines,
   listStages,
   listStagesForOrg,
+  getDefaultPipelineStage,
   listDeals,
   findLeadOpenDealWithStages,
   listLossReasons,
