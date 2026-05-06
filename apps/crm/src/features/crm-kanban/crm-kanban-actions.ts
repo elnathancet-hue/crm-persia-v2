@@ -26,6 +26,12 @@ import {
   updateStage,
   updateStageOrder,
 } from "@/actions/crm";
+import {
+  addTagToLead,
+  assignLead,
+  removeTagFromLead,
+} from "@/actions/leads";
+import { findOrCreateConversationByLead } from "@/actions/conversations";
 
 export const crmKanbanActions: KanbanActions = {
   // ============ PIPELINES ============
@@ -108,4 +114,19 @@ export const crmKanbanActions: KanbanActions = {
   markDealAsLost: (dealId, input) => markDealAsLost(dealId, input),
   bulkMarkDealsAsLost: (dealIds, input) =>
     bulkMarkDealsAsLost(dealIds, input),
+
+  // ============ CARD CONNECTIONS (PR-C) ============
+  // Botao + Tag, dropdown Atribuir e "Abrir conversa" interna direto
+  // do card. Reusa actions existentes (sem logica paralela).
+  assignLead: async (leadId, userId) => {
+    await assignLead(leadId, userId);
+  },
+  addTagToLead: async (leadId, tagId) => {
+    await addTagToLead(leadId, tagId);
+  },
+  removeTagFromLead: async (leadId, tagId) => {
+    await removeTagFromLead(leadId, tagId);
+  },
+  findOrCreateConversationByLead: (leadId) =>
+    findOrCreateConversationByLead(leadId),
 };

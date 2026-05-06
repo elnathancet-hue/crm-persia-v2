@@ -145,4 +145,22 @@ export interface KanbanActions {
     dealIds: string[],
     input: MarkAsLostInput,
   ) => Promise<{ updated_count: number }>;
+
+  /**
+   * PR-C: card connections — atribui responsavel + add/remove tag +
+   * abrir conversa interna direto do card. Todas opcionais pra retro-
+   * compat com adapters antigos (admin nao implementa por enquanto;
+   * UI esconde o botao quando undefined).
+   */
+  assignLead?: (leadId: string, userId: string | null) => Promise<void>;
+  addTagToLead?: (leadId: string, tagId: string) => Promise<void>;
+  removeTagFromLead?: (leadId: string, tagId: string) => Promise<void>;
+  /**
+   * Find or create conversation by lead. Retorna o conversationId
+   * (existente ou novo). UI usa pra navegar pro chat interno no
+   * `/chat?id={conversationId}` em vez de abrir `wa.me/` externo.
+   */
+  findOrCreateConversationByLead?: (
+    leadId: string,
+  ) => Promise<{ conversationId: string; created: boolean }>;
 }

@@ -151,6 +151,73 @@ export async function getConversation(id: string) {
   return { data, error: null };
 }
 
+/**
+ * PR-C: find-or-create conversation by lead. Usado pelo botao
+ * "Abrir conversa" do card Kanban — quando o agente clica num lead
+ * sem conversa ativa, queremos abrir uma conversa interna em vez de
+ * deixar ele no `wa.me/` externo.
+ *
+ * Reusa a logica do `incoming-pipeline.ts` (find by lead + status
+ * em ["active", "waiting_human"], senao cria nova). Diferenca: aqui
+ * a nova conversa nasce ja atribuida ao agente que clicou (`user.id`)
+ * em vez de "ai" — porque o agente quer responder pessoalmente.
+ *
+ * Retorna { conversationId, created } pra o caller decidir se mostra
+ * toast "Conversa criada" ou apenas navega.
+ */
+export async function findOrCreateConversationByLead(
+  leadId: string,
+): Promise<{ conversationId: string; created: boolean }> {
+  const { supabase, orgId, userId } = await requireRole("agent");
+
+  // Defesa multi-tenant: confirma que o lead pertence a org do caller
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id, channel")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!lead) {
+    throw new Error("Lead não encontrado nesta organização");
+  }
+
+  // Find: conversa aberta mais recente do lead
+  const { data: existing } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("lead_id", leadId)
+    .in("status", ["active", "waiting_human"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    return { conversationId: existing.id as string, created: false };
+  }
+
+  // Create: nova conversa atribuida ao agente que clicou
+  const { data: created, error } = await supabase
+    .from("conversations")
+    .insert({
+      organization_id: orgId,
+      lead_id: leadId,
+      channel: (lead.channel as string) || "whatsapp",
+      status: "active",
+      assigned_to: userId,
+      last_message_at: null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !created) {
+    throw new Error(error?.message ?? "Erro ao criar conversa");
+  }
+
+  revalidatePath("/chat");
+  return { conversationId: created.id as string, created: true };
+}
+
 export async function assignConversation(
   conversationId: string,
   assignTo: string
