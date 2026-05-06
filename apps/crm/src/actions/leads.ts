@@ -190,3 +190,25 @@ export async function removeTagFromLead(leadId: string, tagId: string) {
   revalidatePath("/leads");
   revalidatePath("/crm");
 }
+
+/**
+ * PR-C: atribui um lead a um membro da org (responsável). Aceita
+ * `userId` ou `null` (desatribuir). Wrapper fino em volta do
+ * `updateLeadShared` que ja aceita `assigned_to` no UpdateLeadInput.
+ *
+ * Usado pelo card do Kanban (pill "Responsavel" virou dropdown).
+ * Defesa multi-tenant + sync UAZAPI ja vem do shared.
+ */
+export async function assignLead(leadId: string, userId: string | null) {
+  const { supabase, orgId } = await requireRole("agent");
+  const ctx = { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) };
+
+  await updateLeadShared(ctx, leadId, {
+    assigned_to: userId,
+  });
+
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/crm");
+  return { success: true };
+}

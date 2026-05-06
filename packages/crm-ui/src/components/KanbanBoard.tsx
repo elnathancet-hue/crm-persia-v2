@@ -1572,6 +1572,12 @@ export function KanbanBoard({
                           : undefined
                       }
                       hasActiveSelection={selectedCount > 0}
+                      // PR-C: card connections — tags + responsaveis +
+                      // refresh callback. Esses 3 sao opcionais (admin
+                      // pode passar [] e o card degrada graciosamente).
+                      orgTags={orgTags}
+                      assignees={assignees}
+                      onChange={onChange}
                     />
                   ))}
                   {/* Empty state — discreto + clicavel pra adicionar deal */}
@@ -1771,6 +1777,9 @@ const DealCard = React.memo(function DealCardImpl({
   selected,
   onToggleSelected,
   hasActiveSelection,
+  orgTags,
+  assignees,
+  onChange,
 }: {
   deal: Deal;
   draggedDealId: string | null;
@@ -1795,6 +1804,18 @@ const DealCard = React.memo(function DealCardImpl({
   /** PR-K2: ha pelo menos 1 card selecionado em qualquer lugar (mostra
    *  checkbox sempre, nao so no hover). */
   hasActiveSelection: boolean;
+  /**
+   * PR-C: tags da org pra Popover "+ Tag" no card. Vazio = oculta o
+   * botao (tags nao configuradas).
+   */
+  orgTags: TagRef[];
+  /**
+   * PR-C: lista de membros da org pra dropdown "Atribuir" no pill
+   * responsavel. Vazio = pill fica readonly (legacy).
+   */
+  assignees: { id: string; name: string }[];
+  /** PR-C: callback pro pai re-fetchar apos add tag/atribuir. */
+  onChange?: () => void;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const isDragging = draggedDealId === deal.id;
@@ -1987,13 +2008,39 @@ const DealCard = React.memo(function DealCardImpl({
               </p>
             )}
           </div>
+          {/* PR-C: substitui o botao "Abrir WhatsApp" (wa.me externo) por
+              "Abrir conversa" — find-or-create conversation interna e
+              navega pro /chat. Fallback pra wa.me apenas se a action de
+              conversa nao estiver injetada (compat admin) ou se o deal
+              nao tem lead_id (caso degenerado). */}
           {phone && (
             <button
               type="button"
               className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 transition-colors"
-              title="Abrir WhatsApp"
-              onClick={(e) => {
+              title={
+                actionsRef.findOrCreateConversationByLead && deal.lead_id
+                  ? "Abrir conversa"
+                  : "Abrir WhatsApp"
+              }
+              onClick={async (e) => {
                 e.stopPropagation();
+                if (actionsRef.findOrCreateConversationByLead && deal.lead_id) {
+                  try {
+                    const { conversationId } =
+                      await actionsRef.findOrCreateConversationByLead(
+                        deal.lead_id,
+                      );
+                    window.location.href = `/chat?id=${conversationId}`;
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Falha ao abrir conversa",
+                    );
+                  }
+                  return;
+                }
+                // Fallback (compat admin / lead sem id): wa.me externo
                 window.open(
                   `https://wa.me/55${cleanPhone(phone)}`,
                   "_blank",
@@ -2005,12 +2052,90 @@ const DealCard = React.memo(function DealCardImpl({
           )}
         </div>
 
-        {/* Tags coloridas (saturadas usando tag.color) */}
-        {tags.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {/* PR-C: Tags display + botao "+ Tag" inline.
+            Antes era so display read-only — agora agente adiciona tag
+            direto no card via Popover (Popover lista tags da org que
+            ainda nao estao aplicadas). */}
+        {(tags.length > 0 ||
+          (canEdit &&
+            deal.lead_id &&
+            actionsRef.addTagToLead &&
+            orgTags.length > 0)) && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {tags.map((tag) => (
               <ColoredTagPill key={tag.id} tag={tag} />
             ))}
+            {canEdit &&
+              deal.lead_id &&
+              actionsRef.addTagToLead &&
+              orgTags.length > 0 && (
+                <Popover>
+                  <PopoverTrigger
+                    render={
+                      <button
+                        type="button"
+                        className="inline-flex h-5 items-center gap-0.5 rounded-full border border-dashed border-border/60 bg-card px-2 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/5 hover:text-primary"
+                        title="Adicionar tag"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Plus className="size-3" />
+                        Tag
+                      </button>
+                    }
+                  />
+                  <PopoverContent
+                    align="start"
+                    className="w-56 p-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Adicionar tag
+                    </div>
+                    {(() => {
+                      const appliedIds = new Set(tags.map((t) => t.id));
+                      const available = orgTags.filter(
+                        (t) => !appliedIds.has(t.id),
+                      );
+                      if (available.length === 0) {
+                        return (
+                          <div className="px-2 py-2 text-[11px] text-muted-foreground">
+                            Todas as tags já foram aplicadas.
+                          </div>
+                        );
+                      }
+                      const leadId = deal.lead_id;
+                      if (!leadId) return null;
+                      return available.map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted"
+                          onClick={async () => {
+                            if (!actionsRef.addTagToLead) return;
+                            try {
+                              await actionsRef.addTagToLead(leadId, tag.id);
+                              toast.success(`Tag "${tag.name}" adicionada`);
+                              onChange?.();
+                            } catch (err) {
+                              toast.error(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Falha ao adicionar tag",
+                              );
+                            }
+                          }}
+                        >
+                          <span
+                            className="inline-block size-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: tag.color || "#888" }}
+                          />
+                          <span className="truncate">{tag.name}</span>
+                        </button>
+                      ));
+                    })()}
+                  </PopoverContent>
+                </Popover>
+              )}
           </div>
         )}
 
@@ -2068,33 +2193,140 @@ const DealCard = React.memo(function DealCardImpl({
           )}
         </div>
 
-        {/* Pill RESPONSÁVEL (azul) */}
-        <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 dark:bg-blue-500/10">
-          <span
-            className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
-              lead?.assignee?.full_name ? "bg-blue-600" : "bg-muted-foreground/40"
-            }`}
-            aria-hidden
-          >
-            {lead?.assignee?.full_name
-              ? lead.assignee.full_name
-                  .split(/\s+/)
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map((p: string) => p[0])
-                  .join("")
-                  .toUpperCase()
-              : "?"}
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
-              Responsável
-            </div>
-            <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
-              {lead?.assignee?.full_name || "Sem responsável"}
-            </div>
-          </div>
-        </div>
+        {/* PR-C: Pill RESPONSÁVEL (azul) — agora clicavel.
+            Antes era read-only — agora abre DropdownMenu com lista de
+            membros da org pra atribuir/desatribuir direto do card.
+            Degrada graciosamente: se nao tem assignees ou actions
+            de atribuir, fica read-only (admin / lead sem id). */}
+        {(() => {
+          const assigneeName = lead?.assignee?.full_name;
+          const initials = assigneeName
+            ? assigneeName
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p: string) => p[0])
+                .join("")
+                .toUpperCase()
+            : "?";
+          const canAssign =
+            canEdit &&
+            !!deal.lead_id &&
+            !!actionsRef.assignLead &&
+            assignees.length > 0;
+          const leadId = deal.lead_id;
+
+          if (!canAssign || !leadId) {
+            return (
+              <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 dark:bg-blue-500/10">
+                <span
+                  className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
+                    assigneeName ? "bg-blue-600" : "bg-muted-foreground/40"
+                  }`}
+                  aria-hidden
+                >
+                  {initials}
+                </span>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
+                    Responsável
+                  </div>
+                  <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
+                    {assigneeName || "Sem responsável"}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className="mt-2 flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span
+                      className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
+                        assigneeName ? "bg-blue-600" : "bg-muted-foreground/40"
+                      }`}
+                      aria-hidden
+                    >
+                      {initials}
+                    </span>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
+                        Responsável
+                      </div>
+                      <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
+                        {assigneeName || "Sem responsável"}
+                      </div>
+                    </div>
+                    <ChevronDown className="size-3.5 shrink-0 text-blue-700/60 dark:text-blue-300/60" />
+                  </button>
+                }
+              />
+              <DropdownMenuContent
+                align="start"
+                className="w-56"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DropdownMenuLabel>Atribuir responsável</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {assignees.map((m) => (
+                  <DropdownMenuItem
+                    key={m.id}
+                    onClick={async () => {
+                      if (!actionsRef.assignLead) return;
+                      try {
+                        await actionsRef.assignLead(leadId, m.id);
+                        toast.success(`Atribuído a ${m.name}`);
+                        onChange?.();
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "Falha ao atribuir",
+                        );
+                      }
+                    }}
+                  >
+                    {m.name}
+                    {lead?.assigned_to === m.id && (
+                      <Check className="ml-auto size-3.5" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
+                {assigneeName && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={async () => {
+                        if (!actionsRef.assignLead) return;
+                        try {
+                          await actionsRef.assignLead(leadId, null);
+                          toast.success("Responsável removido");
+                          onChange?.();
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "Falha ao remover",
+                          );
+                        }
+                      }}
+                      className="text-muted-foreground"
+                    >
+                      Sem responsável
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        })()}
 
         {/* Footer: horario relativo da ultima atividade (discreto).
             Usa deal.updated_at que JA EXISTE — sem logica nova. */}
