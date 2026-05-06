@@ -25,7 +25,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Activity,
-  ChevronRight,
   Filter as FilterIcon,
   Kanban,
   Plus,
@@ -119,16 +118,26 @@ export function CrmShell(props: CrmShellProps) {
   const canManageTags = props.canManageTags ?? true;
   const canManageSegments = props.canManageSegments ?? true;
 
-  // PR-CRMOPS2: estado da biblioteca de funis. Sincronizado com URL
-  // (?pipeline={id}) pra deep-link e refresh preservarem selecao.
+  // PR-PIPETOOLS: a "biblioteca de funis" foi REMOVIDA — ela rouba foco
+  // do Kanban (briefing). Agora na tab Pipeline:
+  //   - Se ?pipeline={id} na URL e existe, usa.
+  //   - Caso contrario, auto-seleciona o PRIMEIRO funil disponivel.
+  //   - Pra trocar de funil, usuario usa o dropdown "Funil atual: X"
+  //     dentro da toolbar do KanbanBoard (tambem inclui acao
+  //     "+ Criar novo funil" e "Configurar funis").
   const pipelineParam = searchParams.get("pipeline");
   const [selectedPipelineId, setSelectedPipelineId] = React.useState<string | null>(
-    pipelineParam,
+    pipelineParam ?? props.pipelines[0]?.id ?? null,
   );
-  // Mantem em sync se URL mudar (back/forward do browser).
+  // Sync com URL + auto-select fallback.
   React.useEffect(() => {
-    setSelectedPipelineId(pipelineParam);
-  }, [pipelineParam]);
+    if (pipelineParam) {
+      setSelectedPipelineId(pipelineParam);
+    } else if (props.pipelines.length > 0 && selectedPipelineId === null) {
+      setSelectedPipelineId(props.pipelines[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelineParam, props.pipelines.length]);
 
   // PR-CRMOPS2: dialog "Criar novo funil" — vive no shell pra ficar
   // disponivel em qualquer tab via botao do header.
@@ -158,14 +167,8 @@ export function CrmShell(props: CrmShellProps) {
     setSelectedPipelineId(funilId);
   };
 
-  const backToBiblioteca = () => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("pipeline");
-    params.delete("tab");
-    const qs = params.toString();
-    router.push(qs ? `/crm?${qs}` : "/crm", { scroll: false });
-    setSelectedPipelineId(null);
-  };
+  // PR-PIPETOOLS: backToBiblioteca removido — biblioteca nao existe
+  // mais. Pra trocar de funil, usuario usa o dropdown da toolbar.
 
   const visibleTabs = TABS.filter((tab) => {
     if (tab.key === "tags" && !canManageTags) return false;
@@ -194,21 +197,15 @@ export function CrmShell(props: CrmShellProps) {
           tagCount={props.tagCount}
         />
 
-        {/* Conteudo da tab ativa */}
+        {/* Conteudo da tab ativa.
+            PR-PIPETOOLS: removida a "biblioteca de funis" do meio da
+            tela. Quando ha funis, vai DIRETO pro Kanban (auto-select
+            do 1o funil). Pra trocar de funil, dropdown na toolbar do
+            KanbanBoard. Pra ver/criar/editar/excluir funis, drawer
+            "Configurar funis" — tudo dentro do contexto do Kanban. */}
         {activeTab === "pipeline" && (
-          props.pipelines.length === 0 ? (
+          props.pipelines.length === 0 || !selectedPipelineId ? (
             <FunisEmptyState
-              canCreate={canCreateFunil}
-              onCreate={() => setCreateFunilOpen(true)}
-            />
-          ) : selectedPipelineId === null ? (
-            <FunisLibrary
-              pipelines={props.pipelines}
-              stages={props.stages}
-              dealsCount={(funilId) =>
-                props.deals.filter((d) => d.pipeline_id === funilId).length
-              }
-              onSelect={selectFunil}
               canCreate={canCreateFunil}
               onCreate={() => setCreateFunilOpen(true)}
             />
@@ -221,7 +218,7 @@ export function CrmShell(props: CrmShellProps) {
               tags={props.tags}
               assignees={props.assignees}
               pipelineId={selectedPipelineId}
-              onBack={backToBiblioteca}
+              onPipelineChange={selectFunil}
             />
           )
         )}
@@ -387,103 +384,15 @@ function CrmTabs({
 }
 
 // ============================================================================
-// Biblioteca de funis — PR-CRMOPS2
-// Lista os funis configurados como cards clicaveis. Click = abre o Kanban.
+// PR-PIPETOOLS: FunisLibrary REMOVIDA. Antes (PR-CRMOPS2) listava os
+// funis como cards no meio da tela quando nenhum estava selecionado —
+// rouba foco do Kanban (briefing user). Agora auto-seleciona primeiro
+// funil e exibe diretamente o Kanban. Pra trocar de funil ou criar
+// novo, dropdown na toolbar do KanbanBoard. Pra gerir todos os funis,
+// drawer "Configurar funis" disponivel em qualquer momento.
+//
+// Mantemos so o FunisEmptyState pra caso de 0 funis.
 // ============================================================================
-
-function FunisLibrary({
-  pipelines,
-  stages,
-  dealsCount,
-  onSelect,
-  canCreate,
-  onCreate,
-}: {
-  pipelines: Pipeline[];
-  stages: Stage[];
-  dealsCount: (funilId: string) => number;
-  onSelect: (funilId: string) => void;
-  canCreate: boolean;
-  onCreate: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-base font-semibold text-foreground">
-          Funis configurados
-        </h2>
-        <span className="text-xs text-muted-foreground">
-          {pipelines.length} funil{pipelines.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {pipelines.map((p) => {
-          const pStages = stages.filter((s) => s.pipeline_id === p.id);
-          const deals = dealsCount(p.id);
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => onSelect(p.id)}
-              className="group rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                    {p.name}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {pStages.length} etapa{pStages.length === 1 ? "" : "s"}
-                    {deals > 0 && ` · ${deals} negócio${deals === 1 ? "" : "s"}`}
-                  </p>
-                </div>
-                <ChevronRight className="size-4 text-muted-foreground/60 group-hover:text-primary transition-colors shrink-0" aria-hidden />
-              </div>
-
-              {/* Preview: bolinhas das etapas */}
-              {pStages.length > 0 && (
-                <div className="mt-3 flex items-center gap-1 flex-wrap">
-                  {pStages.slice(0, 8).map((s) => (
-                    <span
-                      key={s.id}
-                      title={s.name}
-                      className="inline-block size-2.5 rounded-full ring-1 ring-black/5"
-                      style={{ backgroundColor: s.color || "#6366f1" }}
-                    />
-                  ))}
-                  {pStages.length > 8 && (
-                    <span className="text-[10px] text-muted-foreground/70 ml-0.5">
-                      +{pStages.length - 8}
-                    </span>
-                  )}
-                </div>
-              )}
-            </button>
-          );
-        })}
-
-        {canCreate && (
-          <button
-            type="button"
-            onClick={onCreate}
-            className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <span className="inline-flex size-7 items-center justify-center rounded-md bg-card">
-                <Plus className="size-4" aria-hidden />
-              </span>
-              <span className="text-sm font-medium">Criar novo funil</span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground/80">
-              Configure etapas e regras para um novo fluxo de vendas.
-            </p>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function FunisEmptyState({
   canCreate,

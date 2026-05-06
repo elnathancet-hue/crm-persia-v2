@@ -47,6 +47,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
+// PR-PIPETOOLS: dropdown rico "Funil atual" na toolbar.
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@persia/ui/dropdown-menu";
 import {
   Plus,
   Trash2,
@@ -55,6 +64,7 @@ import {
   Mail,
   Search,
   MessageCircle,
+  ChevronDown,
   ChevronLeft,
   Settings,
   Settings2,
@@ -108,6 +118,8 @@ import type { ExportColumn } from "../lib/export";
 import { CreateKanbanDialog } from "./CreateKanbanDialog";
 import { CreateLeadFromKanbanDialog } from "./CreateLeadFromKanbanDialog";
 import { EditKanbanStructureDrawer } from "./EditKanbanStructureDrawer";
+// PR-PIPETOOLS: drawer "Configurar funis" — gestao consolidada
+import { ManageFunisDrawer } from "./ManageFunisDrawer";
 import { MarkAsLostDialog } from "./MarkAsLostDialog";
 import { ExportMenu } from "./ExportMenu";
 import { DialogHero } from "./DialogHero";
@@ -288,11 +300,12 @@ export interface KanbanBoardProps {
    */
   pipelineId?: string;
   /**
-   * PR-CRMOPS2: callback "voltar pra biblioteca de funis". Quando setado,
-   * mostra um botao "← Funis" no header do board. Usado pelo CrmShell
-   * que controla a navegacao biblioteca <-> kanban.
+   * PR-PIPETOOLS: callback pra trocar de funil via dropdown da toolbar.
+   * CrmShell sincroniza com URL (?pipeline={id}). Em modo controlled
+   * + esse callback presente, o dropdown "Funil atual" lista todos os
+   * funis pra trocar.
    */
-  onBack?: () => void;
+  onPipelineChange?: (newPipelineId: string) => void;
 }
 
 export function KanbanBoard({
@@ -310,7 +323,7 @@ export function KanbanBoard({
   canCreateKanban,
   canEditStages,
   pipelineId: controlledPipelineId,
-  onBack,
+  onPipelineChange,
 }: KanbanBoardProps) {
   // PR-CRMOPS: defaults derivados de `canManagePipelines` pra preservar
   // compat com call-sites que ainda nao foram atualizados (admin etc).
@@ -325,9 +338,13 @@ export function KanbanBoard({
   const isControlled = controlledPipelineId !== undefined;
   const selectedPipeline = isControlled ? controlledPipelineId : internalPipeline;
   const setSelectedPipeline = (next: string) => {
-    if (!isControlled) setInternalPipeline(next);
-    // Em modo controlled, o caller decide quando trocar (via onBack -> volta
-    // pra biblioteca). O select interno fica escondido.
+    if (isControlled) {
+      // PR-PIPETOOLS: em modo controlled, o caller (CrmShell) controla.
+      // Dispara onPipelineChange pro pai sincronizar com URL e re-fetchar.
+      onPipelineChange?.(next);
+    } else {
+      setInternalPipeline(next);
+    }
   };
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
@@ -343,6 +360,12 @@ export function KanbanBoard({
   const [addLeadStage, setAddLeadStage] = React.useState<
     { id: string; name: string } | null
   >(null);
+
+  // PR-PIPETOOLS: drawer "Configurar funis" — gestao consolidada
+  // (lista funis + criar + editar etapas + excluir). Acessivel via
+  // dropdown "Funil atual" na toolbar OU botao "Configurar funil"
+  // nas acoes rapidas.
+  const [manageFunisOpen, setManageFunisOpen] = React.useState(false);
   const [activeOutcome, setActiveOutcome] =
     React.useState<StageOutcome>("em_andamento");
   const [draggedDealId, setDraggedDealId] = React.useState<string | null>(null);
@@ -1002,36 +1025,38 @@ export function KanbanBoard({
         })}
       </div>
 
-      {/* ====== TOP BAR ====== */}
-      {/* Layout: linha 1 (filtros + busca) | linha 2 (metricas + acoes).
-          Em desktop largo, fica em linha unica via flex-wrap natural.
+      {/* ====== TOPBAR — PR-PIPETOOLS reorganizada em 3 LINHAS ======
+          Linha 1: Funil atual (dropdown rico) + busca
+          Linha 2: Status filtro + métricas (compactas, leitura)
+          Linha 3: Ações rápidas (Metas, Filtros avançados, Export,
+                   Import, Configurar funil) alinhadas à direita
 
-          PR-CRMOPS2: quando em modo controlled (CrmShell controla o
-          pipelineId via biblioteca de funis), esconde o select de funis
-          e mostra botao "← Funis" no inicio. Pra trocar de funil,
-          usuario volta pra biblioteca. */}
-      <div className="flex items-center gap-2.5 flex-wrap">
-        {/* Grupo 1: filtros principais (back/pipeline + status) */}
-        <div className="flex items-center gap-2">
-          {onBack && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-9 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
-              onClick={onBack}
-              title="Voltar para os funis"
-            >
-              <ChevronLeft className="size-4" aria-hidden />
-              <span>Funis</span>
-            </Button>
-          )}
-          {!isControlled && pipelines.length > 1 && (
+          Antes: tudo numa linha só (flex-wrap), elementos misturados.
+          Agora: hierarquia clara — usuário entende qual funil, depois
+          status/métricas, depois ações. Kanban aparece logo após. */}
+
+      {/* ===== Linha 1: Funil atual + busca ===== */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* Dropdown "Funil atual" rico (em modo controlled).
+            Em modo uncontrolled (admin antigo), cai no select tradicional. */}
+        {isControlled ? (
+          <FunilCurrentDropdown
+            currentName={pipelines.find((p) => p.id === selectedPipeline)?.name ?? ""}
+            pipelines={pipelines}
+            selectedId={selectedPipeline}
+            onSelect={(id) => setSelectedPipeline(id)}
+            canCreate={effectiveCanCreateKanban}
+            canManage={effectiveCanEditStages}
+            onCreate={() => setCreateKanbanOpen(true)}
+            onManage={() => setManageFunisOpen(true)}
+          />
+        ) : (
+          pipelines.length > 1 && (
             <Select
               value={selectedPipeline}
               onValueChange={(v) => setSelectedPipeline(v ?? "")}
             >
-              <SelectTrigger className="w-48 h-9 rounded-md">
+              <SelectTrigger className="w-56 h-9 rounded-md">
                 <SelectValue placeholder="Selecione o funil">
                   {pipelines.find((p) => p.id === selectedPipeline)?.name ??
                     "Selecione o funil"}
@@ -1045,41 +1070,11 @@ export function KanbanBoard({
                 ))}
               </SelectContent>
             </Select>
-          )}
-          {isControlled && (
-            <h2 className="text-base font-semibold text-foreground truncate max-w-xs">
-              {pipelines.find((p) => p.id === selectedPipeline)?.name ?? ""}
-            </h2>
-          )}
+          )
+        )}
 
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v ?? "all")}
-          >
-            <SelectTrigger className="w-40 h-9 rounded-md">
-              <SelectValue placeholder="Status">
-                {statusFilter === "all"
-                  ? "Todos"
-                  : statusFilter === "open"
-                    ? "Em andamento"
-                    : statusFilter === "won"
-                      ? "Ganho"
-                      : statusFilter === "lost"
-                        ? "Perdido"
-                        : "Status"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="open">Em andamento</SelectItem>
-              <SelectItem value="won">Ganho</SelectItem>
-              <SelectItem value="lost">Perdido</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Busca — flex-1 pra ocupar espaco disponivel */}
-        <div className="relative flex-1 min-w-[200px] max-w-md">
+        {/* Busca — flex-1 pra ocupar resto do espaço */}
+        <div className="relative flex-1 min-w-[200px] max-w-lg">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           <Input
             value={searchQuery}
@@ -1088,9 +1083,39 @@ export function KanbanBoard({
             className="h-9 pl-9 rounded-md"
           />
         </div>
+      </div>
 
-        {/* Grupo 2: metricas (so leitura, visualmente sutis) */}
-        <div className="flex items-center gap-1.5">
+      {/* ===== Linha 2: Status filtro + métricas compactas ===== */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v ?? "all")}
+        >
+          <SelectTrigger className="w-40 h-8 rounded-md text-xs">
+            <SelectValue placeholder="Status">
+              {statusFilter === "all"
+                ? "Todos"
+                : statusFilter === "open"
+                  ? "Em andamento"
+                  : statusFilter === "won"
+                    ? "Ganho"
+                    : statusFilter === "lost"
+                      ? "Perdido"
+                      : "Status"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="open">Em andamento</SelectItem>
+            <SelectItem value="won">Ganho</SelectItem>
+            <SelectItem value="lost">Perdido</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Separador visual + métricas (faixa compacta, leitura) */}
+        <span className="h-5 w-px bg-border" aria-hidden />
+
+        <div className="flex items-center gap-1.5 flex-wrap">
           <MetricChip icon={<Target className="size-3.5" />}>
             <strong className="font-semibold">{boardMetrics.count}</strong>{" "}
             <span className="text-muted-foreground">negócios</span>
@@ -1113,9 +1138,11 @@ export function KanbanBoard({
             <span className="text-muted-foreground">conv.</span>
           </MetricChip>
         </div>
+      </div>
 
-        {/* Grupo 3: acoes (alinhado a direita) */}
-        <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
+      {/* ===== Linha 3: Ações rápidas (alinhadas à direita) ===== */}
+      <div className="flex items-center justify-end">
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
           <Button
             type="button"
             variant={showGoalsEditor ? "secondary" : "ghost"}
@@ -1155,11 +1182,14 @@ export function KanbanBoard({
               - "+ Criar novo Kanban" (primario): dialog simples (nome).
               - "Editar estrutura" (ghost): Sheet/Drawer 720px com o
                 PipelineStagesEditor pro funil ATIVO. */}
-          {/* PR-CRMOPS2: "Criar novo funil" so renderiza em modo
-              uncontrolled (admin antigo). Em modo controlled, o
-              CrmShell tem esse botao no header da pagina (canto
-              superior direito). "Editar estrutura" continua aqui
-              porque e operacao do funil ATIVO. */}
+          {/* PR-PIPETOOLS:
+              - "+ Criar novo funil" renderiza so em modo uncontrolled
+                (admin antigo). Em modo controlled, esta no dropdown
+                "Funil atual" + header do CrmShell.
+              - Botao "Configurar funil" (era "Editar estrutura")
+                abre o ManageFunisDrawer (gestao consolidada). O
+                modal antigo (so etapas do funil ativo) agora e
+                acessado de DENTRO do drawer, em "Editar". */}
           {(effectiveCanCreateKanban || effectiveCanEditStages) && (
             <>
               <span className="h-5 w-px bg-border" aria-hidden />
@@ -1176,17 +1206,27 @@ export function KanbanBoard({
                   <span>Criar novo funil</span>
                 </Button>
               )}
-              {effectiveCanEditStages && selectedPipeline && (
+              {effectiveCanEditStages && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   className="h-8 rounded-md px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
-                  onClick={() => setEditStructureOpen(true)}
-                  title="Editar estrutura do funil (etapas, cores, regras)"
+                  onClick={() => {
+                    if (isControlled) {
+                      // Modo CRM: abre drawer de gestao (lista funis +
+                      // criar + editar etapas + excluir).
+                      setManageFunisOpen(true);
+                    } else {
+                      // Modo admin antigo: abre direto editor de etapas
+                      // do funil ativo (compat).
+                      setEditStructureOpen(true);
+                    }
+                  }}
+                  title="Configurar funil (etapas, cores, regras)"
                 >
                   <Settings2 className="size-3.5" aria-hidden />
-                  <span>Editar estrutura</span>
+                  <span>Configurar funil</span>
                 </Button>
               )}
             </>
@@ -1650,7 +1690,25 @@ export function KanbanBoard({
           }}
         />
       )}
-      {effectiveCanEditStages && selectedPipeline && (
+      {/* PR-PIPETOOLS: drawer "Configurar funis" — gestao consolidada
+          (lista + criar + editar + excluir). Acessivel via botao
+          "Configurar funil" na toolbar OU via dropdown "Funil atual"
+          → "Configurar funis...". So renderiza em modo controlled. */}
+      {isControlled && effectiveCanEditStages && (
+        <ManageFunisDrawer
+          open={manageFunisOpen}
+          onOpenChange={setManageFunisOpen}
+          pipelines={pipelines}
+          stages={initialStages}
+          onSelectPipeline={(id) => setSelectedPipeline(id)}
+          onChange={onChange}
+        />
+      )}
+      {/* PR-CRMOPS2: editor de etapas do funil ativo — modo
+          uncontrolled (admin antigo) abre direto. Em modo CRM
+          controlled, o ManageFunisDrawer abre esse modal por baixo
+          quando user clica "Editar" num funil da lista. */}
+      {!isControlled && effectiveCanEditStages && selectedPipeline && (
         <EditKanbanStructureDrawer
           open={editStructureOpen}
           onOpenChange={setEditStructureOpen}
@@ -2079,6 +2137,94 @@ const DealCard = React.memo(function DealCardImpl({
     </>
   );
 });
+
+// ============ FUNIL CURRENT DROPDOWN (PR-PIPETOOLS) ============
+//
+// Dropdown rico que substitui o botao "← Funis" + nome estatico
+// antigos. Mostra o funil ativo + lista pra trocar + acoes "+ Criar
+// novo funil" e "Configurar funis...".
+//
+// Uso: so em modo controlled (CrmShell controla pipelineId).
+
+function FunilCurrentDropdown({
+  currentName,
+  pipelines,
+  selectedId,
+  onSelect,
+  canCreate,
+  canManage,
+  onCreate,
+  onManage,
+}: {
+  currentName: string;
+  pipelines: Pipeline[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  canCreate: boolean;
+  canManage: boolean;
+  onCreate: () => void;
+  onManage: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-md gap-2 max-w-xs"
+            title="Trocar de funil ou gerenciar"
+          >
+            <span className="text-xs text-muted-foreground shrink-0">
+              Funil atual:
+            </span>
+            <span className="font-semibold text-foreground truncate">
+              {currentName || "—"}
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="start" className="min-w-[240px]">
+        {pipelines.length > 1 && (
+          <>
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Trocar de funil
+            </DropdownMenuLabel>
+            {pipelines.map((p) => (
+              <DropdownMenuItem
+                key={p.id}
+                onClick={() => onSelect(p.id)}
+                className={p.id === selectedId ? "bg-primary/5 text-primary font-medium" : ""}
+              >
+                {p.name}
+                {p.id === selectedId && (
+                  <span className="ml-auto text-[10px] text-muted-foreground">
+                    atual
+                  </span>
+                )}
+              </DropdownMenuItem>
+            ))}
+            {(canCreate || canManage) && <DropdownMenuSeparator />}
+          </>
+        )}
+        {canCreate && (
+          <DropdownMenuItem onClick={onCreate}>
+            <Plus className="size-3.5" aria-hidden />
+            Criar novo funil
+          </DropdownMenuItem>
+        )}
+        {canManage && (
+          <DropdownMenuItem onClick={onManage}>
+            <Settings2 className="size-3.5" aria-hidden />
+            Configurar funis...
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 // ============ METRIC CHIP (PR-D) ============
 //
