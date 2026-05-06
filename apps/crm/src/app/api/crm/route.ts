@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { moveDealToStage } from "@/lib/crm/move-deal";
+import { phoneBROptional, leadUpdateSchema } from "@persia/shared/validation";
 
 /**
  * CRM API - Used by n8n AI Agent to control the CRM pipeline
@@ -46,17 +47,26 @@ export async function POST(request: NextRequest) {
     let resolvedOrgId = orgId;
 
     if (!resolvedLeadId && phone) {
-      const cleanPhone = String(phone).replace(/\D/g, "");
-      const { data: lead } = await supabase
-        .from("leads")
-        .select("id, organization_id")
-        .eq("phone", cleanPhone)
-        .limit(1)
-        .single();
+      // PR-A LEADFIX: normaliza phone via Zod (E.164) antes de
+      // lookup. Resolve duplicidade entre formatos diferentes
+      // (ex: "11987654321" vs "+5511987654321"). Se phone vier
+      // malformado, phoneBROptional retorna undefined e o lookup
+      // simplesmente falha — n8n recebe lead not found.
+      const phoneResult = phoneBROptional.safeParse(phone);
+      const normalizedPhone = phoneResult.success ? phoneResult.data : undefined;
 
-      if (lead) {
-        resolvedLeadId = lead.id;
-        if (!resolvedOrgId) resolvedOrgId = lead.organization_id;
+      if (normalizedPhone) {
+        const { data: lead } = await supabase
+          .from("leads")
+          .select("id, organization_id")
+          .eq("phone", normalizedPhone)
+          .limit(1)
+          .single();
+
+        if (lead) {
+          resolvedLeadId = lead.id;
+          if (!resolvedOrgId) resolvedOrgId = lead.organization_id;
+        }
       }
     }
 
@@ -269,10 +279,26 @@ export async function POST(request: NextRequest) {
 
       // ============ UPDATE LEAD ============
       case "update_lead": {
-        const { name, email, status, score } = body;
+        // PR-A LEADFIX: payload validado via Zod centralizado.
+        // Garante phone E.164, email RFC, score 0-100 etc.
+        const parsed = leadUpdateSchema.safeParse(body);
+        if (!parsed.success) {
+          return NextResponse.json(
+            {
+              error: "Payload inválido",
+              issues: parsed.error.issues.map((i) => ({
+                field: i.path.join("."),
+                message: i.message,
+              })),
+            },
+            { status: 400 },
+          );
+        }
+        const { name, email, phone, status, score } = parsed.data;
         const updates: Record<string, unknown> = {};
         if (name) updates.name = name;
         if (email) updates.email = email;
+        if (phone) updates.phone = phone;
         if (status) updates.status = status;
         if (score !== undefined) updates.score = score;
         updates.updated_at = new Date().toISOString();

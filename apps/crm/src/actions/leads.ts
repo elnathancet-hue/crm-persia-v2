@@ -11,11 +11,9 @@ import type {
 } from "@persia/shared/crm";
 import {
   addTagToLead as addTagToLeadShared,
-  createDeal as createDealShared,
   createLead as createLeadShared,
   deleteLead as deleteLeadShared,
   fetchLead,
-  getDefaultPipelineStage,
   listLeads,
   listOrgActivities,
   listTags,
@@ -23,6 +21,7 @@ import {
   updateLead as updateLeadShared,
   type ListOrgActivitiesOptions,
 } from "@persia/shared/crm";
+import { phoneBROptional, emailOptional } from "@persia/shared/validation";
 
 // Re-exporta tipos canônicos. Fonte da verdade: @persia/shared/crm.
 export type { LeadActivity, LeadDetail, LeadFilters, LeadWithTags };
@@ -86,64 +85,44 @@ function fdField(formData: FormData, key: string): string | null | undefined {
 /**
  * Cria um lead.
  *
- * PR-CRMOPS4: tambem cria um DEAL automatico vinculado ao lead, no
- * primeiro pipeline + primeira stage "em_andamento" da org. Garante
- * que o lead aparece no Kanban (Pipeline) imediatamente. Antes desse
- * fix, leads criados pela tab "Leads" ficavam orfaos — visiveis em
- * /crm?tab=leads mas invisiveis no /crm?tab=pipeline.
+ * PR-A LEADFIX: o auto-deal (que vivia aqui em PR-CRMOPS4) virou
+ * trigger de DB (`lead_auto_deal` em migration 035). A garantia
+ * "todo lead tem deal no Kanban" agora e invariante de banco —
+ * vale pra qualquer caminho de criacao (action, webhook, n8n,
+ * booking publico, importacao CSV, futuras integracoes).
  *
- * Se a org nao tem pipeline OU nao tem stage em_andamento (config
- * quebrada), cria so o lead e loga warning. Idempotency do upsert do
- * createLeadShared (por phone) eh preservada — se lead ja existe,
- * NAO cria deal duplicado.
+ * Aqui ficou apenas: requireRole + createLeadShared (UPSERT por
+ * phone) + revalidatePath. O trigger faz o resto.
  */
 export async function createLead(formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
   const ctx = { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) };
 
+  // PR-A LEADFIX: normaliza phone (E.164) e email (lowercase trim)
+  // ANTES do createLeadShared. Isso garante que o lookup de
+  // duplicidade por phone funciona corretamente — sem isso, lead
+  // criado pelo webhook UAZAPI ("+5511987654321") nao casa com lead
+  // do form ("(11) 98765-4321") e vira duplicado.
+  const rawPhone = fdField(formData, "phone");
+  const rawEmail = fdField(formData, "email");
+
+  const phoneResult = phoneBROptional.safeParse(rawPhone ?? undefined);
+  if (!phoneResult.success) {
+    throw new Error(phoneResult.error.issues[0]?.message ?? "Telefone inválido");
+  }
+  const emailResult = emailOptional.safeParse(rawEmail ?? undefined);
+  if (!emailResult.success) {
+    throw new Error("Email inválido");
+  }
+
   const lead = await createLeadShared(ctx, {
     name: fdField(formData, "name"),
-    phone: fdField(formData, "phone"),
-    email: fdField(formData, "email"),
+    phone: phoneResult.data ?? null,
+    email: emailResult.data ?? null,
     source: (fdField(formData, "source") as string) || undefined,
     status: (fdField(formData, "status") as string) || undefined,
     channel: (fdField(formData, "channel") as string) || undefined,
   });
-
-  // PR-CRMOPS4: cria deal automatico se o lead nao tem deal ainda.
-  // `createLeadShared` faz UPSERT por phone — se phone ja existia,
-  // retorna o lead pre-existente (que pode ja ter deals). Pra nao
-  // duplicar, checamos antes de criar.
-  try {
-    const { data: existingDeals } = await supabase
-      .from("deals")
-      .select("id")
-      .eq("organization_id", orgId)
-      .eq("lead_id", lead.id)
-      .limit(1);
-
-    if (!existingDeals || existingDeals.length === 0) {
-      const defaults = await getDefaultPipelineStage(ctx);
-      if (defaults) {
-        await createDealShared(ctx, {
-          pipelineId: defaults.pipelineId,
-          stageId: defaults.stageId,
-          leadId: lead.id,
-          title: (fdField(formData, "name") as string)?.trim() || "Novo lead",
-          value: 0,
-        });
-      } else {
-        console.warn(
-          "[createLead] Sem default pipeline/stage — lead criado sem deal:",
-          lead.id,
-        );
-      }
-    }
-  } catch (err) {
-    // Erro na criacao do deal NAO falha o lead — loga e segue.
-    // O usuario sempre pode adicionar manualmente depois.
-    console.error("[createLead] auto-deal falhou:", err);
-  }
 
   revalidatePath("/leads");
   revalidatePath("/crm");

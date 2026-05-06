@@ -166,7 +166,8 @@ describe("leads — every query scopes by caller's organization_id", () => {
     supabase.queue("leads", { data: null, error: null }); // dedup lookup
     supabase.queue("leads", { data: { id: "new" }, error: null }); // insert
 
-    await createLead(formOf({ name: "Ana", phone: "5511" }));
+    // PR-A LEADFIX: phone agora normalizado pra E.164 — usa formato valido
+    await createLead(formOf({ name: "Ana", phone: "11987654321" }));
 
     const inserted = supabase.inserts.leads?.[0] as Record<string, unknown>;
     expect(inserted.organization_id).toBe(ORG_A);
