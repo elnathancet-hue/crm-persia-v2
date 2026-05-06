@@ -8,8 +8,10 @@
 // novo funil" do header poder usar useKanbanActions. CrmClient agora
 // assume estar dentro do provider.
 //
-// PR-CRMOPS2: aceita props `pipelineId` (controlled, vem do CrmShell
-// via biblioteca de funis) + `onBack` (volta pra biblioteca).
+// PR-CRMOPS2: aceita props `pipelineId` (controlled, vem do CrmShell).
+// PR-PIPETOOLS: trocou `onBack` (que voltava pra biblioteca, agora
+// removida) por `onPipelineChange` — KanbanBoard usa pra trocar de
+// funil via dropdown. CrmShell sincroniza com URL.
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -39,10 +41,11 @@ interface Props {
   tags?: TagRef[];
   /** Responsaveis pra filtro 'Atribuido a' (PR-K2). */
   assignees?: { id: string; name: string }[];
-  /** PR-CRMOPS2: funil controlado externamente pelo CrmShell (biblioteca). */
+  /** PR-CRMOPS2: funil controlado externamente pelo CrmShell. */
   pipelineId?: string;
-  /** PR-CRMOPS2: callback "voltar pra biblioteca de funis". */
-  onBack?: () => void;
+  /** PR-PIPETOOLS: callback pra trocar de funil via dropdown da
+   * toolbar. CrmShell sincroniza com URL (?pipeline={id}). */
+  onPipelineChange?: (newPipelineId: string) => void;
 }
 
 export function CrmClient({
@@ -53,7 +56,7 @@ export function CrmClient({
   tags = [],
   assignees = [],
   pipelineId,
-  onBack,
+  onPipelineChange,
 }: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
@@ -91,7 +94,7 @@ export function CrmClient({
         tags={tags}
         assignees={assignees}
         pipelineId={pipelineId}
-        onBack={onBack}
+        onPipelineChange={onPipelineChange}
         toolbarExtras={
           isAgent ? (
             <Button

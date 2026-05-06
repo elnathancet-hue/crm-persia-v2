@@ -49,6 +49,11 @@ export {
 } from "./components/PipelineStagesEditor";
 export { CreateKanbanDialog } from "./components/CreateKanbanDialog";
 export { EditKanbanStructureDrawer } from "./components/EditKanbanStructureDrawer";
+// PR-PIPETOOLS: drawer "Configurar funis" — gestao consolidada de
+// funis (lista + criar + editar + excluir). Substitui a "biblioteca
+// de funis" do PR-CRMOPS2 (cards no meio da tela), que foi removida
+// por roubar foco do Kanban.
+export { ManageFunisDrawer } from "./components/ManageFunisDrawer";
 // PR-CRMOPS2: dialog do "+" das colunas — cria lead vinculado a deal
 // na etapa selecionada (substitui o "Novo negocio" antigo).
 export { CreateLeadFromKanbanDialog } from "./components/CreateLeadFromKanbanDialog";
