@@ -41,10 +41,17 @@
     "./agenda": {
       "types": "./src/agenda/index.ts",
       "default": "./src/agenda/index.ts"
+    },
+    "./validation": {
+      "types": "./src/validation/index.ts",
+      "default": "./src/validation/index.ts"
     }
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "typescript": "^5"

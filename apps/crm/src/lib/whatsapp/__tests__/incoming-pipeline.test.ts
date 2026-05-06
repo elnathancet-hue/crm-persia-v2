@@ -152,10 +152,11 @@ describe("processIncomingMessage", () => {
       "message.received",
       expect.objectContaining({ conversationId: "conv-1", leadId: "lead-1" }),
     );
-    // lead saved with expected shape
+    // lead saved with expected shape — PR-A LEADFIX: phone
+    // normalizado pra E.164 ("5511988880000" -> "+5511988880000")
     expect(supabase.inserts.leads?.[0]).toMatchObject({
       organization_id: "org-1",
-      phone: "5511988880000",
+      phone: "+5511988880000",
       source: "whatsapp",
       status: "new",
     });

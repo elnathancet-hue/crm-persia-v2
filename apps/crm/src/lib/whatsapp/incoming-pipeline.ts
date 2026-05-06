@@ -24,6 +24,7 @@ import { onKeyword, onNewLead } from "@/lib/flows/triggers";
 import { parseSplitConfig, splitMessage } from "@/lib/ai/message-splitter";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import { errorMessage, logError } from "@/lib/observability";
+import { phoneBR } from "@persia/shared/validation";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
@@ -68,12 +69,30 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   }
 
   // 2) Find or create lead
+  //
+  // PR-A LEADFIX: phone normalizado via Zod (E.164) antes de
+  // lookup/insert. Garante que webhook UAZAPI nao gera leads
+  // duplicados por variacao de formato (ex: "11987654321" vs
+  // "+5511987654321"). Tolerante a falha — se phone vier malformado,
+  // skipa a normalizacao e usa o raw (degradacao).
+  let normalizedPhone = msg.phone;
+  try {
+    normalizedPhone = phoneBR.parse(msg.phone);
+  } catch {
+    // Phone invalido vindo do webhook (raro). Loga e segue com raw —
+    // melhor ter lead com phone estranho do que perder a mensagem.
+    logError("incoming_pipeline_phone_normalize_failed", {
+      ...baseLogContext,
+      raw_phone: msg.phone,
+    });
+  }
+
   let isNewLead = false;
   let { data: lead } = await supabase
     .from("leads")
     .select("id")
     .eq("organization_id", orgId)
-    .eq("phone", msg.phone)
+    .eq("phone", normalizedPhone)
     .maybeSingle();
 
   if (!lead) {
@@ -81,8 +100,8 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       .from("leads")
       .insert({
         organization_id: orgId,
-        phone: msg.phone,
-        name: msg.pushName || msg.phone,
+        phone: normalizedPhone,
+        name: msg.pushName || normalizedPhone,
         source: "whatsapp",
         status: "new",
         channel: "whatsapp",
@@ -97,7 +116,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         organization_id: orgId,
         lead_id: lead.id,
         type: "lead_created",
-        description: `Lead criado via WhatsApp (${msg.pushName || msg.phone})`,
+        description: `Lead criado via WhatsApp (${msg.pushName || normalizedPhone})`,
       });
     }
   }
@@ -107,7 +126,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   // 3) New-lead triggers
   if (isNewLead) {
     dispatchWebhook(orgId, "lead.created", {
-      lead: { id: lead.id, phone: msg.phone, name: msg.pushName },
+      lead: { id: lead.id, phone: normalizedPhone, name: msg.pushName },
     });
     try {
       await onNewLead(orgId, lead.id);
@@ -119,39 +138,11 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       });
     }
 
-    // PR-CRMOPS4: cria deal automatico no funil principal pra que o
-    // lead apareca no Kanban. Antes desse fix, lead chegava por
-    // WhatsApp, virava conversa, mas ficava invisivel na aba Pipeline.
-    //
-    // CRITICO: fire-and-forget (sem await) — pipeline UAZAPI NAO pode
-    // esperar por isso. Se a criacao demorar/falhar, o webhook ja
-    // respondeu OK ha tempos. O pior caso degradado e o mesmo de
-    // antes do fix (lead sem card no Kanban — usuario adiciona
-    // manualmente). NUNCA bloqueia mensagem entrando.
-    const leadIdForDeal = lead.id;
-    void (async () => {
-      try {
-        const { getDefaultPipelineStage, createDeal: createDealShared } =
-          await import("@persia/shared/crm");
-        const ctx = { db: supabase, orgId };
-        const defaults = await getDefaultPipelineStage(ctx);
-        if (defaults) {
-          await createDealShared(ctx, {
-            pipelineId: defaults.pipelineId,
-            stageId: defaults.stageId,
-            leadId: leadIdForDeal,
-            title: msg.pushName || msg.phone,
-            value: 0,
-          });
-        }
-      } catch (err: unknown) {
-        logError("incoming_pipeline_auto_deal_failed", {
-          ...baseLogContext,
-          lead_id: leadIdForDeal,
-          error: errorMessage(err),
-        });
-      }
-    })();
+    // PR-A LEADFIX: auto-deal removido daqui. Migration 035 instala
+    // trigger DB `lead_auto_deal` que cria deal pra TODO lead inserido
+    // (qualquer caminho). Defense-in-depth no DB e mais robusta que
+    // fire-and-forget na camada de aplicacao — funciona ate pra
+    // INSERTs feitos via Supabase Studio direto.
   }
 
   // 4) Keyword triggers (before AI)

@@ -99,14 +99,16 @@ describe("createLead", () => {
     // insert returns the new row
     supabase.queue("leads", { data: { id: "new-lead" }, error: null });
 
+    // PR-A LEADFIX: phone normalizado pra E.164. "11987654321" vira
+    // "+5511987654321" antes do INSERT — padroniza dedup multi-canal.
     const data = await createLead(
-      formDataOf({ name: "Ana", phone: "5511", email: "a@b.com" }),
+      formDataOf({ name: "Ana", phone: "11987654321", email: "a@b.com" }),
     );
     expect(data).toEqual({ id: "new-lead" });
     expect(supabase.inserts.leads?.[0]).toMatchObject({
       organization_id: "org-1",
       name: "Ana",
-      phone: "5511",
+      phone: "+5511987654321", // E.164 normalizado
       email: "a@b.com",
       source: "manual", // default
       status: "new", // default
@@ -117,13 +119,13 @@ describe("createLead", () => {
   it("merges into the existing lead when one already matches the phone (dedup)", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
-    // dedup lookup finds a bare webhook-created lead
+    // dedup lookup finds a bare webhook-created lead (phone ja em E.164)
     supabase.queue("leads", {
-      data: { id: "existing-1", name: null, email: null, phone: "5511" },
+      data: { id: "existing-1", name: null, email: null, phone: "+5511987654321" },
       error: null,
     });
 
-    const data = await createLead(formDataOf({ name: "Ana", phone: "5511", email: "a@b.com" }));
+    const data = await createLead(formDataOf({ name: "Ana", phone: "11987654321", email: "a@b.com" }));
 
     // Returns the merged row — keeps existing id
     expect((data as { id: string }).id).toBe("existing-1");

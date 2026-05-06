@@ -19,9 +19,7 @@ import {
   checkSubmitRateLimit,
   getClientIp,
 } from "@/lib/agenda/public-rate-limit";
-
-const PHONE_REGEX = /^\+?[\d\s().-]{8,20}$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { phoneBR, emailOptional } from "@persia/shared/validation";
 
 // Helper: admin client com tipagem solta pra acessar tabelas que ainda
 // nao estao no @/types/database (regeneracao desde migration 031 pendente).
@@ -180,13 +178,23 @@ export async function submitPublicBooking(
     );
   }
 
+  // PR-A LEADFIX: validacao centralizada via Zod. Phone normalizado
+  // pra E.164 (resolve duplicidade entre "11987654321" e
+  // "+5511987654321"). Email opcional mas valida formato se vier.
   const name = input.lead_name?.trim() ?? "";
-  if (name.length < 2) throw new Error("Nome obrigatório");
-  const phone = input.lead_phone?.trim() ?? "";
-  if (!PHONE_REGEX.test(phone)) throw new Error("Telefone inválido");
-  if (input.lead_email && !EMAIL_REGEX.test(input.lead_email.trim())) {
+  if (name.length < 2) throw new Error("Nome obrigatório (mínimo 2 caracteres)");
+
+  const phoneResult = phoneBR.safeParse(input.lead_phone);
+  if (!phoneResult.success) {
+    throw new Error(phoneResult.error.issues[0]?.message ?? "Telefone inválido");
+  }
+  const phone = phoneResult.data;
+
+  const emailResult = emailOptional.safeParse(input.lead_email);
+  if (!emailResult.success) {
     throw new Error("Email inválido");
   }
+  const email = emailResult.data; // string | undefined
 
   const db = looseDb();
 
@@ -236,8 +244,8 @@ export async function submitPublicBooking(
     leadId = existingLead.id as string;
     const patch: Record<string, unknown> = {};
     if (name && !existingLead.name) patch.name = name;
-    if (input.lead_email?.trim() && !existingLead.email) {
-      patch.email = input.lead_email.trim();
+    if (email && !existingLead.email) {
+      patch.email = email;
     }
     if (Object.keys(patch).length > 0) {
       await db
@@ -247,13 +255,17 @@ export async function submitPublicBooking(
         .eq("organization_id", page.organization_id);
     }
   } else {
+    // PR-A LEADFIX: trigger DB `lead_auto_deal` (migration 035) cria
+    // deal automatico no funil padrao quando o lead e inserido aqui.
+    // Booking publico nao precisa mais criar deal manual — invariante
+    // do banco garante que o lead aparece no Kanban imediatamente.
     const { data: newLead, error: leadErr } = await db
       .from("leads")
       .insert({
         organization_id: page.organization_id,
         name,
         phone,
-        email: input.lead_email?.trim() || null,
+        email: email ?? null,
         source: "booking_page",
         status: "new",
         channel: "whatsapp",
