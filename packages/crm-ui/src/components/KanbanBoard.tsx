@@ -1052,9 +1052,18 @@ export function KanbanBoard({
           />
         ) : (
           pipelines.length > 1 && (
+            // PR-HOTFIX-CRMOPS5: defesa contra Base UI error #31
+            // (Select.Root recebe value sem SelectItem matching).
+            // 1. `validPipelines` filtra ids vazios — protege contra
+            //    pipeline "fantasma" vindo do banco
+            // 2. `value || undefined` — se selectedPipeline for "",
+            //    Base UI trata como uncontrolled (sem matching error)
+            // 3. `onValueChange` ignora null/empty (mantem ultimo valor)
             <Select
-              value={selectedPipeline}
-              onValueChange={(v) => setSelectedPipeline(v ?? "")}
+              value={selectedPipeline || undefined}
+              onValueChange={(v) => {
+                if (v) setSelectedPipeline(v);
+              }}
             >
               <SelectTrigger className="w-56 h-9 rounded-md">
                 <SelectValue placeholder="Selecione o funil">
@@ -1063,11 +1072,13 @@ export function KanbanBoard({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {pipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
+                {pipelines
+                  .filter((p) => Boolean(p.id))
+                  .map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           )

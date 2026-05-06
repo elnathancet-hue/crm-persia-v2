@@ -217,7 +217,11 @@ export function CrmShell(props: CrmShellProps) {
               leads={props.pipelineLeads}
               tags={props.tags}
               assignees={props.assignees}
-              pipelineId={selectedPipelineId}
+              // PR-HOTFIX-CRMOPS5: converte null pra undefined.
+              // KanbanBoard espera `string | undefined`, mas o state
+              // local pode ser null. Passar null ativava modo controlled
+              // com value=null e disparava Base UI error #31.
+              pipelineId={selectedPipelineId ?? undefined}
               onPipelineChange={selectFunil}
             />
           )

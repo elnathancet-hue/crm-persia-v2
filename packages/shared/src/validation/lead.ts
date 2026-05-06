@@ -29,9 +29,9 @@ const PHONE_MIN_DIGITS = 10; // 10 = fixo (11 3322-4455), 11 = celular (11 98765
 const PHONE_MAX_DIGITS = 15; // E.164 max teorico
 
 export const phoneBR = z
-  .string({ message: "Telefone obrigatorio" })
+  .string({ message: "Telefone obrigatório" })
   .trim()
-  .min(1, "Telefone obrigatorio")
+  .min(1, "Telefone obrigatório")
   .transform((raw) => {
     const digits = raw.replace(/\D/g, "");
     if (digits.length === 0) return "";
@@ -51,7 +51,7 @@ export const phoneBR = z
       const digits = val.replace(/\D/g, "");
       return digits.length >= PHONE_MIN_DIGITS && digits.length <= PHONE_MAX_DIGITS;
     },
-    { message: "Telefone deve ter entre 10 e 15 digitos" },
+    { message: "Telefone deve ter entre 10 e 15 dígitos" },
   );
 
 /** Phone opcional — undefined/empty pass through, formato valido se preenchido. */
@@ -77,7 +77,7 @@ export const phoneBROptional = z
       const digits = val.replace(/\D/g, "");
       return digits.length >= PHONE_MIN_DIGITS && digits.length <= PHONE_MAX_DIGITS;
     },
-    { message: "Telefone deve ter entre 10 e 15 digitos" },
+    { message: "Telefone deve ter entre 10 e 15 dígitos" },
   );
 
 // ----------------------------------------------------------------
@@ -85,10 +85,10 @@ export const phoneBROptional = z
 // ----------------------------------------------------------------
 
 export const emailSchema = z
-  .string({ message: "Email invalido" })
+  .string({ message: "Email inválido" })
   .trim()
   .toLowerCase()
-  .email("Email invalido");
+  .email("Email inválido");
 
 export const emailOptional = z
   .string()
@@ -98,7 +98,7 @@ export const emailOptional = z
   .transform((v) => (v && v.length > 0 ? v : undefined))
   .refine(
     (v) => v === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
-    { message: "Email invalido" },
+    { message: "Email inválido" },
   );
 
 // ----------------------------------------------------------------
@@ -158,7 +158,7 @@ export const cpfCnpjSchema = z
       if (v.length === 14) return validateCNPJ(v);
       return false;
     },
-    { message: "CPF ou CNPJ invalido" },
+    { message: "CPF ou CNPJ inválido" },
   );
 
 // ----------------------------------------------------------------
@@ -166,10 +166,10 @@ export const cpfCnpjSchema = z
 // ----------------------------------------------------------------
 
 export const leadNameSchema = z
-  .string({ message: "Nome obrigatorio" })
+  .string({ message: "Nome obrigatório" })
   .trim()
-  .min(2, "Nome muito curto (minimo 2 caracteres)")
-  .max(120, "Nome muito longo (maximo 120 caracteres)");
+  .min(2, "Nome muito curto (mínimo 2 caracteres)")
+  .max(120, "Nome muito longo (máximo 120 caracteres)");
 
 export const leadNameOptional = z
   .string()
