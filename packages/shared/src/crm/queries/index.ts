@@ -27,7 +27,12 @@ export {
 
 export { listTags, listTagsWithCount } from "./tags";
 
-export { listPipelines, listStages, listStagesForOrg } from "./pipelines";
+export {
+  listPipelines,
+  listStages,
+  listStagesForOrg,
+  getDefaultPipelineStage,
+} from "./pipelines";
 
 export { listDeals, findLeadOpenDealWithStages } from "./deals";
 

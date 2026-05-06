@@ -1083,6 +1083,17 @@ export function KanbanBoard({
             className="h-9 pl-9 rounded-md"
           />
         </div>
+
+        {/* PR-CRMOPS4: Filtros avançados ao lado da busca (era na linha
+            3 junto de Metas/Export/Import). Filtros sao "zoom no que ja
+            existe", agem junto com a busca — agrupar aqui faz mais
+            sentido mental. */}
+        <AdvancedFiltersPopover
+          value={advancedFilters}
+          onChange={setAdvancedFilters}
+          tags={orgTags}
+          assignees={assignees}
+        />
       </div>
 
       {/* ===== Linha 2: Status filtro + métricas compactas ===== */}
@@ -1157,13 +1168,11 @@ export function KanbanBoard({
 
           <span className="h-5 w-px bg-border" aria-hidden />
 
-          {/* ====== FILTROS AVANCADOS (PR-K2) ====== */}
-          <AdvancedFiltersPopover
-            value={advancedFilters}
-            onChange={setAdvancedFilters}
-            tags={orgTags}
-            assignees={assignees}
-          />
+          {/* PR-CRMOPS4: AdvancedFiltersPopover MOVIDO pra linha 1 da
+              toolbar (ao lado da busca). Filtros sao ato exploratorio
+              (zoom no que tem na tela), nao acao de gestao — fica mais
+              perto do input de busca pra coerencia mental. Aqui na
+              linha 3 sobraram so acoes de gestao do funil. */}
 
           {/* ====== EXPORTAR (PR-K3) ====== */}
           <ExportMenu

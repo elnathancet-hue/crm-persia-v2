@@ -11,9 +11,11 @@ import type {
 } from "@persia/shared/crm";
 import {
   addTagToLead as addTagToLeadShared,
+  createDeal as createDealShared,
   createLead as createLeadShared,
   deleteLead as deleteLeadShared,
   fetchLead,
+  getDefaultPipelineStage,
   listLeads,
   listOrgActivities,
   listTags,
@@ -81,20 +83,70 @@ function fdField(formData: FormData, key: string): string | null | undefined {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * Cria um lead.
+ *
+ * PR-CRMOPS4: tambem cria um DEAL automatico vinculado ao lead, no
+ * primeiro pipeline + primeira stage "em_andamento" da org. Garante
+ * que o lead aparece no Kanban (Pipeline) imediatamente. Antes desse
+ * fix, leads criados pela tab "Leads" ficavam orfaos — visiveis em
+ * /crm?tab=leads mas invisiveis no /crm?tab=pipeline.
+ *
+ * Se a org nao tem pipeline OU nao tem stage em_andamento (config
+ * quebrada), cria so o lead e loga warning. Idempotency do upsert do
+ * createLeadShared (por phone) eh preservada — se lead ja existe,
+ * NAO cria deal duplicado.
+ */
 export async function createLead(formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
-  const lead = await createLeadShared(
-    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
-    {
-      name: fdField(formData, "name"),
-      phone: fdField(formData, "phone"),
-      email: fdField(formData, "email"),
-      source: (fdField(formData, "source") as string) || undefined,
-      status: (fdField(formData, "status") as string) || undefined,
-      channel: (fdField(formData, "channel") as string) || undefined,
-    },
-  );
+  const ctx = { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) };
+
+  const lead = await createLeadShared(ctx, {
+    name: fdField(formData, "name"),
+    phone: fdField(formData, "phone"),
+    email: fdField(formData, "email"),
+    source: (fdField(formData, "source") as string) || undefined,
+    status: (fdField(formData, "status") as string) || undefined,
+    channel: (fdField(formData, "channel") as string) || undefined,
+  });
+
+  // PR-CRMOPS4: cria deal automatico se o lead nao tem deal ainda.
+  // `createLeadShared` faz UPSERT por phone — se phone ja existia,
+  // retorna o lead pre-existente (que pode ja ter deals). Pra nao
+  // duplicar, checamos antes de criar.
+  try {
+    const { data: existingDeals } = await supabase
+      .from("deals")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("lead_id", lead.id)
+      .limit(1);
+
+    if (!existingDeals || existingDeals.length === 0) {
+      const defaults = await getDefaultPipelineStage(ctx);
+      if (defaults) {
+        await createDealShared(ctx, {
+          pipelineId: defaults.pipelineId,
+          stageId: defaults.stageId,
+          leadId: lead.id,
+          title: (fdField(formData, "name") as string)?.trim() || "Novo lead",
+          value: 0,
+        });
+      } else {
+        console.warn(
+          "[createLead] Sem default pipeline/stage — lead criado sem deal:",
+          lead.id,
+        );
+      }
+    }
+  } catch (err) {
+    // Erro na criacao do deal NAO falha o lead — loga e segue.
+    // O usuario sempre pode adicionar manualmente depois.
+    console.error("[createLead] auto-deal falhou:", err);
+  }
+
   revalidatePath("/leads");
+  revalidatePath("/crm");
   return lead;
 }
 
