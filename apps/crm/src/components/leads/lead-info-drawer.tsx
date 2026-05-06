@@ -17,6 +17,9 @@ import {
   Loader2,
   Save,
   ChevronDown,
+  CircleDollarSign,
+  MessageCircle,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
@@ -49,7 +52,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@persia/ui/tabs";
-import { updateLead } from "@/actions/leads";
+import { getLeadStats, updateLead, type LeadStats } from "@/actions/leads";
 import { getLeadOpenDealWithStages, updateDealStage } from "@/actions/crm";
 
 // Buckets pra agrupar stages no Popover do subheader. Espelha o
@@ -157,6 +160,12 @@ export function LeadInfoDrawer({
   const [drawerStages, setDrawerStages] = React.useState<DrawerStage[]>([]);
   const [stageChangePending, setStageChangePending] = React.useState(false);
 
+  // PR-D: stats do lead pros 3 cards do header (Negocios / Conversas /
+  // Atividades). Carregado em paralelo ao deal+stages, sem bloquear o
+  // form. Se a query falhar, cards mostram "—" mas o drawer abre normal.
+  const [stats, setStats] = React.useState<LeadStats | null>(null);
+  const [statsLoading, setStatsLoading] = React.useState(false);
+
   // Re-hidrata o form quando trocar de lead ou reabrir.
   React.useEffect(() => {
     if (open) setForm(leadToFormState(lead));
@@ -182,6 +191,27 @@ export function LeadInfoDrawer({
           setCurrentDeal(null);
           setDrawerStages([]);
         }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, lead.id]);
+
+  // PR-D: busca stats do lead em paralelo (Negocios + Conversas + Activities).
+  // Falha silenciosa — cards mostram "—" se nao conseguir carregar.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setStatsLoading(true);
+    getLeadStats(lead.id)
+      .then((res) => {
+        if (!cancelled) setStats(res);
+      })
+      .catch(() => {
+        if (!cancelled) setStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStatsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -355,6 +385,11 @@ export function LeadInfoDrawer({
             </SheetDescription>
           ) : null}
         </SheetHeader>
+
+        {/* PR-D: header rico — 3 cards de stats (Negocios / Conversas /
+            Atividades). Mostram count + info "de uma olhada" pro agente
+            entender historico do lead sem trocar de tab/pagina. */}
+        <LeadStatsCards stats={stats} loading={statsLoading} />
 
         <Tabs defaultValue="dados" className="flex-1 flex flex-col">
           <TabsList className="mx-5 mt-3 grid grid-cols-3">
@@ -595,4 +630,156 @@ function Field({
       {children}
     </div>
   );
+}
+
+// ============================================================================
+// PR-D: LeadStatsCards — 3 mini cards no header do drawer
+// ----------------------------------------------------------------------------
+// Renderiza count + 1 detalhe contextual por categoria. Cores:
+//   - Negocios: emerald (mesmo do pill de valor no card do Kanban)
+//   - Conversas: blue (consistente com chat)
+//   - Atividades: violet (consistente com timeline)
+//
+// Loading state: mostra skeleton em cada card. Falha (stats=null):
+// mostra "—" — drawer continua funcionando, so perde o sumario.
+
+function LeadStatsCards({
+  stats,
+  loading,
+}: {
+  stats: LeadStats | null;
+  loading: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2 px-5 py-3 bg-muted/30 border-b border-border shrink-0">
+      <StatCard
+        icon={<CircleDollarSign className="size-3.5 text-emerald-600" />}
+        label="Negócios"
+        accentClass="text-emerald-700 dark:text-emerald-400"
+        loading={loading}
+        primary={stats ? String(stats.deals.count) : "—"}
+        detail={
+          stats && stats.deals.count > 0
+            ? `R$ ${formatBRL(stats.deals.total_value)}${
+                stats.deals.latest_status
+                  ? ` · ${humanizeDealStatus(stats.deals.latest_status)}`
+                  : ""
+              }`
+            : stats
+            ? "Nenhum negócio ainda"
+            : ""
+        }
+      />
+      <StatCard
+        icon={<MessageCircle className="size-3.5 text-blue-600" />}
+        label="Conversas"
+        accentClass="text-blue-700 dark:text-blue-400"
+        loading={loading}
+        primary={stats ? String(stats.conversations.count) : "—"}
+        detail={
+          stats && stats.conversations.count > 0
+            ? stats.conversations.last_message_at
+              ? `Última msg: ${formatRelativeShort(
+                  stats.conversations.last_message_at,
+                )}`
+              : "Sem mensagens ainda"
+            : stats
+            ? "Nenhuma conversa"
+            : ""
+        }
+      />
+      <StatCard
+        icon={<ActivityIcon className="size-3.5 text-violet-600" />}
+        label="Atividades"
+        accentClass="text-violet-700 dark:text-violet-400"
+        loading={loading}
+        primary={stats ? String(stats.activities.count) : "—"}
+        detail={
+          stats && stats.activities.count > 0
+            ? truncate(stats.activities.latest_description ?? "", 28)
+            : stats
+            ? "Sem atividades"
+            : ""
+        }
+      />
+    </div>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  primary,
+  detail,
+  accentClass,
+  loading,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  primary: string;
+  detail: string;
+  accentClass: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-card border border-border/60 p-2.5 flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+      </div>
+      {loading ? (
+        <>
+          <div className="h-5 w-8 bg-muted rounded animate-pulse" />
+          <div className="h-3 w-full bg-muted/60 rounded animate-pulse" />
+        </>
+      ) : (
+        <>
+          <div className={`text-lg font-bold tabular-nums ${accentClass}`}>
+            {primary}
+          </div>
+          <div className="text-[11px] text-muted-foreground truncate">
+            {detail}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Helpers locais — formato BR de moeda (sem dependencia nova),
+// "ha X" curto, e truncate seguro pra UTF-8.
+function formatBRL(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatRelativeShort(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d`;
+  const month = Math.floor(day / 30);
+  return `${month}mes`;
+}
+
+function humanizeDealStatus(status: string): string {
+  const map: Record<string, string> = {
+    open: "Aberto",
+    won: "Ganho",
+    lost: "Perdido",
+    archived: "Arquivado",
+  };
+  return map[status] ?? status;
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
 }
