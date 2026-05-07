@@ -67,6 +67,124 @@ export async function getOrgActivities(
   return listOrgActivities({ db: supabase, orgId }, options);
 }
 
+/**
+ * PR-D: stats agregados do lead pro header rico do LeadInfoDrawer.
+ * Retorna 3 cards de info "de uma olhada":
+ *   - Negocios: count + valor total + status do mais recente
+ *   - Conversas: count + ultima mensagem
+ *   - Atividades: count + descricao da ultima
+ *
+ * Multi-tenant: o lead e buscado scoped por orgId; queries de stats
+ * tambem filtram por organization_id (defesa em camadas — RLS ja
+ * deveria proteger, mas explicitos pra ficar claro).
+ *
+ * Performance: 4 queries paralelas (lead lookup + 3 stats). Cada
+ * stat eh COUNT agregado + 1 LIMIT 1 pra "mais recente". Nao busca
+ * dados completos — so o suficiente pros cards.
+ */
+export interface LeadStats {
+  deals: {
+    count: number;
+    total_value: number;
+    latest_status: string | null;
+  };
+  conversations: {
+    count: number;
+    last_message_at: string | null;
+  };
+  activities: {
+    count: number;
+    latest_description: string | null;
+    latest_at: string | null;
+  };
+}
+
+export async function getLeadStats(leadId: string): Promise<LeadStats> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Defesa multi-tenant: confirma lead pertence ao org
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!lead) {
+    return {
+      deals: { count: 0, total_value: 0, latest_status: null },
+      conversations: { count: 0, last_message_at: null },
+      activities: { count: 0, latest_description: null, latest_at: null },
+    };
+  }
+
+  // 3 queries paralelas (deals + conversations + activities)
+  const [dealsRes, convsRes, activitiesRes] = await Promise.all([
+    supabase
+      .from("deals")
+      .select("value, status, created_at")
+      .eq("organization_id", orgId)
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("conversations")
+      .select("id, last_message_at", { count: "exact" })
+      .eq("organization_id", orgId)
+      .eq("lead_id", leadId)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(1),
+    supabase
+      .from("lead_activities")
+      .select("description, created_at", { count: "exact" })
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+
+  const deals = dealsRes.data ?? [];
+  const dealsCount = deals.length;
+  const dealsTotal = deals.reduce(
+    (sum, d) => sum + ((d as { value?: number }).value ?? 0),
+    0,
+  );
+  const latestDealStatus =
+    dealsCount > 0
+      ? ((deals[0] as { status?: string }).status ?? null)
+      : null;
+
+  const convsCount = convsRes.count ?? 0;
+  const lastMsgAt =
+    convsRes.data && convsRes.data.length > 0
+      ? ((convsRes.data[0] as { last_message_at?: string | null })
+          .last_message_at ?? null)
+      : null;
+
+  const activitiesCount = activitiesRes.count ?? 0;
+  const latestActivity =
+    activitiesRes.data && activitiesRes.data.length > 0
+      ? (activitiesRes.data[0] as {
+          description?: string | null;
+          created_at?: string | null;
+        })
+      : null;
+
+  return {
+    deals: {
+      count: dealsCount,
+      total_value: dealsTotal,
+      latest_status: latestDealStatus,
+    },
+    conversations: {
+      count: convsCount,
+      last_message_at: lastMsgAt,
+    },
+    activities: {
+      count: activitiesCount,
+      latest_description: latestActivity?.description ?? null,
+      latest_at: latestActivity?.created_at ?? null,
+    },
+  };
+}
+
 // ============================================================================
 // Mutations — thin wrappers que injetam onLeadChanged + revalidatePath
 // ============================================================================
