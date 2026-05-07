@@ -57,6 +57,103 @@ export async function getOrgTags() {
 }
 
 /**
+ * PR-L5: lookup async pra detectar duplicidade de lead na criacao.
+ *
+ * Usado pelo LeadForm quando agente preenche phone OU email — busca
+ * lead existente na MESMA org com match exato. Se encontra, UI mostra
+ * banner "Lead ja existe: ... [Reutilizar] [Criar mesmo assim]".
+ *
+ * NORMALIZACAO:
+ *   - phone: phoneBROptional.safeParse normaliza pra E.164 antes da query
+ *     (resolve "11987654321" vs "+5511987654321" — mesma fonte de verdade
+ *     do PR-A LEADFIX)
+ *   - email: emailOptional normaliza lowercase + trim
+ *
+ * MATCH:
+ *   - Exato (eq, nao ilike). Parcial vira PR proprio se user pedir.
+ *   - Tenta phone primeiro (mais comum em WhatsApp), depois email.
+ *   - Retorna o PRIMEIRO encontrado (limit 1).
+ *   - null se nenhum match OU se ambos vierem vazios/invalidos.
+ *
+ * MULTI-TENANT:
+ *   - requireRole("agent") + .eq("organization_id", orgId)
+ *   - Privacidade: agente VE leads da propria org (RLS ja garante).
+ *     Banner com nome NAO vaza pra outras orgs.
+ *
+ * RETRO-COMPAT: action nova, nao quebra nada existente.
+ */
+export interface DuplicateMatch {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  /** Em qual canal o match foi feito — pra UI mostrar "phone igual" ou "email igual". */
+  matched_by: "phone" | "email";
+}
+
+export async function findLeadByPhoneOrEmail(
+  phone?: string | null,
+  email?: string | null,
+): Promise<DuplicateMatch | null> {
+  // Early return se ambos vazios — nao gasta query
+  const phoneTrimmed = (phone ?? "").trim();
+  const emailTrimmed = (email ?? "").trim();
+  if (!phoneTrimmed && !emailTrimmed) return null;
+
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Tenta PHONE primeiro (mais discriminante em CRM WhatsApp-first)
+  if (phoneTrimmed) {
+    const phoneResult = phoneBROptional.safeParse(phoneTrimmed);
+    const normalizedPhone = phoneResult.success ? phoneResult.data : undefined;
+    if (normalizedPhone) {
+      const { data } = await supabase
+        .from("leads")
+        .select("id, name, phone, email")
+        .eq("organization_id", orgId)
+        .eq("phone", normalizedPhone)
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        return {
+          id: data.id as string,
+          name: (data.name as string | null) ?? null,
+          phone: (data.phone as string | null) ?? null,
+          email: (data.email as string | null) ?? null,
+          matched_by: "phone",
+        };
+      }
+    }
+  }
+
+  // Fallback: tenta EMAIL
+  if (emailTrimmed) {
+    const emailResult = emailOptional.safeParse(emailTrimmed);
+    const normalizedEmail = emailResult.success ? emailResult.data : undefined;
+    if (normalizedEmail) {
+      const { data } = await supabase
+        .from("leads")
+        .select("id, name, phone, email")
+        .eq("organization_id", orgId)
+        .eq("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle();
+      if (data) {
+        return {
+          id: data.id as string,
+          name: (data.name as string | null) ?? null,
+          phone: (data.phone as string | null) ?? null,
+          email: (data.email as string | null) ?? null,
+          matched_by: "email",
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * PR-K7: timeline global de activities da org pra tab "Atividades"
  * do CRM. Aceita filtros por tipo + lead + paginacao.
  */

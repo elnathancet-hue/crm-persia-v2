@@ -5,7 +5,12 @@
 // O admin faz o equivalente em apps/admin com requireSuperadminForOrg.
 
 import type { LeadsActions, OrgTag } from "@persia/leads-ui";
-import { createLead, getLeads, getOrgTags } from "@/actions/leads";
+import {
+  createLead,
+  findLeadByPhoneOrEmail,
+  getLeads,
+  getOrgTags,
+} from "@/actions/leads";
 
 export const crmLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -25,4 +30,7 @@ export const crmLeadsActions: LeadsActions = {
     const tags = await getOrgTags();
     return tags as OrgTag[];
   },
+  // PR-L5: lookup de duplicidade. Multi-tenant ja vem do
+  // requireRole("agent") da action (orgId scoping).
+  findDuplicate: (phone, email) => findLeadByPhoneOrEmail(phone, email),
 };

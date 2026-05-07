@@ -1186,6 +1186,19 @@ export function LeadsList({
               onSubmit={handleCreate}
               onCancel={() => setIsCreateOpen(false)}
               submitLabel="Criar lead"
+              // PR-L5: ao detectar duplicidade, fecha o form e abre
+              // o drawer do lead existente. Tenta encontrar em
+              // `leads` (state local — pagina atual). Se nao achar
+              // (lead em outra pagina/filtro), apenas fecha o form
+              // — caller pode wireia `onOpenLeadById` no futuro pra
+              // ir buscar.
+              onDuplicateFound={(match) => {
+                setIsCreateOpen(false);
+                const existing = leads.find((l) => l.id === match.id);
+                if (existing && onRowClick) {
+                  onRowClick(existing);
+                }
+              }}
             />
           </div>
         </DialogContent>
