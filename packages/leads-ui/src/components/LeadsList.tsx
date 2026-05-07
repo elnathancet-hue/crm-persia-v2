@@ -55,6 +55,12 @@ import {
   Eye,
   Pencil,
   Trash2,
+  Briefcase,
+  MessageCircle,
+  CalendarPlus,
+  ChevronDown,
+  Check,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import type { LeadWithTags } from "@persia/shared/crm";
 
@@ -94,6 +100,42 @@ function getContrastTextColor(hex: string | null | undefined): string {
   return luminance > 0.6 ? "#1A1A1A" : "#FFFFFF";
 }
 
+// PR-L3: helpers locais pra render das colunas enriquecidas
+function formatBRL(value: number): string {
+  return value.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function truncateText(s: string | null, max: number): string {
+  if (!s) return "—";
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1) + "…";
+}
+
+/**
+ * PR-L3: stats enriquecidas por linha.
+ * Shape espelha LeadListItemStats em apps/crm/src/actions/leads.ts.
+ * Definido aqui pra evitar dependencia cruzada (packages/leads-ui
+ * nao importa de apps/crm — regra de monorepo).
+ */
+export interface LeadListItemStatsShape {
+  deals: {
+    open_count: number;
+    open_total_value: number;
+    latest_open_stage: { id: string; name: string; color: string } | null;
+  };
+  activities: {
+    count: number;
+    latest_description: string | null;
+  };
+  conversations: {
+    count: number;
+    last_message_at: string | null;
+  };
+}
+
 export interface LeadsListProps {
   initialLeads: LeadWithTags[];
   initialTotal: number;
@@ -110,6 +152,26 @@ export interface LeadsListProps {
   /** Slots opcionais no header (ex: botao Importar, Exportar). Renderizam
    *  ANTES do botao "Novo Lead". Cada app decide o que injetar. */
   headerActions?: React.ReactNode;
+  /**
+   * PR-L3: stats enriquecidas pra colunas extras (Negocios/Etapa/
+   * Atividades). Map<leadId, stats>. Opcional — se nao vier, colunas
+   * extras nao renderizam (degrada graciosamente, admin compat).
+   */
+  initialStats?: Map<string, LeadListItemStatsShape>;
+  /**
+   * PR-L3: lista de membros pra dropdown "Atribuir responsavel"
+   * inline. Vazio = coluna Responsavel renderiza read-only (so nome
+   * do assignee atual).
+   */
+  assignees?: { id: string; name: string }[];
+  /** PR-L3: callback de atribuir lead via dropdown inline. */
+  onAssignLead?: (leadId: string, userId: string | null) => Promise<void>;
+  /** PR-L3: callback "+ Negocio" no menu ⋯ */
+  onCreateDeal?: (lead: LeadWithTags) => void;
+  /** PR-L3: callback "Abrir conversa" no menu ⋯ */
+  onOpenConversation?: (lead: LeadWithTags) => void;
+  /** PR-L3: callback "Agendar" no menu ⋯ */
+  onScheduleAppointment?: (lead: LeadWithTags) => void;
 }
 
 export function LeadsList({
@@ -122,6 +184,12 @@ export function LeadsList({
   onEditLead,
   onDeleteLead,
   headerActions,
+  initialStats,
+  assignees = [],
+  onAssignLead,
+  onCreateDeal,
+  onOpenConversation,
+  onScheduleAppointment,
 }: LeadsListProps) {
   const actions = useLeadsActions();
   const [leads, setLeads] = React.useState(initialLeads);
@@ -386,6 +454,177 @@ export function LeadsList({
         </span>
       ),
     },
+    // ==================== PR-L3: 4 colunas enriquecidas ====================
+    // Renderizam quando initialStats existe; degradam graciosamente quando
+    // nao (admin compat). Ocultas em mobile (md:table-cell) pra nao poluir.
+    ...(initialStats
+      ? ([
+          {
+            key: "responsavel",
+            header: "Responsável",
+            className: "hidden lg:table-cell",
+            render: (row: LeadWithTags) => {
+              // PR-L3: dropdown inline pra atribuir. Reusa pattern do PR-C card.
+              const currentAssigneeId = row.assigned_to ?? null;
+              const currentAssignee =
+                currentAssigneeId
+                  ? assignees.find((a) => a.id === currentAssigneeId)
+                  : null;
+              const canAssign =
+                canEdit && !!onAssignLead && assignees.length > 0;
+
+              if (!canAssign) {
+                return (
+                  <span className="text-xs text-muted-foreground">
+                    {currentAssignee?.name || "—"}
+                  </span>
+                );
+              }
+
+              return (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted text-foreground"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    }
+                  >
+                    <span
+                      className={
+                        currentAssignee
+                          ? "text-foreground"
+                          : "text-muted-foreground/70"
+                      }
+                    >
+                      {currentAssignee?.name || "Sem responsável"}
+                    </span>
+                    <ChevronDown
+                      className="size-3 shrink-0 opacity-60"
+                      aria-hidden
+                    />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-56"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {assignees.map((m) => (
+                      <DropdownMenuItem
+                        key={m.id}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!onAssignLead) return;
+                          await onAssignLead(row.id, m.id);
+                        }}
+                      >
+                        {m.name}
+                        {currentAssigneeId === m.id && (
+                          <Check className="ml-auto size-3.5" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                    {currentAssigneeId && (
+                      <DropdownMenuItem
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!onAssignLead) return;
+                          await onAssignLead(row.id, null);
+                        }}
+                        className="text-muted-foreground"
+                      >
+                        Sem responsável
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              );
+            },
+          },
+          {
+            key: "negocios",
+            header: "Negócios",
+            className: "hidden md:table-cell",
+            render: (row: LeadWithTags) => {
+              const stats = initialStats.get(row.id);
+              if (!stats || stats.deals.open_count === 0) {
+                return <span className="text-xs text-muted-foreground/60">—</span>;
+              }
+              return (
+                <div className="flex flex-col gap-0.5">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground tabular-nums">
+                    <Briefcase className="size-3 text-muted-foreground" />
+                    {stats.deals.open_count}
+                  </span>
+                  {stats.deals.open_total_value > 0 && (
+                    <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      R$ {formatBRL(stats.deals.open_total_value)}
+                    </span>
+                  )}
+                </div>
+              );
+            },
+          },
+          {
+            key: "etapa",
+            header: "Etapa atual",
+            className: "hidden xl:table-cell",
+            render: (row: LeadWithTags) => {
+              const stats = initialStats.get(row.id);
+              const stage = stats?.deals.latest_open_stage;
+              if (!stage) {
+                return <span className="text-xs text-muted-foreground/60">—</span>;
+              }
+              return (
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
+                  style={{
+                    backgroundColor: `${stage.color}20`,
+                    color: stage.color,
+                  }}
+                  title={`Etapa do negócio aberto mais recente: ${stage.name}`}
+                >
+                  <span
+                    className="inline-block size-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: stage.color }}
+                    aria-hidden
+                  />
+                  {stage.name}
+                </span>
+              );
+            },
+          },
+          {
+            key: "atividades",
+            header: "Atividades",
+            className: "hidden xl:table-cell",
+            render: (row: LeadWithTags) => {
+              const stats = initialStats.get(row.id);
+              if (!stats || stats.activities.count === 0) {
+                return <span className="text-xs text-muted-foreground/60">—</span>;
+              }
+              return (
+                <div className="flex flex-col gap-0.5 max-w-[180px]">
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground tabular-nums">
+                    <ActivityIcon className="size-3 text-violet-600" />
+                    {stats.activities.count}
+                  </span>
+                  {stats.activities.latest_description && (
+                    <span
+                      className="text-[10px] text-muted-foreground truncate"
+                      title={stats.activities.latest_description}
+                    >
+                      {truncateText(stats.activities.latest_description, 32)}
+                    </span>
+                  )}
+                </div>
+              );
+            },
+          },
+        ] as ColumnDef<LeadWithTags>[])
+      : []),
     {
       key: "actions",
       header: "",
@@ -415,6 +654,40 @@ export function LeadsList({
               >
                 <Eye className="size-4" />
                 Ver detalhes
+              </DropdownMenuItem>
+            )}
+            {/* PR-L3: 3 CTAs novos por linha — operacionais (atendimento) */}
+            {canEdit && onCreateDeal && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateDeal(row);
+                }}
+              >
+                <Briefcase className="size-4" />
+                Novo negócio
+              </DropdownMenuItem>
+            )}
+            {canEdit && onOpenConversation && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenConversation(row);
+                }}
+              >
+                <MessageCircle className="size-4" />
+                Abrir conversa
+              </DropdownMenuItem>
+            )}
+            {canEdit && onScheduleAppointment && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onScheduleAppointment(row);
+                }}
+              >
+                <CalendarPlus className="size-4" />
+                Agendar
               </DropdownMenuItem>
             )}
             {canEdit && handleEdit && (

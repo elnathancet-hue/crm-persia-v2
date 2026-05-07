@@ -23,13 +23,22 @@ import { useRole } from "@/lib/hooks/use-role";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
 import { importLeads } from "@/actions/leads-import";
-import { getOrgTags } from "@/actions/leads";
+import {
+  assignLead,
+  getOrgTags,
+  type LeadListItemStats,
+} from "@/actions/leads";
+import { findOrCreateConversationByLead } from "@/actions/conversations";
 
 interface Props {
   initialLeads: LeadWithTags[];
   initialTotal: number;
   initialPage: number;
   initialTotalPages: number;
+  /** PR-L3: stats enriquecidas pra colunas extras. Map<leadId, stats>. */
+  initialStats?: Map<string, LeadListItemStats>;
+  /** PR-L3: lista de membros pra dropdown "Atribuir responsavel" inline. */
+  assignees?: { id: string; name: string }[];
   /**
    * PR-CRMOPS3: quando setado, mostra hint visual no topo da lista
    * indicando que o resultado esta filtrado pelo segmento. Botao
@@ -139,10 +148,35 @@ export function LeadList(props: Props) {
           initialTotal={props.initialTotal}
           initialPage={props.initialPage}
           initialTotalPages={props.initialTotalPages}
+          // PR-L3: props enriquecidas
+          initialStats={props.initialStats}
+          assignees={props.assignees ?? []}
           canEdit={isAgent}
           onRowClick={(lead) => setInfoDrawerLead(lead)}
           onEditLead={(lead) => router.push(`/leads/${lead.id}`)}
           onDeleteLead={(lead) => router.push(`/leads/${lead.id}`)}
+          // PR-L3: CTAs inline por linha (menu ⋯ extendido)
+          onAssignLead={async (leadId, userId) => {
+            await assignLead(leadId, userId);
+            router.refresh();
+          }}
+          onCreateDeal={(lead) => {
+            // Navega pro Kanban no funil padrao (deal sera criado lá)
+            router.push(`/crm?leadId=${lead.id}`);
+          }}
+          onOpenConversation={async (lead) => {
+            try {
+              const { conversationId } = await findOrCreateConversationByLead(
+                lead.id,
+              );
+              router.push(`/chat?id=${conversationId}`);
+            } catch (err) {
+              console.error("[LeadList] open conversation failed:", err);
+            }
+          }}
+          onScheduleAppointment={(lead) => {
+            router.push(`/agenda?leadId=${lead.id}`);
+          }}
           headerActions={
             <>
               <ExportMenu
