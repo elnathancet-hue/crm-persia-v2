@@ -20,6 +20,8 @@ import type { LeadWithTags } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import { Filter, Upload, X } from "lucide-react";
 import { useRole } from "@/lib/hooks/use-role";
+import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
+import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
 import { importLeads } from "@/actions/leads-import";
@@ -52,6 +54,15 @@ interface Props {
 export function LeadList(props: Props) {
   const router = useRouter();
   const { isAgent } = useRole();
+  const orgId = useCurrentOrgId();
+
+  // PR-O Realtime: outro agente criou/editou/deletou lead nesta org.
+  // router.refresh() reroda o server component que repopula a lista
+  // com os filtros/paginacao atuais. RLS de leads + filtro
+  // organization_id no canal sao defesa em camada.
+  useLeadsRealtime(orgId, () => router.refresh());
+
+
   // Drawer "Informacoes do lead" — CRM-specific (Fase 2, abre na linha
   // sem navegar). Mantido aqui (nao no pacote) porque o admin nao tem
   // essa feature ainda.

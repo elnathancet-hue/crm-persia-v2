@@ -79,6 +79,7 @@ import {
   updateLeadComment,
   type LeadComment,
 } from "@/actions/lead-comments";
+import { useLeadCommentsRealtime } from "@/lib/realtime/use-lead-comments-realtime";
 import { Switch } from "@persia/ui/switch";
 import {
   DropdownMenu,
@@ -1368,6 +1369,14 @@ function LeadComentariosTab({
       cancelled = true;
     };
   }, [open, reload]);
+
+  // PR-O Realtime: outro agente comentou/editou/deletou neste lead.
+  // Estrategia simples e segura: refetch completo. Lista e curta
+  // (geralmente <50 comentarios por lead) e elimina dedupe vs
+  // optimistic updates (a refetch sempre reflete verdade do servidor).
+  useLeadCommentsRealtime(open ? leadId : null, () => {
+    void reload();
+  });
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
