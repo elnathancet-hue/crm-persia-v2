@@ -35,7 +35,8 @@ const SHIPPED_PRS = new Set<NativeToolPreset["shipped_in_pr"]>(["PR1", "PR3", "P
 // tipico de uso: comunicacao primeiro, atribuicao depois, midia/auxiliares
 // no fim.
 const CATEGORY_ORDER: ReadonlyArray<{ id: ToolCategory; label: string }> = [
-  { id: "kanban", label: "CRM (Kanban)" },
+  // PR-H: terminologia user-facing — "Funil" no lugar de "Kanban"
+  { id: "kanban", label: "CRM (Funil)" },
   { id: "transfer", label: "Transferência" },
   { id: "handoff", label: "Encerramento" },
   { id: "tag", label: "Tags" },

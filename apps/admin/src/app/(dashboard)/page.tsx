@@ -100,8 +100,9 @@ function ClientDashboard({ orgId, orgName }: { orgId: string; orgName: string })
   const kpis = [
     { label: "Leads", value: stats?.totalLeads ?? 0, icon: Users, color: "text-blue-500 bg-blue-500/10" },
     { label: "Conversas", value: stats?.totalConversations ?? 0, icon: MessageSquare, color: "text-green-500 bg-green-500/10" },
-    { label: "Pipeline", value: stats?.pipelineCount ?? 0, icon: Kanban, color: "text-purple-500 bg-purple-500/10" },
-    { label: "Automacoes", value: stats?.automationCount ?? 0, icon: Zap, color: "text-amber-500 bg-amber-500/10" },
+    // PR-H: terminologia "Funis" (plural pq e count) em vez de "Pipeline"
+    { label: "Funis", value: stats?.pipelineCount ?? 0, icon: Kanban, color: "text-purple-500 bg-purple-500/10" },
+    { label: "Automações", value: stats?.automationCount ?? 0, icon: Zap, color: "text-amber-500 bg-amber-500/10" },
   ];
 
   return (

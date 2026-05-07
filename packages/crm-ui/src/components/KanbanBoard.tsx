@@ -1740,7 +1740,8 @@ export function KanbanBoard({
           onOpenChange={setEditStructureOpen}
           pipelineId={selectedPipeline}
           pipelineName={
-            pipelines.find((p) => p.id === selectedPipeline)?.name ?? "Kanban"
+            // PR-H: fallback "Funil" em vez de "Kanban" — termo user-facing
+            pipelines.find((p) => p.id === selectedPipeline)?.name ?? "Funil"
           }
           stages={initialStages.filter((s) => s.pipeline_id === selectedPipeline)}
           canDeleteKanban={pipelines.length > 1}
