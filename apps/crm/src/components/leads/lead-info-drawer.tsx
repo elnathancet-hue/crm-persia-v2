@@ -20,6 +20,8 @@ import {
   CircleDollarSign,
   MessageCircle,
   Activity as ActivityIcon,
+  Briefcase,
+  ExternalLink,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
@@ -52,7 +54,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@persia/ui/tabs";
-import { getLeadStats, updateLead, type LeadStats } from "@/actions/leads";
+import {
+  getLeadDealsList,
+  getLeadStats,
+  updateLead,
+  type LeadDealItem,
+  type LeadStats,
+} from "@/actions/leads";
 import { getLeadOpenDealWithStages, updateDealStage } from "@/actions/crm";
 import {
   getLeadCustomFields,
@@ -399,10 +407,18 @@ export function LeadInfoDrawer({
         <LeadStatsCards stats={stats} loading={statsLoading} />
 
         <Tabs defaultValue="dados" className="flex-1 flex flex-col">
-          <TabsList className="mx-5 mt-3 grid grid-cols-3">
+          {/* PR-L2: 4 tabs (era 3). Tab "Negócios" lista deals do lead
+              — modelo conceitual "1 lead -> N negocios" (briefing user).
+              Mobile: 2 cols (2 linhas); Desktop: 4 cols (1 linha). */}
+          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="dados">
               <Contact className="size-4" />
               Dados
+            </TabsTrigger>
+            {/* PR-L2: tab "Negócios" — modelo "1 lead -> N negocios" */}
+            <TabsTrigger value="negocios">
+              <Briefcase className="size-4" />
+              Negócios
             </TabsTrigger>
             {/* PR-E: tab "Produtos" virou "Campos" — renderizacao
                 dinamica dos custom_fields da org. Quando user
@@ -580,6 +596,10 @@ export function LeadInfoDrawer({
                   rows={5}
                 />
               </section>
+            </TabsContent>
+
+            <TabsContent value="negocios" className="mt-0">
+              <LeadNegociosTab leadId={lead.id} open={open} />
             </TabsContent>
 
             <TabsContent value="campos" className="mt-0">
@@ -1077,4 +1097,189 @@ function humanizeDealStatus(status: string): string {
 function truncate(s: string, max: number): string {
   if (s.length <= max) return s;
   return s.slice(0, max - 1) + "…";
+}
+
+// ============================================================================
+// PR-L2: LeadNegociosTab — lista de negocios (deals) vinculados ao lead
+// ----------------------------------------------------------------------------
+// Modelo conceitual confirmado pelo user:
+//   1 LEAD -> N NEGOCIOS (cada negocio = produto/oportunidade especifica)
+//
+// UX:
+//   - Header: count + valor total dos abertos + CTA "Abrir no Funil"
+//   - Lista: cada negocio em card com nome + valor + etapa (badge color)
+//     + status (Aberto/Ganho/Perdido) + criado em
+//   - Click no card: deep-link pro Kanban (?pipeline=X) com highlight
+//   - Empty state: hint pra criar primeiro negocio
+//
+// Loading: skeleton 3 linhas. Erro: empty + log.
+// ============================================================================
+
+function LeadNegociosTab({
+  leadId,
+  open,
+}: {
+  leadId: string;
+  open: boolean;
+}) {
+  const [deals, setDeals] = React.useState<LeadDealItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    getLeadDealsList(leadId)
+      .then((res) => {
+        if (!cancelled) setDeals(res);
+      })
+      .catch((err) => {
+        console.error("[LeadNegociosTab] failed:", err);
+        if (!cancelled) setDeals([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, leadId]);
+
+  if (loading) {
+    return (
+      <div className="space-y-2 py-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-20 w-full bg-muted rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (deals.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+        <Briefcase className="size-6 mx-auto mb-2 text-muted-foreground/60" />
+        <p className="font-medium text-foreground">
+          Nenhum negócio vinculado a este lead
+        </p>
+        <p className="mt-1 text-xs">
+          Negócios são criados automaticamente quando o lead chega no funil
+          (PR-A LEADFIX). Crie negócios adicionais via Kanban → coluna →
+          ícone &quot;+&quot;.
+        </p>
+      </div>
+    );
+  }
+
+  // Agrupa por status pra resumo no header
+  const openDeals = deals.filter((d) => d.status === "open");
+  const totalAbertos = openDeals.reduce((sum, d) => sum + d.value, 0);
+
+  return (
+    <div className="space-y-3">
+      {/* Header com resumo */}
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/40">
+        <div className="text-xs text-muted-foreground">
+          <strong className="text-foreground tabular-nums">
+            {openDeals.length}
+          </strong>{" "}
+          abert{openDeals.length === 1 ? "o" : "os"}
+          {totalAbertos > 0 && (
+            <>
+              {" · "}
+              <strong className="text-emerald-600 dark:text-emerald-400 tabular-nums">
+                R$ {formatBRL(totalAbertos)}
+              </strong>
+            </>
+          )}
+          {deals.length > openDeals.length && (
+            <>
+              {" · "}
+              <span>
+                {deals.length - openDeals.length} fechad
+                {deals.length - openDeals.length === 1 ? "o" : "os"}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Lista de negocios */}
+      <div className="space-y-2">
+        {deals.map((deal) => (
+          <DealCard key={deal.id} deal={deal} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Card de negocio dentro da tab. Cor da etapa como bullet visual.
+// Click = navega pro Kanban no pipeline correspondente.
+function DealCard({ deal }: { deal: LeadDealItem }) {
+  const statusBadge = (() => {
+    switch (deal.status) {
+      case "open":
+        return { label: "Aberto", className: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300" };
+      case "won":
+        return { label: "Ganho", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" };
+      case "lost":
+        return { label: "Perdido", className: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" };
+      default:
+        return { label: deal.status, className: "bg-muted text-muted-foreground" };
+    }
+  })();
+
+  const href = `/crm?pipeline=${deal.pipeline_id}`;
+
+  return (
+    <a
+      href={href}
+      className="block rounded-lg border border-border bg-card hover:border-primary/40 hover:bg-primary/[0.02] transition-colors p-3 group"
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h4 className="text-sm font-semibold text-foreground truncate flex-1">
+          {deal.title}
+        </h4>
+        <ExternalLink className="size-3.5 text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+        {/* Etapa atual com cor do stage */}
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
+          style={{
+            backgroundColor: `${deal.stage_color}20`,
+            color: deal.stage_color,
+          }}
+        >
+          <span
+            className="inline-block size-1.5 rounded-full"
+            style={{ backgroundColor: deal.stage_color }}
+            aria-hidden
+          />
+          {deal.stage_name}
+        </span>
+
+        {/* Status do negocio */}
+        <span
+          className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${statusBadge.className}`}
+        >
+          {statusBadge.label}
+        </span>
+
+        {/* Valor */}
+        {deal.value > 0 && (
+          <span className="ml-auto font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+            R$ {formatBRL(deal.value)}
+          </span>
+        )}
+      </div>
+
+      {/* Footer: criado ha X */}
+      <p className="mt-2 text-[10px] text-muted-foreground/70 tabular-nums">
+        Criado {formatRelativeShort(deal.created_at)}
+      </p>
+    </a>
+  );
 }

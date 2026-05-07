@@ -185,6 +185,94 @@ export async function getLeadStats(leadId: string): Promise<LeadStats> {
   };
 }
 
+/**
+ * PR-L2: lista de negocios (deals) do lead com info da etapa atual.
+ * Usado pela tab "Negocios" do drawer (lista expansivel) e pela
+ * coluna "Negocios" da LeadsList (PR-L3).
+ *
+ * Modelo conceitual confirmado pelo user:
+ *   1 LEAD -> N NEGOCIOS (cada negocio = produto/oportunidade
+ *   especifica vinculada ao lead)
+ *
+ * Ordenacao: mais recente primeiro (created_at DESC).
+ * Status: retorna TODOS (open, won, lost, archived) — UI filtra
+ * conforme contexto (drawer mostra todos, PR-L3 LeadsList mostra
+ * so abertos).
+ *
+ * Multi-tenant: lead lookup scoped por orgId (defense in depth).
+ * Performance: JOIN com pipeline_stages (id, name, color, outcome)
+ * em select unico — sem N+1.
+ */
+export interface LeadDealItem {
+  id: string;
+  title: string;
+  value: number;
+  status: string;
+  pipeline_id: string;
+  stage_id: string;
+  stage_name: string;
+  stage_color: string;
+  stage_outcome: "em_andamento" | "falha" | "bem_sucedido";
+  created_at: string;
+  updated_at: string | null;
+}
+
+export async function getLeadDealsList(leadId: string): Promise<LeadDealItem[]> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Defesa multi-tenant: confirma lead da org
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!lead) return [];
+
+  const { data, error } = await supabase
+    .from("deals")
+    .select(
+      "id, title, value, status, pipeline_id, stage_id, created_at, updated_at, " +
+        "pipeline_stages!inner(id, name, color, outcome)",
+    )
+    .eq("organization_id", orgId)
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  type Row = {
+    id: string;
+    title: string;
+    value: number;
+    status: string;
+    pipeline_id: string;
+    stage_id: string;
+    created_at: string;
+    updated_at: string | null;
+    pipeline_stages: {
+      id: string;
+      name: string;
+      color: string | null;
+      outcome: "em_andamento" | "falha" | "bem_sucedido";
+    } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    value: Number(row.value ?? 0),
+    status: row.status,
+    pipeline_id: row.pipeline_id,
+    stage_id: row.stage_id,
+    stage_name: row.pipeline_stages?.name ?? "—",
+    stage_color: row.pipeline_stages?.color ?? "#888",
+    stage_outcome: row.pipeline_stages?.outcome ?? "em_andamento",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
+}
+
 // ============================================================================
 // Mutations — thin wrappers que injetam onLeadChanged + revalidatePath
 // ============================================================================

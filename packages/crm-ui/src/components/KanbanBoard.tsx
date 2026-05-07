@@ -855,7 +855,7 @@ export function KanbanBoard({
         );
         clearSelection();
         toast.success(
-          `${res.updated_count} negocio${res.updated_count === 1 ? "" : "s"} marcado${res.updated_count === 1 ? "" : "s"} como perdido${res.updated_count === 1 ? "" : "s"}`,
+          `${res.updated_count} negócio${res.updated_count === 1 ? "" : "s"} marcado${res.updated_count === 1 ? "" : "s"} como perdido${res.updated_count === 1 ? "" : "s"}`,
         );
       }
       setLossTarget(null);
@@ -918,7 +918,7 @@ export function KanbanBoard({
   ) {
     if (selectedCount === 0) return;
     if (selectedCount > BULK_CAP) {
-      toast.error(`Maximo ${BULK_CAP} negocios por operacao em massa.`);
+      toast.error(`Máximo ${BULK_CAP} negócios por operação em massa.`);
       return;
     }
     let snapshot: Deal[] | null = null;
@@ -955,7 +955,7 @@ export function KanbanBoard({
     await runBulk(
       () => actions.bulkMoveDeals!(ids, stageId),
       (r) =>
-        `${r.moved_count} negocio${r.moved_count === 1 ? "" : "s"} movido${r.moved_count === 1 ? "" : "s"}`,
+        `${r.moved_count} negócio${r.moved_count === 1 ? "" : "s"} movido${r.moved_count === 1 ? "" : "s"}`,
       (prev) =>
         prev.map((d) =>
           selectedIds.has(d.id) ? { ...d, stage_id: stageId } : d,
@@ -972,7 +972,7 @@ export function KanbanBoard({
     await runBulk(
       () => actions.bulkSetDealStatus!(ids, status),
       (r) =>
-        `${r.updated_count} negocio${r.updated_count === 1 ? "" : "s"} marcado${r.updated_count === 1 ? "" : "s"} como ${status === "won" ? "ganho" : "perdido"}`,
+        `${r.updated_count} negócio${r.updated_count === 1 ? "" : "s"} marcado${r.updated_count === 1 ? "" : "s"} como ${status === "won" ? "ganho" : "perdido"}`,
       (prev) =>
         prev.map((d) =>
           selectedIds.has(d.id) ? { ...d, status } : d,
@@ -989,7 +989,7 @@ export function KanbanBoard({
     await runBulk(
       () => actions.bulkDeleteDeals!(ids),
       (r) =>
-        `${r.deleted_count} negocio${r.deleted_count === 1 ? "" : "s"} excluido${r.deleted_count === 1 ? "" : "s"}`,
+        `${r.deleted_count} negócio${r.deleted_count === 1 ? "" : "s"} excluído${r.deleted_count === 1 ? "" : "s"}`,
       (prev) => prev.filter((d) => !selectedIds.has(d.id)),
     );
   }
@@ -1268,7 +1268,7 @@ export function KanbanBoard({
 
             <div className="space-y-1.5">
               <Label htmlFor="goal-won" className="text-xs">
-                Meta de negocios ganhos
+                Meta de negócios ganhos
               </Label>
               <Input
                 id="goal-won"
@@ -1310,8 +1310,8 @@ export function KanbanBoard({
             </Badge>
             <span className="font-medium">
               {selectedCount === 1
-                ? "negocio selecionado"
-                : "negocios selecionados"}
+                ? "negócio selecionado"
+                : "negócios selecionados"}
             </span>
             {selectedCount > BULK_CAP && (
               <span className="text-xs text-destructive">
@@ -1383,7 +1383,7 @@ export function KanbanBoard({
                 className="h-8 rounded-md text-destructive hover:text-destructive hover:bg-destructive/10"
                 disabled={bulkPending}
                 onClick={() => setBulkConfirm({ kind: "delete" })}
-                title="Excluir negocios selecionados"
+                title="Excluir negócios selecionados"
               >
                 <Trash2 className="size-3.5" />
                 Excluir
@@ -1664,12 +1664,12 @@ export function KanbanBoard({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {bulkConfirm?.kind === "delete"
-                ? `Excluir ${selectedCount} negocio${selectedCount === 1 ? "" : "s"}?`
+                ? `Excluir ${selectedCount} negócio${selectedCount === 1 ? "" : "s"}?`
                 : `Marcar ${selectedCount} como ganho?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {bulkConfirm?.kind === "delete"
-                ? "Os negocios selecionados serao removidos permanentemente. Esta acao nao pode ser desfeita."
+                ? "Os negócios selecionados serão removidos permanentemente. Esta ação não pode ser desfeita."
                 : "Voce pode reverter individualmente depois, mas a acao em massa nao tem 'desfazer'."}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1966,7 +1966,7 @@ const DealCard = React.memo(function DealCardImpl({
           >
             <Checkbox
               checked={selected}
-              aria-label={selected ? "Desmarcar negocio" : "Selecionar negocio"}
+              aria-label={selected ? "Desmarcar negócio" : "Selecionar negócio"}
               className="bg-card shadow-sm"
             />
           </div>
