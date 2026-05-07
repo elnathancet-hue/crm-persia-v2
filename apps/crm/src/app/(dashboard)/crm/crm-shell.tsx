@@ -61,7 +61,10 @@ const TABS: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
-  { key: "pipeline", label: "Pipeline", icon: Kanban },
+  // PR-H: terminologia user-facing — "Funil" e mais familiar pro usuario
+  // brasileiro que "Pipeline" (jargao tecnico). Key da URL preservada
+  // como "pipeline" (?tab=pipeline) pra nao quebrar bookmarks.
+  { key: "pipeline", label: "Funil", icon: Kanban },
   { key: "leads", label: "Leads", icon: Users },
   { key: "segmentos", label: "Segmentação", icon: FilterIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
