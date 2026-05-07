@@ -32,12 +32,20 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import { Spinner } from "@persia/ui/spinner";
-import { Contact, Filter, StickyNote } from "lucide-react";
+import {
+  Contact,
+  Filter,
+  StickyNote,
+  AlertCircle,
+  Loader2,
+  ExternalLink,
+} from "lucide-react";
 import {
   phoneBROptional,
   emailOptional,
   leadCreateSchema,
 } from "@persia/shared/validation";
+import { useLeadsActions } from "../context";
 
 const STATUS_OPTIONS = [
   { value: "new", label: "Novo" },
@@ -79,6 +87,18 @@ type LeadFormProps = {
   onSubmit: (formData: FormData) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
+  /**
+   * PR-L5: callback quando lookup detecta lead duplicado e user
+   * clica "Reutilizar". Caller (LeadList) abre drawer do lead
+   * existente. Opcional — sem callback, apenas o botao "Criar
+   * mesmo assim" funciona (banner mostra info mas nao conecta).
+   */
+  onDuplicateFound?: (lead: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+  }) => void;
 };
 
 export function LeadForm({
@@ -86,7 +106,12 @@ export function LeadForm({
   onSubmit,
   onCancel,
   submitLabel = "Salvar",
+  onDuplicateFound,
 }: LeadFormProps) {
+  // PR-L5: action injetada via context. findDuplicate e opcional —
+  // se nao foi injetada (admin compat), banner nao aparece.
+  const actions = useLeadsActions();
+
   const [isPending, startTransition] = React.useTransition();
   const [name, setName] = React.useState(defaultValues?.name ?? "");
   const [phone, setPhone] = React.useState(defaultValues?.phone ?? "");
@@ -98,6 +123,60 @@ export function LeadForm({
   );
   const [notes, setNotes] = React.useState(defaultValues?.notes ?? "");
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  // PR-L5: state pra lookup de duplicidade
+  const [duplicateMatch, setDuplicateMatch] = React.useState<{
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    matched_by: "phone" | "email";
+  } | null>(null);
+  const [duplicateChecking, setDuplicateChecking] = React.useState(false);
+  const [duplicateDismissed, setDuplicateDismissed] = React.useState(false);
+  const lookupCancelRef = React.useRef<{ cancelled: boolean } | null>(null);
+
+  // Lookup async on blur (phone OR email). Re-checa apenas quando
+  // user dismissou anteriormente nao retorna ate proximo blur com
+  // valor diferente (evita banner persistente).
+  const checkDuplicate = React.useCallback(
+    async (currentPhone: string, currentEmail: string) => {
+      // Edicao de lead existente: nao precisa lookup
+      if (defaultValues?.phone || defaultValues?.email) return;
+      // Action nao injetada (admin compat): skip
+      if (!actions.findDuplicate) return;
+      // Ambos vazios: skip
+      if (!currentPhone.trim() && !currentEmail.trim()) {
+        setDuplicateMatch(null);
+        return;
+      }
+
+      // Cancela lookup anterior em voo
+      if (lookupCancelRef.current) lookupCancelRef.current.cancelled = true;
+      const cancelToken = { cancelled: false };
+      lookupCancelRef.current = cancelToken;
+
+      setDuplicateChecking(true);
+      try {
+        const match = await actions.findDuplicate(
+          currentPhone.trim() || null,
+          currentEmail.trim() || null,
+        );
+        if (cancelToken.cancelled) return;
+        // Reset dismissed se voltou a achar (ou achou outro lead diferente)
+        if (match && match.id !== duplicateMatch?.id) {
+          setDuplicateDismissed(false);
+        }
+        setDuplicateMatch(match);
+      } catch {
+        // Falha silenciosa — banner nao aparece, fluxo continua
+        if (!cancelToken.cancelled) setDuplicateMatch(null);
+      } finally {
+        if (!cancelToken.cancelled) setDuplicateChecking(false);
+      }
+    },
+    [actions, defaultValues?.phone, defaultValues?.email, duplicateMatch?.id],
+  );
 
   // Validacao por campo on blur (UX ideal pra forms — nao interrompe
   // digitacao). Phone normaliza pra E.164 e atualiza state com valor
@@ -240,6 +319,8 @@ export function LeadForm({
               }}
               onBlur={(e) => {
                 if (e.target.value.trim()) validatePhone(e.target.value);
+                // PR-L5: dispara lookup de duplicidade on blur
+                checkDuplicate(e.target.value, email);
               }}
               placeholder="(11) 98765-4321"
               aria-invalid={!!errors.phone}
@@ -267,6 +348,8 @@ export function LeadForm({
               }}
               onBlur={(e) => {
                 if (e.target.value.trim()) validateEmail(e.target.value);
+                // PR-L5: dispara lookup de duplicidade on blur
+                checkDuplicate(phone, e.target.value);
               }}
               placeholder="email@exemplo.com"
               aria-invalid={!!errors.email}
@@ -277,6 +360,63 @@ export function LeadForm({
             )}
           </Field>
         </div>
+
+        {/* PR-L5: Banner de duplicidade — aparece quando lookup achou
+            lead existente. User pode "Reutilizar" (callback abre drawer
+            do existente) ou "Criar mesmo assim" (dismissa banner).
+            Indicador de loading subtle ao lado do label se checking. */}
+        {duplicateChecking && (
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            Verificando duplicatas...
+          </p>
+        )}
+        {duplicateMatch && !duplicateDismissed && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                    Lead já existe nesta organização
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300/90 mt-0.5">
+                    <strong className="font-semibold">
+                      {duplicateMatch.name?.trim() || "Sem nome"}
+                    </strong>
+                    {" — "}
+                    {duplicateMatch.matched_by === "phone"
+                      ? `mesmo telefone (${duplicateMatch.phone ?? "—"})`
+                      : `mesmo email (${duplicateMatch.email ?? "—"})`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onDuplicateFound && (
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      className="h-7 rounded-md gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600"
+                      onClick={() => onDuplicateFound(duplicateMatch)}
+                    >
+                      <ExternalLink className="size-3" />
+                      Abrir lead existente
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-md text-xs border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-200 dark:hover:bg-amber-500/20"
+                    onClick={() => setDuplicateDismissed(true)}
+                  >
+                    Criar mesmo assim
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </FormSection>
 
       {/* ============ SECAO 2: ORIGEM & STATUS ============ */}

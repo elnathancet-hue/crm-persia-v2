@@ -22,6 +22,19 @@ export interface OrgTag {
   created_at: string;
 }
 
+/**
+ * PR-L5: shape do match de duplicidade. UI exibe banner com nome +
+ * canal que bateu (phone ou email). Definido aqui pra evitar
+ * dependencia cruzada (packages/leads-ui nao importa de apps/crm).
+ */
+export interface DuplicateMatch {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  matched_by: "phone" | "email";
+}
+
 export interface LeadsActions {
   /** Lista paginada com filtros (search/status/tags). */
   listLeads: (filters: LeadFilters) => Promise<PaginatedLeadsResult>;
@@ -29,4 +42,13 @@ export interface LeadsActions {
   createLead: (formData: FormData) => Promise<{ id: string } | void>;
   /** Tags do org (pra filtros chip). */
   getOrgTags: () => Promise<OrgTag[]>;
+  /**
+   * PR-L5: lookup de duplicidade ao criar lead. Opcional pra
+   * retro-compat — admin pode nao implementar (degrada graciosamente,
+   * banner nao aparece).
+   */
+  findDuplicate?: (
+    phone?: string | null,
+    email?: string | null,
+  ) => Promise<DuplicateMatch | null>;
 }
