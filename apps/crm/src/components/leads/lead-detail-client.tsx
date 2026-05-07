@@ -227,10 +227,10 @@ export function LeadDetailClient({
         await createDeal(formData);
         setIsCreateDealOpen(false);
         setDealValue("");
-        toast.success("Negocio criado no CRM.");
+        toast.success("Negócio criado no CRM.");
         router.push("/crm");
       } catch {
-        toast.error("Nao foi possivel criar o negocio.");
+        toast.error("Não foi possível criar o negócio.");
       }
     });
   }
@@ -541,7 +541,7 @@ export function LeadDetailClient({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setDealTitle(e.target.value)
                 }
-                placeholder="Nome do negocio"
+                placeholder="Nome do negócio"
               />
             </div>
             <div className="space-y-2">
