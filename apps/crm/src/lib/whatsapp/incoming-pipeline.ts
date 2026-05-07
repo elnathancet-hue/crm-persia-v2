@@ -25,6 +25,7 @@ import { parseSplitConfig, splitMessage } from "@/lib/ai/message-splitter";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import { errorMessage, logError } from "@/lib/observability";
 import { phoneBR } from "@persia/shared/validation";
+import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
@@ -211,6 +212,14 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     content: msg.text,
     type: msg.type,
   });
+
+  // PR-K LEAD-SYNC: invalida caches /crm + /leads + /chat apos
+  // pipeline completo (lead + conversation + message persistidos).
+  // Helper e tolerante a falha — try/catch interno garante que
+  // mensagem do WhatsApp NUNCA falha por erro de revalidate.
+  // Lead novo aparece na tab Leads na proxima navegacao do agente
+  // (95% dos casos). User parado na tab so ve com Realtime/PR-O.
+  await revalidateLeadAndChatCaches(lead.id);
 
   // 7) Flow already handled it?
   if (keywordFlowTriggered) {

@@ -20,6 +20,7 @@ import {
   getClientIp,
 } from "@/lib/agenda/public-rate-limit";
 import { phoneBR, emailOptional } from "@persia/shared/validation";
+import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 
 // Helper: admin client com tipagem solta pra acessar tabelas que ainda
 // nao estao no @/types/database (regeneracao desde migration 031 pendente).
@@ -346,6 +347,12 @@ export async function submitPublicBooking(
   } catch (err) {
     console.error("[public.submit] update total_bookings:", err);
   }
+
+  // PR-K LEAD-SYNC: lead novo via booking publico precisa aparecer
+  // na tab Leads do CRM imediatamente. Antes deste revalidate, lead
+  // entrava no DB mas user nao via ate F5 manual. Helper tolerante
+  // a falha — booking publico nunca falha por erro de revalidate.
+  await revalidateLeadCaches(leadId);
 
   return {
     appointment_id: created.id,
