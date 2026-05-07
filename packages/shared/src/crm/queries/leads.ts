@@ -33,7 +33,29 @@ export async function listLeads(
   filters: LeadFilters = {},
 ): Promise<PaginatedLeads> {
   const { db, orgId } = ctx;
-  const { search, status, tags, segmentId, page = 1, limit = 20 } = filters;
+  const {
+    search,
+    status,
+    tags,
+    segmentId,
+    page = 1,
+    limit = 20,
+    orderBy,
+  } = filters;
+
+  // PR-L4: orderBy validado (defesa contra SQL injection mesmo Supabase
+  // ja sanitizando — defesa em camadas). Default created_at DESC.
+  const ALLOWED_COLUMNS = [
+    "created_at",
+    "name",
+    "last_interaction_at",
+    "updated_at",
+  ] as const;
+  const orderColumn =
+    orderBy && ALLOWED_COLUMNS.includes(orderBy.column)
+      ? orderBy.column
+      : "created_at";
+  const orderAscending = orderBy?.direction === "asc";
 
   const from = (page - 1) * limit;
   const to = from + limit - 1;
@@ -106,7 +128,10 @@ export async function listLeads(
       { count: "exact" },
     )
     .eq("organization_id", orgId)
-    .order("created_at", { ascending: false })
+    .order(orderColumn, {
+      ascending: orderAscending,
+      nullsFirst: false,
+    })
     .range(from, to);
 
   if (search) {

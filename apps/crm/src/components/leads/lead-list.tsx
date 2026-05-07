@@ -25,6 +25,8 @@ import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
 import { importLeads } from "@/actions/leads-import";
 import {
   assignLead,
+  bulkAssignLeads,
+  bulkDeleteLeads,
   getOrgTags,
   type LeadListItemStats,
 } from "@/actions/leads";
@@ -176,6 +178,17 @@ export function LeadList(props: Props) {
           }}
           onScheduleAppointment={(lead) => {
             router.push(`/agenda?leadId=${lead.id}`);
+          }}
+          // PR-L4: bulk operations (atribuir / excluir)
+          onBulkAssign={async (leadIds, userId) => {
+            const result = await bulkAssignLeads(leadIds, userId);
+            router.refresh();
+            return result;
+          }}
+          onBulkDelete={async (leadIds) => {
+            const result = await bulkDeleteLeads(leadIds);
+            router.refresh();
+            return result;
           }}
           headerActions={
             <>

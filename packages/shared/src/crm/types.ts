@@ -33,6 +33,19 @@ export interface LeadFilters {
   segmentId?: string;
   page?: number;
   limit?: number;
+  /**
+   * PR-L4: ordenacao opcional. Default: `created_at DESC` (mais
+   * recentes primeiro). Colunas suportadas (com index ou eficientes):
+   *   - "created_at" (default)
+   *   - "name"
+   *   - "last_interaction_at"
+   *   - "updated_at"
+   * Direction: "asc" | "desc" (default desc).
+   */
+  orderBy?: {
+    column: "created_at" | "name" | "last_interaction_at" | "updated_at";
+    direction?: "asc" | "desc";
+  };
 }
 
 /**

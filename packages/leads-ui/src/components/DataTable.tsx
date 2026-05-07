@@ -18,7 +18,10 @@ import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 export type ColumnDef<T> = {
   key: string;
-  header: string;
+  // PR-L4: header aceita string OU ReactNode (pra checkboxes / sortable
+  // headers customizados). DataTable native sort (button hover ↑↓)
+  // continua funcionando quando header for string + sortable=true.
+  header: string | React.ReactNode;
   sortable?: boolean;
   className?: string;
   render: (row: T) => React.ReactNode;
