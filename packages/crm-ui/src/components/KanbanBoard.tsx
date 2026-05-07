@@ -1090,7 +1090,7 @@ export function KanbanBoard({
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar negócio ou lead..."
+            placeholder="Buscar lead..."
             className="h-9 pl-9 rounded-md"
           />
         </div>
@@ -1137,16 +1137,22 @@ export function KanbanBoard({
         {/* Separador visual + métricas (faixa compacta, leitura) */}
         <span className="h-5 w-px bg-border" aria-hidden />
 
+        {/* PR-I: terminologia "leads" em vez de "negocios" (briefing
+            user — "tudo e lead, nao precisa misturar"). Chip de R$
+            so aparece quando total > 0 (esconde "R$ 0,00" ruidoso
+            quando funil novo / sem valores cadastrados). */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <MetricChip icon={<Target className="size-3.5" />}>
             <strong className="font-semibold">{boardMetrics.count}</strong>{" "}
-            <span className="text-muted-foreground">negócios</span>
+            <span className="text-muted-foreground">leads</span>
           </MetricChip>
-          <MetricChip icon={<CircleDollarSign className="size-3.5" />}>
-            <strong className="font-semibold">
-              R$ {formatCurrency(boardMetrics.total)}
-            </strong>
-          </MetricChip>
+          {boardMetrics.total > 0 && (
+            <MetricChip icon={<CircleDollarSign className="size-3.5" />}>
+              <strong className="font-semibold">
+                R$ {formatCurrency(boardMetrics.total)}
+              </strong>
+            </MetricChip>
+          )}
           <MetricChip icon={<TrendingUp className="size-3.5" />}>
             <strong className="font-semibold text-emerald-600 dark:text-emerald-400">
               {boardMetrics.won}
@@ -1481,8 +1487,11 @@ export function KanbanBoard({
                     : ""
                 }`}
               >
-                {/* Header da coluna — bullet colorido + nome + count.
-                    Bullet com tamanho maior + ring sutil pra destaque. */}
+                {/* Header da coluna — bullet colorido + nome stage + "Leads: X"
+                    + R$ valor (so se > 0).
+                    PR-I: subtitle "Leads: X" explicito (briefing user) em
+                    vez de Badge solto, alinhado com o briefing "tudo e
+                    lead, nao precisa misturar negocios". */}
                 <div className="px-4 py-3 rounded-t-2xl bg-card/60 border-b border-border/60 backdrop-blur-sm">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -1494,17 +1503,6 @@ export function KanbanBoard({
                       <h3 className="truncate font-semibold text-sm text-foreground">
                         {stage.name}
                       </h3>
-                      <Badge
-                        variant="secondary"
-                        className="h-5 min-w-5 px-1.5 text-[10px] font-bold tabular-nums"
-                        title={
-                          index > 0
-                            ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
-                            : `Ticket médio R$ ${formatCurrency(metrics.average)}`
-                        }
-                      >
-                        {metrics.count}
-                      </Badge>
                     </div>
                     {canEdit && (
                       // PR-CRMOPS2: o "+" agora abre o form de Lead
@@ -1534,11 +1532,26 @@ export function KanbanBoard({
                       )
                     )}
                   </div>
-                  {metrics.total > 0 && (
-                    <p className="mt-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                      R$ {formatCurrency(metrics.total)}
-                    </p>
-                  )}
+                  {/* PR-I: subtitle "Leads: X" + R$ na MESMA linha.
+                      Conv % e ticket medio movidos pro title attr da
+                      linha (mantem accessibility, evita poluir UI). */}
+                  <div
+                    className="mt-1.5 flex items-center justify-between gap-2 text-[11px] tabular-nums"
+                    title={
+                      index > 0
+                        ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
+                        : `Ticket médio R$ ${formatCurrency(metrics.average)}`
+                    }
+                  >
+                    <span className="font-medium text-muted-foreground">
+                      Leads: <strong className="text-foreground tabular-nums">{metrics.count}</strong>
+                    </span>
+                    {metrics.total > 0 && (
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        R$ {formatCurrency(metrics.total)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="px-2.5 py-2.5 space-y-2 flex-1 overflow-y-auto">
@@ -2139,59 +2152,75 @@ const DealCard = React.memo(function DealCardImpl({
           </div>
         )}
 
-        {/* Pill VALOR ESTIMADO (verde) */}
-        <div className="mt-3">
-          {editingField === "value" && canEdit ? (
-            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 dark:bg-emerald-500/10">
-              <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <div className="flex-1 min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
-                  Valor estimado
-                </div>
-                <div className="flex items-center gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200">
-                  <span>R$</span>
-                  <InlineEdit
-                    initialValue={String(deal.value ?? 0)}
-                    type="number"
-                    ariaLabel="Editar valor"
-                    pending={editPending}
-                    onCommit={(v) => saveEdit("value", v)}
-                    onCancel={() => setEditingField(null)}
-                    className="flex-1 text-emerald-800 dark:text-emerald-200"
-                  />
+        {/* PR-I: pill VALOR ESTIMADO (verde) — so renderiza quando ha
+            valor cadastrado OU usuario esta editando (pra permitir
+            adicionar valor depois). Quando valor=0 e nao editando, o
+            espaco fica limpo. Botao "+ Adicionar valor" sutil aparece
+            so no hover do card pra permitir cadastrar. */}
+        {(deal.value > 0 || editingField === "value") && (
+          <div className="mt-3">
+            {editingField === "value" && canEdit ? (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 dark:bg-emerald-500/10">
+                <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
+                    Valor estimado
+                  </div>
+                  <div className="flex items-center gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                    <span>R$</span>
+                    <InlineEdit
+                      initialValue={String(deal.value ?? 0)}
+                      type="number"
+                      ariaLabel="Editar valor"
+                      pending={editPending}
+                      onCommit={(v) => saveEdit("value", v)}
+                      onCancel={() => setEditingField(null)}
+                      className="flex-1 text-emerald-800 dark:text-emerald-200"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
+            ) : (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-left transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
+                title={canEdit ? "Duplo-click para editar valor" : undefined}
+                onDoubleClick={(e) => {
+                  if (!canEdit) return;
+                  e.stopPropagation();
+                  setEditingField("value");
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
+                    Valor estimado
+                  </div>
+                  <div className="text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                    R$ {formatCurrency(deal.value)}
+                  </div>
+                </div>
+              </button>
+            )}
+          </div>
+        )}
+        {/* PR-I: link sutil "+ Adicionar valor" so quando valor=0,
+            visivel apenas no hover do card pra nao poluir. */}
+        {deal.value === 0 && canEdit && editingField !== "value" && (
+          <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-left transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
-              title={canEdit ? "Duplo-click para editar valor" : undefined}
-              onDoubleClick={(e) => {
-                if (!canEdit) return;
+              className="text-[10px] font-medium text-muted-foreground hover:text-emerald-600 transition-colors"
+              onClick={(e) => {
                 e.stopPropagation();
                 setEditingField("value");
               }}
-              onClick={(e) => e.stopPropagation()}
             >
-              <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <div className="flex-1 min-w-0">
-                <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
-                  Valor estimado
-                </div>
-                <div className="text-sm font-bold text-emerald-800 dark:text-emerald-200">
-                  {deal.value > 0 ? (
-                    `R$ ${formatCurrency(deal.value)}`
-                  ) : (
-                    <span className="opacity-70">
-                      R$ — {canEdit ? "(duplo-click)" : ""}
-                    </span>
-                  )}
-                </div>
-              </div>
+              + Adicionar valor estimado
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* PR-C: Pill RESPONSÁVEL (azul) — agora clicavel.
             Antes era read-only — agora abre DropdownMenu com lista de
@@ -2216,13 +2245,22 @@ const DealCard = React.memo(function DealCardImpl({
             assignees.length > 0;
           const leadId = deal.lead_id;
 
+          // PR-I: SEM assignee = texto cinza simples "Sem responsável"
+          // (em vez de pill azul cheio com "?" — visualmente mais leve,
+          // espelha briefing do design). COM assignee = pill azul cheio
+          // mantido (mostra avatar + nome).
           if (!canAssign || !leadId) {
+            if (!assigneeName) {
+              return (
+                <div className="mt-2 px-1 text-xs font-medium text-muted-foreground/70">
+                  Sem responsável
+                </div>
+              );
+            }
             return (
               <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 dark:bg-blue-500/10">
                 <span
-                  className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
-                    assigneeName ? "bg-blue-600" : "bg-muted-foreground/40"
-                  }`}
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[10px] font-bold text-white"
                   aria-hidden
                 >
                   {initials}
@@ -2232,40 +2270,51 @@ const DealCard = React.memo(function DealCardImpl({
                     Responsável
                   </div>
                   <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
-                    {assigneeName || "Sem responsável"}
+                    {assigneeName}
                   </div>
                 </div>
               </div>
             );
           }
 
+          // PR-I: SEM assignee + canAssign = texto cinza clicavel
+          // (abre dropdown). COM assignee = pill azul cheio (atual).
           return (
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <button
-                    type="button"
-                    className="mt-2 flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <span
-                      className={`inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
-                        assigneeName ? "bg-blue-600" : "bg-muted-foreground/40"
-                      }`}
-                      aria-hidden
+                  assigneeName ? (
+                    <button
+                      type="button"
+                      className="mt-2 flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {initials}
-                    </span>
-                    <div className="flex-1 min-w-0 text-left">
-                      <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
-                        Responsável
+                      <span
+                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[10px] font-bold text-white"
+                        aria-hidden
+                      >
+                        {initials}
+                      </span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
+                          Responsável
+                        </div>
+                        <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
+                          {assigneeName}
+                        </div>
                       </div>
-                      <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
-                        {assigneeName || "Sem responsável"}
-                      </div>
-                    </div>
-                    <ChevronDown className="size-3.5 shrink-0 text-blue-700/60 dark:text-blue-300/60" />
-                  </button>
+                      <ChevronDown className="size-3.5 shrink-0 text-blue-700/60 dark:text-blue-300/60" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="mt-2 inline-flex items-center gap-1 px-1 text-xs font-medium text-muted-foreground/70 hover:text-blue-600 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Sem responsável
+                      <ChevronDown className="size-3 opacity-60" />
+                    </button>
+                  )
                 }
               />
               <DropdownMenuContent
@@ -2337,8 +2386,12 @@ const DealCard = React.memo(function DealCardImpl({
           </div>
         )}
 
-        {/* Botoes terminais (Descartado / Fechado) — discretos, so no hover */}
-        <div className="mt-2.5 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+        {/* PR-I: Botoes terminais sempre visiveis (briefing user — design
+            do screenshot mostra Descartado/Fechado proeminentes).
+            Mantem disabled state quando bucket nao configurado.
+            Cores mais saturadas (background ao inves de border-only)
+            pra ficar igual ao screenshot. */}
+        <div className="mt-2.5 flex items-center gap-1.5">
           <button
             type="button"
             disabled={!canEdit || !hasFailureBucket}
@@ -2351,10 +2404,10 @@ const DealCard = React.memo(function DealCardImpl({
                 ? "Marcar como perdido (registra motivo)"
                 : "Sem etapa de falha configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-red-200 bg-white px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-red-500/30 dark:bg-card dark:hover:bg-red-500/10"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
           >
             <X className="size-3" />
-            Descartar
+            Negócio descartado
           </button>
           <button
             type="button"
@@ -2368,10 +2421,10 @@ const DealCard = React.memo(function DealCardImpl({
                 ? "Marcar como ganho"
                 : "Sem etapa de sucesso configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:border-emerald-500/30 dark:bg-card dark:hover:bg-emerald-500/10"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
           >
             <Check className="size-3" />
-            Fechar
+            Negócio fechado
           </button>
         </div>
       </div>
