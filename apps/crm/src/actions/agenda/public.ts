@@ -156,6 +156,15 @@ export interface SubmitBookingInput {
   lead_phone: string;
   lead_email?: string;
   notes?: string;
+  /**
+   * PR-G: honeypot anti-bot. Form publico tem campo "website" invisivel
+   * pra humanos (CSS off-screen + tabIndex=-1 + aria-hidden). Bots
+   * scrapers preenchem por reflexo. Aqui, se vier preenchido, retorna
+   * sucesso fake (nao cria appointment, nao loga erro audivel) — nao
+   * ensina o bot que falhou. Comportamento idempotente do ponto de
+   * vista do bot.
+   */
+  honeypot?: string;
 }
 
 export interface BookingConfirmation {
@@ -170,6 +179,23 @@ export interface BookingConfirmation {
 export async function submitPublicBooking(
   input: SubmitBookingInput,
 ): Promise<BookingConfirmation> {
+  // PR-G: honeypot first-line — se vier preenchido, e bot. Retorna
+  // sucesso FAKE (nao cria appointment, nao loga, nao throwa). Bot
+  // pensa que funcionou e nao reaprende. Humanos nunca veem esse
+  // campo (CSS off-screen + tabIndex=-1).
+  if (input.honeypot && input.honeypot.trim().length > 0) {
+    // Retorna shape valido com IDs fake — bot nao consegue distinguir.
+    // Note: nao loga aqui pra nao poluir observability com ruido.
+    return {
+      appointment_id: "00000000-0000-0000-0000-000000000000",
+      start_at: new Date().toISOString(),
+      end_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+      timezone: input.timezone,
+      page_title: "",
+      organization_name: "",
+    };
+  }
+
   const ip = getClientIp(await headers());
   const rl = checkSubmitRateLimit(ip);
   if (!rl.allowed) {
