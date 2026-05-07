@@ -25,6 +25,7 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 import { useRole } from "@/lib/hooks/use-role";
+import { useDealsRealtime } from "@/lib/realtime/use-deals-realtime";
 
 interface Props {
   pipelines: Pipeline[];
@@ -54,6 +55,14 @@ export function CrmClient({
 }: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
+
+  // PR-O Realtime: outro agente moveu/criou/deletou deal neste funil.
+  // router.refresh() reroda o server component da pagina /crm e o
+  // KanbanBoard re-renderiza com deals atualizados. RLS de deals +
+  // filtro pipeline_id no canal sao defesa em camada (broadcast nao
+  // vaza cross-org).
+  // Admin tem seu proprio wrapper e nao recebe esse hook (compat).
+  useDealsRealtime(pipelineId ?? null, () => router.refresh());
 
   // PR-J: importOpen/importTags/openImport REMOVIDOS — briefing user:
   // "tirar importar e exportar, deixar essa opcao somente em leads".
