@@ -178,6 +178,26 @@ export interface KanbanLead {
   email: string | null;
 }
 
+// PR-J: contrastTextColor — escolhe texto branco ou dark com base na
+// luminancia do background. Usado nos headers de coluna do Kanban (cor
+// do stage como bg, texto precisa ser legivel). Heuristica simples
+// (relative luminance W3C-style). Fallback pra dark se hex invalido.
+function contrastTextColor(bgHex: string): string {
+  const hex = bgHex.replace(/^#/, "");
+  if (hex.length !== 3 && hex.length !== 6) return "#1a1a1a";
+  const full =
+    hex.length === 3
+      ? hex.split("").map((c) => c + c).join("")
+      : hex;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return "#1a1a1a";
+  // YIQ luma (perceived brightness)
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? "#1a1a1a" : "#ffffff";
+}
+
 function formatCurrency(value: number): string {
   return value.toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
@@ -993,49 +1013,54 @@ export function KanbanBoard({
     );
   }
 
+  // PR-J: outcome pills sao reusados em toolbar (Linha 1, direita)
+  const outcomePillsEl = (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {OUTCOME_BUCKETS.map((bucket) => {
+        const isActive = activeOutcome === bucket.outcome;
+        const stageCount = stagesByOutcome[bucket.outcome].length;
+        return (
+          <button
+            key={bucket.outcome}
+            type="button"
+            onClick={() => setActiveOutcome(bucket.outcome)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              isActive ? bucket.activeClass : bucket.inactiveClass
+            }`}
+            aria-pressed={isActive}
+          >
+            <span>{bucket.label}</span>
+            {stageCount > 0 && (
+              <span
+                className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold ${
+                  isActive ? "bg-white/20" : "bg-current/10"
+                }`}
+              >
+                {stageCount}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="space-y-4">
-      {/* ====== OUTCOME PILLS ====== */}
-      <div className="flex items-center justify-center gap-2 flex-wrap">
-        {OUTCOME_BUCKETS.map((bucket) => {
-          const isActive = activeOutcome === bucket.outcome;
-          const stageCount = stagesByOutcome[bucket.outcome].length;
-          return (
-            <button
-              key={bucket.outcome}
-              type="button"
-              onClick={() => setActiveOutcome(bucket.outcome)}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-1.5 text-sm font-medium transition-colors ${
-                isActive ? bucket.activeClass : bucket.inactiveClass
-              }`}
-              aria-pressed={isActive}
-            >
-              <span>{bucket.label}</span>
-              {stageCount > 0 && (
-                <span
-                  className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
-                    isActive ? "bg-white/20" : "bg-current/10"
-                  }`}
-                >
-                  {stageCount}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+    <div className="space-y-3">
+      {/* ====== TOPBAR — PR-J reorganizada em 2 LINHAS ======
+          Briefing user (screenshot):
+          - Linha 1: Funil atual (destacado) | Busca | Filtros | Outcomes
+          - Linha 2: Stats compactos + Metas + Configurar funil
 
-      {/* ====== TOPBAR — PR-PIPETOOLS reorganizada em 3 LINHAS ======
-          Linha 1: Funil atual (dropdown rico) + busca
-          Linha 2: Status filtro + métricas (compactas, leitura)
-          Linha 3: Ações rápidas (Metas, Filtros avançados, Export,
-                   Import, Configurar funil) alinhadas à direita
+          REMOVIDO desta toolbar (vs versao anterior):
+          - OUTCOME PILLS centralizadas no topo (movidos pra Linha 1)
+          - Status Select (Todos/Em andamento/Ganho/Perdido) — redundante
+            com outcome pills
+          - ExportMenu — fica so na tab Leads (briefing user)
+          - toolbarExtras Importar — removido em crm-client.tsx
+            (briefing user: "deixar essa opcao somente em leads") */}
 
-          Antes: tudo numa linha só (flex-wrap), elementos misturados.
-          Agora: hierarquia clara — usuário entende qual funil, depois
-          status/métricas, depois ações. Kanban aparece logo após. */}
-
-      {/* ===== Linha 1: Funil atual + busca ===== */}
+      {/* ===== Linha 1: Funil atual destacado + busca + filtros + outcomes ===== */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Dropdown "Funil atual" rico (em modo controlled).
             Em modo uncontrolled (admin antigo), cai no select tradicional. */}
@@ -1043,6 +1068,7 @@ export function KanbanBoard({
           <FunilCurrentDropdown
             currentName={pipelines.find((p) => p.id === selectedPipeline)?.name ?? ""}
             pipelines={pipelines}
+            stages={initialStages}
             selectedId={selectedPipeline}
             onSelect={(id) => setSelectedPipeline(id)}
             canCreate={effectiveCanCreateKanban}
@@ -1105,42 +1131,20 @@ export function KanbanBoard({
           tags={orgTags}
           assignees={assignees}
         />
+
+        {/* PR-J: outcomes pills na DIREITA da Linha 1 (briefing user
+            screenshot). Antes ficavam centralizados no topo isolado. */}
+        <div className="ml-auto">{outcomePillsEl}</div>
       </div>
 
-      {/* ===== Linha 2: Status filtro + métricas compactas ===== */}
+      {/* ===== Linha 2: Stats compactos + Metas + Configurar funil =====
+          PR-J: stats antes ficavam na Linha 2 com Status Select. Status
+          Select removido (redundante com outcomes pills da Linha 1).
+          Metas + Configurar funil colados aqui (briefing user: "alinhar
+          ao lado de filtros" — mas Filtros ja na Linha 1 com busca, entao
+          fica na Linha 2 que e a linha de "acoes" e stats). */}
       <div className="flex items-center gap-3 flex-wrap">
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v ?? "all")}
-        >
-          <SelectTrigger className="w-40 h-8 rounded-md text-xs">
-            <SelectValue placeholder="Status">
-              {statusFilter === "all"
-                ? "Todos"
-                : statusFilter === "open"
-                  ? "Em andamento"
-                  : statusFilter === "won"
-                    ? "Ganho"
-                    : statusFilter === "lost"
-                      ? "Perdido"
-                      : "Status"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="open">Em andamento</SelectItem>
-            <SelectItem value="won">Ganho</SelectItem>
-            <SelectItem value="lost">Perdido</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Separador visual + métricas (faixa compacta, leitura) */}
-        <span className="h-5 w-px bg-border" aria-hidden />
-
-        {/* PR-I: terminologia "leads" em vez de "negocios" (briefing
-            user — "tudo e lead, nao precisa misturar"). Chip de R$
-            so aparece quando total > 0 (esconde "R$ 0,00" ruidoso
-            quando funil novo / sem valores cadastrados). */}
+        {/* Stats compactos */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <MetricChip icon={<Target className="size-3.5" />}>
             <strong className="font-semibold">{boardMetrics.count}</strong>{" "}
@@ -1166,16 +1170,15 @@ export function KanbanBoard({
             <span className="text-muted-foreground">conv.</span>
           </MetricChip>
         </div>
-      </div>
 
-      {/* ===== Linha 3: Ações rápidas (alinhadas à direita) ===== */}
-      <div className="flex items-center justify-end">
-        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
+        {/* PR-J: Acoes (Metas + Configurar funil) na MESMA linha dos
+            stats, alinhadas a direita. Importar/Exportar removidos. */}
+        <div className="ml-auto flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-sm">
           <Button
             type="button"
             variant={showGoalsEditor ? "secondary" : "ghost"}
             size="sm"
-            className="h-7 rounded-md px-2.5"
+            className="h-7 rounded-md px-2.5 gap-1.5"
             onClick={() => setShowGoalsEditor((prev) => !prev)}
             title="Metas do funil"
           >
@@ -1183,39 +1186,12 @@ export function KanbanBoard({
             <span className="hidden md:inline">Metas</span>
           </Button>
 
-          <span className="h-5 w-px bg-border" aria-hidden />
-
-          {/* PR-CRMOPS4: AdvancedFiltersPopover MOVIDO pra linha 1 da
-              toolbar (ao lado da busca). Filtros sao ato exploratorio
-              (zoom no que tem na tela), nao acao de gestao — fica mais
-              perto do input de busca pra coerencia mental. Aqui na
-              linha 3 sobraram so acoes de gestao do funil. */}
-
-          {/* ====== EXPORTAR (PR-K3) ====== */}
-          <ExportMenu
-            rows={filteredDeals}
-            columns={dealExportColumns}
-            filenamePrefix="negocios"
-            sheetName="Negocios"
-          />
-
+          {/* toolbarExtras (Importar) removido — briefing user: "tirar
+              importar e exportar, deixar essa opcao somente em leads".
+              ExportMenu removido tambem (mesma razao).
+              CRM client (apps/crm) parou de injetar toolbarExtras no PR-J. */}
           {toolbarExtras}
-          {/* PR-CRMOPS: configuracao volta pro contexto do CRM via 2 botoes
-              inline. Antes (PR-CRMCFG) era atalho que linkava pra
-              /settings/crm — abandonado por decisao de produto: usuario
-              nao deve sair do CRM pra editar Kanban.
 
-              - "+ Criar novo Kanban" (primario): dialog simples (nome).
-              - "Editar estrutura" (ghost): Sheet/Drawer 720px com o
-                PipelineStagesEditor pro funil ATIVO. */}
-          {/* PR-PIPETOOLS:
-              - "+ Criar novo funil" renderiza so em modo uncontrolled
-                (admin antigo). Em modo controlled, esta no dropdown
-                "Funil atual" + header do CrmShell.
-              - Botao "Configurar funil" (era "Editar estrutura")
-                abre o ManageFunisDrawer (gestao consolidada). O
-                modal antigo (so etapas do funil ativo) agora e
-                acessado de DENTRO do drawer, em "Editar". */}
           {(effectiveCanCreateKanban || effectiveCanEditStages) && (
             <>
               <span className="h-5 w-px bg-border" aria-hidden />
@@ -1240,12 +1216,8 @@ export function KanbanBoard({
                   className="h-8 rounded-md px-2.5 gap-1.5 text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     if (isControlled) {
-                      // Modo CRM: abre drawer de gestao (lista funis +
-                      // criar + editar etapas + excluir).
                       setManageFunisOpen(true);
                     } else {
-                      // Modo admin antigo: abre direto editor de etapas
-                      // do funil ativo (compat).
                       setEditStructureOpen(true);
                     }
                   }}
@@ -1487,23 +1459,33 @@ export function KanbanBoard({
                     : ""
                 }`}
               >
-                {/* Header da coluna — bullet colorido + nome stage + "Leads: X"
-                    + R$ valor (so se > 0).
-                    PR-I: subtitle "Leads: X" explicito (briefing user) em
-                    vez de Badge solto, alinhado com o briefing "tudo e
-                    lead, nao precisa misturar negocios". */}
-                <div className="px-4 py-3 rounded-t-2xl bg-card/60 border-b border-border/60 backdrop-blur-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span
-                        className="inline-block size-2.5 rounded-full shrink-0 ring-2 ring-card"
-                        style={{ backgroundColor: stage.color }}
-                        aria-hidden
-                      />
-                      <h3 className="truncate font-semibold text-sm text-foreground">
-                        {stage.name}
-                      </h3>
-                    </div>
+                {/* PR-J: Header da coluna agora usa cor do stage como
+                    background (briefing user — screenshot com headers
+                    coloridos NOVO LEAD/COLETA/COTACAO/DOCUMENTACAO).
+                    Texto adapta automaticamente ao contraste via
+                    contrastTextColor() helper. Mantem nome stage uppercase
+                    pra match com o screenshot. */}
+                {(() => {
+                  const headerBg = stage.color || "#3b82f6";
+                  const headerText = contrastTextColor(headerBg);
+                  const subtleText =
+                    headerText === "#ffffff"
+                      ? "rgba(255,255,255,0.75)"
+                      : "rgba(0,0,0,0.65)";
+                  return (
+                    <div
+                      className="px-4 py-3 rounded-t-2xl"
+                      style={{ backgroundColor: headerBg, color: headerText }}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <h3
+                            className="truncate font-bold text-sm uppercase tracking-wide"
+                            style={{ color: headerText }}
+                          >
+                            {stage.name}
+                          </h3>
+                        </div>
                     {canEdit && (
                       // PR-CRMOPS2: o "+" agora abre o form de Lead
                       // (briefing C). Se actions.createLeadWithDeal nao
@@ -1532,27 +1514,40 @@ export function KanbanBoard({
                       )
                     )}
                   </div>
-                  {/* PR-I: subtitle "Leads: X" + R$ na MESMA linha.
-                      Conv % e ticket medio movidos pro title attr da
-                      linha (mantem accessibility, evita poluir UI). */}
-                  <div
-                    className="mt-1.5 flex items-center justify-between gap-2 text-[11px] tabular-nums"
-                    title={
-                      index > 0
-                        ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
-                        : `Ticket médio R$ ${formatCurrency(metrics.average)}`
-                    }
-                  >
-                    <span className="font-medium text-muted-foreground">
-                      Leads: <strong className="text-foreground tabular-nums">{metrics.count}</strong>
-                    </span>
-                    {metrics.total > 0 && (
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                        R$ {formatCurrency(metrics.total)}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                      {/* PR-I/J: subtitle "Leads: X" + R$ na MESMA linha.
+                          Cores adaptam ao header (texto branco/dark). */}
+                      <div
+                        className="mt-1.5 flex items-center justify-between gap-2 text-[11px] tabular-nums"
+                        title={
+                          index > 0
+                            ? `Ticket médio R$ ${formatCurrency(metrics.average)} · Conv ${stageConversion.toFixed(1)}%`
+                            : `Ticket médio R$ ${formatCurrency(metrics.average)}`
+                        }
+                      >
+                        <span
+                          className="font-medium"
+                          style={{ color: subtleText }}
+                        >
+                          Leads:{" "}
+                          <strong
+                            className="tabular-nums"
+                            style={{ color: headerText }}
+                          >
+                            {metrics.count}
+                          </strong>
+                        </span>
+                        {metrics.total > 0 && (
+                          <span
+                            className="font-semibold tabular-nums"
+                            style={{ color: headerText }}
+                          >
+                            R$ {formatCurrency(metrics.total)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="px-2.5 py-2.5 space-y-2 flex-1 overflow-y-auto">
                   {isOver && draggedDealId && (
@@ -2452,9 +2447,15 @@ const DealCard = React.memo(function DealCardImpl({
 //
 // Uso: so em modo controlled (CrmShell controla pipelineId).
 
+// PR-J: FunilCurrentDropdown enriquecido com cards de funis (briefing
+// user — "ao clicar que apareca o menu parecido com configurar funil,
+// para selecionar o funil"). Cada funil renderiza nome + numero de
+// etapas + chips coloridos com bullet por stage. Visual destacado:
+// botao trigger com bg-primary/10 + cor primary.
 function FunilCurrentDropdown({
   currentName,
   pipelines,
+  stages,
   selectedId,
   onSelect,
   canCreate,
@@ -2464,6 +2465,9 @@ function FunilCurrentDropdown({
 }: {
   currentName: string;
   pipelines: Pipeline[];
+  /** Stages de TODOS os funis — usado pra renderizar chips coloridos
+   *  no dropdown (sem chamada extra). */
+  stages: Stage[];
   selectedId: string;
   onSelect: (id: string) => void;
   canCreate: boolean;
@@ -2471,6 +2475,21 @@ function FunilCurrentDropdown({
   onCreate: () => void;
   onManage: () => void;
 }) {
+  // Agrupa stages por pipeline_id pra render dos chips
+  const stagesByPipeline = React.useMemo(() => {
+    const map = new Map<string, Stage[]>();
+    for (const s of stages) {
+      const arr = map.get(s.pipeline_id) ?? [];
+      arr.push(s);
+      map.set(s.pipeline_id, arr);
+    }
+    // Ordena cada array por sort_order
+    for (const arr of map.values()) {
+      arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    }
+    return map;
+  }, [stages]);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -2479,53 +2498,114 @@ function FunilCurrentDropdown({
             type="button"
             variant="outline"
             size="sm"
-            className="h-9 rounded-md gap-2 max-w-xs"
+            className="h-9 rounded-md gap-2 max-w-xs border-primary/30 bg-primary/5 hover:bg-primary/10 text-foreground"
             title="Trocar de funil ou gerenciar"
           >
-            <span className="text-xs text-muted-foreground shrink-0">
-              Funil atual:
+            <span className="text-[10px] font-bold uppercase tracking-wider text-primary shrink-0">
+              Funil atual
             </span>
-            <span className="font-semibold text-foreground truncate">
+            <span className="font-bold text-foreground truncate">
               {currentName || "—"}
             </span>
-            <ChevronDown className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
+            <ChevronDown className="size-3.5 text-primary shrink-0" aria-hidden />
           </Button>
         }
       />
-      <DropdownMenuContent align="start" className="min-w-[240px]">
-        {pipelines.length > 1 && (
+      <DropdownMenuContent
+        align="start"
+        className="w-[360px] p-2 max-h-[480px] overflow-y-auto"
+      >
+        {pipelines.length > 0 && (
           <>
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Trocar de funil
-            </DropdownMenuLabel>
-            {pipelines.map((p) => (
-              <DropdownMenuItem
-                key={p.id}
-                onClick={() => onSelect(p.id)}
-                className={p.id === selectedId ? "bg-primary/5 text-primary font-medium" : ""}
-              >
-                {p.name}
-                {p.id === selectedId && (
-                  <span className="ml-auto text-[10px] text-muted-foreground">
-                    atual
-                  </span>
-                )}
-              </DropdownMenuItem>
-            ))}
-            {(canCreate || canManage) && <DropdownMenuSeparator />}
+            </div>
+            <div className="space-y-1.5">
+              {pipelines.map((p) => {
+                const isActive = p.id === selectedId;
+                const pipelineStages = stagesByPipeline.get(p.id) ?? [];
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onSelect(p.id)}
+                    className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                      isActive
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40 hover:bg-muted/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="font-semibold text-sm text-foreground truncate">
+                        {p.name}
+                      </span>
+                      {isActive && (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+                          <Check className="size-3" aria-hidden />
+                          Atual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mb-2">
+                      {pipelineStages.length} etapa
+                      {pipelineStages.length === 1 ? "" : "s"}
+                    </p>
+                    {pipelineStages.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {pipelineStages.slice(0, 8).map((s) => (
+                          <span
+                            key={s.id}
+                            className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-foreground"
+                          >
+                            <span
+                              className="inline-block size-1.5 rounded-full shrink-0"
+                              style={{
+                                backgroundColor: s.color || "#888",
+                              }}
+                              aria-hidden
+                            />
+                            {s.name}
+                          </span>
+                        ))}
+                        {pipelineStages.length > 8 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{pipelineStages.length - 8}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </>
         )}
-        {canCreate && (
-          <DropdownMenuItem onClick={onCreate}>
-            <Plus className="size-3.5" aria-hidden />
-            Criar novo funil
-          </DropdownMenuItem>
-        )}
-        {canManage && (
-          <DropdownMenuItem onClick={onManage}>
-            <Settings2 className="size-3.5" aria-hidden />
-            Configurar funis...
-          </DropdownMenuItem>
+        {(canCreate || canManage) && (
+          <>
+            <div className="my-2 h-px bg-border" />
+            <div className="space-y-0.5">
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={onCreate}
+                  className="w-full inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                  Criar novo funil
+                </button>
+              )}
+              {canManage && (
+                <button
+                  type="button"
+                  onClick={onManage}
+                  className="w-full inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  <Settings2 className="size-3.5" aria-hidden />
+                  Configurar funis...
+                </button>
+              )}
+            </div>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
