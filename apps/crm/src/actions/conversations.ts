@@ -2,6 +2,7 @@
 
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 
 export type ConversationFilter = "all" | "ai" | "waiting_human";
 
@@ -214,7 +215,10 @@ export async function findOrCreateConversationByLead(
     throw new Error(error?.message ?? "Erro ao criar conversa");
   }
 
-  revalidatePath("/chat");
+  // PR-K LEAD-SYNC: nova conversa criada por agente -> /chat e
+  // /leads atualizam (drawer mostra conversation count via PR-D
+  // header rico, lista pode mostrar "ultima conversa" futuramente).
+  await revalidateLeadAndChatCaches(leadId);
   return { conversationId: created.id as string, created: true };
 }
 

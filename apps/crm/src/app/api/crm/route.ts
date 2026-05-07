@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { moveDealToStage } from "@/lib/crm/move-deal";
 import { phoneBROptional, leadUpdateSchema } from "@persia/shared/validation";
+import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 
 /**
  * CRM API - Used by n8n AI Agent to control the CRM pipeline
@@ -171,6 +172,11 @@ export async function POST(request: NextRequest) {
           reason,
         });
 
+        // PR-K LEAD-SYNC: invalida caches /crm + /leads + /leads/:id
+        // pra Tab Leads refletir que o deal mudou (e potencialmente o
+        // status do lead). Sem isso, n8n move o deal mas user nao ve.
+        await revalidateLeadCaches(resolvedLeadId);
+
         return NextResponse.json({
           ok: result.ok,
           action: "move_deal",
@@ -211,6 +217,10 @@ export async function POST(request: NextRequest) {
             .upsert({ lead_id: resolvedLeadId, tag_id: tag.id }, { onConflict: "lead_id,tag_id" });
         }
 
+        // PR-K LEAD-SYNC: tag adicionada via n8n -> tab Leads precisa
+        // refletir nas chips do lead (LeadsList renderiza tags inline).
+        await revalidateLeadCaches(resolvedLeadId);
+
         return NextResponse.json({ ok: true, action: "add_tag", tagName });
       }
 
@@ -234,6 +244,9 @@ export async function POST(request: NextRequest) {
             .eq("lead_id", resolvedLeadId)
             .eq("tag_id", existingTag.id);
         }
+
+        // PR-K LEAD-SYNC: tag removida via n8n -> tab Leads atualiza
+        await revalidateLeadCaches(resolvedLeadId);
 
         return NextResponse.json({ ok: true, action: "remove_tag" });
       }
@@ -262,6 +275,10 @@ export async function POST(request: NextRequest) {
             await disableChatbotForLead(lead.organization_id, lead.phone, minutes);
           }
         } catch {}
+
+        // PR-K LEAD-SYNC: bot pausado afeta status do lead na lista
+        // (indicador "AI ativo / pausado" — disponivel no drawer)
+        await revalidateLeadCaches(resolvedLeadId);
 
         return NextResponse.json({ ok: true, action: "pause_bot", minutes });
       }
@@ -304,6 +321,10 @@ export async function POST(request: NextRequest) {
         updates.updated_at = new Date().toISOString();
 
         await supabase.from("leads").update(updates).eq("id", resolvedLeadId);
+
+        // PR-K LEAD-SYNC: update via n8n precisa refletir na tab Leads
+        // imediatamente (mudanca de status / nome / etc).
+        await revalidateLeadCaches(resolvedLeadId);
 
         return NextResponse.json({ ok: true, action: "update_lead" });
       }

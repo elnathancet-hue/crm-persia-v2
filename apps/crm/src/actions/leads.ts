@@ -1,7 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 import type {
   LeadActivity,
   LeadDetail,
@@ -242,8 +242,9 @@ export async function createLead(formData: FormData) {
     channel: (fdField(formData, "channel") as string) || undefined,
   });
 
-  revalidatePath("/leads");
-  revalidatePath("/crm");
+  // PR-K LEAD-SYNC: helper centralizado (substitui revalidatePath
+  // espalhado). Padroniza paths invalidados em todas mutations.
+  await revalidateLeadCaches(lead.id);
   return lead;
 }
 
@@ -272,16 +273,18 @@ export async function updateLead(
       : data;
 
   const updated = await updateLeadShared(ctx, id, input);
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${id}`);
-  revalidatePath("/crm");
+  // PR-K LEAD-SYNC: helper centralizado
+  await revalidateLeadCaches(id);
   return updated;
 }
 
 export async function deleteLead(id: string) {
   const { supabase, orgId } = await requireRole("agent");
   await deleteLeadShared({ db: supabase, orgId }, id);
-  revalidatePath("/leads");
+  // PR-K LEAD-SYNC: helper centralizado (lead deletado sai da lista
+  // e do Kanban — invalida tudo, nao precisa /leads/:id pois rota
+  // deixa de existir)
+  await revalidateLeadCaches();
   return { success: true };
 }
 
@@ -292,9 +295,8 @@ export async function addTagToLead(leadId: string, tagId: string) {
     leadId,
     tagId,
   );
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/crm");
+  // PR-K LEAD-SYNC: helper centralizado
+  await revalidateLeadCaches(leadId);
 }
 
 export async function removeTagFromLead(leadId: string, tagId: string) {
@@ -304,9 +306,8 @@ export async function removeTagFromLead(leadId: string, tagId: string) {
     leadId,
     tagId,
   );
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/leads");
-  revalidatePath("/crm");
+  // PR-K LEAD-SYNC: helper centralizado
+  await revalidateLeadCaches(leadId);
 }
 
 /**
@@ -325,8 +326,8 @@ export async function assignLead(leadId: string, userId: string | null) {
     assigned_to: userId,
   });
 
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/crm");
+  // PR-K LEAD-SYNC: helper centralizado (atribuicao reflete em
+  // /crm Kanban + /leads lista + /leads/:id drawer)
+  await revalidateLeadCaches(leadId);
   return { success: true };
 }
