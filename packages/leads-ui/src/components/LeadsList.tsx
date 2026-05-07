@@ -14,10 +14,22 @@
 // estava com UI legada custom-CSS).
 
 import * as React from "react";
+import { toast } from "sonner";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Card } from "@persia/ui/card";
+import { Checkbox } from "@persia/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -61,6 +73,12 @@ import {
   ChevronDown,
   Check,
   Activity as ActivityIcon,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  X,
+  UserCog,
+  Loader2,
 } from "lucide-react";
 import type { LeadWithTags } from "@persia/shared/crm";
 
@@ -172,6 +190,19 @@ export interface LeadsListProps {
   onOpenConversation?: (lead: LeadWithTags) => void;
   /** PR-L3: callback "Agendar" no menu ⋯ */
   onScheduleAppointment?: (lead: LeadWithTags) => void;
+  /**
+   * PR-L4: callback bulk delete. Recebe lista de leadIds. Caller e
+   * responsavel pela confirmacao (UI ja faz AlertDialog antes de
+   * chamar). Retorna count atualizado.
+   */
+  onBulkDelete?: (leadIds: string[]) => Promise<{ deleted_count: number }>;
+  /**
+   * PR-L4: callback bulk assign. userId=null = desatribui todos.
+   */
+  onBulkAssign?: (
+    leadIds: string[],
+    userId: string | null,
+  ) => Promise<{ updated_count: number }>;
 }
 
 export function LeadsList({
@@ -190,6 +221,8 @@ export function LeadsList({
   onCreateDeal,
   onOpenConversation,
   onScheduleAppointment,
+  onBulkDelete,
+  onBulkAssign,
 }: LeadsListProps) {
   const actions = useLeadsActions();
   const [leads, setLeads] = React.useState(initialLeads);
@@ -215,12 +248,39 @@ export function LeadsList({
   const [isLoading, setIsLoading] = React.useState(false);
   const debounceRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  // PR-L4: bulk select state
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [bulkDeleteOpen, setBulkDeleteOpen] = React.useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = React.useState(false);
+  const [bulkPending, setBulkPending] = React.useState(false);
+
+  // PR-L4: sort state. Default created_at DESC.
+  type SortColumn =
+    | "created_at"
+    | "name"
+    | "last_interaction_at"
+    | "updated_at";
+  const [sortColumn, setSortColumn] =
+    React.useState<SortColumn>("created_at");
+  const [sortDirection, setSortDirection] = React.useState<"asc" | "desc">(
+    "desc",
+  );
+
+  // Limpa selecao quando dados mudam (refresh / page change)
+  React.useEffect(() => {
+    setSelectedIds(new Set());
+  }, [leads]);
+
   const fetchLeads = React.useCallback(
     async (params: {
       search?: string;
       status?: string;
       tags?: string[];
       page?: number;
+      orderColumn?: SortColumn;
+      orderDirection?: "asc" | "desc";
     }) => {
       setIsLoading(true);
       try {
@@ -231,6 +291,15 @@ export function LeadsList({
             params.tags && params.tags.length > 0 ? params.tags : undefined,
           page: params.page || 1,
           limit: 20,
+          // PR-L4: orderBy opcional
+          ...(params.orderColumn
+            ? {
+                orderBy: {
+                  column: params.orderColumn,
+                  direction: params.orderDirection ?? "desc",
+                },
+              }
+            : {}),
         });
         setLeads(result.leads);
         setTotal(result.total);
@@ -291,7 +360,51 @@ export function LeadsList({
       status: statusFilter,
       tags: selectedTagIds,
       page: newPage,
+      orderColumn: sortColumn,
+      orderDirection: sortDirection,
     });
+  }
+
+  // PR-L4: handler de click em sortable header. Toggle direction se
+  // mesma coluna; senao, set nova coluna com default DESC.
+  function handleSortClick(column: SortColumn) {
+    let nextDirection: "asc" | "desc";
+    if (sortColumn === column) {
+      nextDirection = sortDirection === "desc" ? "asc" : "desc";
+    } else {
+      nextDirection = "desc";
+    }
+    setSortColumn(column);
+    setSortDirection(nextDirection);
+    fetchLeads({
+      search,
+      status: statusFilter,
+      tags: selectedTagIds,
+      page: 1,
+      orderColumn: column,
+      orderDirection: nextDirection,
+    });
+  }
+
+  // PR-L4: bulk select handlers
+  function toggleSelected(leadId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (prev.size === leads.length) return new Set();
+      return new Set(leads.map((l) => l.id));
+    });
+  }
+
+  function clearSelected() {
+    setSelectedIds(new Set());
   }
 
   async function handleCreate(formData: FormData) {
@@ -313,10 +426,67 @@ export function LeadsList({
 
   const handleEdit = onEditLead ?? onRowClick;
 
+  // PR-L4: helper pra renderizar cabecalho sortable com seta visual.
+  // Click no header chama handleSortClick(column).
+  const renderSortHeader = (column: SortColumn, label: string) => {
+    const isActive = sortColumn === column;
+    const Icon = isActive
+      ? sortDirection === "desc"
+        ? ArrowDown
+        : ArrowUp
+      : ArrowUpDown;
+    return (
+      <button
+        type="button"
+        onClick={() => handleSortClick(column)}
+        className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider hover:text-primary transition-colors"
+      >
+        {label}
+        <Icon
+          className={`size-3 ${isActive ? "text-primary" : "text-muted-foreground/50"}`}
+          aria-hidden
+        />
+      </button>
+    );
+  };
+
+  // PR-L4: bulk operations enabled? (admin compat — admin nao passa
+  // callbacks por default).
+  const bulkEnabled = canEdit && (!!onBulkDelete || !!onBulkAssign);
+  const allSelected =
+    selectedIds.size > 0 && selectedIds.size === leads.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
   const columns: ColumnDef<LeadWithTags>[] = [
+    // PR-L4: coluna checkbox bulk select (so renderiza se bulk habilitado)
+    ...(bulkEnabled
+      ? ([
+          {
+            key: "_select",
+            header: (
+              <Checkbox
+                checked={allSelected}
+                indeterminate={someSelected}
+                onCheckedChange={toggleSelectAll}
+                aria-label="Selecionar todos"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) as React.ReactNode,
+            className: "w-10",
+            render: (row: LeadWithTags) => (
+              <Checkbox
+                checked={selectedIds.has(row.id)}
+                onCheckedChange={() => toggleSelected(row.id)}
+                aria-label={`Selecionar ${row.name ?? "lead"}`}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ),
+          },
+        ] as ColumnDef<LeadWithTags>[])
+      : []),
     {
       key: "name",
-      header: "Nome",
+      header: renderSortHeader("name", "Nome"),
       sortable: true,
       render: (row) => {
         const name = row.name?.trim() || "Sem nome";
@@ -446,7 +616,7 @@ export function LeadsList({
     },
     {
       key: "last_interaction_at",
-      header: "Última interação",
+      header: renderSortHeader("last_interaction_at", "Última interação"),
       sortable: true,
       render: (row) => (
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -851,10 +1021,65 @@ export function LeadsList({
         </div>
       )}
 
-      {/* Content — overflow-x-auto pra tabela em telas estreitas */}
+      {/* PR-L4: Bulk action bar — aparece quando ha selecao.
+          Sticky no topo da tabela, mostra count + acoes (Atribuir,
+          Excluir, Limpar). */}
+      {bulkEnabled && selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-sm font-semibold text-primary tabular-nums">
+              {selectedIds.size} lead{selectedIds.size === 1 ? "" : "s"}{" "}
+              selecionado{selectedIds.size === 1 ? "" : "s"}
+            </span>
+            <button
+              type="button"
+              onClick={clearSelected}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              disabled={bulkPending}
+            >
+              Limpar
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            {onBulkAssign && assignees.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-md gap-1.5"
+                onClick={() => setBulkAssignOpen(true)}
+                disabled={bulkPending}
+              >
+                <UserCog className="size-3.5" />
+                Atribuir
+              </Button>
+            )}
+            {onBulkDelete && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-md gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={() => setBulkDeleteOpen(true)}
+                disabled={bulkPending}
+              >
+                {bulkPending ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3.5" />
+                )}
+                Excluir
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Content — overflow-x-auto pra tabela em telas estreitas
+          PR-L4: skeleton durante loading (em vez de opacity-60) */}
       <Card
-        className={`border border-border/60 rounded-xl shadow-sm overflow-hidden transition-opacity ${
-          isLoading ? "opacity-60" : ""
+        className={`border border-border/60 rounded-xl shadow-sm overflow-hidden ${
+          isLoading ? "opacity-70" : ""
         }`}
       >
         {leads.length === 0 ? (
@@ -962,6 +1187,128 @@ export function LeadsList({
               onCancel={() => setIsCreateOpen(false)}
               submitLabel="Criar lead"
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* PR-L4: AlertDialog confirmar bulk delete (defesa contra
+          excluir lista inteira por engano) */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Excluir {selectedIds.size} lead{selectedIds.size === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Os leads selecionados e todos os dados vinculados (negócios,
+              conversas, atividades, tags) serão removidos permanentemente.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkPending}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!onBulkDelete) return;
+                setBulkPending(true);
+                try {
+                  const ids = Array.from(selectedIds);
+                  const result = await onBulkDelete(ids);
+                  toast.success(
+                    `${result.deleted_count} lead${result.deleted_count === 1 ? "" : "s"} excluído${result.deleted_count === 1 ? "" : "s"}`,
+                  );
+                  setSelectedIds(new Set());
+                  setBulkDeleteOpen(false);
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Erro ao excluir",
+                  );
+                } finally {
+                  setBulkPending(false);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* PR-L4: Dialog escolher responsavel pra bulk assign */}
+      <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Atribuir {selectedIds.size} lead
+              {selectedIds.size === 1 ? "" : "s"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 py-2 max-h-80 overflow-y-auto">
+            {assignees.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                disabled={bulkPending}
+                onClick={async () => {
+                  if (!onBulkAssign) return;
+                  setBulkPending(true);
+                  try {
+                    const ids = Array.from(selectedIds);
+                    const result = await onBulkAssign(ids, m.id);
+                    toast.success(
+                      `${result.updated_count} lead${result.updated_count === 1 ? "" : "s"} atribuído${result.updated_count === 1 ? "" : "s"} a ${m.name}`,
+                    );
+                    setSelectedIds(new Set());
+                    setBulkAssignOpen(false);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : "Erro ao atribuir",
+                    );
+                  } finally {
+                    setBulkPending(false);
+                  }
+                }}
+                className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
+              >
+                <span>{m.name}</span>
+              </button>
+            ))}
+            {assignees.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-3">
+                Nenhum membro disponível para atribuir.
+              </p>
+            ) : (
+              <button
+                type="button"
+                disabled={bulkPending}
+                onClick={async () => {
+                  if (!onBulkAssign) return;
+                  setBulkPending(true);
+                  try {
+                    const ids = Array.from(selectedIds);
+                    const result = await onBulkAssign(ids, null);
+                    toast.success(
+                      `${result.updated_count} lead${result.updated_count === 1 ? "" : "s"} sem responsável`,
+                    );
+                    setSelectedIds(new Set());
+                    setBulkAssignOpen(false);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : "Erro ao remover",
+                    );
+                  } finally {
+                    setBulkPending(false);
+                  }
+                }}
+                className="mt-2 flex w-full items-center justify-between rounded-md border border-dashed border-border px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <X className="size-3.5" />
+                Sem responsável
+              </button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

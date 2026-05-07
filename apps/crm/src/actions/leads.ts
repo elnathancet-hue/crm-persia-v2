@@ -590,3 +590,115 @@ export async function assignLead(leadId: string, userId: string | null) {
   await revalidateLeadCaches(leadId);
   return { success: true };
 }
+
+// ============================================================================
+// PR-L4: Bulk operations (atribuir / deletar em massa)
+// ----------------------------------------------------------------------------
+// Cap defensivo BULK_LEAD_CAP=200 (alinhado com BULK_CAP do KanbanBoard).
+// Multi-tenant em camadas:
+//   - requireRole("agent")
+//   - .eq("organization_id", orgId) no UPDATE/DELETE
+//   - Se userId fornecido (assign), valida que e membro ATIVO da org
+//
+// Sem activity log per-lead (overhead em massa). Activity unica
+// agregada pode ser feature futura se user pedir.
+//
+// revalidate via helper centralizado (PR-K) — invalida /crm + /leads.
+// ============================================================================
+
+const BULK_LEAD_CAP = 200;
+
+/**
+ * PR-L4: atribui um responsavel (ou desatribui com null) pra
+ * multiplos leads de uma vez. Cap 200 por chamada.
+ *
+ * Validacoes:
+ *   - leadIds.length > 0 e <= BULK_LEAD_CAP
+ *   - Se userId nao for null, valida que e membro ATIVO da org
+ *     (defesa contra atribuir lead a user de outra org)
+ *
+ * Performance: 1 UPDATE com `.in("id", leadIds)` — sem N+1.
+ * Retorna count de leads atualizados (server-side).
+ */
+export async function bulkAssignLeads(
+  leadIds: string[],
+  userId: string | null,
+): Promise<{ updated_count: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  if (leadIds.length === 0) return { updated_count: 0 };
+  if (leadIds.length > BULK_LEAD_CAP) {
+    throw new Error(
+      `Máximo ${BULK_LEAD_CAP} leads por operação em massa.`,
+    );
+  }
+
+  // Defesa: se userId fornecido, valida membership na org
+  if (userId !== null) {
+    const { data: member } = await supabase
+      .from("organization_members")
+      .select("user_id")
+      .eq("organization_id", orgId)
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!member) {
+      throw new Error(
+        "Usuário não é membro ativo desta organização",
+      );
+    }
+  }
+
+  // Bulk UPDATE — `.eq("organization_id", orgId)` garante que so
+  // leads da org do caller sao tocados (defesa em camadas, mesmo
+  // que leadIds venha "envenenado" do client)
+  const { data, error } = await supabase
+    .from("leads")
+    .update({
+      assigned_to: userId,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("organization_id", orgId)
+    .in("id", leadIds)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+
+  await revalidateLeadCaches();
+  return { updated_count: data?.length ?? 0 };
+}
+
+/**
+ * PR-L4: deleta multiplos leads de uma vez. Cap 200 por chamada.
+ *
+ * IMPORTANTE: deletar lead CASCADE deleta deals/activities/conversations
+ * vinculados (FK ON DELETE CASCADE). UI deve confirmar via AlertDialog
+ * antes de chamar (caller responsibility — actions sao "burras").
+ *
+ * Performance: 1 DELETE com `.in("id", leadIds)`.
+ */
+export async function bulkDeleteLeads(
+  leadIds: string[],
+): Promise<{ deleted_count: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  if (leadIds.length === 0) return { deleted_count: 0 };
+  if (leadIds.length > BULK_LEAD_CAP) {
+    throw new Error(
+      `Máximo ${BULK_LEAD_CAP} leads por operação em massa.`,
+    );
+  }
+
+  const { data, error } = await supabase
+    .from("leads")
+    .delete()
+    .eq("organization_id", orgId)
+    .in("id", leadIds)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+
+  await revalidateLeadCaches();
+  return { deleted_count: data?.length ?? 0 };
+}
