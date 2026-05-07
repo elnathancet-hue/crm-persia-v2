@@ -54,6 +54,13 @@ import {
 } from "@persia/ui/tabs";
 import { getLeadStats, updateLead, type LeadStats } from "@/actions/leads";
 import { getLeadOpenDealWithStages, updateDealStage } from "@/actions/crm";
+import {
+  getLeadCustomFields,
+  setLeadCustomFieldValue,
+  type LeadCustomFieldDef,
+  type LeadCustomFieldEntry,
+} from "@/actions/custom-fields";
+import { Switch } from "@persia/ui/switch";
 
 // Buckets pra agrupar stages no Popover do subheader. Espelha o
 // schema de outcome (Fase 1) e as cores usadas no Kanban.
@@ -397,11 +404,14 @@ export function LeadInfoDrawer({
               <Contact className="size-4" />
               Dados
             </TabsTrigger>
-            <TabsTrigger value="produtos">
+            {/* PR-E: tab "Produtos" virou "Campos" — renderizacao
+                dinamica dos custom_fields da org. Quando user
+                implementar produtos depois, vira tab proprio. */}
+            <TabsTrigger value="campos">
               <span className="size-4 inline-flex items-center justify-center">
-                📦
+                ⚙
               </span>
-              Produtos
+              Campos
             </TabsTrigger>
             <TabsTrigger value="comentarios">
               <span className="size-4 inline-flex items-center justify-center">
@@ -572,10 +582,8 @@ export function LeadInfoDrawer({
               </section>
             </TabsContent>
 
-            <TabsContent value="produtos" className="mt-0">
-              <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-                Em breve. Vincule produtos ao lead pra montar propostas.
-              </div>
+            <TabsContent value="campos" className="mt-0">
+              <CustomFieldsTab leadId={lead.id} open={open} />
             </TabsContent>
 
             <TabsContent value="comentarios" className="mt-0">
@@ -628,6 +636,293 @@ function Field({
     <div className={className ? `space-y-1 ${className}` : "space-y-1"}>
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// ============================================================================
+// PR-E: CustomFieldsTab — renderizacao dinamica dos custom_fields da org
+// ----------------------------------------------------------------------------
+// Carrega definicoes + valores quando a tab abre. Cada field e
+// renderizado pelo CustomFieldInput (despacho por field_type).
+// Auto-save on blur (sem botao "salvar" — o agente espera).
+//
+// Loading: skeleton 3 linhas. Empty: hint "Org nao configurou campos".
+// Error: toast PT-BR + mantem valor anterior.
+// ============================================================================
+
+function CustomFieldsTab({
+  leadId,
+  open,
+}: {
+  leadId: string;
+  open: boolean;
+}) {
+  const [entries, setEntries] = React.useState<LeadCustomFieldEntry[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [savingFieldId, setSavingFieldId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    getLeadCustomFields(leadId)
+      .then((res) => {
+        if (!cancelled) setEntries(res);
+      })
+      .catch(() => {
+        if (!cancelled) setEntries([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, leadId]);
+
+  async function handleSave(fieldId: string, newValue: string) {
+    // Otimista: atualiza state local imediato
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.field.id === fieldId ? { ...e, value: newValue } : e,
+      ),
+    );
+    setSavingFieldId(fieldId);
+    try {
+      await setLeadCustomFieldValue(leadId, fieldId, newValue);
+      // Sem toast em cada save — auto-save deve ser silencioso.
+      // Se quiser feedback, mostrar dot pequeno "salvo" no field.
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao salvar campo",
+      );
+      // Reload entries pra reverter o otimista que falhou
+      try {
+        const res = await getLeadCustomFields(leadId);
+        setEntries(res);
+      } catch {
+        /* swallow */
+      }
+    } finally {
+      setSavingFieldId(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-3 py-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="space-y-1">
+            <div className="h-3 w-24 bg-muted rounded animate-pulse" />
+            <div className="h-9 w-full bg-muted/60 rounded animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+        <p className="font-medium">Sua organização ainda não criou campos personalizados.</p>
+        <p className="mt-1 text-xs">
+          Configure em Configurações → Campos personalizados pra capturar dados
+          adicionais sobre cada lead (data de nascimento, segmento, prioridade,
+          etc).
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 py-2">
+      {entries.map((entry) => (
+        <CustomFieldInput
+          key={entry.field.id}
+          field={entry.field}
+          value={entry.value}
+          saving={savingFieldId === entry.field.id}
+          onSave={(v) => handleSave(entry.field.id, v)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * PR-E: dispatcher de input por field_type. Auto-save on blur (text/
+ * number/url/phone/email) ou on change (select, boolean, date — esses
+ * tem commit imediato pq nao tem fase intermediaria de digitacao).
+ *
+ * Field types suportados:
+ *   - text, url, phone, email: <Input> simples (commit on blur)
+ *   - number: <Input type="number"> (commit on blur, valida numero)
+ *   - date: <Input type="date"> (commit on change)
+ *   - boolean: <Switch> (commit on change)
+ *   - select: <Select> com options do field.options (commit on change)
+ *   - multi_select: NOT SUPPORTED — fallback pra text simples
+ *
+ * Cada caso renderiza o mesmo Field wrapper (label + spinner saving).
+ */
+function CustomFieldInput({
+  field,
+  value,
+  saving,
+  onSave,
+}: {
+  field: LeadCustomFieldDef;
+  value: string;
+  saving: boolean;
+  onSave: (newValue: string) => void;
+}) {
+  const [localValue, setLocalValue] = React.useState(value);
+
+  // Re-hidrata quando entry muda (ex: reload apos erro)
+  React.useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  const labelEl = (
+    <span className="flex items-center gap-1.5">
+      <span>{field.name}</span>
+      {field.is_required && (
+        <span className="text-destructive" aria-label="obrigatório">
+          *
+        </span>
+      )}
+      {saving && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+    </span>
+  );
+
+  // Boolean: Switch com commit imediato
+  if (field.field_type === "boolean") {
+    const checked = localValue === "true";
+    return (
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">{labelEl}</Label>
+        <div className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2">
+          <span className="text-sm text-muted-foreground">
+            {checked ? "Sim" : "Não"}
+          </span>
+          <Switch
+            checked={checked}
+            onCheckedChange={(next) => {
+              const v = next ? "true" : "false";
+              setLocalValue(v);
+              onSave(v);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Select: Select com options + commit imediato
+  if (field.field_type === "select") {
+    return (
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">{labelEl}</Label>
+        <Select
+          value={localValue || undefined}
+          onValueChange={(v) => {
+            if (!v) return;
+            setLocalValue(v);
+            onSave(v);
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Selecione...">
+              {localValue || "Selecione..."}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {field.options.length === 0 ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                Sem opções configuradas
+              </div>
+            ) : (
+              field.options.map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
+  // Date: input type=date com commit on change
+  if (field.field_type === "date") {
+    return (
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">{labelEl}</Label>
+        <Input
+          type="date"
+          value={localValue}
+          onChange={(e) => {
+            const v = e.target.value;
+            setLocalValue(v);
+            onSave(v); // date picker commit imediato
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Number: type=number com validacao + commit on blur
+  if (field.field_type === "number") {
+    return (
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">{labelEl}</Label>
+        <Input
+          type="number"
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={() => {
+            if (localValue === value) return; // sem mudanca, skip
+            // Aceita vazio (deleta valor). Numero invalido revert.
+            if (localValue !== "" && !Number.isFinite(Number(localValue))) {
+              toast.error("Número inválido");
+              setLocalValue(value);
+              return;
+            }
+            onSave(localValue);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // text, url, phone, email, multi_select (fallback): Input + commit on blur
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{labelEl}</Label>
+      <Input
+        type={
+          field.field_type === "email"
+            ? "email"
+            : field.field_type === "url"
+              ? "url"
+              : "text"
+        }
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
+        onBlur={() => {
+          if (localValue !== value) onSave(localValue);
+        }}
+        placeholder={
+          field.field_type === "phone"
+            ? "+55 (00) 00000-0000"
+            : field.field_type === "email"
+              ? "email@exemplo.com"
+              : field.field_type === "url"
+                ? "https://..."
+                : ""
+        }
+      />
     </div>
   );
 }
