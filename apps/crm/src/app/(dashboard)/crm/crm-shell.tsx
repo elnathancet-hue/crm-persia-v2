@@ -46,6 +46,7 @@ import type {
   TagRef,
   TagWithCount,
 } from "@persia/shared/crm";
+import type { LeadListItemStats } from "@/actions/leads";
 
 import { CrmClient } from "./crm-client";
 import { LeadList } from "@/components/leads/lead-list";
@@ -83,6 +84,9 @@ interface CrmShellProps {
     initialTotal: number;
     initialPage: number;
     initialTotalPages: number;
+    // PR-L3: stats enriquecidas pras 4 colunas novas. Map<leadId, stats>.
+    // Opcional pra retro-compat com call-sites que ainda nao passaram.
+    initialStats?: Map<string, LeadListItemStats>;
   };
   segments: unknown[];
   tagsList: TagWithCount[];
@@ -235,7 +239,9 @@ export function CrmShell(props: CrmShellProps) {
             initialTotal={props.leadsListData.initialTotal}
             initialPage={props.leadsListData.initialPage}
             initialTotalPages={props.leadsListData.initialTotalPages}
+            initialStats={props.leadsListData.initialStats}
             activeSegment={props.activeSegment ?? null}
+            assignees={props.assignees}
           />
         )}
         {activeTab === "segmentos" && canManageSegments && (

@@ -2,7 +2,12 @@ export const metadata = { title: "CRM" };
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { ensureDefaultPipeline } from "@/actions/crm";
-import { getLeads, getOrgActivities } from "@/actions/leads";
+import {
+  getLeads,
+  getLeadsListStats,
+  getOrgActivities,
+  type LeadListItemStats,
+} from "@/actions/leads";
 import { getTagsWithCount } from "@/actions/tags";
 import { getSegments } from "@/actions/segments";
 import { listPipelines, listDeals } from "@persia/shared/crm";
@@ -183,6 +188,23 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
     })(),
   ]);
 
+  // PR-L3: stats em batch pra Tab Leads enriquecida (Responsavel +
+  // Negocios + Etapa + Atividades). Usa leadIds da lista paginada
+  // ja carregada (max 20 ids -> 3 queries paralelas, sem N+1).
+  // Defensive try/catch — falha em stats nao quebra a tab.
+  let leadsListStats = new Map<string, LeadListItemStats>();
+  try {
+    const leadIds = (leadsListResult.leads ?? []).map(
+      (l: { id: string }) => l.id,
+    );
+    if (leadIds.length > 0) {
+      leadsListStats = await getLeadsListStats(leadIds);
+    }
+  } catch (err) {
+    console.error("[/crm page] getLeadsListStats falhou:", err);
+    // leadsListStats fica vazio — UI degrada mostrando colunas vazias
+  }
+
   // Resolve nomes dos responsaveis em query separada (RLS pode bloquear —
   // try/catch defensivo).
   const memberUserIds = members
@@ -226,6 +248,9 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
         initialTotal: leadsListResult.total,
         initialPage: leadsListResult.page,
         initialTotalPages: leadsListResult.totalPages,
+        // PR-L3: stats enriquecidas pras 4 colunas novas
+        // (Responsavel/Negocios/Etapa/Atividades)
+        initialStats: leadsListStats,
       }}
       activeSegment={
         segmentIdFilter && activeSegmentName

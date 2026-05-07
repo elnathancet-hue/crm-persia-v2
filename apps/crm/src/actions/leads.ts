@@ -273,6 +273,177 @@ export async function getLeadDealsList(leadId: string): Promise<LeadDealItem[]> 
   }));
 }
 
+/**
+ * PR-L3: stats em BATCH pra Tab Leads enriquecida.
+ *
+ * Recebe lista de leadIds (paginados, normalmente 20 por vez) e
+ * retorna um Map<leadId, LeadListItemStats> com 4 categorias de
+ * dados por linha:
+ *   - Deals: count abertos + valor total dos abertos + etapa do
+ *     deal aberto mais recente (com nome + cor + outcome)
+ *   - Activities: count + descricao da ultima
+ *   - Conversations: count + ultima mensagem
+ *   - Assignee: ja vem no LeadWithTags (campo assignee no embed)
+ *
+ * PERFORMANCE (briefing user — "nao pode falhar"):
+ *   - 3 queries em PARALELO (Promise.all)
+ *   - Cada query usa .in("lead_id", leadIds) — uma chamada por
+ *     categoria, nao N por linha (evita N+1 explicito)
+ *   - Aggregation client-side via Map<leadId, ...>
+ *   - Cap defensivo: se leadIds.length > 200, abandona stats e
+ *     retorna Map vazio (lista degrada graciosamente — sem stats
+ *     mas continua renderizando)
+ *
+ * MULTI-TENANT:
+ *   - Todas as 3 queries filtram por organization_id = orgId
+ *   - Lead lookup nao precisa (leadIds ja vem da prop dos leads
+ *     visiveis pro caller, scoped pelo org)
+ *
+ * UPGRADE FUTURO:
+ *   - Quando tiver coluna "Conversas" na lista, adicionar
+ *     conversations no shape (ja preparado, so descomentar)
+ *   - Quando tiver flag "AI ativo/pausado" por lead, adicionar
+ *     query de agent_runs ou conversations.assigned_to
+ */
+export interface LeadListItemStats {
+  deals: {
+    open_count: number;
+    open_total_value: number;
+    /** Etapa do deal aberto mais recente (created_at DESC). null se 0 abertos. */
+    latest_open_stage: {
+      id: string;
+      name: string;
+      color: string;
+    } | null;
+  };
+  activities: {
+    count: number;
+    /** Descricao da ultima activity (truncada client-side). */
+    latest_description: string | null;
+  };
+  conversations: {
+    count: number;
+    /** Ultimo last_message_at (ISO). Pra futuro: "ha 2h". */
+    last_message_at: string | null;
+  };
+}
+
+export async function getLeadsListStats(
+  leadIds: string[],
+): Promise<Map<string, LeadListItemStats>> {
+  const result = new Map<string, LeadListItemStats>();
+  if (leadIds.length === 0) return result;
+
+  // Cap defensivo — paginacao default e 20, mas alguns callers podem
+  // mandar mais. Se vier muito alem, degrada (lista renderiza sem
+  // stats — melhor que travar query).
+  if (leadIds.length > 200) {
+    console.warn(
+      "[getLeadsListStats] leadIds.length > 200, skipping stats batch",
+    );
+    return result;
+  }
+
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Defesa: inicializa shape vazio pra todos leadIds (UI pode
+  // assumir que toda key existe mesmo se nao houver registros)
+  for (const id of leadIds) {
+    result.set(id, {
+      deals: {
+        open_count: 0,
+        open_total_value: 0,
+        latest_open_stage: null,
+      },
+      activities: { count: 0, latest_description: null },
+      conversations: { count: 0, last_message_at: null },
+    });
+  }
+
+  // 3 queries em paralelo (Promise.all). Cada uma traz so o suficiente.
+  const [dealsRes, activitiesRes, conversationsRes] = await Promise.all([
+    // DEALS abertos com etapa info
+    supabase
+      .from("deals")
+      .select(
+        "lead_id, value, status, created_at, " +
+          "pipeline_stages!inner(id, name, color)",
+      )
+      .eq("organization_id", orgId)
+      .eq("status", "open")
+      .in("lead_id", leadIds)
+      .order("created_at", { ascending: false }),
+    // ACTIVITIES (todas, agrupa client-side)
+    supabase
+      .from("lead_activities")
+      .select("lead_id, description, created_at")
+      .eq("organization_id", orgId)
+      .in("lead_id", leadIds)
+      .order("created_at", { ascending: false }),
+    // CONVERSATIONS (todas, agrupa client-side)
+    supabase
+      .from("conversations")
+      .select("lead_id, last_message_at")
+      .eq("organization_id", orgId)
+      .in("lead_id", leadIds)
+      .order("last_message_at", { ascending: false, nullsFirst: false }),
+  ]);
+
+  // Agrupa deals por lead_id (1 lead pode ter N deals abertos)
+  type DealRow = {
+    lead_id: string;
+    value: number;
+    status: string;
+    created_at: string;
+    pipeline_stages: { id: string; name: string; color: string | null } | null;
+  };
+  const dealsRows = (dealsRes.data ?? []) as unknown as DealRow[];
+  for (const row of dealsRows) {
+    const stat = result.get(row.lead_id);
+    if (!stat) continue;
+    stat.deals.open_count += 1;
+    stat.deals.open_total_value += Number(row.value ?? 0);
+    // Primeiro encontrado = mais recente (query ordenada DESC)
+    if (!stat.deals.latest_open_stage && row.pipeline_stages) {
+      stat.deals.latest_open_stage = {
+        id: row.pipeline_stages.id,
+        name: row.pipeline_stages.name,
+        color: row.pipeline_stages.color ?? "#888",
+      };
+    }
+  }
+
+  // Agrupa activities (count + ultima descricao)
+  type ActivityRow = {
+    lead_id: string;
+    description: string | null;
+    created_at: string;
+  };
+  const actRows = (activitiesRes.data ?? []) as unknown as ActivityRow[];
+  for (const row of actRows) {
+    const stat = result.get(row.lead_id);
+    if (!stat) continue;
+    stat.activities.count += 1;
+    if (!stat.activities.latest_description && row.description) {
+      stat.activities.latest_description = row.description;
+    }
+  }
+
+  // Agrupa conversations (count + ultima msg)
+  type ConvRow = { lead_id: string; last_message_at: string | null };
+  const convRows = (conversationsRes.data ?? []) as unknown as ConvRow[];
+  for (const row of convRows) {
+    const stat = result.get(row.lead_id);
+    if (!stat) continue;
+    stat.conversations.count += 1;
+    if (!stat.conversations.last_message_at && row.last_message_at) {
+      stat.conversations.last_message_at = row.last_message_at;
+    }
+  }
+
+  return result;
+}
+
 // ============================================================================
 // Mutations — thin wrappers que injetam onLeadChanged + revalidatePath
 // ============================================================================
