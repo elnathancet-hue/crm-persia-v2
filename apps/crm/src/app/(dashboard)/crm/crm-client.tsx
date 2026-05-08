@@ -26,6 +26,7 @@ import type {
 } from "@persia/shared/crm";
 import { useRole } from "@/lib/hooks/use-role";
 import { useDealsRealtime } from "@/lib/realtime/use-deals-realtime";
+import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
 
 interface Props {
   pipelines: Pipeline[];
@@ -57,12 +58,13 @@ export function CrmClient({
   const router = useRouter();
 
   // PR-O Realtime: outro agente moveu/criou/deletou deal neste funil.
-  // router.refresh() reroda o server component da pagina /crm e o
-  // KanbanBoard re-renderiza com deals atualizados. RLS de deals +
-  // filtro pipeline_id no canal sao defesa em camada (broadcast nao
-  // vaza cross-org).
+  // PR-P: debounce 200ms trailing — burst de drag-drop ou bulk move
+  // dispara N eventos em <200ms; sem debounce o servidor refetcha N
+  // vezes desnecessariamente. Com debounce, dispara 1x apos o burst.
+  // RLS de deals + filtro pipeline_id no canal sao defesa em camada.
   // Admin tem seu proprio wrapper e nao recebe esse hook (compat).
-  useDealsRealtime(pipelineId ?? null, () => router.refresh());
+  const debouncedRefresh = useDebouncedCallback(() => router.refresh());
+  useDealsRealtime(pipelineId ?? null, debouncedRefresh);
 
   // PR-J: importOpen/importTags/openImport REMOVIDOS — briefing user:
   // "tirar importar e exportar, deixar essa opcao somente em leads".

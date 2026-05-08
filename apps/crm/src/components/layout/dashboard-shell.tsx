@@ -3,10 +3,23 @@
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
+import { useCurrentUser } from "@/lib/realtime/use-current-user";
+import { useCommentToast } from "@/lib/realtime/use-comment-toast";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isChatPage = pathname === "/chat";
+
+  // PR-P: toast scoped global. Listener vive enquanto o user esta no
+  // dashboard (qualquer rota). Cap 60s/lead + filter assigned_to
+  // garantem que so leads do user disparam toast.
+  const orgId = useCurrentOrgId();
+  const currentUser = useCurrentUser();
+  useCommentToast({
+    orgId,
+    currentUserId: currentUser?.user_id ?? null,
+  });
 
   return (
     <div className="flex h-screen">
