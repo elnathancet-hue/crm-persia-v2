@@ -8,13 +8,19 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { LeadsList, LeadsProvider } from "@persia/leads-ui";
+import {
+  LeadsList,
+  LeadsProvider,
+  useDebouncedCallback,
+  useLeadsRealtime,
+} from "@persia/leads-ui";
 import type { LeadWithTags } from "@persia/shared/crm";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { LeadDetail } from "@/components/leads/lead-detail";
 import { getLeads, deleteLead } from "@/actions/leads";
 import { adminLeadsActions } from "@/features/leads/admin-leads-actions";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export function LeadListPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();
@@ -24,6 +30,19 @@ export function LeadListPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   // Forca remount do LeadsList depois de delete pra re-fetchar inicial.
   const [reloadKey, setReloadKey] = useState(0);
+
+  // PR-S3: realtime — admin ve mudancas nos leads do org gerenciado
+  // ao vivo. Debounce 200ms agrupa burst (bulk delete por exemplo).
+  // Reload bumpa reloadKey -> useEffect refaz fetch.
+  const supabase = getSupabaseBrowserClient();
+  const debouncedReload = useDebouncedCallback(() =>
+    setReloadKey((n) => n + 1),
+  );
+  useLeadsRealtime(
+    isManagingClient ? supabase : null,
+    isManagingClient ? activeOrgId : null,
+    debouncedReload,
+  );
 
   useEffect(() => {
     if (!isManagingClient) return;
