@@ -79,7 +79,8 @@ import {
   updateLeadComment,
   type LeadComment,
 } from "@/actions/lead-comments";
-import { useLeadCommentsRealtime } from "@/lib/realtime/use-lead-comments-realtime";
+import { useCurrentUser } from "@/lib/realtime/use-current-user";
+import { useLeadPresence } from "@/lib/realtime/use-lead-presence";
 import { Switch } from "@persia/ui/switch";
 import {
   DropdownMenu,
@@ -198,6 +199,17 @@ export function LeadInfoDrawer({
   // form. Se a query falhar, cards mostram "—" mas o drawer abre normal.
   const [stats, setStats] = React.useState<LeadStats | null>(null);
   const [statsLoading, setStatsLoading] = React.useState(false);
+
+  // PR-P Realtime: presence + comments num canal so. Quando outro
+  // agente abre o mesmo lead, vira watcher visivel no header. Quando
+  // alguem comenta/edita/deleta, dispara bump na tab Comentarios.
+  const currentUser = useCurrentUser();
+  const [commentsBump, setCommentsBump] = React.useState(0);
+  const { watchers, othersCount } = useLeadPresence({
+    leadId: open ? lead.id : null,
+    currentUser,
+    onCommentEvent: () => setCommentsBump((v) => v + 1),
+  });
 
   // Re-hidrata o form quando trocar de lead ou reabrir.
   React.useEffect(() => {
@@ -348,7 +360,14 @@ export function LeadInfoDrawer({
         className="w-full sm:max-w-2xl overflow-hidden p-0 flex flex-col"
       >
         <SheetHeader className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
-          <SheetTitle>Informações do lead</SheetTitle>
+          <div className="flex items-start justify-between gap-3">
+            <SheetTitle>Informações do lead</SheetTitle>
+            <PresenceAvatars
+              watchers={watchers}
+              othersCount={othersCount}
+              currentUserId={currentUser?.user_id ?? null}
+            />
+          </div>
           {currentStageObj ? (
             <SheetDescription className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Etapa atual:</span>
@@ -629,6 +648,7 @@ export function LeadInfoDrawer({
                 leadId={lead.id}
                 open={open}
                 members={members}
+                reloadVersion={commentsBump}
               />
             </TabsContent>
           </form>
@@ -1319,10 +1339,14 @@ function LeadComentariosTab({
   leadId,
   open,
   members,
+  reloadVersion,
 }: {
   leadId: string;
   open: boolean;
   members: Member[];
+  /** PR-P: bump incrementado pelo drawer pai quando o canal de
+   *  presence/comments dispara evento. Tab refetcha a lista. */
+  reloadVersion: number;
 }) {
   const [comments, setComments] = React.useState<LeadComment[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -1370,13 +1394,14 @@ function LeadComentariosTab({
     };
   }, [open, reload]);
 
-  // PR-O Realtime: outro agente comentou/editou/deletou neste lead.
-  // Estrategia simples e segura: refetch completo. Lista e curta
-  // (geralmente <50 comentarios por lead) e elimina dedupe vs
-  // optimistic updates (a refetch sempre reflete verdade do servidor).
-  useLeadCommentsRealtime(open ? leadId : null, () => {
+  // PR-P Realtime: o drawer pai assina presence + comments num canal
+  // so (`lead-${leadId}`) e bumpa reloadVersion quando algo muda.
+  // Aqui so reagimos ao bump pra refetch. Estrategia simples: refetch
+  // completo (lista curta, <50 comentarios por lead).
+  React.useEffect(() => {
+    if (!open || reloadVersion === 0) return;
     void reload();
-  });
+  }, [reloadVersion, open, reload]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -1698,4 +1723,66 @@ function renderCommentContent(content: string, members: Member[]): React.ReactNo
   const after = content.slice(lastIndex);
   if (after) parts.push(after);
   return parts.length > 0 ? parts : content;
+}
+
+// ============================================================================
+// PR-P: PresenceAvatars — pill mostrando quem mais esta vendo o lead.
+// Renderiza ate 3 iniciais coloridas + "+N" se overflow. Tooltip com
+// nome completo via title attr (nativo). Auto-oculta se nao tiver
+// outros (othersCount === 0) — header limpo na grande maioria do tempo.
+// ============================================================================
+
+function PresenceAvatars({
+  watchers,
+  othersCount,
+  currentUserId,
+}: {
+  watchers: { user_id: string; full_name: string }[];
+  othersCount: number;
+  currentUserId: string | null;
+}) {
+  if (othersCount === 0) return null;
+  // Filtra o proprio user e pega ate 3 outros pra mostrar avatares
+  const others = watchers.filter((w) => w.user_id !== currentUserId);
+  const visible = others.slice(0, 3);
+  const overflow = others.length - visible.length;
+
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2 py-1"
+      title={`${others.map((w) => w.full_name).join(", ")} ${
+        others.length === 1 ? "está vendo" : "estão vendo"
+      } este lead agora`}
+      aria-label={`${others.length} outro${
+        others.length === 1 ? "" : "s"
+      } agente${others.length === 1 ? "" : "s"} vendo este lead`}
+    >
+      <div className="flex -space-x-1.5">
+        {visible.map((w) => (
+          <div
+            key={w.user_id}
+            className="size-5 rounded-full border-2 border-card bg-primary/15 text-[10px] font-semibold text-primary flex items-center justify-center uppercase"
+          >
+            {presenceInitials(w.full_name)}
+          </div>
+        ))}
+        {overflow > 0 ? (
+          <div className="size-5 rounded-full border-2 border-card bg-muted text-[10px] font-semibold text-muted-foreground flex items-center justify-center">
+            +{overflow}
+          </div>
+        ) : null}
+      </div>
+      <span className="text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+        {others.length === 1 ? "está vendo" : `${others.length} vendo`}
+      </span>
+    </div>
+  );
+}
+
+function presenceInitials(fullName: string): string {
+  const trimmed = (fullName || "").trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
