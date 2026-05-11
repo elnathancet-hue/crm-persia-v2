@@ -11,15 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
-import { Bell, LogOut, Settings, User, Moon, Sun } from "lucide-react";
+import { Bell, BellOff, LogOut, Settings, User, Moon, Sun } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useToastMuted } from "@/lib/realtime/use-toast-prefs";
 
 export function Header() {
   const { profile } = useUser();
   const { organization } = useOrganization();
   const [isDark, setIsDark] = useState(false);
+  const [toastMuted, setToastMuted] = useToastMuted();
 
   useEffect(() => {
     const isDarkMode = document.documentElement.classList.contains("dark");
@@ -104,6 +106,21 @@ export function Header() {
                 <Settings className="mr-2 size-4" />
                 Configurações
               </Link>
+            </DropdownMenuItem>
+            {/* PR-Q: toggle de mute pros toasts de realtime (comentarios
+                + atribuicao). Persiste em localStorage. */}
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                setToastMuted(!toastMuted);
+              }}
+            >
+              {toastMuted ? (
+                <BellOff className="mr-2 size-4" />
+              ) : (
+                <Bell className="mr-2 size-4" />
+              )}
+              {toastMuted ? "Notificações silenciadas" : "Silenciar notificações"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive">

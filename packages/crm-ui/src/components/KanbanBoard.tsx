@@ -326,6 +326,17 @@ export interface KanbanBoardProps {
    * funis pra trocar.
    */
   onPipelineChange?: (newPipelineId: string) => void;
+  /**
+   * PR-Q: mapa de presence — qual deal cada user esta vendo agora.
+   * Vazio/undefined = sem indicador (compat admin que nao usa presence).
+   */
+  dealWatchers?: Map<string, Array<{ user_id: string; full_name: string }>>;
+  /**
+   * PR-Q: callback chamado quando o user logado abre/fecha detalhe de
+   * um deal — caller faz channel.track({ viewing_deal_id }) pra os
+   * outros agentes verem. undefined = sem presence (compat).
+   */
+  onDealViewChange?: (dealId: string | null) => void;
 }
 
 export function KanbanBoard({
@@ -344,6 +355,8 @@ export function KanbanBoard({
   canEditStages,
   pipelineId: controlledPipelineId,
   onPipelineChange,
+  dealWatchers,
+  onDealViewChange,
 }: KanbanBoardProps) {
   // PR-CRMOPS: defaults derivados de `canManagePipelines` pra preservar
   // compat com call-sites que ainda nao foram atualizados (admin etc).
@@ -1586,6 +1599,10 @@ export function KanbanBoard({
                       orgTags={orgTags}
                       assignees={assignees}
                       onChange={onChange}
+                      // PR-Q: presence watchers + callback. Vazio quando
+                      // o caller (admin) nao passa dealWatchers (compat).
+                      watchers={dealWatchers?.get(deal.id) ?? []}
+                      onViewChange={onDealViewChange}
                     />
                   ))}
                   {/* Empty state — discreto + clicavel pra adicionar deal */}
@@ -1789,6 +1806,8 @@ const DealCard = React.memo(function DealCardImpl({
   orgTags,
   assignees,
   onChange,
+  watchers,
+  onViewChange,
 }: {
   deal: Deal;
   draggedDealId: string | null;
@@ -1825,8 +1844,22 @@ const DealCard = React.memo(function DealCardImpl({
   assignees: { id: string; name: string }[];
   /** PR-C: callback pro pai re-fetchar apos add tag/atribuir. */
   onChange?: () => void;
+  /** PR-Q: outros agentes vendo este card (excluindo currentUser). */
+  watchers?: Array<{ user_id: string; full_name: string }>;
+  /** PR-Q: dispara quando este user abre/fecha detalhe (pra presence). */
+  onViewChange?: (dealId: string | null) => void;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
+
+  // PR-Q: sincroniza presence quando o user logado abre/fecha o detalhe.
+  // useEffect cuida do unmount (Kanban troca de pipeline -> dispara null).
+  React.useEffect(() => {
+    if (!onViewChange) return;
+    onViewChange(detailOpen ? deal.id : null);
+    return () => {
+      if (detailOpen) onViewChange(null);
+    };
+  }, [detailOpen, deal.id, onViewChange]);
   const isDragging = draggedDealId === deal.id;
   const lead = deal.leads;
   const phone = lead?.phone;
@@ -1951,6 +1984,34 @@ const DealCard = React.memo(function DealCardImpl({
         }
         onClick={handleCardClick}
       >
+        {/* PR-Q: dot de presence — outro agente esta vendo este card.
+            Pequeno (size-2), canto superior direito, com pulse animation
+            pra ser notavel mas nao competir com o conteudo. Tooltip via
+            title attr mostra quem esta vendo. */}
+        {watchers && watchers.length > 0 && (
+          <div
+            className="absolute right-2 top-2 z-10 flex items-center gap-1"
+            title={
+              watchers.length === 1
+                ? `${watchers[0].full_name} está vendo`
+                : `${watchers.map((w) => w.full_name).join(", ")} estão vendo`
+            }
+            aria-label={`${watchers.length} agente${
+              watchers.length === 1 ? "" : "s"
+            } vendo este card`}
+          >
+            <span className="relative inline-flex size-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/60 opacity-75" />
+              <span className="relative inline-flex size-2 rounded-full bg-primary" />
+            </span>
+            {watchers.length > 1 && (
+              <span className="text-[10px] font-semibold text-primary">
+                {watchers.length}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Checkbox de selecao bulk — hover ou ativo. */}
         {onToggleSelected && (
           <div

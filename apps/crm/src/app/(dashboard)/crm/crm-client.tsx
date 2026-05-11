@@ -27,6 +27,8 @@ import type {
 import { useRole } from "@/lib/hooks/use-role";
 import { useDealsRealtime } from "@/lib/realtime/use-deals-realtime";
 import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
+import { useCurrentUser } from "@/lib/realtime/use-current-user";
+import { useDealPresence } from "@/lib/realtime/use-deal-presence";
 
 interface Props {
   pipelines: Pipeline[];
@@ -66,6 +68,15 @@ export function CrmClient({
   const debouncedRefresh = useDebouncedCallback(() => router.refresh());
   useDealsRealtime(pipelineId ?? null, debouncedRefresh);
 
+  // PR-Q: presence-only do pipeline pra mostrar quem ta vendo cada card.
+  // Canal proprio (`pipeline-presence-${pipelineId}`) — separa o concern
+  // de presence (muito mais updates) do realtime de postgres_changes.
+  const currentUser = useCurrentUser();
+  const { watchersByDeal, setViewingDealId } = useDealPresence({
+    pipelineId: pipelineId ?? null,
+    currentUser,
+  });
+
   // PR-J: importOpen/importTags/openImport REMOVIDOS — briefing user:
   // "tirar importar e exportar, deixar essa opcao somente em leads".
   // O ImportLeadsWizard continua acessivel via tab Leads (headerActions
@@ -87,6 +98,9 @@ export function CrmClient({
       assignees={assignees}
       pipelineId={pipelineId}
       onPipelineChange={onPipelineChange}
+      // PR-Q: presence — admin nao passa nada (compat)
+      dealWatchers={watchersByDeal}
+      onDealViewChange={setViewingDealId}
     />
   );
 }
