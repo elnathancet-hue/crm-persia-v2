@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { User, LogOut, Settings, Moon, Sun } from "lucide-react";
+import { Bell, BellOff, User, LogOut, Settings, Moon, Sun } from "lucide-react";
+import { useToastMuted } from "@persia/leads-ui";
 import { signOut } from "@/actions/auth";
 import Link from "next/link";
 
@@ -9,6 +10,7 @@ export function HeaderUserMenu() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isDark, setIsDark] = useState(false);
+  const [toastMuted, setToastMuted] = useToastMuted();
 
   useEffect(() => {
     const saved = localStorage.getItem("admin-theme");
@@ -75,6 +77,20 @@ export function HeaderUserMenu() {
               <Settings className="size-4" />
               Configurações
             </Link>
+            {/* PR-S3: toggle de mute pros toasts de realtime
+                (comentarios + atribuicao). Persiste em localStorage
+                via useToastMuted (compartilhado com CRM). */}
+            <button
+              onClick={() => setToastMuted(!toastMuted)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              {toastMuted ? (
+                <BellOff className="size-4" />
+              ) : (
+                <Bell className="size-4" />
+              )}
+              {toastMuted ? "Notificações silenciadas" : "Silenciar notificações"}
+            </button>
             <button
               onClick={() => signOut()}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-muted transition-colors"

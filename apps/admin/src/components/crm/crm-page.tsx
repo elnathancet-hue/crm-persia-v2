@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { KanbanBoard, KanbanProvider } from "@persia/crm-ui";
+import { useDealsRealtime, useDebouncedCallback } from "@persia/leads-ui";
 import type {
   DealWithLead,
   Pipeline,
@@ -25,6 +26,7 @@ import {
   getStagesForOrg,
 } from "@/actions/pipelines";
 import { adminKanbanActions } from "@/features/crm-kanban/admin-kanban-actions";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 interface KanbanLead {
   id: string;
@@ -40,6 +42,25 @@ export function CrmPage() {
   const [deals, setDeals] = useState<DealWithLead[]>([]);
   const [leads, setLeads] = useState<KanbanLead[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // PR-S3: realtime no Kanban admin. Subscreve no PRIMEIRO pipeline
+  // (admin v1 — controla pipeline via state interno do KanbanBoard,
+  // entao nao temos o pipelineId atualmente selecionado aqui).
+  // Limitacao aceitavel pra v1 — agente movendo deal no funil padrao
+  // reflete pro admin. Outros funis sem realtime (admin pode F5).
+  // Debounce 200ms agrupa burst (drag-drop em massa).
+  const supabase = getSupabaseBrowserClient();
+  const debouncedReload = useDebouncedCallback(() => {
+    reload().catch(() => {
+      // erro silencioso — proximo evento ou F5 manual recupera
+    });
+  });
+  const primaryPipelineId = pipelines[0]?.id ?? null;
+  useDealsRealtime(
+    isManagingClient ? supabase : null,
+    primaryPipelineId,
+    debouncedReload,
+  );
 
   async function reload() {
     let basePipelines = (await getPipelines()) as Pipeline[];

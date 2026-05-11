@@ -4,11 +4,17 @@ import { AppSidebar } from "@/components/admin-sidebar";
 import { ClientBanner } from "@/components/client-banner";
 import { HeaderOrgBadge } from "@/components/header-org-badge";
 import { HeaderUserMenu } from "@/components/header-user-menu";
+import { AdminRealtimeMount } from "@/components/admin-realtime-mount";
 import { clientNavigation, clientMobileItems } from "@/lib/constants/navigation";
 
 export function ClientShell({ children }: { children: React.ReactNode }) {
   return (
     <>
+      {/* PR-S3: monta listeners de realtime (toasts globais) so
+          enquanto admin esta em modo cliente. Em modo admin puro
+          nao ha org pra escutar. */}
+      <AdminRealtimeMount />
+
       {/* Left sidebar - full CRM navigation */}
       <AppSidebar items={clientNavigation} mobileItems={clientMobileItems} brandAction="home" />
 

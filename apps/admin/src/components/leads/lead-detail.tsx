@@ -2,8 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { ReactivateAgentButton } from "@persia/ai-agent-ui";
-import { LeadCommentsTab } from "@persia/leads-ui";
+import {
+  LeadCommentsTab,
+  useCurrentUser,
+  useLeadPresence,
+} from "@persia/leads-ui";
 import { getLeadDetail, updateLead, getLeadActivities } from "@/actions/leads";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
   getLeadAgentHandoffState,
   reactivateAgent as reactivateLeadAgent,
@@ -29,6 +34,21 @@ interface Props {
 
 export function LeadDetail({ leadId, onBack }: Props) {
   const { activeOrgId } = useActiveOrg();
+
+  // PR-S3: presence + comments realtime no detalhe do lead. Quando
+  // outro user comenta/edita/deleta neste lead, commentsBump muda
+  // e a tab refetcha. Admin tambem aparece como watcher pros
+  // agentes da org (transparencia + audit).
+  const supabase = getSupabaseBrowserClient();
+  const currentUser = useCurrentUser(supabase);
+  const [commentsBump, setCommentsBump] = useState(0);
+  useLeadPresence({
+    supabase,
+    leadId,
+    currentUser,
+    onCommentEvent: () => setCommentsBump((v) => v + 1),
+  });
+
   const [lead, setLead] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [handoffState, setHandoffState] = useState<{
@@ -412,7 +432,12 @@ export function LeadDetail({ leadId, onBack }: Props) {
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">
           Comentários internos
         </h2>
-        <LeadCommentsTab leadId={leadId} open members={[]} />
+        <LeadCommentsTab
+          leadId={leadId}
+          open
+          members={[]}
+          reloadVersion={commentsBump}
+        />
       </div>
     </div>
   );
