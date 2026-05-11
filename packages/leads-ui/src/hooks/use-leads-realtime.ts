@@ -1,21 +1,17 @@
 "use client";
 
-// PR-O: hook de realtime pros leads (LeadsList).
+// PR-S2 (movido de apps/crm/src/lib/realtime): hook de realtime pros
+// leads scoped por organization_id.
 //
-// Uso: chamado no provider do LeadsList. Quando outro agente da
-// mesma org cria/edita/deleta lead, callback dispara e a lista
-// refetcha.
+// DI: recebe `supabase` como param em vez de chamar createClient()
+// interno. Cada app injeta seu proprio client (CRM: createBrowserClient
+// com cookies; admin: getRealtimeClient com ANON_KEY).
 //
-// Estrategia: filtra por organization_id. RLS de leads (migration 001)
-// e camada extra — mesmo se filter falhar, broadcast cross-org nunca
-// vaza pra cliente sem JWT do org.
-//
-// Pegadinhas tratadas:
-//   - cleanup via removeChannel
-//   - re-subscribe quando orgId muda
+// Pegadinhas tratadas: cleanup via removeChannel, re-subscribe quando
+// orgId muda.
 
 import { useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type LeadRealtimeEvent = {
   type: "INSERT" | "UPDATE" | "DELETE";
@@ -23,12 +19,12 @@ export type LeadRealtimeEvent = {
 };
 
 export function useLeadsRealtime(
+  supabase: SupabaseClient | null,
   orgId: string | null,
   onEvent: (e: LeadRealtimeEvent) => void,
 ) {
   useEffect(() => {
-    if (!orgId) return;
-    const supabase = createClient();
+    if (!supabase || !orgId) return;
 
     const channel = supabase
       .channel(`leads-${orgId}`)
@@ -57,5 +53,5 @@ export function useLeadsRealtime(
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId]);
+  }, [supabase, orgId]);
 }

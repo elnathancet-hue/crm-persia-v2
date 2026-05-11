@@ -18,6 +18,12 @@
 // importar moved-only pra tab Leads (LeadsList headerActions).
 import { useRouter } from "next/navigation";
 import { KanbanBoard } from "@persia/crm-ui";
+import {
+  useDealsRealtime,
+  useDebouncedCallback,
+  useCurrentUser,
+  useDealPresence,
+} from "@persia/leads-ui";
 import type {
   DealWithLead,
   Pipeline,
@@ -25,10 +31,7 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 import { useRole } from "@/lib/hooks/use-role";
-import { useDealsRealtime } from "@/lib/realtime/use-deals-realtime";
-import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
-import { useCurrentUser } from "@/lib/realtime/use-current-user";
-import { useDealPresence } from "@/lib/realtime/use-deal-presence";
+import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   pipelines: Pipeline[];
@@ -59,20 +62,18 @@ export function CrmClient({
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
 
-  // PR-O Realtime: outro agente moveu/criou/deletou deal neste funil.
-  // PR-P: debounce 200ms trailing — burst de drag-drop ou bulk move
-  // dispara N eventos em <200ms; sem debounce o servidor refetcha N
-  // vezes desnecessariamente. Com debounce, dispara 1x apos o burst.
-  // RLS de deals + filtro pipeline_id no canal sao defesa em camada.
-  // Admin tem seu proprio wrapper e nao recebe esse hook (compat).
+  // PR-S2: createClient e singleton — passamos pro hook puro do pacote.
+  const supabase = createClient();
+
+  // PR-O Realtime + PR-P debounce: outro agente moveu/criou/deletou
+  // deal neste funil. Burst de drag-drop agrupa em 1 refetch.
   const debouncedRefresh = useDebouncedCallback(() => router.refresh());
-  useDealsRealtime(pipelineId ?? null, debouncedRefresh);
+  useDealsRealtime(supabase, pipelineId ?? null, debouncedRefresh);
 
   // PR-Q: presence-only do pipeline pra mostrar quem ta vendo cada card.
-  // Canal proprio (`pipeline-presence-${pipelineId}`) — separa o concern
-  // de presence (muito mais updates) do realtime de postgres_changes.
-  const currentUser = useCurrentUser();
+  const currentUser = useCurrentUser(supabase);
   const { watchersByDeal, setViewingDealId } = useDealPresence({
+    supabase,
     pipelineId: pipelineId ?? null,
     currentUser,
   });

@@ -72,9 +72,12 @@ import {
   type LeadCustomFieldDef,
   type LeadCustomFieldEntry,
 } from "@/actions/custom-fields";
-import { LeadCommentsTab } from "@persia/leads-ui";
-import { useCurrentUser } from "@/lib/realtime/use-current-user";
-import { useLeadPresence } from "@/lib/realtime/use-lead-presence";
+import {
+  LeadCommentsTab,
+  useCurrentUser,
+  useLeadPresence,
+} from "@persia/leads-ui";
+import { createClient } from "@/lib/supabase/client";
 import { Switch } from "@persia/ui/switch";
 import {
   DropdownMenu,
@@ -197,9 +200,12 @@ export function LeadInfoDrawer({
   // PR-P Realtime: presence + comments num canal so. Quando outro
   // agente abre o mesmo lead, vira watcher visivel no header. Quando
   // alguem comenta/edita/deleta, dispara bump na tab Comentarios.
-  const currentUser = useCurrentUser();
+  // PR-S2: hooks vivem em @persia/leads-ui; supabase injetado pelo CRM.
+  const supabase = createClient();
+  const currentUser = useCurrentUser(supabase);
   const [commentsBump, setCommentsBump] = React.useState(0);
   const { watchers, othersCount } = useLeadPresence({
+    supabase,
     leadId: open ? lead.id : null,
     currentUser,
     onCommentEvent: () => setCommentsBump((v) => v + 1),

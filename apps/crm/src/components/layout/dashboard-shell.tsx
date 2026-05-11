@@ -1,30 +1,41 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  useAssignmentToast,
+  useCommentToast,
+  useCurrentUser,
+} from "@persia/leads-ui";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
-import { useCurrentUser } from "@/lib/realtime/use-current-user";
-import { useCommentToast } from "@/lib/realtime/use-comment-toast";
-import { useAssignmentToast } from "@/lib/realtime/use-assignment-toast";
+import { createClient } from "@/lib/supabase/client";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const isChatPage = pathname === "/chat";
 
-  // PR-P/Q: 2 toasts globais. Listeners vivem enquanto o user esta no
-  // dashboard (qualquer rota). Mute global (PR-Q) respeitado pelos 2.
-  //   - useCommentToast: cap 60s/lead + filter assigned_to
-  //   - useAssignmentToast: dispara na transicao assigned_to -> currentUser
+  // PR-P/Q + PR-S2: 2 toasts globais. Hooks vivem em @persia/leads-ui;
+  // injetamos supabase + onNavigate aqui. Mute global respeitado.
+  // org/user resolution sao CRM-specific (useCurrentOrgId le de
+  // organization_members; admin le de cookie).
+  const supabase = createClient();
   const orgId = useCurrentOrgId();
-  const currentUser = useCurrentUser();
+  const currentUser = useCurrentUser(supabase);
+  const navigateToLead = (leadId: string) =>
+    router.push(`/crm?tab=leads&leadId=${encodeURIComponent(leadId)}`);
   useCommentToast({
+    supabase,
     orgId,
     currentUserId: currentUser?.user_id ?? null,
+    onNavigate: navigateToLead,
   });
   useAssignmentToast({
+    supabase,
     orgId,
     currentUserId: currentUser?.user_id ?? null,
+    onNavigate: navigateToLead,
   });
 
   return (
