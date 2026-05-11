@@ -35,6 +35,22 @@ export interface DuplicateMatch {
   matched_by: "phone" | "email";
 }
 
+/**
+ * PR-S1: shape de um comentario colaborativo no lead (espelho da
+ * tabela `lead_comments`). Vivem no pacote pra evitar dependencia
+ * cruzada (packages/leads-ui nao importa de apps/crm).
+ */
+export interface LeadComment {
+  id: string;
+  lead_id: string;
+  organization_id: string;
+  author_id: string;
+  author_name: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface LeadsActions {
   /** Lista paginada com filtros (search/status/tags). */
   listLeads: (filters: LeadFilters) => Promise<PaginatedLeadsResult>;
@@ -51,4 +67,17 @@ export interface LeadsActions {
     phone?: string | null,
     email?: string | null,
   ) => Promise<DuplicateMatch | null>;
+  /**
+   * PR-S1: comentarios colaborativos no lead. As 4 actions sao
+   * opcionais — admin pode nao implementar todas (ex: read-only).
+   * Componente LeadCommentsTab degrada graciosamente: se `createLeadComment`
+   * for undefined, esconde o form de novo comentario.
+   */
+  getLeadComments?: (leadId: string) => Promise<LeadComment[]>;
+  createLeadComment?: (leadId: string, content: string) => Promise<LeadComment>;
+  updateLeadComment?: (
+    commentId: string,
+    content: string,
+  ) => Promise<{ success: boolean }>;
+  deleteLeadComment?: (commentId: string) => Promise<{ success: boolean }>;
 }

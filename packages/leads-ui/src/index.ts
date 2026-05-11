@@ -9,6 +9,8 @@ export type {
   LeadsActions,
   PaginatedLeadsResult,
   OrgTag,
+  LeadComment,
+  DuplicateMatch,
 } from "./actions";
 export {
   LeadsProvider,
@@ -19,3 +21,8 @@ export {
 export { LeadsList, type LeadsListProps } from "./components/LeadsList";
 export { LeadForm } from "./components/LeadForm";
 export { DataTable, type ColumnDef } from "./components/DataTable";
+export {
+  LeadCommentsTab,
+  type LeadCommentsTabProps,
+  type LeadCommentsTabMember,
+} from "./components/LeadCommentsTab";

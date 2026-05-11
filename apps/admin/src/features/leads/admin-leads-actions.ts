@@ -8,6 +8,12 @@
 import type { LeadsActions, OrgTag } from "@persia/leads-ui";
 import { createLead, getLeads } from "@/actions/leads";
 import { getTags } from "@/actions/tags";
+import {
+  createLeadComment,
+  deleteLeadComment,
+  getLeadComments,
+  updateLeadComment,
+} from "@/actions/lead-comments";
 
 export const adminLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -38,4 +44,11 @@ export const adminLeadsActions: LeadsActions = {
     const tags = await getTags();
     return tags as OrgTag[];
   },
+  // PR-S1: comentarios colaborativos — wire admin actions com
+  // requireSuperadminForOrg. Service-role bypassa RLS; ainda checamos
+  // organization_id manualmente como defesa em camada.
+  getLeadComments,
+  createLeadComment,
+  updateLeadComment,
+  deleteLeadComment,
 };
