@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ReactivateAgentButton } from "@persia/ai-agent-ui";
+import { LeadCommentsTab } from "@persia/leads-ui";
 import { getLeadDetail, updateLead, getLeadActivities } from "@/actions/leads";
 import {
   getLeadAgentHandoffState,
@@ -401,6 +402,17 @@ export function LeadDetail({ leadId, onBack }: Props) {
             )}
           </div>
         </div>
+      </div>
+
+      {/* PR-S1: Comentarios colaborativos — superadmin pode ler e
+          escrever em nome do org gerenciado. Members empty na v1 (admin
+          nao tem getOrgMembers action — @mention renderiza sem
+          destaque de membros). */}
+      <div className="mt-6 bg-card border border-border rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">
+          Comentários internos
+        </h2>
+        <LeadCommentsTab leadId={leadId} open members={[]} />
       </div>
     </div>
   );

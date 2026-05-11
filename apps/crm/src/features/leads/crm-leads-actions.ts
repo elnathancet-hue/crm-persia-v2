@@ -11,6 +11,12 @@ import {
   getLeads,
   getOrgTags,
 } from "@/actions/leads";
+import {
+  createLeadComment,
+  deleteLeadComment,
+  getLeadComments,
+  updateLeadComment,
+} from "@/actions/lead-comments";
 
 export const crmLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -33,4 +39,10 @@ export const crmLeadsActions: LeadsActions = {
   // PR-L5: lookup de duplicidade. Multi-tenant ja vem do
   // requireRole("agent") da action (orgId scoping).
   findDuplicate: (phone, email) => findLeadByPhoneOrEmail(phone, email),
+  // PR-S1: comentarios colaborativos — server actions ja existem
+  // (PR-M) com requireRole("agent") + RLS. Apenas re-exportadas.
+  getLeadComments,
+  createLeadComment,
+  updateLeadComment,
+  deleteLeadComment,
 };

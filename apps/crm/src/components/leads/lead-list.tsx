@@ -226,18 +226,20 @@ export function LeadList(props: Props) {
             </>
           }
         />
+        {/* PR-S1: Drawer dentro do LeadsProvider pra que o
+            <LeadCommentsTab> (shared do pacote) consuma as
+            comment actions via useLeadsActions(). */}
+        {infoDrawerLead ? (
+          <LeadInfoDrawer
+            open={!!infoDrawerLead}
+            onOpenChange={(open) => {
+              if (!open) setInfoDrawerLead(null);
+            }}
+            lead={infoDrawerLead}
+            onSaved={() => router.refresh()}
+          />
+        ) : null}
       </LeadsProvider>
-
-      {infoDrawerLead ? (
-        <LeadInfoDrawer
-          open={!!infoDrawerLead}
-          onOpenChange={(open) => {
-            if (!open) setInfoDrawerLead(null);
-          }}
-          lead={infoDrawerLead}
-          onSaved={() => router.refresh()}
-        />
-      ) : null}
 
       <ImportLeadsWizard
         open={importOpen}

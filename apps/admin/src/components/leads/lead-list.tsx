@@ -47,11 +47,15 @@ export function LeadListPage() {
   }
 
   if (selectedLeadId) {
+    // PR-S1: <LeadDetail> precisa de <LeadsProvider> pra que o
+    // <LeadCommentsTab> shared consuma actions via useLeadsActions().
     return (
-      <LeadDetail
-        leadId={selectedLeadId}
-        onBack={() => setSelectedLeadId(null)}
-      />
+      <LeadsProvider actions={adminLeadsActions}>
+        <LeadDetail
+          leadId={selectedLeadId}
+          onBack={() => setSelectedLeadId(null)}
+        />
+      </LeadsProvider>
     );
   }
 
