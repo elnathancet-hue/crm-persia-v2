@@ -1,57 +1,46 @@
 "use client";
 
-// PR-P: hook global pra disparar toast quando outro agente comenta
-// num lead onde o user logado e o responsavel.
+// PR-S2 (movido de apps/crm/src/lib/realtime): toast global quando
+// outro agente comenta num lead onde o user logado e o responsavel.
 //
-// Por que scoped (assigned_to)? Toast global pra TODA org cria spam:
-// 100 leads x 5 comentarios/dia = 500 toasts. User mute. Perde sinal.
-// Scoped = so leads que o user atende. Sinal alto, ruido baixo.
-//
-// Pegadinhas tratadas:
-//   - Skip se autor = user logado (nao toast por proprio comentario)
-//   - Cap 60s por lead (Map<leadId, lastToastAt>) — varias mensagens
-//     em sequencia geram 1 toast so. Reset proativo na unmount.
-//   - Toast NAO mostra texto do comentario (privacy: PII em popup)
-//   - Click do toast vai pra /crm?tab=leads&leadId=... (abre drawer)
-//   - Se rede oscilar, perde event — aceito v1 (proximo F5 mostra)
-//
-// Custo de rede: 1 query SELECT por evento que passou no cap. Cap 60s
-// por lead garante <60 queries/min mesmo em burst.
+// DI: recebe supabase + onNavigate como params. CRM passa
+// router.push; admin idem (mesma router do Next.js). Mute global
+// respeitado via useIsToastMuted.
 
 import { useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useIsToastMuted } from "./use-toast-prefs";
 
-const TOAST_CAP_MS = 60_000; // 1 toast por lead a cada 60s
+const TOAST_CAP_MS = 60_000;
 
 export interface UseCommentToastOptions {
-  /** organization_id do user logado — filtra broadcast no servidor */
+  supabase: SupabaseClient | null;
   orgId: string | null;
-  /** user_id do user logado — pra skip de eco + scope assigned_to */
   currentUserId: string | null;
+  /** Callback de navegacao quando user clica "Ver" no toast. */
+  onNavigate: (leadId: string) => void;
 }
 
 export function useCommentToast({
+  supabase,
   orgId,
   currentUserId,
+  onNavigate,
 }: UseCommentToastOptions) {
-  const router = useRouter();
   const muted = useIsToastMuted();
-  // capRef sobrevive entre eventos sem re-render.
   const capRef = useRef<Map<string, number>>(new Map());
-  // mutedRef: leitura no momento do evento (sem reconectar canal a
-  // cada toggle de mute). Re-render do hook por causa do muted state
-  // nao recria o useEffect (deps nao incluem muted).
   const mutedRef = useRef(muted);
+  const onNavigateRef = useRef(onNavigate);
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+  useEffect(() => {
+    onNavigateRef.current = onNavigate;
+  }, [onNavigate]);
 
   useEffect(() => {
-    if (!orgId || !currentUserId) return;
-    const supabase = createClient();
+    if (!supabase || !orgId || !currentUserId) return;
     const cap = capRef.current;
 
     const channel = supabase
@@ -75,21 +64,13 @@ export function useCommentToast({
           const row = payload.new;
           if (!row?.lead_id || !row.author_id) return;
 
-          // PR-Q: respeita mute global do user (toggle no header).
           if (mutedRef.current) return;
-
-          // Skip eco do proprio user
           if (row.author_id === currentUserId) return;
 
-          // Cap por lead (60s)
           const now = Date.now();
           const lastAt = cap.get(row.lead_id) ?? 0;
           if (now - lastAt < TOAST_CAP_MS) return;
 
-          // Fetch lead + author. RLS de leads + profiles (PR-L1)
-          // garante mesma org. Se RLS bloquear, fica null e abortamos.
-          // Cast soft: Database type ainda nao tem assigned_to (migration
-          // 033 — pendente regen) mas a coluna existe em prod.
           type LooseSupabase = {
             from: (table: string) => {
               select: (cols: string) => {
@@ -123,10 +104,6 @@ export function useCommentToast({
             | null;
 
           if (!lead) return;
-
-          // Scope: so dispara toast pra leads atribuidos ao user logado.
-          // Sem isso vira spam global. Adiar "ja comentou antes" pra v2
-          // (exigiria 1 query extra por evento).
           if (lead.assigned_to !== currentUserId) return;
 
           cap.set(row.lead_id, now);
@@ -140,11 +117,7 @@ export function useCommentToast({
             description: "Clique para ver o comentário",
             action: {
               label: "Ver",
-              onClick: () => {
-                router.push(
-                  `/crm?tab=leads&leadId=${encodeURIComponent(lead.id)}`,
-                );
-              },
+              onClick: () => onNavigateRef.current(lead.id),
             },
             duration: 6000,
           });
@@ -154,8 +127,7 @@ export function useCommentToast({
 
     return () => {
       supabase.removeChannel(channel);
-      // Limpa cap pra liberar memoria (cap volta no proximo mount).
       cap.clear();
     };
-  }, [orgId, currentUserId, router]);
+  }, [supabase, orgId, currentUserId]);
 }

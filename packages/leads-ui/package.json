@@ -20,9 +20,11 @@
     "lucide-react": "^1.7.0"
   },
   "peerDependencies": {
+    "@supabase/supabase-js": "^2",
     "next": "^15.5.14",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sonner": "^1"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

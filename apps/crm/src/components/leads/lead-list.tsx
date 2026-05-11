@@ -9,7 +9,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LeadsList, LeadsProvider } from "@persia/leads-ui";
+import {
+  LeadsList,
+  LeadsProvider,
+  useDebouncedCallback,
+  useLeadsRealtime,
+} from "@persia/leads-ui";
 import {
   ExportMenu,
   ImportLeadsWizard,
@@ -21,8 +26,7 @@ import { Button } from "@persia/ui/button";
 import { Filter, Upload, X } from "lucide-react";
 import { useRole } from "@/lib/hooks/use-role";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
-import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
-import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
+import { createClient } from "@/lib/supabase/client";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
 import { importLeads } from "@/actions/leads-import";
@@ -56,13 +60,14 @@ export function LeadList(props: Props) {
   const router = useRouter();
   const { isAgent } = useRole();
   const orgId = useCurrentOrgId();
+  const supabase = createClient();
 
   // PR-O Realtime + PR-P debounce: outro agente criou/editou/deletou
   // lead nesta org. Debounce 200ms agrupa burst (bulk import, bulk
   // delete) num refetch unico ao inves de N. RLS + filtro
   // organization_id no canal sao defesa em camada.
   const debouncedRefresh = useDebouncedCallback(() => router.refresh());
-  useLeadsRealtime(orgId, debouncedRefresh);
+  useLeadsRealtime(supabase, orgId, debouncedRefresh);
 
 
   // Drawer "Informacoes do lead" — CRM-specific (Fase 2, abre na linha
