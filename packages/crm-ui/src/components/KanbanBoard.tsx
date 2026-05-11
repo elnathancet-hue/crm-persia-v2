@@ -1453,7 +1453,11 @@ export function KanbanBoard({
               onDrop={() => handleDrop(stage.id)}
             >
               <div
-                className={`rounded-2xl ${columnBgClass} transition-all duration-200 min-h-[420px] flex flex-col border border-transparent ${
+                // PR-KANBAN-UI: max-h ativa scroll vertical INTERNO da coluna
+                // (antes a coluna crescia infinitamente e o scroll era da
+                // pagina inteira). 280px desconta header + toolbar do CRM.
+                // Em telas menores cai pra min-h naturalmente.
+                className={`rounded-2xl ${columnBgClass} transition-all duration-200 min-h-[420px] max-h-[calc(100vh-260px)] flex flex-col border border-transparent ${
                   isOver
                     ? "ring-2 ring-primary/40 border-primary/30 bg-primary/5 -translate-y-0.5 shadow-md"
                     : ""
@@ -1559,6 +1563,9 @@ export function KanbanBoard({
                     <DealCard
                       key={deal.id}
                       deal={deal}
+                      // PR-KANBAN-UI: cor da etapa pra contorno do card —
+                      // identidade visual por coluna sem precisar olhar o header.
+                      stageColor={stage.color || "#3b82f6"}
                       draggedDealId={draggedDealId}
                       onDragStart={handleDragStart}
                       onDelete={handleDeleteDeal}
@@ -1775,6 +1782,7 @@ export function KanbanBoard({
 // cards cuja prop mudou re-renderizam.
 const DealCard = React.memo(function DealCardImpl({
   deal,
+  stageColor,
   draggedDealId,
   onDragStart,
   onDelete,
@@ -1791,6 +1799,9 @@ const DealCard = React.memo(function DealCardImpl({
   onChange,
 }: {
   deal: Deal;
+  /** PR-KANBAN-UI: cor da etapa (vem do stage pai), usada como
+   *  contorno do card pra identidade visual por coluna. */
+  stageColor: string;
   draggedDealId: string | null;
   onDragStart: (e: React.DragEvent, dealId: string) => void;
   onDelete: (dealId: string) => void;
@@ -1938,13 +1949,17 @@ const DealCard = React.memo(function DealCardImpl({
   return (
     <>
       <div
-        className={`group relative bg-card border border-border/60 rounded-xl p-3.5 transition-all duration-200 ${
+        // PR-KANBAN-UI: borderColor inline = cor da etapa (identidade visual
+        // por coluna). selected state ainda sobrescreve via ring + border-primary.
+        // Em dragging fica subtil pra nao competir com o ring de selecao.
+        className={`group relative bg-card border-2 rounded-xl p-3.5 transition-all duration-200 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
         } ${isDragging ? "opacity-40 ring-2 ring-primary scale-[0.98]" : "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-foreground/5"} ${
           selected
             ? "border-primary ring-2 ring-primary/30 bg-primary/[0.03]"
-            : "hover:border-primary/40"
+            : ""
         }`}
+        style={selected ? undefined : { borderColor: stageColor }}
         draggable={canEdit && !hasActiveSelection}
         onDragStart={(e) =>
           canEdit && !hasActiveSelection && onDragStart(e, deal.id)
