@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Calendar, Coffee, Plus, Users } from "lucide-react";
 import type { AppointmentKind } from "@persia/shared/agenda";
+import { TONE_PILL_CLASSES, type AgendaTone } from "../lib/agenda-tones";
 
 interface AgendaCreateMenuProps {
   onSelect: (kind: AppointmentKind) => void;
@@ -10,12 +11,14 @@ interface AgendaCreateMenuProps {
   hidden?: readonly AppointmentKind[];
 }
 
+// PR9e: tons semanticos centralizados (agenda-tones). Antes cada
+// option tinha sua classe Tailwind crua. Agora reusa o helper.
 interface OptionDef {
   kind: AppointmentKind;
   label: string;
   description: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
-  tone: string;
+  tone: Extract<AgendaTone, "brand" | "success" | "neutral">;
 }
 
 const OPTIONS: OptionDef[] = [
@@ -24,21 +27,21 @@ const OPTIONS: OptionDef[] = [
     label: "Agendamento",
     description: "Compromisso com lead",
     icon: Calendar,
-    tone: "text-primary bg-primary/10",
+    tone: "brand",
   },
   {
     kind: "event",
     label: "Evento",
     description: "Reunião interna sem lead",
     icon: Users,
-    tone: "text-emerald-600 bg-emerald-50",
+    tone: "success",
   },
   {
     kind: "block",
     label: "Bloqueio",
     description: "Folga, almoço ou indisponibilidade",
     icon: Coffee,
-    tone: "text-muted-foreground bg-muted",
+    tone: "neutral",
   },
 ];
 
@@ -108,7 +111,7 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
                     <div
                       className={[
                         "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                        opt.tone,
+                        TONE_PILL_CLASSES[opt.tone],
                       ].join(" ")}
                     >
                       <Icon size={16} />
