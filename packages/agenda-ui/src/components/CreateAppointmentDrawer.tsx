@@ -19,6 +19,7 @@ import {
   type AppointmentFormHandle,
   type AppointmentFormValues,
 } from "./AppointmentForm";
+import { TONE_ALERT_CLASSES } from "../lib/agenda-tones";
 
 interface CreateAppointmentDrawerProps {
   open: boolean;
@@ -167,7 +168,9 @@ export const CreateAppointmentDrawer: React.FC<CreateAppointmentDrawerProps> = (
           />
 
           {conflictTitle && (
-            <div className="mt-5 rounded-md bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
+            <div
+              className={`mt-5 rounded-md p-3 text-sm ring-1 ${TONE_ALERT_CLASSES.warning}`}
+            >
               ⚠ {conflictTitle}. Ajuste o horário e tente de novo.
             </div>
           )}

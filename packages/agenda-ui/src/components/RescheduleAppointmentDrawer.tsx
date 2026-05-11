@@ -23,6 +23,7 @@ import {
 import { DialogHero } from "@persia/ui/dialog-hero";
 import { useAgendaActions, useAgendaCallbacks } from "../context";
 import { localToUtcIso } from "./CreateAppointmentDrawer";
+import { TONE_ALERT_CLASSES } from "../lib/agenda-tones";
 
 interface RescheduleAppointmentDrawerProps {
   appointment: Appointment | null;
@@ -192,7 +193,9 @@ export const RescheduleAppointmentDrawer: React.FC<
           </p>
 
           {conflict && (
-            <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
+            <div
+              className={`rounded-md p-3 text-sm ring-1 ${TONE_ALERT_CLASSES.warning}`}
+            >
               ⚠ {conflict}
             </div>
           )}
