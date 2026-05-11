@@ -22,6 +22,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { useIsToastMuted } from "./use-toast-prefs";
 
 const TOAST_CAP_MS = 60_000; // 1 toast por lead a cada 60s
 
@@ -37,8 +38,16 @@ export function useCommentToast({
   currentUserId,
 }: UseCommentToastOptions) {
   const router = useRouter();
+  const muted = useIsToastMuted();
   // capRef sobrevive entre eventos sem re-render.
   const capRef = useRef<Map<string, number>>(new Map());
+  // mutedRef: leitura no momento do evento (sem reconectar canal a
+  // cada toggle de mute). Re-render do hook por causa do muted state
+  // nao recria o useEffect (deps nao incluem muted).
+  const mutedRef = useRef(muted);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   useEffect(() => {
     if (!orgId || !currentUserId) return;
@@ -65,6 +74,9 @@ export function useCommentToast({
         }) => {
           const row = payload.new;
           if (!row?.lead_id || !row.author_id) return;
+
+          // PR-Q: respeita mute global do user (toggle no header).
+          if (mutedRef.current) return;
 
           // Skip eco do proprio user
           if (row.author_id === currentUserId) return;

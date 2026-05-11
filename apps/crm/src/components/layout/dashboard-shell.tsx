@@ -6,17 +6,23 @@ import { Header } from "@/components/layout/header";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
 import { useCurrentUser } from "@/lib/realtime/use-current-user";
 import { useCommentToast } from "@/lib/realtime/use-comment-toast";
+import { useAssignmentToast } from "@/lib/realtime/use-assignment-toast";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isChatPage = pathname === "/chat";
 
-  // PR-P: toast scoped global. Listener vive enquanto o user esta no
-  // dashboard (qualquer rota). Cap 60s/lead + filter assigned_to
-  // garantem que so leads do user disparam toast.
+  // PR-P/Q: 2 toasts globais. Listeners vivem enquanto o user esta no
+  // dashboard (qualquer rota). Mute global (PR-Q) respeitado pelos 2.
+  //   - useCommentToast: cap 60s/lead + filter assigned_to
+  //   - useAssignmentToast: dispara na transicao assigned_to -> currentUser
   const orgId = useCurrentOrgId();
   const currentUser = useCurrentUser();
   useCommentToast({
+    orgId,
+    currentUserId: currentUser?.user_id ?? null,
+  });
+  useAssignmentToast({
     orgId,
     currentUserId: currentUser?.user_id ?? null,
   });
