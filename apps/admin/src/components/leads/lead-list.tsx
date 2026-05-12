@@ -1,29 +1,42 @@
 "use client";
 
-// Admin Leads page — agora usa o mesmo LeadsList do cliente
-// (@persia/leads-ui). Antes era UI legada com HTML cru + Tailwind custom.
-// Mantemos o flow do admin: row click navega pra `<LeadDetail>` (full
-// page) em vez do drawer in-place do CRM (que e CRM-specific por ora).
+// PR-U3: admin agora usa o mesmo <LeadInfoDrawer> compartilhado
+// (@persia/leads-ui). Antes navegava pra full-page <LeadDetail>;
+// agora row click abre drawer in-place — mesma UX do CRM cliente.
+//
+// Drawer recebe canEdit=true canDelete=true porque admin = superadmin.
+// Exclusao via AlertDialog dentro do drawer (PR-U3).
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { LeadsList, LeadsProvider } from "@persia/leads-ui";
+import {
+  LeadInfoDrawer,
+  LeadsList,
+  LeadsProvider,
+} from "@persia/leads-ui";
 import type { LeadWithTags } from "@persia/shared/crm";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { NoContextFallback } from "@/components/no-context-fallback";
-import { LeadDetail } from "@/components/leads/lead-detail";
 import { getLeads, deleteLead } from "@/actions/leads";
 import { adminLeadsActions } from "@/features/leads/admin-leads-actions";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 
 export function LeadListPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();
   const [initialLeads, setInitialLeads] = useState<LeadWithTags[]>([]);
   const [initialTotal, setInitialTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  // PR-U3: state do drawer (espelha pattern do CRM)
+  const [infoDrawerLead, setInfoDrawerLead] = useState<LeadWithTags | null>(
+    null,
+  );
   // Forca remount do LeadsList depois de delete pra re-fetchar inicial.
   const [reloadKey, setReloadKey] = useState(0);
+
+  // PR-U3: supabase client pro drawer (DI). getSupabaseBrowserClient
+  // e singleton.
+  const supabase = getSupabaseBrowserClient();
 
   useEffect(() => {
     if (!isManagingClient) return;
@@ -46,19 +59,6 @@ export function LeadListPage() {
     return <NoContextFallback />;
   }
 
-  if (selectedLeadId) {
-    // PR-S1: <LeadDetail> precisa de <LeadsProvider> pra que o
-    // <LeadCommentsTab> shared consuma actions via useLeadsActions().
-    return (
-      <LeadsProvider actions={adminLeadsActions}>
-        <LeadDetail
-          leadId={selectedLeadId}
-          onBack={() => setSelectedLeadId(null)}
-        />
-      </LeadsProvider>
-    );
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -69,6 +69,8 @@ export function LeadListPage() {
 
   const initialTotalPages = Math.ceil(initialTotal / 20);
 
+  // Mantido pra retro-compat com menu "Excluir" da linha (fora do drawer).
+  // Drawer agora tem seu proprio botao Excluir com AlertDialog.
   async function handleDelete(lead: LeadWithTags) {
     if (
       !window.confirm(
@@ -95,10 +97,28 @@ export function LeadListPage() {
         initialPage={1}
         initialTotalPages={initialTotalPages}
         canEdit
-        onRowClick={(lead) => setSelectedLeadId(lead.id)}
-        onEditLead={(lead) => setSelectedLeadId(lead.id)}
+        onRowClick={(lead) => setInfoDrawerLead(lead)}
+        onEditLead={(lead) => setInfoDrawerLead(lead)}
         onDeleteLead={handleDelete}
       />
+      {infoDrawerLead ? (
+        <LeadInfoDrawer
+          open={!!infoDrawerLead}
+          onOpenChange={(open) => {
+            if (!open) setInfoDrawerLead(null);
+          }}
+          lead={infoDrawerLead}
+          onSaved={() => setReloadKey((n) => n + 1)}
+          supabase={supabase}
+          // PR-U3: admin = superadmin, sempre pode editar e excluir
+          canEdit
+          canDelete
+          onDeleted={() => {
+            setInfoDrawerLead(null);
+            setReloadKey((n) => n + 1);
+          }}
+        />
+      ) : null}
     </LeadsProvider>
   );
 }

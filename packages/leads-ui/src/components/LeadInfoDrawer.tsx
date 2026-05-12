@@ -41,6 +41,17 @@ import {
   SheetTitle,
 } from "@persia/ui/sheet";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@persia/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -121,6 +132,18 @@ interface Props {
    * createClient(); admin passa getSupabaseBrowserClient().
    */
   supabase: SupabaseClient;
+  /**
+   * PR-U3: gates de role injetados pelo caller. Regra do projeto:
+   * pacote NUNCA consome useRole/useActiveOrg — caller resolve.
+   *   - canEdit (default true): habilita Salvar + inputs editaveis
+   *   - canDelete (default false): mostra botao "Excluir" no footer
+   *     com AlertDialog. CRM: isAgent. Admin: superadmin (true).
+   */
+  canEdit?: boolean;
+  canDelete?: boolean;
+  /** Callback chamado apos deletar com sucesso (parent fecha drawer
+   *  + refetch lista). Recebe o leadId deletado. */
+  onDeleted?: (leadId: string) => void;
 }
 
 interface FormState {
@@ -173,6 +196,9 @@ export function LeadInfoDrawer({
   members = [],
   onSaved,
   supabase,
+  canEdit = true,
+  canDelete = false,
+  onDeleted,
 }: Props) {
   // PR-U2: actions vem do provider via DI. Cada app injeta sua versao
   // (CRM: requireRole; admin: requireSuperadminForOrg).
@@ -181,6 +207,32 @@ export function LeadInfoDrawer({
     leadToFormState(lead),
   );
   const [isPending, startTransition] = React.useTransition();
+
+  // PR-U3: state pra exclusao. AlertDialog controlled via state pra
+  // que o handler de deletar consiga fechar + chamar onDeleted.
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  async function handleDelete() {
+    if (!actions.deleteLead) {
+      toast.error("Ação indisponível neste app");
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await actions.deleteLead(lead.id);
+      toast.success("Lead excluído");
+      setDeleteDialogOpen(false);
+      onOpenChange(false);
+      onDeleted?.(lead.id);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao excluir lead",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   // Subheader "Etapa atual" — busca o deal aberto + stages do pipeline
   // ao abrir, pra trocar etapa via Popover sem fechar o drawer (#2 do
@@ -673,27 +725,78 @@ export function LeadInfoDrawer({
           </form>
         </Tabs>
 
-        <SheetFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex-row justify-end gap-2 sm:space-x-0">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-            disabled={isPending}
-          >
-            Fechar
-          </Button>
-          <Button
-            type="submit"
-            form="lead-info-form"
-            disabled={isPending}
-          >
-            {isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Save className="size-4" />
+        <SheetFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-2 sm:space-x-0">
+          {/* PR-U3: Excluir no canto esquerdo, gated por canDelete.
+              CRM passa canDelete=isAgent; admin passa true. */}
+          {canDelete && (
+            <AlertDialog
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+            >
+              <AlertDialogTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    disabled={isPending || isDeleting}
+                  >
+                    <Trash2 className="size-4" />
+                    Excluir
+                  </Button>
+                }
+              />
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação não pode ser desfeita. O lead {lead.name ? `"${lead.name}"` : "selecionado"} e seus dados serão removidos permanentemente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>
+                    Cancelar
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                    Excluir
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={isPending}
+            >
+              Fechar
+            </Button>
+            {canEdit && (
+              <Button
+                type="submit"
+                form="lead-info-form"
+                disabled={isPending}
+              >
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Save className="size-4" />
+                )}
+                Salvar
+              </Button>
             )}
-            Salvar
-          </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
