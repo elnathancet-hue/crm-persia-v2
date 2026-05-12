@@ -169,57 +169,24 @@ export async function getConversation(id: string) {
 export async function findOrCreateConversationByLead(
   leadId: string,
 ): Promise<{ conversationId: string; created: boolean }> {
+  // PR-S5: logica em packages/shared/src/crm/mutations/conversations.ts.
+  // Aqui so wrappa auth + revalidate (Next-specific).
   const { supabase, orgId, userId } = await requireRole("agent");
-
-  // Defesa multi-tenant: confirma que o lead pertence a org do caller
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id, channel")
-    .eq("id", leadId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!lead) {
-    throw new Error("Lead não encontrado nesta organização");
-  }
-
-  // Find: conversa aberta mais recente do lead
-  const { data: existing } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("lead_id", leadId)
-    .in("status", ["active", "waiting_human"])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existing) {
-    return { conversationId: existing.id as string, created: false };
-  }
-
-  // Create: nova conversa atribuida ao agente que clicou
-  const { data: created, error } = await supabase
-    .from("conversations")
-    .insert({
-      organization_id: orgId,
-      lead_id: leadId,
-      channel: (lead.channel as string) || "whatsapp",
-      status: "active",
-      assigned_to: userId,
-      last_message_at: null,
-    })
-    .select("id")
-    .single();
-
-  if (error || !created) {
-    throw new Error(error?.message ?? "Erro ao criar conversa");
-  }
+  const { findOrCreateConversationByLead: findOrCreateShared } =
+    await import("@persia/shared/crm");
+  const result = await findOrCreateShared(
+    { db: supabase, orgId },
+    leadId,
+    userId,
+  );
 
   // PR-K LEAD-SYNC: nova conversa criada por agente -> /chat e
   // /leads atualizam (drawer mostra conversation count via PR-D
   // header rico, lista pode mostrar "ultima conversa" futuramente).
-  await revalidateLeadAndChatCaches(leadId);
-  return { conversationId: created.id as string, created: true };
+  if (result.created) {
+    await revalidateLeadAndChatCaches(leadId);
+  }
+  return result;
 }
 
 export async function assignConversation(

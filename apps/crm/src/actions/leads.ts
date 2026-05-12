@@ -14,11 +14,15 @@ import {
   createLead as createLeadShared,
   deleteLead as deleteLeadShared,
   fetchLead,
+  fetchLeadDealsList,
+  fetchLeadStats,
   listLeads,
   listOrgActivities,
   listTags,
   removeTagFromLead as removeTagFromLeadShared,
   updateLead as updateLeadShared,
+  type LeadDealItem,
+  type LeadStats,
   type ListOrgActivitiesOptions,
 } from "@persia/shared/crm";
 import { phoneBROptional, emailOptional } from "@persia/shared/validation";
@@ -178,196 +182,25 @@ export async function getOrgActivities(
  * Performance: 4 queries paralelas (lead lookup + 3 stats). Cada
  * stat eh COUNT agregado + 1 LIMIT 1 pra "mais recente". Nao busca
  * dados completos — so o suficiente pros cards.
+ *
+ * PR-S5: implementacao movida pra packages/shared/src/crm/queries/
+ * lead-stats.ts. Aqui so wrappa requireRole + ctx.
  */
-export interface LeadStats {
-  deals: {
-    count: number;
-    total_value: number;
-    latest_status: string | null;
-  };
-  conversations: {
-    count: number;
-    last_message_at: string | null;
-  };
-  activities: {
-    count: number;
-    latest_description: string | null;
-    latest_at: string | null;
-  };
-}
-
+export type { LeadStats, LeadDealItem };
 export async function getLeadStats(leadId: string): Promise<LeadStats> {
   const { supabase, orgId } = await requireRole("agent");
-
-  // Defesa multi-tenant: confirma lead pertence ao org
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("id", leadId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!lead) {
-    return {
-      deals: { count: 0, total_value: 0, latest_status: null },
-      conversations: { count: 0, last_message_at: null },
-      activities: { count: 0, latest_description: null, latest_at: null },
-    };
-  }
-
-  // 3 queries paralelas (deals + conversations + activities)
-  const [dealsRes, convsRes, activitiesRes] = await Promise.all([
-    supabase
-      .from("deals")
-      .select("value, status, created_at")
-      .eq("organization_id", orgId)
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("conversations")
-      .select("id, last_message_at", { count: "exact" })
-      .eq("organization_id", orgId)
-      .eq("lead_id", leadId)
-      .order("last_message_at", { ascending: false, nullsFirst: false })
-      .limit(1),
-    supabase
-      .from("lead_activities")
-      .select("description, created_at", { count: "exact" })
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: false })
-      .limit(1),
-  ]);
-
-  const deals = dealsRes.data ?? [];
-  const dealsCount = deals.length;
-  const dealsTotal = deals.reduce(
-    (sum, d) => sum + ((d as { value?: number }).value ?? 0),
-    0,
-  );
-  const latestDealStatus =
-    dealsCount > 0
-      ? ((deals[0] as { status?: string }).status ?? null)
-      : null;
-
-  const convsCount = convsRes.count ?? 0;
-  const lastMsgAt =
-    convsRes.data && convsRes.data.length > 0
-      ? ((convsRes.data[0] as { last_message_at?: string | null })
-          .last_message_at ?? null)
-      : null;
-
-  const activitiesCount = activitiesRes.count ?? 0;
-  const latestActivity =
-    activitiesRes.data && activitiesRes.data.length > 0
-      ? (activitiesRes.data[0] as {
-          description?: string | null;
-          created_at?: string | null;
-        })
-      : null;
-
-  return {
-    deals: {
-      count: dealsCount,
-      total_value: dealsTotal,
-      latest_status: latestDealStatus,
-    },
-    conversations: {
-      count: convsCount,
-      last_message_at: lastMsgAt,
-    },
-    activities: {
-      count: activitiesCount,
-      latest_description: latestActivity?.description ?? null,
-      latest_at: latestActivity?.created_at ?? null,
-    },
-  };
+  return fetchLeadStats({ db: supabase, orgId }, leadId);
 }
 
 /**
- * PR-L2: lista de negocios (deals) do lead com info da etapa atual.
- * Usado pela tab "Negocios" do drawer (lista expansivel) e pela
- * coluna "Negocios" da LeadsList (PR-L3).
- *
- * Modelo conceitual confirmado pelo user:
- *   1 LEAD -> N NEGOCIOS (cada negocio = produto/oportunidade
- *   especifica vinculada ao lead)
- *
- * Ordenacao: mais recente primeiro (created_at DESC).
- * Status: retorna TODOS (open, won, lost, archived) — UI filtra
- * conforme contexto (drawer mostra todos, PR-L3 LeadsList mostra
- * so abertos).
- *
- * Multi-tenant: lead lookup scoped por orgId (defense in depth).
- * Performance: JOIN com pipeline_stages (id, name, color, outcome)
- * em select unico — sem N+1.
+ * PR-L2: lista de deals do lead pra tab Negocios do drawer.
+ * PR-S5: implementacao em packages/shared/src/crm/queries/lead-stats.ts.
  */
-export interface LeadDealItem {
-  id: string;
-  title: string;
-  value: number;
-  status: string;
-  pipeline_id: string;
-  stage_id: string;
-  stage_name: string;
-  stage_color: string;
-  stage_outcome: "em_andamento" | "falha" | "bem_sucedido";
-  created_at: string;
-  updated_at: string | null;
-}
-
-export async function getLeadDealsList(leadId: string): Promise<LeadDealItem[]> {
+export async function getLeadDealsList(
+  leadId: string,
+): Promise<LeadDealItem[]> {
   const { supabase, orgId } = await requireRole("agent");
-
-  // Defesa multi-tenant: confirma lead da org
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("id", leadId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!lead) return [];
-
-  const { data, error } = await supabase
-    .from("deals")
-    .select(
-      "id, title, value, status, pipeline_id, stage_id, created_at, updated_at, " +
-        "pipeline_stages!inner(id, name, color, outcome)",
-    )
-    .eq("organization_id", orgId)
-    .eq("lead_id", leadId)
-    .order("created_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-
-  type Row = {
-    id: string;
-    title: string;
-    value: number;
-    status: string;
-    pipeline_id: string;
-    stage_id: string;
-    created_at: string;
-    updated_at: string | null;
-    pipeline_stages: {
-      id: string;
-      name: string;
-      color: string | null;
-      outcome: "em_andamento" | "falha" | "bem_sucedido";
-    } | null;
-  };
-
-  return ((data ?? []) as unknown as Row[]).map((row) => ({
-    id: row.id,
-    title: row.title,
-    value: Number(row.value ?? 0),
-    status: row.status,
-    pipeline_id: row.pipeline_id,
-    stage_id: row.stage_id,
-    stage_name: row.pipeline_stages?.name ?? "—",
-    stage_color: row.pipeline_stages?.color ?? "#888",
-    stage_outcome: row.pipeline_stages?.outcome ?? "em_andamento",
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  }));
+  return fetchLeadDealsList({ db: supabase, orgId }, leadId);
 }
 
 /**
