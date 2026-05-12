@@ -18,6 +18,7 @@
 // change.
 
 export type AgendaTone =
+  | "brand" // primary tokens — destaque visual da marca (overview KPI, menus)
   | "warning" // amber — aguardando confirmacao, rascunho, alerta de mudanca
   | "success" // emerald — confirmado, ativo, OK
   | "info" // blue — concluido / informativo
@@ -32,6 +33,8 @@ export type AgendaTone =
  *   font-medium uppercase tracking-wide ring-1 ring-inset
  */
 export const TONE_BADGE_CLASSES: Record<AgendaTone, string> = {
+  brand:
+    "bg-primary/10 text-primary ring-primary/30 dark:bg-primary/15 dark:text-primary dark:ring-primary/40",
   warning:
     "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30",
   success:
@@ -51,6 +54,8 @@ export const TONE_BADGE_CLASSES: Record<AgendaTone, string> = {
  *   rounded-md p-3 text-sm ring-1
  */
 export const TONE_ALERT_CLASSES: Record<AgendaTone, string> = {
+  brand:
+    "bg-primary/5 text-foreground ring-primary/20 dark:bg-primary/10 dark:text-foreground dark:ring-primary/30",
   warning:
     "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30",
   success:
@@ -70,6 +75,7 @@ export const TONE_ALERT_CLASSES: Record<AgendaTone, string> = {
  *   inline-flex items-center rounded-md px-2 py-0.5 text-xs
  */
 export const TONE_PILL_CLASSES: Record<AgendaTone, string> = {
+  brand: "bg-primary/10 text-primary",
   warning:
     "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
   success:

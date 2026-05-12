@@ -13,6 +13,7 @@ import {
   BLOCKING_APPOINTMENT_STATUSES,
 } from "@persia/shared/agenda";
 import { TodayAppointments } from "./TodayAppointments";
+import { TONE_PILL_CLASSES, type AgendaTone } from "../lib/agenda-tones";
 
 interface AgendaOverviewProps {
   appointments: readonly Appointment[];
@@ -21,19 +22,16 @@ interface AgendaOverviewProps {
   timezone?: string;
 }
 
+// PR9e: tons semanticos centralizados (agenda-tones). Antes era um
+// mini-map indigo/amber/emerald/rose hardcoded. Agora reusa o helper.
+// 4 tons aqui: brand (proximos), warning (aguardando), success
+// (confirmados), danger (cancelados).
 interface MetricCardProps {
   icon: React.ReactNode;
   label: string;
   value: number;
-  tone: "indigo" | "amber" | "emerald" | "rose";
+  tone: Extract<AgendaTone, "brand" | "warning" | "success" | "danger">;
 }
-
-const TONE_STYLES: Record<MetricCardProps["tone"], string> = {
-  indigo: "bg-primary/10 text-primary",
-  amber: "bg-amber-50 text-amber-700",
-  emerald: "bg-emerald-50 text-emerald-700",
-  rose: "bg-destructive/10 text-destructive",
-};
 
 const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, tone }) => (
   <div className="rounded-3xl bg-card p-5 ring-1 ring-border shadow-sm">
@@ -41,7 +39,7 @@ const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, tone }) => 
       <div
         className={[
           "flex h-10 w-10 items-center justify-center rounded-2xl",
-          TONE_STYLES[tone],
+          TONE_PILL_CLASSES[tone],
         ].join(" ")}
       >
         {icon}
@@ -99,25 +97,25 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
           icon={<CalendarCheck size={18} />}
           label="Próximos"
           value={upcoming}
-          tone="indigo"
+          tone="brand"
         />
         <MetricCard
           icon={<ClockIcon size={18} />}
           label="Aguardando confirmação"
           value={countByStatus(appointments, "awaiting_confirmation")}
-          tone="amber"
+          tone="warning"
         />
         <MetricCard
           icon={<CheckCircle2 size={18} />}
           label="Realizados"
           value={countByStatus(appointments, "completed")}
-          tone="emerald"
+          tone="success"
         />
         <MetricCard
           icon={<XCircle size={18} />}
           label="Cancelados"
           value={countByStatus(appointments, "cancelled")}
-          tone="rose"
+          tone="danger"
         />
       </div>
 
