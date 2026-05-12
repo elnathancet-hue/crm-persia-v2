@@ -26,6 +26,18 @@
   --color-ring: var(--ring);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  /* PR-T2: sidebar tokens — espelha apps/crm pra paridade visual.
+     admin-sidebar.tsx usa bg-sidebar / text-sidebar-foreground em
+     vez de hex hardcoded (#090B1A, etc). Cores resolvem via vars
+     CSS — tema dark/light/managing-client funciona automatico. */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: var(--font-sans, "Inter"), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -44,6 +56,16 @@
   --ring: #3B82F6;
   --accent: #F3F4F6;
   --accent-foreground: #0D0D0D;
+  /* PR-T2: sidebar (light) — espelha apps/crm. Mesmo preto pro CRM
+     cliente e admin manterem identidade unica. */
+  --sidebar: hsl(0, 0%, 8%);                /* #141414 preto */
+  --sidebar-foreground: hsl(0, 0%, 96%);    /* off-white pros icones inativos */
+  --sidebar-primary: hsl(217, 91%, 60%);    /* #3B82F6 azul (item ativo) */
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(0, 0%, 14%);        /* #242424 hover bg */
+  --sidebar-accent-foreground: hsl(0, 0%, 96%);
+  --sidebar-border: hsl(0, 0%, 14%);
+  --sidebar-ring: hsl(217, 91%, 60%);
 }
 
 .dark {
@@ -61,6 +83,16 @@
   --ring: #3B82F6;
   --accent: #1A1A1A;
   --accent-foreground: #F2F2F2;
+  /* PR-T2: sidebar (dark) — deep navy + gold accent, espelha tema
+     dark do CRM cliente. */
+  --sidebar: hsl(230, 45%, 5%);
+  --sidebar-foreground: hsl(30, 25%, 96%);
+  --sidebar-primary: hsl(43, 54%, 54%);     /* #C9A84C gold */
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(230, 35%, 12%);
+  --sidebar-accent-foreground: hsl(30, 25%, 96%);
+  --sidebar-border: hsl(230, 35%, 12%);
+  --sidebar-ring: hsl(43, 54%, 54%);
 }
 
 body {
