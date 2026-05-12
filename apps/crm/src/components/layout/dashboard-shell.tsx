@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
-import { useCurrentUser } from "@/lib/realtime/use-current-user";
+import { useCurrentUser } from "@persia/leads-ui";
 import { useCommentToast } from "@/lib/realtime/use-comment-toast";
 import { useAssignmentToast } from "@/lib/realtime/use-assignment-toast";
+import { createClient } from "@/lib/supabase/client";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -17,7 +18,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   //   - useCommentToast: cap 60s/lead + filter assigned_to
   //   - useAssignmentToast: dispara na transicao assigned_to -> currentUser
   const orgId = useCurrentOrgId();
-  const currentUser = useCurrentUser();
+  // PR-U2: useCurrentUser agora vem do @persia/leads-ui (DI supabase).
+  const supabase = createClient();
+  const currentUser = useCurrentUser(supabase);
   useCommentToast({
     orgId,
     currentUserId: currentUser?.user_id ?? null,
