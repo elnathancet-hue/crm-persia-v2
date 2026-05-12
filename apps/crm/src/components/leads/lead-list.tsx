@@ -245,6 +245,14 @@ export function LeadList(props: Props) {
             lead={infoDrawerLead}
             onSaved={() => router.refresh()}
             supabase={supabase}
+            // PR-U3: gates de role injetados aqui (regra: pacote nao usa useRole).
+            // Agent+ pode editar e excluir. Viewer (futuro) so visualiza.
+            canEdit={isAgent}
+            canDelete={isAgent}
+            onDeleted={() => {
+              setInfoDrawerLead(null);
+              router.refresh();
+            }}
           />
         ) : null}
       </LeadsProvider>
