@@ -14,6 +14,22 @@ import {
   getLeadComments,
   updateLeadComment,
 } from "@/actions/lead-comments";
+import {
+  addTagToLeadForDrawer,
+  deleteLeadForDrawer,
+  findOrCreateConversationByLead,
+  getLeadAgentHandoffStateForDrawer,
+  getLeadCustomFields,
+  getLeadDealsList,
+  getLeadForDrawer,
+  getLeadOpenDealWithStages,
+  getLeadStats,
+  reactivateLeadAgentForDrawer,
+  removeTagFromLeadForDrawer,
+  setLeadCustomFieldValue,
+  updateDealStage,
+  updateLeadForDrawer,
+} from "@/actions/lead-detail-actions";
 
 export const adminLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -51,4 +67,21 @@ export const adminLeadsActions: LeadsActions = {
   createLeadComment,
   updateLeadComment,
   deleteLeadComment,
+  // PR-U1: drawer actions. Todas usam requireSuperadminForOrg +
+  // service-role, com check explicito de organization_id como defesa
+  // em camadas (alem do RLS que o service-role bypassa).
+  getLead: getLeadForDrawer,
+  updateLead: updateLeadForDrawer,
+  deleteLead: deleteLeadForDrawer,
+  getLeadStats,
+  getLeadDealsList,
+  getLeadOpenDealWithStages,
+  updateDealStage,
+  addTagToLead: addTagToLeadForDrawer,
+  removeTagFromLead: removeTagFromLeadForDrawer,
+  getLeadCustomFields,
+  setLeadCustomFieldValue,
+  findOrCreateConversationByLead,
+  getLeadAgentHandoffState: getLeadAgentHandoffStateForDrawer,
+  reactivateLeadAgent: reactivateLeadAgentForDrawer,
 };

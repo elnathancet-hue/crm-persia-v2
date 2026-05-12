@@ -6,11 +6,31 @@
 
 import type { LeadsActions, OrgTag } from "@persia/leads-ui";
 import {
+  addTagToLead,
   createLead,
+  deleteLead,
   findLeadByPhoneOrEmail,
+  getLead,
+  getLeadDealsList,
   getLeads,
+  getLeadStats,
   getOrgTags,
+  removeTagFromLead,
+  updateLead,
 } from "@/actions/leads";
+import {
+  getLeadOpenDealWithStages,
+  updateDealStage,
+} from "@/actions/crm";
+import {
+  getLeadCustomFields,
+  setLeadCustomFieldValue,
+} from "@/actions/custom-fields";
+import { findOrCreateConversationByLead } from "@/actions/conversations";
+import {
+  getLeadAgentHandoffState,
+  reactivateAgent,
+} from "@/actions/ai-agent/reactivate";
 import {
   createLeadComment,
   deleteLeadComment,
@@ -45,4 +65,27 @@ export const crmLeadsActions: LeadsActions = {
   createLeadComment,
   updateLeadComment,
   deleteLeadComment,
+  // PR-U1: actions usadas pelo LeadInfoDrawer (extracao em PR-U2).
+  // Todas com requireRole("agent") + multi-tenant via orgId.
+  getLead,
+  updateLead: async (leadId, data) => {
+    const updated = await updateLead(leadId, data);
+    return updated ? { id: updated.id } : undefined;
+  },
+  deleteLead,
+  getLeadStats,
+  getLeadDealsList,
+  getLeadOpenDealWithStages,
+  updateDealStage: async (dealId, stageId) => {
+    // CRM action retorna mais data (UAZAPI sync etc); aqui devolve void
+    // pra alinhar com a interface (caller so precisa saber que rodou).
+    await updateDealStage(dealId, stageId);
+  },
+  addTagToLead,
+  removeTagFromLead,
+  getLeadCustomFields,
+  setLeadCustomFieldValue,
+  findOrCreateConversationByLead,
+  getLeadAgentHandoffState,
+  reactivateLeadAgent: reactivateAgent,
 };
