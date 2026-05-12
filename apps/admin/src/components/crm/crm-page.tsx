@@ -33,7 +33,14 @@ interface KanbanLead {
   email: string | null;
 }
 
-export function CrmPage() {
+interface CrmPageProps {
+  /** PR-T3: quando true, esconde o <h1>CRM</h1> interno — usado
+   *  quando renderizado dentro do AdminCrmShell (header ja vem do
+   *  shell). Default false (standalone /crm preserva header). */
+  hideHeader?: boolean;
+}
+
+export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
   const { activeOrgId, isManagingClient } = useActiveOrg();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -91,7 +98,9 @@ export function CrmPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-foreground">CRM</h1>
+      {!hideHeader && (
+        <h1 className="text-xl font-bold text-foreground">CRM</h1>
+      )}
       {pipelines.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Nao foi possivel inicializar o funil. Tente recarregar.
