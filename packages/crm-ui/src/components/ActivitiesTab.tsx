@@ -36,13 +36,39 @@ import { toast } from "sonner";
 import type { OrgActivityRow } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import { EmptyState } from "@persia/ui/empty-state";
-import { getOrgActivities } from "@/actions/leads";
 
-interface ActivitiesTabProps {
+// PR-T4: extraido de apps/crm/src/components/crm/activities-tab.tsx
+// pra packages/crm-ui com dependency injection do action de fetch.
+// Caller (CRM ou admin) passa `listActivities` — interface agnostica
+// ao app, recebe orgId via auth do action callee.
+
+export interface ListActivitiesOptions {
+  page?: number;
+  limit?: number;
+  types?: string[];
+  leadId?: string;
+}
+
+export interface ListActivitiesResult {
+  activities: OrgActivityRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface ActivitiesTabProps {
   initialActivities: OrgActivityRow[];
   initialTotal: number;
   initialPage: number;
   initialTotalPages: number;
+  /**
+   * Server action injetada pelo caller — CRM passa getOrgActivities
+   * (requireRole), admin passa sua versao (requireSuperadminForOrg).
+   * Componente nao sabe nada de auth — agnostico ao app.
+   */
+  listActivities: (
+    options: ListActivitiesOptions,
+  ) => Promise<ListActivitiesResult>;
 }
 
 // Filtros agrupados — mapeia categoria visivel -> lista de tipos do schema
@@ -197,6 +223,7 @@ export function ActivitiesTab({
   initialTotal,
   initialPage,
   initialTotalPages,
+  listActivities,
 }: ActivitiesTabProps) {
   const router = useRouter();
   const [activities, setActivities] = React.useState<OrgActivityRow[]>(
@@ -222,7 +249,7 @@ export function ActivitiesTab({
     setIsLoading(true);
     try {
       const filter = FILTERS.find((f) => f.key === key)!;
-      const result = await getOrgActivities({
+      const result = await listActivities({
         page: 1,
         limit: PAGE_SIZE,
         types: filter.types.length > 0 ? filter.types : undefined,
@@ -246,7 +273,7 @@ export function ActivitiesTab({
     try {
       const filter = FILTERS.find((f) => f.key === activeFilter)!;
       const next = page + 1;
-      const result = await getOrgActivities({
+      const result = await listActivities({
         page: next,
         limit: PAGE_SIZE,
         types: filter.types.length > 0 ? filter.types : undefined,

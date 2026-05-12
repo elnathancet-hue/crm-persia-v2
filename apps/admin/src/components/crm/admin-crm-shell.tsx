@@ -20,6 +20,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  Activity,
   Filter as FilterIcon,
   Kanban,
   Tag as TagIcon,
@@ -27,10 +28,11 @@ import {
 } from "lucide-react";
 import { CrmPage } from "@/components/crm/crm-page";
 import { LeadListPage } from "@/components/leads/lead-list";
+import { AdminActivitiesTab } from "@/components/crm/admin-activities-tab";
 import SegmentsPage from "@/app/(dashboard)/segments/page";
 import TagsPage from "@/app/(dashboard)/tags/page";
 
-type CrmTab = "pipeline" | "leads" | "segmentos" | "tags";
+type CrmTab = "pipeline" | "leads" | "segmentos" | "tags" | "atividades";
 
 const TABS: {
   key: CrmTab;
@@ -41,6 +43,7 @@ const TABS: {
   { key: "leads", label: "Leads", icon: Users },
   { key: "segmentos", label: "Segmentação", icon: FilterIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
+  { key: "atividades", label: "Atividades", icon: Activity },
 ];
 
 export function AdminCrmShell() {
@@ -119,6 +122,7 @@ export function AdminCrmShell() {
         {activeTab === "leads" && <LeadListPage />}
         {activeTab === "segmentos" && <SegmentsPage />}
         {activeTab === "tags" && <TagsPage />}
+        {activeTab === "atividades" && <AdminActivitiesTab />}
       </div>
     </div>
   );

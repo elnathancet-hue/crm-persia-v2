@@ -84,3 +84,11 @@ export {
   type ImportDestination,
   type DuplicateStrategy,
 } from "./components/ImportLeadsWizard";
+// PR-T4: timeline global de activities — shared entre CRM e admin.
+// Caller injeta `listActivities` (action com auth proprio do app).
+export {
+  ActivitiesTab,
+  type ActivitiesTabProps,
+  type ListActivitiesOptions,
+  type ListActivitiesResult,
+} from "./components/ActivitiesTab";
