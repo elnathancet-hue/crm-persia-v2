@@ -11,6 +11,13 @@ export type {
   OrgTag,
   LeadComment,
   DuplicateMatch,
+  LeadStats,
+  LeadDealItem,
+  DrawerStageRef,
+  LeadOpenDealWithStages,
+  LeadCustomFieldDef,
+  LeadCustomFieldEntry,
+  LeadAgentHandoffState,
 } from "./actions";
 export {
   LeadsProvider,
