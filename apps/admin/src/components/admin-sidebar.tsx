@@ -48,15 +48,16 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
 
   return (
     <>
-    <aside className="hidden md:flex w-[72px] flex-col border-r border-border bg-[#090B1A] h-screen sticky top-0 items-center shrink-0 z-40">
-      {/* Brand */}
+    <aside className="hidden md:flex w-[72px] flex-col border-r border-sidebar-border bg-sidebar h-screen sticky top-0 items-center shrink-0 z-40">
+      {/* Brand — usa tokens semanticos (PR-T2). text-sidebar-primary
+          resolve azul (light) ou dourado (dark) automaticamente. */}
       <div className="py-4 w-full flex justify-center">
         {brandAction === "panel" ? (
           <button onClick={togglePanel} title="Painel de clientes">
             <div className={`size-10 rounded-xl flex items-center justify-center transition-all ${
-              panelOpen ? "bg-[#090B1A] ring-2 ring-primary" : "bg-[#090B1A] hover:opacity-90"
+              panelOpen ? "bg-sidebar-accent ring-2 ring-sidebar-ring" : "bg-sidebar hover:bg-sidebar-accent/60"
             }`}>
-              <svg width="24" height="24" viewBox="0 0 40 40" fill="none" className="text-white dark:text-[#C9A84C]">
+              <svg width="24" height="24" viewBox="0 0 40 40" fill="none" className="text-sidebar-primary">
                 <path d="M20 2L32 14L20 26L8 14Z" fill="none" stroke="currentColor" strokeWidth="1.8"/>
                 <path d="M20 14L32 26L20 38L8 26Z" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.5"/>
                 <circle cx="20" cy="20" r="3" fill="currentColor"/>
@@ -65,8 +66,8 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
           </button>
         ) : (
           <Link href="/" title="Voltar ao inicio">
-            <div className="size-10 rounded-xl flex items-center justify-center hover:opacity-90 transition-opacity bg-[#090B1A]">
-              <svg width="24" height="24" viewBox="0 0 40 40" fill="none" className="text-white dark:text-[#C9A84C]">
+            <div className="size-10 rounded-xl flex items-center justify-center hover:bg-sidebar-accent/60 transition-colors bg-sidebar">
+              <svg width="24" height="24" viewBox="0 0 40 40" fill="none" className="text-sidebar-primary">
                 <path d="M20 2L32 14L20 26L8 14Z" fill="none" stroke="currentColor" strokeWidth="1.8"/>
                 <path d="M20 14L32 26L20 38L8 26Z" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.5"/>
                 <circle cx="20" cy="20" r="3" fill="currentColor"/>
@@ -93,7 +94,9 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
                 <button
                   onClick={() => setOpenMenu(openMenu === item.label ? null : item.label)}
                   className={`flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-xl w-[60px] transition-colors duration-150 ${
-                    isActive ? "text-primary" : "text-white hover:text-blue-400 hover:bg-white/10"
+                    isActive
+                      ? "text-sidebar-primary"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   }`}
                 >
                   <Icon className="size-5" />
@@ -104,7 +107,9 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
                   href={item.href}
                   onClick={() => setOpenMenu(null)}
                   className={`relative flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-xl w-[60px] transition-colors duration-150 ${
-                    isActive ? "text-primary" : "text-white hover:text-blue-400 hover:bg-white/10"
+                    isActive
+                      ? "text-sidebar-primary"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   }`}
                 >
                   <Icon className="size-5" />
@@ -158,8 +163,8 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
       </div>
     </aside>
 
-    {/* Mobile bottom navigation */}
-    <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#090B1A] border-t border-border z-50 items-center justify-around px-2">
+    {/* Mobile bottom navigation — tokens sidebar-* (PR-T2) */}
+    <nav className="flex md:hidden fixed bottom-0 left-0 right-0 h-16 bg-sidebar border-t border-sidebar-border z-50 items-center justify-around px-2">
       {mobileItems.map((item) => {
         const Icon = item.icon;
         const isActive =
@@ -170,7 +175,7 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
             key={item.href}
             href={item.href}
             className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors ${
-              isActive ? "text-primary" : "text-white"
+              isActive ? "text-sidebar-primary" : "text-sidebar-foreground/80"
             }`}
           >
             <Icon className="size-5" />
@@ -181,7 +186,7 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
       <button
         onClick={() => setMobileMoreOpen(true)}
         className={`flex flex-col items-center justify-center gap-0.5 py-1 px-3 rounded-lg transition-colors ${
-          mobileMoreOpen ? "text-primary" : "text-white"
+          mobileMoreOpen ? "text-sidebar-primary" : "text-sidebar-foreground/80"
         }`}
       >
         <MoreHorizontal className="size-5" />
@@ -197,11 +202,16 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
           className="absolute inset-0 bg-black/60"
           onClick={() => setMobileMoreOpen(false)}
         />
-        {/* Sheet */}
-        <div className="relative bg-[#090B1A] border-t border-border rounded-t-2xl max-h-[70vh] overflow-y-auto pb-20">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <span className="text-sm font-semibold text-white">Menu</span>
-            <button onClick={() => setMobileMoreOpen(false)} aria-label="Fechar menu" className="text-[#666] hover:text-white">
+        {/* Sheet — tokens sidebar-* (PR-T2). Visual identico ao
+            sidebar desktop (mesmo bg, foreground, border). */}
+        <div className="relative bg-sidebar border-t border-sidebar-border rounded-t-2xl max-h-[70vh] overflow-y-auto pb-20">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-sidebar-border">
+            <span className="text-sm font-semibold text-sidebar-foreground">Menu</span>
+            <button
+              onClick={() => setMobileMoreOpen(false)}
+              aria-label="Fechar menu"
+              className="text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+            >
               <X className="size-5" />
             </button>
           </div>
@@ -217,14 +227,14 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
                   <Link
                     href={item.href}
                     className={`flex items-center gap-3 px-5 py-3 transition-colors ${
-                      isActive ? "text-primary" : "text-white"
+                      isActive ? "text-sidebar-primary" : "text-sidebar-foreground"
                     }`}
                   >
                     <Icon className="size-5" />
                     <span className="text-sm font-medium">{item.label}</span>
                   </Link>
                   {item.children && (
-                    <div className="ml-12 border-l border-border mb-1">
+                    <div className="ml-12 border-l border-sidebar-border mb-1">
                       {item.children.map((child) => {
                         const childActive = pathname === child.href || pathname.startsWith(child.href + "/");
                         return (
@@ -232,7 +242,9 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
                             key={child.href}
                             href={child.href}
                             className={`block px-4 py-2 text-sm transition-colors ${
-                              childActive ? "text-primary font-medium" : "text-[#A6A6A6]"
+                              childActive
+                                ? "text-sidebar-primary font-medium"
+                                : "text-sidebar-foreground/70"
                             }`}
                           >
                             {child.label}
@@ -246,10 +258,10 @@ export function AppSidebar({ items, mobileItems, brandAction }: AppSidebarProps)
             })}
           </div>
           {/* Sign out */}
-          <div className="border-t border-border px-5 py-3">
+          <div className="border-t border-sidebar-border px-5 py-3">
             <button
               onClick={() => signOut()}
-              className="flex items-center gap-3 text-[#666] hover:text-red-500 transition-colors"
+              className="flex items-center gap-3 text-sidebar-foreground/60 hover:text-destructive transition-colors"
             >
               <LogOut className="size-5" />
               <span className="text-sm font-medium">Sair</span>
