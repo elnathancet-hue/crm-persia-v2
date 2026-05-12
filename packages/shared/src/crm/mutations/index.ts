@@ -66,3 +66,8 @@ export {
   updateLossReason,
   deleteLossReason,
 } from "./deals";
+
+// PR-S5: find-or-create de conversa WhatsApp por lead (botao "Abrir
+// conversa" no menu de 3 pontos do LeadsList).
+export type { FindOrCreateConversationResult } from "./conversations";
+export { findOrCreateConversationByLead } from "./conversations";

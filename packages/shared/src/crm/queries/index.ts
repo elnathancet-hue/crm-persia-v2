@@ -37,3 +37,15 @@ export {
 export { listDeals, findLeadOpenDealWithStages } from "./deals";
 
 export { listLossReasons } from "./loss-reasons";
+
+// PR-S5: queries do drawer "Informacoes do lead" extraidas dos apps.
+export type { LeadStats, LeadDealItem } from "./lead-stats";
+export { fetchLeadStats, fetchLeadDealsList } from "./lead-stats";
+export type {
+  LeadCustomFieldDef,
+  LeadCustomFieldEntry,
+} from "./custom-fields";
+export {
+  fetchLeadCustomFields,
+  upsertLeadCustomFieldValue,
+} from "./custom-fields";

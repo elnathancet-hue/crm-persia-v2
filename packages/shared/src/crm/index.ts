@@ -55,6 +55,11 @@ export type {
   ListPipelinesOptions,
   ListDealsOptions,
   LeadOpenDealWithStages,
+  // PR-S5: types do drawer
+  LeadStats,
+  LeadDealItem,
+  LeadCustomFieldDef,
+  LeadCustomFieldEntry,
 } from "./queries";
 
 export {
@@ -72,6 +77,11 @@ export {
   findLeadOpenDealWithStages,
   listLossReasons,
   listOrgActivities,
+  // PR-S5: queries do drawer
+  fetchLeadStats,
+  fetchLeadDealsList,
+  fetchLeadCustomFields,
+  upsertLeadCustomFieldValue,
 } from "./queries";
 
 // PR-CRMOPS3: helper que resolve regras de segmento em IDs de leads.
@@ -131,4 +141,9 @@ export {
   updateLossReason,
   deleteLossReason,
   sanitizeMutationError,
+  // PR-S5: find-or-create conversa por lead
+  findOrCreateConversationByLead,
 } from "./mutations";
+
+// PR-S5: type tambem exportado pro caller wrappear retorno
+export type { FindOrCreateConversationResult } from "./mutations";
