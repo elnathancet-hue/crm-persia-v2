@@ -1982,17 +1982,21 @@ const DealCard = React.memo(function DealCardImpl({
   return (
     <>
       <div
-        // PR-KANBAN-UI: borderColor inline = cor da etapa (identidade visual
-        // por coluna). selected state ainda sobrescreve via ring + border-primary.
+        // PR-KANBAN-UI: contorno mudou — agora SO a borda esquerda
+        // (4px) tem a cor da etapa. Restante do card fica com border
+        // sutil padrao. Visual: faixa de cor lateral em vez de
+        // contorno completo (briefing user mai/2026).
+        // selected state ainda sobrescreve via ring + border-primary
+        // (todos os lados, pra destaque maior).
         // Em dragging fica subtil pra nao competir com o ring de selecao.
-        className={`group relative bg-card border-2 rounded-xl p-3.5 transition-all duration-200 ${
+        className={`group relative bg-card border border-l-4 border-border rounded-xl p-3.5 transition-all duration-200 ${
           canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-default"
         } ${isDragging ? "opacity-40 ring-2 ring-primary scale-[0.98]" : "hover:-translate-y-0.5 hover:shadow-lg hover:shadow-foreground/5"} ${
           selected
-            ? "border-primary ring-2 ring-primary/30 bg-primary/[0.03]"
+            ? "border-primary border-l-4 ring-2 ring-primary/30 bg-primary/[0.03]"
             : ""
         }`}
-        style={selected ? undefined : { borderColor: stageColor }}
+        style={selected ? undefined : { borderLeftColor: stageColor }}
         draggable={canEdit && !hasActiveSelection}
         onDragStart={(e) =>
           canEdit && !hasActiveSelection && onDragStart(e, deal.id)
