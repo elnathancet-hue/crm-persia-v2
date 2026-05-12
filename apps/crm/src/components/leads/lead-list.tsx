@@ -9,7 +9,11 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LeadsList, LeadsProvider } from "@persia/leads-ui";
+import {
+  LeadInfoDrawer,
+  LeadsList,
+  LeadsProvider,
+} from "@persia/leads-ui";
 import {
   ExportMenu,
   ImportLeadsWizard,
@@ -24,7 +28,7 @@ import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
 import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
 import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
-import { LeadInfoDrawer } from "@/components/leads/lead-info-drawer";
+import { createClient } from "@/lib/supabase/client";
 import { importLeads } from "@/actions/leads-import";
 import {
   assignLead,
@@ -56,6 +60,9 @@ export function LeadList(props: Props) {
   const router = useRouter();
   const { isAgent } = useRole();
   const orgId = useCurrentOrgId();
+  // PR-U2: supabase client pro <LeadInfoDrawer> (DI). Singleton — chamar
+  // direto e seguro.
+  const supabase = createClient();
 
   // PR-O Realtime + PR-P debounce: outro agente criou/editou/deletou
   // lead nesta org. Debounce 200ms agrupa burst (bulk import, bulk
@@ -237,6 +244,7 @@ export function LeadList(props: Props) {
             }}
             lead={infoDrawerLead}
             onSaved={() => router.refresh()}
+            supabase={supabase}
           />
         ) : null}
       </LeadsProvider>

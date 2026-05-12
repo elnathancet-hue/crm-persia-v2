@@ -27,8 +27,9 @@ import type {
 import { useRole } from "@/lib/hooks/use-role";
 import { useDealsRealtime } from "@/lib/realtime/use-deals-realtime";
 import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
-import { useCurrentUser } from "@/lib/realtime/use-current-user";
+import { useCurrentUser } from "@persia/leads-ui";
 import { useDealPresence } from "@/lib/realtime/use-deal-presence";
+import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   pipelines: Pipeline[];
@@ -71,7 +72,9 @@ export function CrmClient({
   // PR-Q: presence-only do pipeline pra mostrar quem ta vendo cada card.
   // Canal proprio (`pipeline-presence-${pipelineId}`) — separa o concern
   // de presence (muito mais updates) do realtime de postgres_changes.
-  const currentUser = useCurrentUser();
+  // PR-U2: useCurrentUser agora vem do @persia/leads-ui (DI supabase).
+  const supabase = createClient();
+  const currentUser = useCurrentUser(supabase);
   const { watchersByDeal, setViewingDealId } = useDealPresence({
     pipelineId: pipelineId ?? null,
     currentUser,

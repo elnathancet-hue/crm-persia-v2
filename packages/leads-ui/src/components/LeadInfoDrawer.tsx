@@ -58,23 +58,19 @@ import {
   TabsList,
   TabsTrigger,
 } from "@persia/ui/tabs";
-import {
-  getLeadDealsList,
-  getLeadStats,
-  updateLead,
-  type LeadDealItem,
-  type LeadStats,
-} from "@/actions/leads";
-import { getLeadOpenDealWithStages, updateDealStage } from "@/actions/crm";
-import {
-  getLeadCustomFields,
-  setLeadCustomFieldValue,
-  type LeadCustomFieldDef,
-  type LeadCustomFieldEntry,
-} from "@/actions/custom-fields";
-import { LeadCommentsTab } from "@persia/leads-ui";
-import { useCurrentUser } from "@/lib/realtime/use-current-user";
-import { useLeadPresence } from "@/lib/realtime/use-lead-presence";
+// PR-U2: actions vem via useLeadsActions() (DI). Hooks de realtime
+// foram extraidos pro mesmo pacote.
+import type {
+  LeadCustomFieldDef,
+  LeadCustomFieldEntry,
+  LeadDealItem,
+  LeadStats,
+} from "../actions";
+import { useLeadsActions } from "../context";
+import { LeadCommentsTab } from "./LeadCommentsTab";
+import { useCurrentUser } from "../hooks/use-current-user";
+import { useLeadPresence } from "../hooks/use-lead-presence";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Switch } from "@persia/ui/switch";
 import {
   DropdownMenu,
@@ -119,6 +115,12 @@ interface Props {
   stages?: Stage[];
   /** Callback apos salvar com sucesso (parent re-busca/sincroniza). */
   onSaved?: (updated: Partial<LeadWithTags>) => void;
+  /**
+   * PR-U2: supabase client injetado pelo caller (DI). Usado por
+   * useCurrentUser + useLeadPresence (realtime). CRM passa
+   * createClient(); admin passa getSupabaseBrowserClient().
+   */
+  supabase: SupabaseClient;
 }
 
 interface FormState {
@@ -170,7 +172,11 @@ export function LeadInfoDrawer({
   currentStageName,
   members = [],
   onSaved,
+  supabase,
 }: Props) {
+  // PR-U2: actions vem do provider via DI. Cada app injeta sua versao
+  // (CRM: requireRole; admin: requireSuperadminForOrg).
+  const actions = useLeadsActions();
   const [form, setForm] = React.useState<FormState>(() =>
     leadToFormState(lead),
   );
@@ -197,9 +203,11 @@ export function LeadInfoDrawer({
   // PR-P Realtime: presence + comments num canal so. Quando outro
   // agente abre o mesmo lead, vira watcher visivel no header. Quando
   // alguem comenta/edita/deleta, dispara bump na tab Comentarios.
-  const currentUser = useCurrentUser();
+  // PR-U2: supabase injetado via prop (DI).
+  const currentUser = useCurrentUser(supabase);
   const [commentsBump, setCommentsBump] = React.useState(0);
   const { watchers, othersCount } = useLeadPresence({
+    supabase,
     leadId: open ? lead.id : null,
     currentUser,
     onCommentEvent: () => setCommentsBump((v) => v + 1),
@@ -212,9 +220,10 @@ export function LeadInfoDrawer({
 
   // Busca deal aberto + stages quando abrir.
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !actions.getLeadOpenDealWithStages) return;
     let cancelled = false;
-    getLeadOpenDealWithStages(lead.id)
+    actions
+      .getLeadOpenDealWithStages(lead.id)
       .then((res) => {
         if (cancelled) return;
         if (res) {
@@ -234,15 +243,16 @@ export function LeadInfoDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, lead.id]);
+  }, [open, lead.id, actions]);
 
   // PR-D: busca stats do lead em paralelo (Negocios + Conversas + Activities).
   // Falha silenciosa — cards mostram "—" se nao conseguir carregar.
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !actions.getLeadStats) return;
     let cancelled = false;
     setStatsLoading(true);
-    getLeadStats(lead.id)
+    actions
+      .getLeadStats(lead.id)
       .then((res) => {
         if (!cancelled) setStats(res);
       })
@@ -255,14 +265,19 @@ export function LeadInfoDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, lead.id]);
+  }, [open, lead.id, actions]);
 
   function handleChangeStage(newStageId: string) {
     if (!currentDeal || newStageId === currentDeal.stage_id) return;
+    if (!actions.updateDealStage) {
+      toast.error("Ação indisponível neste app");
+      return;
+    }
     const previousStageId = currentDeal.stage_id;
     setCurrentDeal({ ...currentDeal, stage_id: newStageId });
     setStageChangePending(true);
-    updateDealStage(currentDeal.id, newStageId)
+    actions
+      .updateDealStage(currentDeal.id, newStageId)
       .then(() => toast.success("Etapa atualizada"))
       .catch((err) => {
         // Revert
@@ -303,11 +318,15 @@ export function LeadInfoDrawer({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!actions.updateLead) {
+      toast.error("Ação indisponível neste app");
+      return;
+    }
     startTransition(async () => {
       try {
         // updateLead agora aceita objeto direto (alem de FormData),
         // entao mandamos todos os campos do drawer numa unica chamada.
-        await updateLead(lead.id, {
+        await actions.updateLead!(lead.id, {
           name: form.name || null,
           email: form.email || null,
           phone: form.phone || null,
@@ -718,15 +737,18 @@ function CustomFieldsTab({
   leadId: string;
   open: boolean;
 }) {
+  // PR-U2: actions via DI
+  const actions = useLeadsActions();
   const [entries, setEntries] = React.useState<LeadCustomFieldEntry[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [savingFieldId, setSavingFieldId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !actions.getLeadCustomFields) return;
     let cancelled = false;
     setLoading(true);
-    getLeadCustomFields(leadId)
+    actions
+      .getLeadCustomFields(leadId)
       .then((res) => {
         if (!cancelled) setEntries(res);
       })
@@ -739,9 +761,10 @@ function CustomFieldsTab({
     return () => {
       cancelled = true;
     };
-  }, [open, leadId]);
+  }, [open, leadId, actions]);
 
   async function handleSave(fieldId: string, newValue: string) {
+    if (!actions.setLeadCustomFieldValue) return;
     // Otimista: atualiza state local imediato
     setEntries((prev) =>
       prev.map((e) =>
@@ -750,7 +773,7 @@ function CustomFieldsTab({
     );
     setSavingFieldId(fieldId);
     try {
-      await setLeadCustomFieldValue(leadId, fieldId, newValue);
+      await actions.setLeadCustomFieldValue(leadId, fieldId, newValue);
       // Sem toast em cada save — auto-save deve ser silencioso.
       // Se quiser feedback, mostrar dot pequeno "salvo" no field.
     } catch (err) {
@@ -759,7 +782,8 @@ function CustomFieldsTab({
       );
       // Reload entries pra reverter o otimista que falhou
       try {
-        const res = await getLeadCustomFields(leadId);
+        if (!actions.getLeadCustomFields) throw err;
+        const res = await actions.getLeadCustomFields(leadId);
         setEntries(res);
       } catch {
         /* swallow */
@@ -1162,14 +1186,17 @@ function LeadNegociosTab({
   leadId: string;
   open: boolean;
 }) {
+  // PR-U2: actions via DI
+  const actions = useLeadsActions();
   const [deals, setDeals] = React.useState<LeadDealItem[]>([]);
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || !actions.getLeadDealsList) return;
     let cancelled = false;
     setLoading(true);
-    getLeadDealsList(leadId)
+    actions
+      .getLeadDealsList(leadId)
       .then((res) => {
         if (!cancelled) setDeals(res);
       })
@@ -1183,7 +1210,7 @@ function LeadNegociosTab({
     return () => {
       cancelled = true;
     };
-  }, [open, leadId]);
+  }, [open, leadId, actions]);
 
   if (loading) {
     return (
