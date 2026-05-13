@@ -44,9 +44,23 @@ function writeMuted(muted: boolean) {
 }
 
 export function useToastMuted(): [boolean, (next: boolean) => void] {
-  const [muted, setMuted] = useState<boolean>(() => readMuted());
+  // PR-B8: SSR always inicializa `false` pra evitar hydration mismatch
+  // (auditoria E2E 2026-05-13). O lazy initializer anterior (`useState(()
+  // => readMuted())`) rodava client-side com localStorage e retornava
+  // potencialmente `true`, divergindo do SSR onde `typeof window` e
+  // "undefined" e readMuted retorna `false`. Quando o user tinha mute
+  // ativo, o Bell/BellOff icone + label "Silenciar"/"Notificações
+  // silenciadas" no header divergiam — React #418.
+  //
+  // Estrategia: SSR renderiza com `false`, useEffect sincroniza
+  // pos-hidratacao. Flicker minimo (icone Bell ↔ BellOff por ~1 frame
+  // em users com mute ativo) — aceitavel pra evitar warning.
+  const [muted, setMuted] = useState<boolean>(false);
 
   useEffect(() => {
+    // Sync inicial: le do localStorage so depois da hidratacao.
+    setMuted(readMuted());
+
     // Sync entre abas: 'storage' event nativo
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) setMuted(readMuted());

@@ -326,7 +326,13 @@ function CommentItem({
           <span className="text-sm font-semibold text-foreground">
             {authorName}
           </span>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
+          {/* PR-B8: suppressHydrationWarning — formatRelativeShort usa
+              Date.now() inline, divergindo SSR/CSR. Vide KanbanBoard
+              pra contexto do React #418. */}
+          <span
+            suppressHydrationWarning
+            className="text-[10px] text-muted-foreground tabular-nums"
+          >
             {formatRelativeShort(comment.created_at)}
             {isEdited && " · editado"}
           </span>
