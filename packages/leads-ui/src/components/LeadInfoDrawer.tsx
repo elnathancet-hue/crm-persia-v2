@@ -26,6 +26,10 @@ import {
   Trash2,
   Send,
   MessageSquare,
+  // PR-B11: icones pra secao TAGS
+  Tag as TagIcon,
+  Plus,
+  X,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
@@ -212,6 +216,88 @@ export function LeadInfoDrawer({
   // que o handler de deletar consiga fechar + chamar onDeleted.
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // PR-B11 (auditoria E2E 2026-05-13, bug #15): tags no drawer.
+  // Antes o drawer NAO tinha controle de tags — usuario precisava
+  // navegar pra pagina legacy /leads/[id] pra adicionar/remover.
+  // Agora reusa actions.addTagToLead/removeTagFromLead + getOrgTags
+  // (ja existentes no LeadsActions, wired em CRM e admin).
+  const [orgTags, setOrgTags] = React.useState<
+    Array<{ id: string; name: string; color: string }>
+  >([]);
+  const [tagPending, setTagPending] = React.useState<string | null>(null);
+  const currentTags = React.useMemo(
+    () =>
+      ((lead as { lead_tags?: Array<{ tag_id: string; tags: { id: string; name: string; color: string } | null }> })
+        .lead_tags ?? [])
+        .map((lt) => lt.tags)
+        .filter(
+          (t): t is { id: string; name: string; color: string } => !!t,
+        ),
+    [lead],
+  );
+  const currentTagIds = React.useMemo(
+    () => new Set(currentTags.map((t) => t.id)),
+    [currentTags],
+  );
+  const availableTags = React.useMemo(
+    () => orgTags.filter((t) => !currentTagIds.has(t.id)),
+    [orgTags, currentTagIds],
+  );
+
+  // Lazy-fetch orgTags na primeira vez que o drawer abre (cache local).
+  React.useEffect(() => {
+    if (!open || !actions.getOrgTags || orgTags.length > 0) return;
+    let cancelled = false;
+    actions
+      .getOrgTags()
+      .then((tags) => {
+        if (cancelled) return;
+        setOrgTags(
+          tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
+        );
+      })
+      .catch(() => {
+        /* silencioso — drawer continua funcional sem add tag */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, actions, orgTags.length]);
+
+  async function handleAddTag(tagId: string) {
+    if (!actions.addTagToLead || tagPending) return;
+    setTagPending(tagId);
+    try {
+      await actions.addTagToLead(lead.id, tagId);
+      toast.success("Tag adicionada", { id: `lead-${lead.id}-tag-${tagId}` });
+      onSaved?.({});
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao adicionar tag",
+        { id: `lead-${lead.id}-tag-${tagId}` },
+      );
+    } finally {
+      setTagPending(null);
+    }
+  }
+
+  async function handleRemoveTag(tagId: string) {
+    if (!actions.removeTagFromLead || tagPending) return;
+    setTagPending(tagId);
+    try {
+      await actions.removeTagFromLead(lead.id, tagId);
+      toast.success("Tag removida", { id: `lead-${lead.id}-tag-${tagId}` });
+      onSaved?.({});
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao remover tag",
+        { id: `lead-${lead.id}-tag-${tagId}` },
+      );
+    } finally {
+      setTagPending(null);
+    }
+  }
 
   async function handleDelete() {
     if (!actions.deleteLead) {
@@ -653,6 +739,107 @@ export function LeadInfoDrawer({
                   </Field>
                 </div>
               </section>
+
+              {/* ============ TAGS ============
+                  PR-B11: secao nova (bug #15). Drawer antes nao
+                  permitia gerenciar tags — usuario precisava ir pra
+                  pagina legacy /leads/[id]. Agora todos podem
+                  adicionar/remover sem sair do contexto. */}
+              {canEdit && (
+                <section className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <TagIcon className="size-4 text-amber-600" />
+                    TAGS
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {currentTags.length === 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        Nenhuma tag adicionada.
+                      </span>
+                    )}
+                    {currentTags.map((tag) => {
+                      const isPending = tagPending === tag.id;
+                      return (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+                          style={{
+                            borderColor: `${tag.color}40`,
+                            backgroundColor: `${tag.color}20`,
+                            color: tag.color,
+                          }}
+                        >
+                          {tag.name}
+                          <button
+                            type="button"
+                            disabled={
+                              !actions.removeTagFromLead || isPending
+                            }
+                            onClick={() => handleRemoveTag(tag.id)}
+                            aria-label={`Remover tag ${tag.name}`}
+                            className="-mr-0.5 ml-0.5 inline-flex size-4 items-center justify-center rounded-full hover:bg-background/40 disabled:opacity-50"
+                          >
+                            {isPending ? (
+                              <Loader2 className="size-2.5 animate-spin" />
+                            ) : (
+                              <X className="size-2.5" />
+                            )}
+                          </button>
+                        </span>
+                      );
+                    })}
+                    {actions.addTagToLead && availableTags.length > 0 && (
+                      <Popover>
+                        <PopoverTrigger
+                          render={
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-dashed border-border bg-card px-2 py-0.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                            />
+                          }
+                        >
+                          <Plus className="size-3" />
+                          Adicionar tag
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="w-56 p-1.5"
+                          sideOffset={6}
+                        >
+                          <div className="max-h-56 overflow-y-auto">
+                            {availableTags.map((tag) => {
+                              const isPending = tagPending === tag.id;
+                              return (
+                                <button
+                                  key={tag.id}
+                                  type="button"
+                                  disabled={isPending}
+                                  onClick={() => handleAddTag(tag.id)}
+                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"
+                                >
+                                  <span
+                                    className="inline-block size-2.5 shrink-0 rounded-full"
+                                    style={{
+                                      backgroundColor: tag.color,
+                                    }}
+                                    aria-hidden
+                                  />
+                                  <span className="flex-1 truncate">
+                                    {tag.name}
+                                  </span>
+                                  {isPending && (
+                                    <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                  </div>
+                </section>
+              )}
 
               {/* ============ ENDEREÇO ============ */}
               <section className="space-y-3">
