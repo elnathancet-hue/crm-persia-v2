@@ -250,6 +250,14 @@ export function LeadList(props: Props) {
             // Agent+ pode editar e excluir. Viewer (futuro) so visualiza.
             canEdit={isAgent}
             canDelete={isAgent}
+            // PR-B6: passa members pro Select "Responsável" do drawer
+            // resolver UUID -> nome. Reusa o array `assignees` que ja
+            // chega pra dropdown "Atribuir" inline da lista. Shape
+            // {id, name} mapeado pra {user_id, name} (contrato do drawer).
+            members={(props.assignees ?? []).map((a) => ({
+              user_id: a.id,
+              name: a.name,
+            }))}
             onDeleted={() => {
               setInfoDrawerLead(null);
               router.refresh();
