@@ -7,13 +7,15 @@
 // Drawer recebe canEdit=true canDelete=true porque admin = superadmin.
 // Exclusao via AlertDialog dentro do drawer (PR-U3).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   LeadInfoDrawer,
   LeadsList,
   LeadsProvider,
+  useDebouncedCallback,
+  useLeadsRealtime,
 } from "@persia/leads-ui";
 import type { LeadWithTags } from "@persia/shared/crm";
 import { useActiveOrg } from "@/lib/stores/client-store";
@@ -37,6 +39,20 @@ export function LeadListPage() {
   // PR-U3: supabase client pro drawer (DI). getSupabaseBrowserClient
   // e singleton.
   const supabase = getSupabaseBrowserClient();
+
+  // PR-V1b: realtime leads do org gerenciado. Quando outro agente
+  // (ou o proprio cliente no CRM) cria/edita/deleta um lead, a lista
+  // recarrega via setReloadKey. Debounce 200ms agrupa burst (bulk import
+  // do CRM dispara N eventos rapidos).
+  const triggerReload = useCallback(() => {
+    setReloadKey((n) => n + 1);
+  }, []);
+  const debouncedReload = useDebouncedCallback(triggerReload);
+  useLeadsRealtime(
+    supabase,
+    isManagingClient ? activeOrgId : null,
+    debouncedReload,
+  );
 
   useEffect(() => {
     if (!isManagingClient) return;

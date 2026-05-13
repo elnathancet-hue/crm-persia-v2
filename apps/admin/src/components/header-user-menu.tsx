@@ -1,14 +1,28 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { User, LogOut, Settings, Moon, Sun } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  LogOut,
+  Moon,
+  Settings,
+  Sun,
+  User,
+} from "lucide-react";
 import { signOut } from "@/actions/auth";
 import Link from "next/link";
+// PR-V1b: mute toggle pra toasts de realtime (comentario novo, lead
+// atribuido). Mesma key de localStorage do CRM ("crm:toast:muted")
+// pra consistencia mental — mas como sao origins distintas, cada app
+// tem sua propria preferencia (intencional).
+import { useToastMuted } from "@persia/leads-ui";
 
 export function HeaderUserMenu() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isDark, setIsDark] = useState(false);
+  const [toastMuted, setToastMuted] = useToastMuted();
 
   useEffect(() => {
     const saved = localStorage.getItem("admin-theme");
@@ -44,6 +58,29 @@ export function HeaderUserMenu() {
 
   return (
     <div className="flex items-center gap-2">
+      {/* PR-V1b: mute toggle de toasts realtime. Sino aberto = notificacoes
+          ativas; sino cortado = silenciado. Paridade visual com CRM. */}
+      <button
+        onClick={() => setToastMuted(!toastMuted)}
+        className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary hover:ring-2 hover:ring-primary/20 transition-all"
+        aria-label={
+          toastMuted
+            ? "Reativar notificações em tempo real"
+            : "Silenciar notificações em tempo real"
+        }
+        title={
+          toastMuted
+            ? "Notificações silenciadas — clique pra reativar"
+            : "Notificações ativas — clique pra silenciar"
+        }
+      >
+        {toastMuted ? (
+          <BellOff className="size-4" />
+        ) : (
+          <Bell className="size-4" />
+        )}
+      </button>
+
       <button
         onClick={toggleTheme}
         className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary hover:ring-2 hover:ring-primary/20 transition-all"
