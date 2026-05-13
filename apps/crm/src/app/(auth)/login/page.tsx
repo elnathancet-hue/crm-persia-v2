@@ -41,9 +41,18 @@ export default function LoginPage() {
     setError("");
     startTransition(async () => {
       try {
-        await signIn(formData);
+        // PR-B10: signIn agora retorna { error: string } | void.
+        // O try/catch antigo NAO capturava o throw original (server
+        // action throw vira 500 no React 19, nao chega no caller).
+        const result = await signIn(formData);
+        if (result?.error) {
+          setError(result.error);
+        }
       } catch (e: any) {
-        setError(e.message || "Email ou senha incorretos");
+        // Fallback defensivo: redirect() do server action throw
+        // NEXT_REDIRECT, que pode propagar como rejection silenciosa.
+        // Erro real de auth (credencial inválida) ja foi tratado acima.
+        setError(e?.message || "Erro ao entrar. Tente novamente.");
       }
     });
   }

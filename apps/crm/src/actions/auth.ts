@@ -61,7 +61,17 @@ export async function signUp(formData: FormData) {
   redirect("/setup");
 }
 
-export async function signIn(formData: FormData) {
+// PR-B10 (auditoria E2E 2026-05-13, bug #1): retornar { error } em vez
+// de throw. React 19 server actions tratam throw Error como crash
+// nao-tratado — Next.js responde 500 + UI generico "An error occurred
+// in the Server Components render". O try/catch no client (em
+// startTransition) NAO captura esse fluxo. Padrao Next 15 recomendado:
+// retornar shape `{ error: string } | void` e o caller verifica.
+// (O `redirect("/")` continua throwing NEXT_REDIRECT, que e tratado
+// pelo router e nao chega no caller.)
+export type SignInResult = { error: string } | void;
+
+export async function signIn(formData: FormData): Promise<SignInResult> {
   const supabase = await createClient();
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -69,7 +79,15 @@ export async function signIn(formData: FormData) {
     password: formData.get("password") as string,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // Mensagem amigavel em PT-BR (substitui o "Invalid login credentials"
+    // generico do Supabase). Outros erros (rate limit, etc) passam direto.
+    const message =
+      error.message === "Invalid login credentials"
+        ? "Email ou senha incorretos."
+        : error.message;
+    return { error: message };
+  }
 
   revalidatePath("/");
   redirect("/");
