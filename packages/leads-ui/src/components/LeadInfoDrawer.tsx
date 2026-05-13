@@ -394,7 +394,16 @@ export function LeadInfoDrawer({
           address_complement: form.address_complement || null,
           notes: form.notes || null,
         });
-        toast.success("Lead atualizado");
+        // PR-B3: id estavel + duracao explicita reforcam o feedback de
+        // sucesso. Antes a auditoria E2E (2026-05-13) capturou cenarios
+        // em que o toast nao era percebido pelo usuario — pode ter
+        // sumido rapido demais ou colidido com outro toast em rapidos
+        // re-clicks. id garante dedup (re-clicks atualizam o mesmo
+        // toast); duration 5s da tempo de leitura confortavel.
+        toast.success("Lead atualizado", {
+          id: `lead-update-${lead.id}`,
+          duration: 5000,
+        });
         onSaved?.({
           name: form.name,
           phone: form.phone,
@@ -413,7 +422,9 @@ export function LeadInfoDrawer({
         });
         onOpenChange(false);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+        toast.error(err instanceof Error ? err.message : "Erro ao salvar", {
+          id: `lead-update-${lead.id}`,
+        });
       }
     });
   }
