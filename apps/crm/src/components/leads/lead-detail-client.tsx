@@ -141,7 +141,7 @@ export function LeadDetailClient({
   React.useEffect(() => {
     if (!isCreateDealOpen) return;
 
-    const defaultTitle = lead.name ? `Negocio - ${lead.name}` : "Novo negocio";
+    const defaultTitle = lead.name ? `Negócio - ${lead.name}` : "Novo negócio";
     setDealTitle(defaultTitle);
     setDealFormError("");
 
@@ -295,7 +295,7 @@ export function LeadDetailClient({
             <>
               <Button variant="outline" onClick={() => setIsCreateDealOpen(true)}>
                 <Plus className="size-4" data-icon="inline-start" />
-                Criar Negocio
+                Criar Negócio
               </Button>
               <Button variant="outline" onClick={() => setIsEditOpen(true)}>
                 <Pencil className="size-4" data-icon="inline-start" />
@@ -338,7 +338,7 @@ export function LeadDetailClient({
           {/* Info card */}
           <Card>
             <CardHeader>
-              <CardTitle>Informacoes do Lead</CardTitle>
+              <CardTitle>Informações do Lead</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -528,7 +528,7 @@ export function LeadDetailClient({
       <Dialog open={isCreateDealOpen} onOpenChange={setIsCreateDealOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Criar Negocio</DialogTitle>
+            <DialogTitle>Criar Negócio</DialogTitle>
             <DialogDescription>
               Crie um negocio para este lead e acompanhe no Kanban.
             </DialogDescription>

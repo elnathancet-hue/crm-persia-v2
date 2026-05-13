@@ -110,13 +110,17 @@ export function ExportMenu<T>({
           <div className="flex-1">
             <div className="font-medium">CSV (.csv)</div>
             <div className="text-[11px] text-muted-foreground">
-              Compativel com qualquer ferramenta
+              Compatível com qualquer ferramenta
             </div>
           </div>
         </button>
         <div className="mt-1 border-t border-border px-2.5 py-1.5 text-[10px] text-muted-foreground">
+          {/* PR-B1: o template anterior concatenava `sera` + `ão` gerando
+              "seraão"; trocado por will-be conjugado completo, com acento
+              no singular ("será") tambem. */}
           {rows.length.toLocaleString("pt-BR")} linha
-          {rows.length === 1 ? "" : "s"} sera{rows.length === 1 ? "" : "ão"}{" "}
+          {rows.length === 1 ? "" : "s"}{" "}
+          {rows.length === 1 ? "será" : "serão"}{" "}
           exportada{rows.length === 1 ? "" : "s"}.
         </div>
       </PopoverContent>

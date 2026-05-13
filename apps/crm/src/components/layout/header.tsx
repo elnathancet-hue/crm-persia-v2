@@ -77,9 +77,10 @@ export function Header() {
           {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
         </Button>
 
-        <Button variant="ghost" size="icon" className="relative size-9 rounded-lg" aria-label="Notificações">
-          <Bell className="size-4" />
-        </Button>
+        {/* PR-B1: removido botão Bell standalone — era decorativo
+            (sem onClick). O toggle de mute real vive dentro do menu do
+            avatar abaixo (item "Silenciar notificações") com ícone
+            BellOff/Bell que reflete o estado atual. */}
 
         <DropdownMenu>
           <DropdownMenuTrigger>
