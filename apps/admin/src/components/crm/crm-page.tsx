@@ -6,10 +6,16 @@
 // automaticamente. Auth permanece isolado: admin usa
 // requireSuperadminForOrg + service-role; cliente usa requireRole + RLS.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { KanbanBoard, KanbanProvider } from "@persia/crm-ui";
+import {
+  useCurrentUser,
+  useDealPresence,
+  useDealsRealtime,
+  useDebouncedCallback,
+} from "@persia/leads-ui";
 import type {
   DealWithLead,
   Pipeline,
@@ -17,6 +23,7 @@ import type {
 } from "@persia/shared/crm";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { NoContextFallback } from "@/components/no-context-fallback";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
   ensureDefaultPipeline,
   getDeals,
@@ -47,6 +54,36 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
   const [deals, setDeals] = useState<DealWithLead[]>([]);
   const [leads, setLeads] = useState<KanbanLead[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // PR-V1b: realtime + presence pro Kanban (paridade com CRM cliente).
+  //   - useDealsRealtime: outro agente moveu/criou/deletou deal → reload
+  //   - useDealPresence: mostra avatares de quem ta vendo cada card
+  // KanbanBoard hoje gerencia o pipelineId selecionado internamente
+  // (props.pipelines + seletor interno). O admin nao expoe esse state
+  // por enquanto — vamos assinar o primeiro pipeline como proxy
+  // "pipeline ativo padrao". Caso evolua pra multi-pipeline com seletor
+  // externo, reusa esse activePipelineId no callback do KanbanBoard.
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const currentUser = useCurrentUser(supabase);
+  const activePipelineId = pipelines[0]?.id ?? null;
+  // useDebouncedCallback armazena o callback num ref interno, entao
+  // passar uma seta nova a cada render e seguro (sempre roda a versao
+  // mais recente). Mesmo pattern do CRM cliente.
+  const debouncedReload = useDebouncedCallback(() => {
+    reload().catch(() => {
+      /* erro tratado no useEffect inicial */
+    });
+  });
+  useDealsRealtime(supabase, activePipelineId, debouncedReload);
+  const { watchersByDeal: _watchersByDeal, setViewingDealId: _setViewingDealId } =
+    useDealPresence({
+      supabase,
+      pipelineId: activePipelineId,
+      currentUser,
+    });
+  // _watchersByDeal/_setViewingDealId: presence montada (admin ja
+  // aparece pros outros usuarios do org). Repassar pro KanbanBoard
+  // exigiria nova prop — fica pra PR proprio se demanda surgir.
 
   async function reload() {
     let basePipelines = (await getPipelines()) as Pipeline[];
