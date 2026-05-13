@@ -5,6 +5,32 @@
 
 export { cn } from "./utils";
 
+// --- Cross-cutting patterns (Sprint 1) -----------------------------------
+// Tipos, hooks e components padronizados que TODA feature do /crm consome.
+// Documentação: packages/ui/docs/patterns.md
+export type {
+  ActionResult,
+} from "./types/action-result";
+export {
+  isActionError,
+  actionData,
+} from "./types/action-result";
+export {
+  useDialogMutation,
+  type UseDialogMutationOptions,
+  type UseDialogMutationReturn,
+} from "./hooks/use-dialog-mutation";
+export {
+  useOptimisticList,
+  type UseOptimisticListOptions,
+  type UseOptimisticListReturn,
+} from "./hooks/use-optimistic-list";
+export {
+  RelativeTime,
+  type RelativeTimeProps,
+} from "./components/relative-time";
+// -------------------------------------------------------------------------
+
 export * from "./components/accordion";
 export * from "./components/alert-dialog";
 export * from "./components/alert";
