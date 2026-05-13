@@ -552,8 +552,13 @@ export function LeadInfoDrawer({
                   CONTATO
                 </h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {/* PR-B1: name= em todos os inputs do drawer pra
+                      melhorar a11y (label association via for/id pareados)
+                      e desligar autofill cross-contamination dos
+                      password managers (cada campo tem prefix "lead_"). */}
                   <Field label="Nome">
                     <Input
+                      name="lead_name"
                       value={form.name}
                       onChange={(e) => set("name", e.target.value)}
                       placeholder="Nome do contato"
@@ -561,6 +566,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="E-mail">
                     <Input
+                      name="lead_email"
                       type="email"
                       value={form.email}
                       onChange={(e) => set("email", e.target.value)}
@@ -569,6 +575,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Celular">
                     <Input
+                      name="lead_phone"
                       value={form.phone}
                       onChange={(e) => set("phone", e.target.value)}
                       placeholder="+55 (00) 00000-0000"
@@ -576,6 +583,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Telefone">
                     <Input
+                      name="lead_landline"
                       value={form.landline}
                       onChange={(e) => set("landline", e.target.value)}
                       placeholder="(00) 3000-0000"
@@ -606,6 +614,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Website">
                     <Input
+                      name="lead_website"
                       type="url"
                       value={form.website}
                       onChange={(e) => set("website", e.target.value)}
@@ -624,6 +633,7 @@ export function LeadInfoDrawer({
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Field label="País">
                     <Input
+                      name="lead_address_country"
                       value={form.address_country}
                       onChange={(e) => set("address_country", e.target.value)}
                       placeholder="Brasil"
@@ -631,6 +641,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Estado">
                     <Input
+                      name="lead_address_state"
                       value={form.address_state}
                       onChange={(e) => set("address_state", e.target.value)}
                       placeholder="SP"
@@ -638,6 +649,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Cidade">
                     <Input
+                      name="lead_address_city"
                       value={form.address_city}
                       onChange={(e) => set("address_city", e.target.value)}
                       placeholder="São Paulo"
@@ -645,6 +657,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="CEP">
                     <Input
+                      name="lead_address_zip"
                       value={form.address_zip}
                       onChange={(e) => set("address_zip", e.target.value)}
                       placeholder="00000-000"
@@ -652,6 +665,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Endereço">
                     <Input
+                      name="lead_address_street"
                       value={form.address_street}
                       onChange={(e) => set("address_street", e.target.value)}
                       placeholder="Rua, Av..."
@@ -659,6 +673,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Número">
                     <Input
+                      name="lead_address_number"
                       value={form.address_number}
                       onChange={(e) => set("address_number", e.target.value)}
                       placeholder="123"
@@ -666,6 +681,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Bairro" className="sm:col-span-1">
                     <Input
+                      name="lead_address_neighborhood"
                       value={form.address_neighborhood}
                       onChange={(e) =>
                         set("address_neighborhood", e.target.value)
@@ -675,6 +691,7 @@ export function LeadInfoDrawer({
                   </Field>
                   <Field label="Complemento" className="sm:col-span-2">
                     <Input
+                      name="lead_address_complement"
                       value={form.address_complement}
                       onChange={(e) =>
                         set("address_complement", e.target.value)
@@ -1047,6 +1064,7 @@ function CustomFieldInput({
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">{labelEl}</Label>
         <Input
+          name={`custom_${field.field_key}`}
           type="date"
           value={localValue}
           onChange={(e) => {
@@ -1065,6 +1083,7 @@ function CustomFieldInput({
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">{labelEl}</Label>
         <Input
+          name={`custom_${field.field_key}`}
           type="number"
           value={localValue}
           onChange={(e) => setLocalValue(e.target.value)}
@@ -1088,6 +1107,7 @@ function CustomFieldInput({
     <div className="space-y-1">
       <Label className="text-xs text-muted-foreground">{labelEl}</Label>
       <Input
+        name={`custom_${field.field_key}`}
         type={
           field.field_type === "email"
             ? "email"
