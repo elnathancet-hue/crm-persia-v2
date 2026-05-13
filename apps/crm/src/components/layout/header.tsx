@@ -109,9 +109,18 @@ export function Header() {
               </Link>
             </DropdownMenuItem>
             {/* PR-Q: toggle de mute pros toasts de realtime (comentarios
-                + atribuicao). Persiste em localStorage. */}
+                + atribuicao). Persiste em localStorage.
+
+                PR-B5: trocado `onSelect` por `onClick`. O DropdownMenu
+                deste app usa @base-ui/react/menu (nao Radix), que NAO
+                escuta `onSelect` — a prop caia em ...props e nunca era
+                chamada. Resultado em prod (auditoria E2E 2026-05-13,
+                bug #4): clicar no item nao persistia em localStorage,
+                label nao virava "Notificações silenciadas". Outros
+                DropdownMenuItems do header ja usavam onClick (signOut)
+                ou nao precisavam de handler customizado (Links). */}
             <DropdownMenuItem
-              onSelect={(e) => {
+              onClick={(e) => {
                 e.preventDefault();
                 setToastMuted(!toastMuted);
               }}
