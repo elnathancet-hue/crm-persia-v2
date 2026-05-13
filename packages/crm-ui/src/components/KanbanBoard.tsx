@@ -796,6 +796,18 @@ export function KanbanBoard({
     const deal = localDeals.find((d) => d.id === dealId);
     if (!deal || deal.stage_id === terminalStage.id) return;
 
+    // PR-B4: dedup de double-click rapido nos botoes inline "Negocio
+    // descartado/fechado". handleDrop ja tem esse guard via
+    // pendingMovesRef (linha 738) mas handleMoveToTerminal esquecia —
+    // resultado em prod: dois cliques rapidos geravam duas chamadas
+    // paralelas a actions.moveDealStage + duas activities stage_change
+    // duplicadas no mesmo timestamp (auditoria E2E 2026-05-13, bug #23).
+    if (pendingMovesRef.current.has(dealId)) {
+      toast.info("Aguarde a movimentação anterior terminar.");
+      return;
+    }
+    pendingMovesRef.current.add(dealId);
+
     const previousStageId = deal.stage_id;
 
     setLocalDeals((prev) =>
@@ -814,6 +826,8 @@ export function KanbanBoard({
             d.id === dealId ? { ...d, stage_id: previousStageId } : d,
           ),
         );
+      } finally {
+        pendingMovesRef.current.delete(dealId);
       }
     });
   }
