@@ -21,8 +21,14 @@ import type { LeadWithTags } from "@persia/shared/crm";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { getLeads, deleteLead } from "@/actions/leads";
+import { getTeamMembers } from "@/actions/settings";
 import { adminLeadsActions } from "@/features/leads/admin-leads-actions";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+
+// PR-B6: shape mínimo do member pro Select "Responsável" do drawer.
+// getTeamMembers retorna mais campos (email, phone, role), só usamos
+// user_id + name aqui.
+type DrawerMember = { user_id: string; name: string };
 
 export function LeadListPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();
@@ -35,6 +41,10 @@ export function LeadListPage() {
   );
   // Forca remount do LeadsList depois de delete pra re-fetchar inicial.
   const [reloadKey, setReloadKey] = useState(0);
+  // PR-B6: cache do team pra resolver UUID -> nome no Select "Responsável"
+  // do drawer. Buscado uma vez quando entra em modo cliente; fica em
+  // sync com troca de cliente via [activeOrgId, isManagingClient] deps.
+  const [members, setMembers] = useState<DrawerMember[]>([]);
 
   // PR-U3: supabase client pro drawer (DI). getSupabaseBrowserClient
   // e singleton.
@@ -70,6 +80,23 @@ export function LeadListPage() {
       })
       .finally(() => setLoading(false));
   }, [activeOrgId, isManagingClient, reloadKey]);
+
+  // PR-B6: busca team uma vez ao entrar em modo cliente (independente
+  // de reloadKey — team nao muda quando deleta lead). Falha silenciosa
+  // (drawer cai no placeholder "Selecione" + permite edicao normal).
+  useEffect(() => {
+    if (!isManagingClient) {
+      setMembers([]);
+      return;
+    }
+    getTeamMembers()
+      .then((data) => {
+        setMembers(
+          (data ?? []).map((m) => ({ user_id: m.user_id, name: m.name })),
+        );
+      })
+      .catch(() => setMembers([]));
+  }, [activeOrgId, isManagingClient]);
 
   if (!isManagingClient) {
     return <NoContextFallback />;
@@ -129,6 +156,9 @@ export function LeadListPage() {
           // PR-U3: admin = superadmin, sempre pode editar e excluir
           canEdit
           canDelete
+          // PR-B6: passa team pro Select "Responsável" do drawer
+          // resolver UUID -> nome. Fetched no useEffect acima.
+          members={members}
           onDeleted={() => {
             setInfoDrawerLead(null);
             setReloadKey((n) => n + 1);

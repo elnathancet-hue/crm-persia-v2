@@ -606,7 +606,26 @@ export function LeadInfoDrawer({
                       onValueChange={(v) => set("assigned_to", v ?? "")}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecione" />
+                        {/*
+                          PR-B6: mostra o nome do responsavel em vez do
+                          UUID cru. Bug em prod (auditoria E2E
+                          2026-05-13, #13) — o SelectValue do @base-ui
+                          (e tambem do Radix com SSR) renderiza o
+                          `value` cru ate o portal montar pela primeira
+                          vez. Como o drawer monta em demanda (click
+                          numa linha) com value ja preenchido, o trigger
+                          mostrava o UUID antes do listbox abrir uma vez.
+
+                          Solucao: passar children pro SelectValue com o
+                          nome do membro selecionado (lookup em
+                          `members`). Se membro nao foi carregado ainda
+                          ou foi removido, cai no placeholder.
+                        */}
+                        <SelectValue placeholder="Selecione">
+                          {members.find(
+                            (m) => m.user_id === form.assigned_to,
+                          )?.name ?? null}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {members.length === 0 ? (
