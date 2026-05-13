@@ -1,25 +1,26 @@
 "use client";
 
-// PR-T3: admin CRM shell com tabs internas, espelhando a estrutura do
-// CRM cliente (apps/crm/src/app/(dashboard)/crm/crm-shell.tsx).
+// PR-T3 + PR-V1c: admin CRM shell com tabs internas, espelhando a
+// estrutura do CRM cliente (apps/crm/src/app/(dashboard)/crm/crm-shell.tsx).
 //
-// 4 tabs: Pipeline (Funil), Leads, Segmentação, Tags.
-// (Atividades cortada na v1 — admin nao tem ActivitiesTab equivalente
-//  ao CRM cliente. Vira PR proprio se demanda surgir.)
+// 5 tabs: Pipeline (Funil), Leads, Segmentação, Tags, Atividades.
+// PR-V1c adicionou Atividades — consome ActivitiesTab do @persia/crm-ui
+// com getOrgActivities(superadmin) via DI.
 //
 // Cada tab renderiza o componente top-level ja existente do admin —
-// CrmPage, LeadListPage, SegmentsPage, TagsPage. Cada um ja faz
-// isManagingClient check + NoContextFallback + fetch dos dados.
-// Mounting lazy: so monta o componente da tab ativa pra evitar
+// CrmPage, LeadListPage, SegmentsPage, TagsPage, AdminActivitiesTab.
+// Cada um ja faz isManagingClient check + NoContextFallback + fetch dos
+// dados. Mounting lazy: so monta o componente da tab ativa pra evitar
 // queries paralelas em todas tabs ao carregar.
 //
-// URL sync: ?tab=pipeline|leads|segmentos|tags. Default: pipeline.
+// URL sync: ?tab=pipeline|leads|segmentos|tags|atividades. Default: pipeline.
 // Replica o pattern do CrmShell pra deep links funcionarem identicos
 // em ambos apps.
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  Activity,
   Filter as FilterIcon,
   Kanban,
   Tag as TagIcon,
@@ -27,10 +28,11 @@ import {
 } from "lucide-react";
 import { CrmPage } from "@/components/crm/crm-page";
 import { LeadListPage } from "@/components/leads/lead-list";
+import { AdminActivitiesTab } from "@/components/crm/admin-activities-tab";
 import SegmentsPage from "@/app/(dashboard)/segments/page";
 import TagsPage from "@/app/(dashboard)/tags/page";
 
-type CrmTab = "pipeline" | "leads" | "segmentos" | "tags";
+type CrmTab = "pipeline" | "leads" | "segmentos" | "tags" | "atividades";
 
 const TABS: {
   key: CrmTab;
@@ -41,6 +43,7 @@ const TABS: {
   { key: "leads", label: "Leads", icon: Users },
   { key: "segmentos", label: "Segmentação", icon: FilterIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
+  { key: "atividades", label: "Atividades", icon: Activity },
 ];
 
 export function AdminCrmShell() {
@@ -119,6 +122,7 @@ export function AdminCrmShell() {
         {activeTab === "leads" && <LeadListPage />}
         {activeTab === "segmentos" && <SegmentsPage />}
         {activeTab === "tags" && <TagsPage />}
+        {activeTab === "atividades" && <AdminActivitiesTab />}
       </div>
     </div>
   );
