@@ -1,14 +1,17 @@
 "use client";
 
-// PR-P: helper compartilhado pra debounce trailing de router.refresh()
-// nos hooks de realtime. Sem isso, burst de N eventos em <200ms
-// dispara N refetches no servidor — desperdicio + risco de race.
+// PR-V1a (movido de apps/crm/src/lib/realtime, parte do S2):
+// helper de debounce trailing pros hooks de realtime. Sem isso, burst
+// de N eventos em <200ms dispara N refetches no servidor — desperdicio
+// + risco de race.
 //
 // Pattern: trailing debounce 200ms. Cada chamada reseta o timer;
 // quando para de chegar evento por 200ms, dispara UMA vez.
 //
 // Cleanup obrigatorio: limpa timer no unmount pra nao disparar
 // refresh depois de componente desmontado (warning React).
+//
+// Hook puro (sem supabase, sem next) — DI nao se aplica.
 
 import { useEffect, useRef, useCallback } from "react";
 

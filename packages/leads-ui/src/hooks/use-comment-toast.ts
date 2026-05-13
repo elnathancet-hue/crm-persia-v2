@@ -1,7 +1,8 @@
 "use client";
 
-// PR-P: hook global pra disparar toast quando outro agente comenta
-// num lead onde o user logado e o responsavel.
+// PR-V1a (movido de apps/crm/src/lib/realtime, parte do S2):
+// hook global pra disparar toast quando outro agente comenta num lead
+// onde o user logado e o responsavel.
 //
 // Por que scoped (assigned_to)? Toast global pra TODA org cria spam:
 // 100 leads x 5 comentarios/dia = 500 toasts. User mute. Perde sinal.
@@ -17,16 +18,21 @@
 //
 // Custo de rede: 1 query SELECT por evento que passou no cap. Cap 60s
 // por lead garante <60 queries/min mesmo em burst.
+//
+// DI: recebe supabase como param.
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useIsToastMuted } from "./use-toast-prefs";
 
 const TOAST_CAP_MS = 60_000; // 1 toast por lead a cada 60s
 
 export interface UseCommentToastOptions {
+  /** Supabase client (CRM passa createClient(), admin passa
+   *  getSupabaseBrowserClient()). */
+  supabase: SupabaseClient | null;
   /** organization_id do user logado — filtra broadcast no servidor */
   orgId: string | null;
   /** user_id do user logado — pra skip de eco + scope assigned_to */
@@ -34,6 +40,7 @@ export interface UseCommentToastOptions {
 }
 
 export function useCommentToast({
+  supabase,
   orgId,
   currentUserId,
 }: UseCommentToastOptions) {
@@ -50,8 +57,7 @@ export function useCommentToast({
   }, [muted]);
 
   useEffect(() => {
-    if (!orgId || !currentUserId) return;
-    const supabase = createClient();
+    if (!supabase || !orgId || !currentUserId) return;
     const cap = capRef.current;
 
     const channel = supabase
@@ -75,7 +81,7 @@ export function useCommentToast({
           const row = payload.new;
           if (!row?.lead_id || !row.author_id) return;
 
-          // PR-Q: respeita mute global do user (toggle no header).
+          // Respeita mute global do user (toggle no header).
           if (mutedRef.current) return;
 
           // Skip eco do proprio user
@@ -86,8 +92,8 @@ export function useCommentToast({
           const lastAt = cap.get(row.lead_id) ?? 0;
           if (now - lastAt < TOAST_CAP_MS) return;
 
-          // Fetch lead + author. RLS de leads + profiles (PR-L1)
-          // garante mesma org. Se RLS bloquear, fica null e abortamos.
+          // Fetch lead + author. RLS de leads + profiles garante
+          // mesma org. Se RLS bloquear, fica null e abortamos.
           // Cast soft: Database type ainda nao tem assigned_to (migration
           // 033 — pendente regen) mas a coluna existe em prod.
           type LooseSupabase = {
@@ -157,5 +163,5 @@ export function useCommentToast({
       // Limpa cap pra liberar memoria (cap volta no proximo mount).
       cap.clear();
     };
-  }, [orgId, currentUserId, router]);
+  }, [supabase, orgId, currentUserId, router]);
 }

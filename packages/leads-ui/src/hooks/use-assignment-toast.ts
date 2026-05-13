@@ -1,7 +1,8 @@
 "use client";
 
-// PR-Q: hook global pra disparar toast quando um lead e atribuido AO
-// user logado (transicao assigned_to -> currentUser).
+// PR-V1a (movido de apps/crm/src/lib/realtime, parte do S2):
+// hook global pra disparar toast quando um lead e atribuido AO user
+// logado (transicao assigned_to -> currentUser).
 //
 // Por que precisa? Atribuicao e o gatilho mais critico do CRM — agente
 // recebe lead novo, precisa agir. Sem notificacao, vira tempo perdido
@@ -21,14 +22,17 @@
 //   - Skip "ainda voce": old.assigned_to === currentUser && new === currentUser
 //   - Toast e simples: "Voce recebeu um novo lead: João Silva"
 //   - Mute global respeitado
+//
+// DI: recebe supabase como param.
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useIsToastMuted } from "./use-toast-prefs";
 
 export interface UseAssignmentToastOptions {
+  supabase: SupabaseClient | null;
   orgId: string | null;
   currentUserId: string | null;
 }
@@ -40,6 +44,7 @@ type LeadRowPartial = {
 };
 
 export function useAssignmentToast({
+  supabase,
   orgId,
   currentUserId,
 }: UseAssignmentToastOptions) {
@@ -55,8 +60,7 @@ export function useAssignmentToast({
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!orgId || !currentUserId) return;
-    const supabase = createClient();
+    if (!supabase || !orgId || !currentUserId) return;
     const seen = seenRef.current;
 
     const channel = supabase
@@ -113,5 +117,5 @@ export function useAssignmentToast({
       supabase.removeChannel(channel);
       seen.clear();
     };
-  }, [orgId, currentUserId, router]);
+  }, [supabase, orgId, currentUserId, router]);
 }

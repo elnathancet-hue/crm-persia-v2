@@ -1,6 +1,7 @@
 "use client";
 
-// PR-O: hook de realtime pros deals (cards do Kanban).
+// PR-V1a (movido de apps/crm/src/lib/realtime, parte do S2):
+// hook de realtime pros deals (cards do Kanban).
 //
 // Uso: chamado no KanbanBoard. Quando outro agente da mesma org
 // cria/move/atualiza/deleta deal num pipeline, callback dispara e
@@ -13,9 +14,11 @@
 // Pegadinhas tratadas:
 //   - cleanup via removeChannel
 //   - debounce externo (caller decide se faz refetch imediato ou agrupa)
+//
+// DI: recebe supabase como param.
 
 import { useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type DealRealtimeEvent = {
   type: "INSERT" | "UPDATE" | "DELETE";
@@ -24,12 +27,12 @@ export type DealRealtimeEvent = {
 };
 
 export function useDealsRealtime(
+  supabase: SupabaseClient | null,
   pipelineId: string | null,
   onEvent: (e: DealRealtimeEvent) => void,
 ) {
   useEffect(() => {
-    if (!pipelineId) return;
-    const supabase = createClient();
+    if (!supabase || !pipelineId) return;
 
     const channel = supabase
       .channel(`deals-${pipelineId}`)
@@ -62,5 +65,5 @@ export function useDealsRealtime(
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipelineId]);
+  }, [supabase, pipelineId]);
 }

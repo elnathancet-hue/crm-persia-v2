@@ -4,9 +4,11 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
-import { useCurrentUser } from "@persia/leads-ui";
-import { useCommentToast } from "@/lib/realtime/use-comment-toast";
-import { useAssignmentToast } from "@/lib/realtime/use-assignment-toast";
+import {
+  useAssignmentToast,
+  useCommentToast,
+  useCurrentUser,
+} from "@persia/leads-ui";
 import { createClient } from "@/lib/supabase/client";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -21,11 +23,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   // PR-U2: useCurrentUser agora vem do @persia/leads-ui (DI supabase).
   const supabase = createClient();
   const currentUser = useCurrentUser(supabase);
+  // PR-V1a: hooks agora vivem em @persia/leads-ui e recebem supabase
+  // via DI. Mesmo client usado pelo useCurrentUser acima.
   useCommentToast({
+    supabase,
     orgId,
     currentUserId: currentUser?.user_id ?? null,
   });
   useAssignmentToast({
+    supabase,
     orgId,
     currentUserId: currentUser?.user_id ?? null,
   });
