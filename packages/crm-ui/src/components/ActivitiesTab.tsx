@@ -1,8 +1,11 @@
 "use client";
 
-// ActivitiesTab (PR-K7) — timeline cronologica global de activities
-// da org. Renderiza dentro do shell de /crm na tab "Atividades"
-// (substitui o stub placeholder do PR-K5).
+// PR-V1c (movido de apps/crm/src/components/crm/activities-tab.tsx):
+// timeline cronologica global de activities da org.
+//
+// Renderiza dentro do shell de /crm na tab "Atividades". Antes vivia
+// no CRM cliente; movido pra @persia/crm-ui pra o admin tambem
+// consumir (5a tab no AdminCrmShell).
 //
 // Estrutura:
 //   - Filtros chips no topo (Todos / Mensagens / Tags / Mudancas / Sistema)
@@ -10,6 +13,10 @@
 //     + horario relativo
 //   - Botao "Carregar mais" no fim (pagina + 30)
 //   - Empty state quando vazio
+//
+// DI: a action server-side e injetada via prop `listActivities`. Cada
+// app injeta a sua (CRM = requireRole agent; admin = requireSuperadminForOrg).
+// Mesma assinatura: (options) => Promise<OrgActivitiesResult>.
 //
 // Os tipos do schema atual (lead_activities.type) sao tecnicos:
 //   created, edited, tag_added, tag_removed, message_sent,
@@ -19,7 +26,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -36,13 +42,40 @@ import { toast } from "sonner";
 import type { OrgActivityRow } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import { EmptyState } from "@persia/ui/empty-state";
-import { getOrgActivities } from "@/actions/leads";
 
-interface ActivitiesTabProps {
+/** Resultado paginado vindo do server action. Mesma shape do
+ *  ListOrgActivitiesOptions/OrgActivitiesResult do @persia/shared/crm,
+ *  reexpresso aqui pra evitar dependencia transitiva no caller. */
+export interface ActivitiesPage {
+  activities: OrgActivityRow[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+export interface ListActivitiesOptions {
+  page?: number;
+  limit?: number;
+  types?: string[];
+  leadId?: string;
+}
+
+export type ListActivitiesFn = (
+  options: ListActivitiesOptions,
+) => Promise<ActivitiesPage>;
+
+export interface ActivitiesTabProps {
   initialActivities: OrgActivityRow[];
   initialTotal: number;
   initialPage: number;
   initialTotalPages: number;
+  /** DI: action server-side que devolve uma pagina filtrada/paginada.
+   *  CRM passa wrapper de requireRole("agent"); admin passa wrapper de
+   *  requireSuperadminForOrg(). */
+  listActivities: ListActivitiesFn;
+  /** Link pra detalhe do lead. Default `/leads/{id}` — admin pode passar
+   *  `/leads?leadId={id}` se quiser usar drawer no lugar. */
+  leadHref?: (leadId: string) => string;
 }
 
 // Filtros agrupados — mapeia categoria visivel -> lista de tipos do schema
@@ -197,8 +230,9 @@ export function ActivitiesTab({
   initialTotal,
   initialPage,
   initialTotalPages,
+  listActivities,
+  leadHref = (id) => `/leads/${id}`,
 }: ActivitiesTabProps) {
-  const router = useRouter();
   const [activities, setActivities] = React.useState<OrgActivityRow[]>(
     initialActivities,
   );
@@ -222,7 +256,7 @@ export function ActivitiesTab({
     setIsLoading(true);
     try {
       const filter = FILTERS.find((f) => f.key === key)!;
-      const result = await getOrgActivities({
+      const result = await listActivities({
         page: 1,
         limit: PAGE_SIZE,
         types: filter.types.length > 0 ? filter.types : undefined,
@@ -246,7 +280,7 @@ export function ActivitiesTab({
     try {
       const filter = FILTERS.find((f) => f.key === activeFilter)!;
       const next = page + 1;
-      const result = await getOrgActivities({
+      const result = await listActivities({
         page: next,
         limit: PAGE_SIZE,
         types: filter.types.length > 0 ? filter.types : undefined,
@@ -342,7 +376,7 @@ export function ActivitiesTab({
                       {item.leads && (
                         <div className="mt-2 flex items-center gap-1.5">
                           <Link
-                            href={`/leads/${item.lead_id}`}
+                            href={leadHref(item.lead_id)}
                             className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                           >
                             {item.leads.name || "Lead sem nome"}

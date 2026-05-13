@@ -50,7 +50,9 @@ import type { LeadListItemStats } from "@/actions/leads";
 
 import { CrmClient } from "./crm-client";
 import { LeadList } from "@/components/leads/lead-list";
-import { ActivitiesTab } from "@/components/crm/activities-tab";
+// PR-V1c: ActivitiesTab agora vive em @persia/crm-ui (compartilhado com admin).
+import { ActivitiesTab } from "@persia/crm-ui";
+import { getOrgActivities } from "@/actions/leads";
 import { SegmentList } from "@/components/segments/segment-list";
 import { TagsPageClient } from "@/app/(dashboard)/tags/tags-client";
 import { crmKanbanActions } from "@/features/crm-kanban/crm-kanban-actions";
@@ -259,6 +261,7 @@ export function CrmShell(props: CrmShellProps) {
             initialTotal={props.activitiesData.initialTotal}
             initialPage={props.activitiesData.initialPage}
             initialTotalPages={props.activitiesData.initialTotalPages}
+            listActivities={getOrgActivities}
           />
         )}
 

@@ -84,3 +84,13 @@ export {
   type ImportDestination,
   type DuplicateStrategy,
 } from "./components/ImportLeadsWizard";
+// PR-V1c: timeline global de activities movida de apps/crm pro pacote.
+// Admin tambem consome (5a tab no AdminCrmShell). DI por prop:
+// `listActivities` recebe filtros e devolve pagina.
+export {
+  ActivitiesTab,
+  type ActivitiesTabProps,
+  type ListActivitiesFn,
+  type ListActivitiesOptions,
+  type ActivitiesPage,
+} from "./components/ActivitiesTab";
