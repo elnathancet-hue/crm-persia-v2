@@ -193,16 +193,43 @@ export function LeadDetailClient({
   function handleAddTag(tagId: string) {
     if (!tagId) return;
     startAddTagTransition(async () => {
-      await addTagToLead(lead.id, tagId);
-      setSelectedTagToAdd("");
-      router.refresh();
+      // PR-B7: try/catch + toast feedback. O handler anterior chamava
+      // addTagToLead sem try/catch; se a action throw (ex: RLS, lead
+      // ja com a tag, network), o erro era engolido silenciosamente —
+      // a auditoria E2E (2026-05-13, bug #22) capturou que clicar
+      // "Interessado" no combobox da pagina legacy nao persistia nem
+      // dava feedback. Toast.success/error revelam o estado real e
+      // confirmam o save (paridade com fluxo PR-B3 do drawer).
+      try {
+        await addTagToLead(lead.id, tagId);
+        setSelectedTagToAdd("");
+        router.refresh();
+        toast.success("Tag adicionada", {
+          id: `lead-${lead.id}-tag-${tagId}`,
+        });
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Erro ao adicionar tag",
+          { id: `lead-${lead.id}-tag-${tagId}` },
+        );
+      }
     });
   }
 
   function handleRemoveTag(tagId: string) {
     startAddTagTransition(async () => {
-      await removeTagFromLead(lead.id, tagId);
-      router.refresh();
+      try {
+        await removeTagFromLead(lead.id, tagId);
+        router.refresh();
+        toast.success("Tag removida", {
+          id: `lead-${lead.id}-tag-${tagId}`,
+        });
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : "Erro ao remover tag",
+          { id: `lead-${lead.id}-tag-${tagId}` },
+        );
+      }
     });
   }
 
