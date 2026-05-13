@@ -89,14 +89,18 @@ export function TagPicker({ leadId, initialTags, allTags: initialAllTags }: TagP
     setLoading(true);
     try {
       const randomColor = DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)];
-      const newTag = await createTag({ name: search.trim(), color: randomColor });
-      if (newTag) {
-        const tag = newTag as Tag;
+      const result = await createTag({ name: search.trim(), color: randomColor });
+      // Sprint 2: createTag agora retorna ActionResult<Tag>.
+      // Em erro, retorna { error: string }; em sucesso, { data: Tag }.
+      if (result && "data" in result && result.data) {
+        const tag = result.data as Tag;
         setAllTags((prev) => [tag, ...prev]);
         await addTagToLead(leadId, tag.id);
         setSelectedTags((prev) => [...prev, tag]);
         setSearch("");
       }
+      // Erro silencioso preservado por compat — toast vem em PR futuro
+      // quando este componente migrar pro pattern completo (Sprint 3).
     } catch {
       // silently fail
     } finally {

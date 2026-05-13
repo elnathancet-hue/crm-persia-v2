@@ -8,6 +8,15 @@
 // Originalmente em apps/crm/src/app/(dashboard)/tags/tags-client.tsx
 // (~282 linhas). Extraido pra resolver drift visual (admin estava com
 // HTML cru + Tailwind custom).
+//
+// === Sprint 2 (refactor arquitetural) =====================================
+// Migrado pra pattern padronizado:
+//   - useDialogMutation (resolve "modal nao fecha apos save")
+//   - actions retornam ActionResult { data?, error? } | void
+//   - toast.success/error com id estavel + duration 5000
+//   - Erros antes silenciados ("// silently fail") agora viram toast
+// Referencias: packages/ui/docs/patterns.md  +  PR #178
+// ==========================================================================
 
 import * as React from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
@@ -23,6 +32,7 @@ import {
 } from "@persia/ui/dialog";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
+import { useDialogMutation } from "@persia/ui";
 import type { TagWithCount } from "@persia/shared/crm";
 
 import { TagBadge } from "./TagBadge";
@@ -71,7 +81,6 @@ export function TagsList({
     React.useState<TagWithCount | null>(null);
   const [name, setName] = React.useState("");
   const [color, setColor] = React.useState("#6366f1");
-  const [saving, setSaving] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   // Sync com prop quando o pai re-fetcha (router.refresh).
@@ -103,6 +112,7 @@ export function TagsList({
     setEditingTag(tag);
     setName(tag.name);
     setColor(tag.color);
+    setErrors({});
     setDialogOpen(true);
   }
 
@@ -111,55 +121,84 @@ export function TagsList({
     setDeleteDialogOpen(true);
   }
 
-  async function handleSave() {
+  // -----------------------------------------------------------------------
+  // Mutations padronizadas
+  // -----------------------------------------------------------------------
+
+  const saveMutation = useDialogMutation<
+    { mode: "create" | "update"; name: string; color: string; tagId?: string }
+  >({
+    mutation: async (input) => {
+      if (input.mode === "update" && input.tagId) {
+        const result = await actions.updateTag(input.tagId, {
+          name: input.name,
+          color: input.color,
+        });
+        return result;
+      }
+      return actions.createTag({ name: input.name, color: input.color });
+    },
+    onOpenChange: setDialogOpen,
+    successToast: (data) => {
+      // data eh Tag quando create; void quando update.
+      return data ? "Tag criada" : "Tag atualizada";
+    },
+    errorToast: (err) => err,
+    toastId: "tag-save",
+    onSuccess: (data) => {
+      // Optimistic local update — mantem UX rapida sem precisar de
+      // router.refresh extra (a action ja faz revalidatePath).
+      if (editingTag) {
+        setTags((prev) =>
+          prev.map((t) =>
+            t.id === editingTag.id ? { ...t, name, color } : t,
+          ),
+        );
+      } else if (data && typeof data === "object" && "id" in data) {
+        const newTag = data as { id: string; name: string; color: string };
+        setTags((prev) => [
+          { ...newTag, lead_count: 0 } as TagWithCount,
+          ...prev,
+        ]);
+      }
+    },
+  });
+
+  const deleteMutation = useDialogMutation<{ tagId: string }>({
+    mutation: ({ tagId }) => actions.deleteTag(tagId),
+    onOpenChange: setDeleteDialogOpen,
+    successToast: "Tag excluída",
+    errorToast: (err) => err,
+    toastId: "tag-delete",
+    onSuccess: () => {
+      if (deletingTag) {
+        setTags((prev) => prev.filter((t) => t.id !== deletingTag.id));
+        setDeletingTag(null);
+      }
+    },
+  });
+
+  function handleSave() {
     if (!name.trim()) {
       setError("tag_name", "Campo obrigatório");
       return;
     }
     clearError("tag_name");
-    setSaving(true);
-    try {
-      if (editingTag) {
-        await actions.updateTag(editingTag.id, {
-          name: name.trim(),
-          color,
-        });
-        setTags((prev) =>
-          prev.map((t) =>
-            t.id === editingTag.id ? { ...t, name: name.trim(), color } : t,
-          ),
-        );
-      } else {
-        const newTag = await actions.createTag({ name: name.trim(), color });
-        if (newTag) {
-          setTags((prev) => [
-            { ...newTag, lead_count: 0 } as TagWithCount,
-            ...prev,
-          ]);
-        }
-      }
-      setDialogOpen(false);
-    } catch {
-      // silently fail
-    } finally {
-      setSaving(false);
-    }
+    saveMutation.run({
+      mode: editingTag ? "update" : "create",
+      tagId: editingTag?.id,
+      name: name.trim(),
+      color,
+    });
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deletingTag) return;
-    setSaving(true);
-    try {
-      await actions.deleteTag(deletingTag.id);
-      setTags((prev) => prev.filter((t) => t.id !== deletingTag.id));
-      setDeleteDialogOpen(false);
-      setDeletingTag(null);
-    } catch {
-      // silently fail
-    } finally {
-      setSaving(false);
-    }
+    deleteMutation.run({ tagId: deletingTag.id });
   }
+
+  const saving = saveMutation.pending;
+  const deleting = deleteMutation.pending;
 
   return (
     <>
@@ -214,6 +253,7 @@ export function TagsList({
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      aria-label={`Editar tag ${tag.name}`}
                       onClick={() => openEditDialog(tag)}
                     >
                       <Pencil className="size-3.5" />
@@ -223,6 +263,7 @@ export function TagsList({
                     <Button
                       variant="ghost"
                       size="icon-sm"
+                      aria-label={`Excluir tag ${tag.name}`}
                       onClick={() => openDeleteDialog(tag)}
                     >
                       <Trash2 className="size-3.5 text-destructive" />
@@ -253,8 +294,10 @@ export function TagsList({
               <Label htmlFor="tag-name">Nome *</Label>
               <Input
                 id="tag-name"
+                name="tag_name"
                 placeholder="Ex: Cliente VIP"
                 value={name}
+                aria-invalid={Boolean(errors.tag_name)}
                 onChange={(e) => {
                   setName(e.target.value);
                   clearError("tag_name");
@@ -286,6 +329,8 @@ export function TagsList({
                   <button
                     key={c}
                     type="button"
+                    aria-label={`Cor ${c}`}
+                    aria-pressed={color === c}
                     onClick={() => setColor(c)}
                     className="size-7 rounded-full border-2 transition-transform hover:scale-110"
                     style={{
@@ -321,7 +366,7 @@ export function TagsList({
             <DialogTitle>Excluir Tag</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja excluir a tag{" "}
-              <strong>{deletingTag?.name}</strong>? Ela sera removida de
+              <strong>{deletingTag?.name}</strong>? Ela será removida de
               todos os leads.
             </DialogDescription>
           </DialogHeader>
@@ -332,9 +377,9 @@ export function TagsList({
             <Button
               variant="destructive"
               onClick={handleDelete}
-              disabled={saving}
+              disabled={deleting}
             >
-              {saving ? "Excluindo..." : "Excluir"}
+              {deleting ? "Excluindo..." : "Excluir"}
             </Button>
           </DialogFooter>
         </DialogContent>

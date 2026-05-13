@@ -2,6 +2,8 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import type { ActionResult } from "@persia/ui";
+import type { Tag } from "@persia/shared/crm";
 import {
   addTagToLead as addTagToLeadShared,
   createTag as createTagShared,
@@ -12,8 +14,9 @@ import {
   updateTag as updateTagShared,
 } from "@persia/shared/crm";
 
-function asErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Erro desconhecido";
+function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamente."): string {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
 }
 
 export async function getTags() {
@@ -34,16 +37,19 @@ export async function getTagsWithCount() {
   }
 }
 
-export async function createTag(name: string, color: string) {
+export async function createTag(
+  name: string,
+  color: string,
+): Promise<ActionResult<Tag>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     const tag = await createTagShared({ db: admin, orgId }, { name, color });
     revalidatePath("/tags");
     revalidatePath("/leads");
     revalidatePath("/crm");
-    return { data: tag, error: null };
+    return { data: tag };
   } catch (err) {
-    return { data: null, error: asErrorMessage(err) };
+    return { error: asErrorMessage(err, "Não foi possível criar a tag.") };
   }
 }
 
@@ -71,28 +77,31 @@ export async function removeTagFromLead(leadId: string, tagId: string) {
   }
 }
 
-export async function updateTag(tagId: string, data: { name?: string; color?: string }) {
+export async function updateTag(
+  tagId: string,
+  data: { name?: string; color?: string },
+): Promise<ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await updateTagShared({ db: admin, orgId }, tagId, data);
     revalidatePath("/tags");
     revalidatePath("/leads");
     revalidatePath("/crm");
-    return { error: null };
+    return;
   } catch (err) {
-    return { error: asErrorMessage(err) };
+    return { error: asErrorMessage(err, "Não foi possível atualizar a tag.") };
   }
 }
 
-export async function deleteTag(tagId: string) {
+export async function deleteTag(tagId: string): Promise<ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await deleteTagShared({ db: admin, orgId }, tagId);
     revalidatePath("/tags");
     revalidatePath("/leads");
     revalidatePath("/crm");
-    return { error: null };
+    return;
   } catch (err) {
-    return { error: asErrorMessage(err) };
+    return { error: asErrorMessage(err, "Não foi possível excluir a tag.") };
   }
 }
