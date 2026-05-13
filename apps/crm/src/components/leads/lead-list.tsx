@@ -13,6 +13,8 @@ import {
   LeadInfoDrawer,
   LeadsList,
   LeadsProvider,
+  useDebouncedCallback,
+  useLeadsRealtime,
 } from "@persia/leads-ui";
 import {
   ExportMenu,
@@ -25,8 +27,6 @@ import { Button } from "@persia/ui/button";
 import { Filter, Upload, X } from "lucide-react";
 import { useRole } from "@/lib/hooks/use-role";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
-import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
-import { useLeadsRealtime } from "@/lib/realtime/use-leads-realtime";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { createClient } from "@/lib/supabase/client";
 import { importLeads } from "@/actions/leads-import";
@@ -69,7 +69,8 @@ export function LeadList(props: Props) {
   // delete) num refetch unico ao inves de N. RLS + filtro
   // organization_id no canal sao defesa em camada.
   const debouncedRefresh = useDebouncedCallback(() => router.refresh());
-  useLeadsRealtime(orgId, debouncedRefresh);
+  // PR-V1a: hook recebe supabase via DI agora.
+  useLeadsRealtime(supabase, orgId, debouncedRefresh);
 
 
   // Drawer "Informacoes do lead" — CRM-specific (Fase 2, abre na linha

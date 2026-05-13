@@ -1,7 +1,8 @@
 "use client";
 
-// PR-Q: presence-only por pipeline pra mostrar quem ta vendo qual deal
-// no Kanban. NAO combinado com deals-realtime do PR-O — keep concerns
+// PR-V1a (movido de apps/crm/src/lib/realtime, parte do S2):
+// presence-only por pipeline pra mostrar quem ta vendo qual deal
+// no Kanban. NAO combinado com deals-realtime — keep concerns
 // separados (presence muda muito mais que postgres_changes).
 //
 // 1 canal por pipeline aberto = aceitavel: o user ve um pipeline por vez,
@@ -20,10 +21,11 @@
 //   - Untrack antes de removeChannel (sem ghost de 30s)
 //   - setViewingDealId tem callback estavel (mesma ref) — evita
 //     re-mount do canal quando o caller atualiza prop
+//
+// DI: recebe supabase como param.
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 
 export interface DealPresenceUser {
   user_id: string;
@@ -32,6 +34,7 @@ export interface DealPresenceUser {
 }
 
 export interface UseDealPresenceOptions {
+  supabase: SupabaseClient | null;
   pipelineId: string | null;
   currentUser: { user_id: string; full_name: string } | null;
 }
@@ -44,6 +47,7 @@ export interface UseDealPresenceResult {
 }
 
 export function useDealPresence({
+  supabase,
   pipelineId,
   currentUser,
 }: UseDealPresenceOptions): UseDealPresenceResult {
@@ -71,12 +75,11 @@ export function useDealPresence({
   }, [currentUser?.user_id, currentUser?.full_name]);
 
   useEffect(() => {
-    if (!pipelineId || !currentUser) {
+    if (!supabase || !pipelineId || !currentUser) {
       setWatchersByDeal(new Map());
       channelRef.current = null;
       return;
     }
-    const supabase = createClient();
     const channel = supabase.channel(`pipeline-presence-${pipelineId}`, {
       config: { presence: { key: currentUser.user_id } },
     });
@@ -122,7 +125,7 @@ export function useDealPresence({
       channelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipelineId, currentUser?.user_id, currentUser?.full_name]);
+  }, [supabase, pipelineId, currentUser?.user_id, currentUser?.full_name]);
 
   return { watchersByDeal, setViewingDealId };
 }

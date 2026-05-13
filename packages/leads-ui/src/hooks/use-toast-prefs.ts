@@ -1,15 +1,21 @@
 "use client";
 
-// PR-Q: preferencia de mute pra toasts de realtime (comentario novo,
-// lead atribuido). Single source of truth — qualquer hook que dispara
-// toast checa antes.
+// PR-V1a (movido de apps/crm/src/lib/realtime, parte do S2):
+// preferencia de mute pra toasts de realtime (comentario novo, lead
+// atribuido). Single source of truth — qualquer hook que dispara toast
+// checa antes.
 //
-// Persistencia: localStorage (per-browser, per-user implicito pelo
-// auth). Sync entre abas via 'storage' event nativo do browser.
+// Persistencia: localStorage (per-browser, per-origin). Sync entre abas
+// via 'storage' event nativo do browser. Origins distintos (CRM vs
+// admin) tem buckets independentes — intencional: user pode mutar so
+// no admin sem afetar o CRM.
 //
 // Por que NAO Supabase preferences table? Toast UX e local ao
 // browser/device. User pode querer toast no notebook e mute no
 // celular. Server-side seria over-engineering.
+//
+// Hook puro (sem supabase) — DI nao se aplica. A KEY mantem o prefixo
+// "crm:" por compat com prefs existentes do CRM cliente.
 
 import { useEffect, useState } from "react";
 

@@ -52,3 +52,36 @@ export {
   type UseLeadPresenceOptions,
   type UseLeadPresenceResult,
 } from "./hooks/use-lead-presence";
+
+// PR-V1a: 7 hooks de realtime restantes movidos de apps/crm/src/lib/realtime
+// (completa o S2). Todos com supabase via DI pra funcionar em CRM (anon)
+// e admin (anon + cookie superadmin). use-current-org-id NAO foi movido —
+// e app-specific (CRM resolve via organization_members + JWT; admin usa
+// Zustand store).
+export { useDebouncedCallback } from "./hooks/use-debounced-refresh";
+export {
+  useToastMuted,
+  useIsToastMuted,
+} from "./hooks/use-toast-prefs";
+export {
+  useLeadsRealtime,
+  type LeadRealtimeEvent,
+} from "./hooks/use-leads-realtime";
+export {
+  useDealsRealtime,
+  type DealRealtimeEvent,
+} from "./hooks/use-deals-realtime";
+export {
+  useDealPresence,
+  type DealPresenceUser,
+  type UseDealPresenceOptions,
+  type UseDealPresenceResult,
+} from "./hooks/use-deal-presence";
+export {
+  useCommentToast,
+  type UseCommentToastOptions,
+} from "./hooks/use-comment-toast";
+export {
+  useAssignmentToast,
+  type UseAssignmentToastOptions,
+} from "./hooks/use-assignment-toast";

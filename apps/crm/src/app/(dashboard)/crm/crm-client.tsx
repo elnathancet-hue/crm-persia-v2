@@ -25,10 +25,12 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 import { useRole } from "@/lib/hooks/use-role";
-import { useDealsRealtime } from "@/lib/realtime/use-deals-realtime";
-import { useDebouncedCallback } from "@/lib/realtime/use-debounced-refresh";
-import { useCurrentUser } from "@persia/leads-ui";
-import { useDealPresence } from "@/lib/realtime/use-deal-presence";
+import {
+  useCurrentUser,
+  useDealPresence,
+  useDealsRealtime,
+  useDebouncedCallback,
+} from "@persia/leads-ui";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -66,16 +68,18 @@ export function CrmClient({
   // vezes desnecessariamente. Com debounce, dispara 1x apos o burst.
   // RLS de deals + filtro pipeline_id no canal sao defesa em camada.
   // Admin tem seu proprio wrapper e nao recebe esse hook (compat).
+  // PR-V1a: useDealsRealtime + useDealPresence agora vem de @persia/leads-ui
+  // (parte do S2) e recebem supabase via DI.
+  const supabase = createClient();
   const debouncedRefresh = useDebouncedCallback(() => router.refresh());
-  useDealsRealtime(pipelineId ?? null, debouncedRefresh);
+  useDealsRealtime(supabase, pipelineId ?? null, debouncedRefresh);
 
   // PR-Q: presence-only do pipeline pra mostrar quem ta vendo cada card.
   // Canal proprio (`pipeline-presence-${pipelineId}`) — separa o concern
   // de presence (muito mais updates) do realtime de postgres_changes.
-  // PR-U2: useCurrentUser agora vem do @persia/leads-ui (DI supabase).
-  const supabase = createClient();
   const currentUser = useCurrentUser(supabase);
   const { watchersByDeal, setViewingDealId } = useDealPresence({
+    supabase,
     pipelineId: pipelineId ?? null,
     currentUser,
   });

@@ -15,7 +15,7 @@ import { Bell, BellOff, LogOut, Settings, User, Moon, Sun } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useToastMuted } from "@/lib/realtime/use-toast-prefs";
+import { useToastMuted } from "@persia/leads-ui";
 
 export function Header() {
   const { profile } = useUser();
