@@ -7,7 +7,7 @@
 //
 // Originalmente em apps/crm/src/components/segments/segment-list.tsx.
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
@@ -33,6 +33,7 @@ import { DialogHero } from "@persia/ui/dialog-hero";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
+import { useDialogMutation } from "@persia/ui";
 import {
   Filter,
   Pencil,
@@ -81,7 +82,6 @@ export function SegmentsList({
   const actions = useSegmentsActions();
   const [segments, setSegments] = useState<Segment[]>(initialSegments);
   const [open, setOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
   const [editingSegment, setEditingSegment] = useState<Segment | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -131,7 +131,59 @@ export function SegmentsList({
     setOpen(true);
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  // Sprint 3: mutations padronizadas com useDialogMutation.
+  // Toasts antes silenciados ("// silently fail") agora aparecem.
+  //
+  // Separamos create / update em 2 hooks: o tipo de retorno difere
+  // (ActionResult<Segment> vs ActionResult<void>), entao um hook unico
+  // exigiria cast. 2 hooks deixam tipos limpos e codigo claro.
+
+  type SegmentPayload = {
+    name: string;
+    description?: string;
+    rules: SegmentRules;
+  };
+
+  const createMutation = useDialogMutation<SegmentPayload, Segment>({
+    mutation: (payload) => actions.createSegment(payload),
+    onOpenChange: setOpen,
+    successToast: "Segmentação criada",
+    errorToast: (err) => err,
+    toastId: "segment-create",
+    onSuccess: (data) => {
+      if (data) {
+        setSegments((prev) => [data, ...prev]);
+      }
+    },
+  });
+
+  const updateMutation = useDialogMutation<
+    { id: string; payload: SegmentPayload }
+  >({
+    mutation: ({ id, payload }) => actions.updateSegment(id, payload),
+    onOpenChange: setOpen,
+    successToast: "Segmentação atualizada",
+    errorToast: (err) => err,
+    toastId: "segment-update",
+    onSuccess: () => {
+      if (editingSegment) {
+        setSegments((prev) =>
+          prev.map((s) =>
+            s.id === editingSegment.id
+              ? {
+                  ...s,
+                  name: name.trim(),
+                  description: description.trim() || null,
+                  rules: rules as unknown as SegmentRules,
+                }
+              : s,
+          ),
+        );
+      }
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) {
       setError("segment_name", "Informe um nome pra esta segmentação");
@@ -139,43 +191,37 @@ export function SegmentsList({
     }
     clearError("segment_name");
 
-    const payload = {
+    const payload: SegmentPayload = {
       name: name.trim(),
       description: description.trim() || undefined,
       rules: rules as unknown as SegmentRules,
     };
 
-    startTransition(async () => {
-      try {
-        if (editingSegment) {
-          await actions.updateSegment(editingSegment.id, payload);
-          setSegments((prev) =>
-            prev.map((s) =>
-              s.id === editingSegment.id
-                ? {
-                    ...s,
-                    name: payload.name,
-                    description: payload.description ?? null,
-                    rules: payload.rules,
-                  }
-                : s,
-            ),
-          );
-        } else {
-          const created = await actions.createSegment(payload);
-          if (created) {
-            setSegments((prev) => [created, ...prev]);
-          }
-        }
-        setOpen(false);
-      } catch {
-        // silently fail
-      }
-    });
+    if (editingSegment) {
+      updateMutation.run({ id: editingSegment.id, payload });
+    } else {
+      createMutation.run(payload);
+    }
   }
 
-  // PR-M02: AlertDialog substitui window.confirm pra delete
+  // PR-M02: AlertDialog substitui window.confirm pra delete.
+  // Sprint 3: usa useDialogMutation pra toast/erro padronizado.
   const [pendingDelete, setPendingDelete] = useState<Segment | null>(null);
+
+  const deleteMutation = useDialogMutation<{ id: string }>({
+    mutation: ({ id }) => actions.deleteSegment(id),
+    onOpenChange: (o) => {
+      if (!o) setPendingDelete(null);
+    },
+    successToast: "Segmentação excluída",
+    errorToast: (err) => err,
+    toastId: "segment-delete",
+    onSuccess: () => {
+      if (pendingDelete) {
+        setSegments((prev) => prev.filter((s) => s.id !== pendingDelete.id));
+      }
+    },
+  });
 
   function handleDelete(segment: Segment) {
     setPendingDelete(segment);
@@ -183,17 +229,13 @@ export function SegmentsList({
 
   function confirmDelete() {
     if (!pendingDelete) return;
-    const id = pendingDelete.id;
-    setPendingDelete(null);
-    startTransition(async () => {
-      try {
-        await actions.deleteSegment(id);
-        setSegments((prev) => prev.filter((s) => s.id !== id));
-      } catch {
-        // silently fail
-      }
-    });
+    deleteMutation.run({ id: pendingDelete.id });
   }
+
+  const isPending =
+    createMutation.pending ||
+    updateMutation.pending ||
+    deleteMutation.pending;
 
   const dialogTitle = editingSegment
     ? "Editar segmentação"
@@ -244,6 +286,7 @@ export function SegmentsList({
                   </Label>
                   <Input
                     id="seg-name"
+                    name="segment_name"
                     value={name}
                     onChange={(e) => {
                       setName(e.target.value);
@@ -283,6 +326,7 @@ export function SegmentsList({
                   </Label>
                   <Textarea
                     id="seg-desc"
+                    name="segment_description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Descreva o objetivo desta segmentação"
