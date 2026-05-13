@@ -73,7 +73,25 @@ function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
       data-slot="tabs-content"
-      className={cn("flex-1 text-sm outline-none", className)}
+      // PR-B9 (auditoria E2E 2026-05-13, bug #16): @base-ui/react/tabs
+      // marca panels inativos com o atributo `inert` (mas NAO aplica
+      // CSS pra escondê-los). Browsers desativam interacao com inert
+      // por padrao, mas mantem o elemento VISIVEL (display: block).
+      // Resultado em prod: drawer com 4 tabs (Dados/Negócios/Campos/
+      // Comentários) mostrava 2 panels ao mesmo tempo na troca, com
+      // o conteudo dos dois sobrepondo verticalmente. Fix simétrico
+      // com o pattern de TabsTrigger (que ja tinha visual state via
+      // data-selected): adicionar `[&[inert]]:hidden` pra que o panel
+      // inerte fique fora do fluxo visual.
+      //
+      // Tambem cobre `data-ending-style=""` (que vem durante uma
+      // transition out de animation libraries) — Tailwind 4 aceita o
+      // selector raw. Mantemos so `inert` pra simplicidade (atributo
+      // estavel pre/pos-transition).
+      className={cn(
+        "flex-1 text-sm outline-none [&[inert]]:hidden",
+        className,
+      )}
       {...props}
     />
   )
