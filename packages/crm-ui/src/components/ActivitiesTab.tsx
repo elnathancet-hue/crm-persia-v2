@@ -103,8 +103,16 @@ const FILTERS: {
   {
     key: "changes",
     label: "Mudanças",
+    // PR-B2: incluido `stage_change` no filter (deal movido entre etapas
+    // do funil) — antes ficava fora de qualquer categoria e nao aparecia
+    // ao filtrar por "Mudanças".
     icon: UserCog,
-    types: ["assigned", "status_changed", "score_changed"],
+    types: [
+      "assigned",
+      "status_changed",
+      "score_changed",
+      "stage_change",
+    ],
   },
   {
     key: "system",
@@ -182,6 +190,14 @@ const TYPE_META: Record<
     label: "Score atualizado",
     tone: "text-pink-700 dark:text-pink-300",
     iconBg: "bg-pink-100 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400",
+  },
+  // PR-B2: deal movido entre etapas do funil. Antes ficava sem entry e
+  // o fallback mostrava o type cru ("stage_change") na timeline.
+  stage_change: {
+    label: "Etapa do funil alterada",
+    tone: "text-indigo-700 dark:text-indigo-300",
+    iconBg:
+      "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
   },
   flow_entered: {
     label: "Entrou no fluxo",
@@ -460,6 +476,9 @@ function getIconForType(type: string): React.ComponentType<{
   ) {
     return UserCog;
   }
+  // PR-B2: stage_change tem icone proprio (ArrowRight) — conota "mudou
+  // de coluna" no Kanban, distinto de mudancas de campo (UserCog).
+  if (type === "stage_change") return ArrowRight;
   if (type === "imported") return RefreshCw;
   return Activity;
 }
