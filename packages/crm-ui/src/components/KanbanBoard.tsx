@@ -2468,11 +2468,22 @@ const DealCard = React.memo(function DealCardImpl({
         })()}
 
         {/* Footer: horario relativo da ultima atividade (discreto).
-            Usa deal.updated_at que JA EXISTE — sem logica nova. */}
+            Usa deal.updated_at que JA EXISTE — sem logica nova.
+
+            PR-B8: suppressHydrationWarning no <span> do tempo relativo.
+            formatRelativeShort usa Date.now() durante o render, que
+            diverge entre SSR e CSR (ms de diferenca entre os dois
+            momentos do render). Sem o suppress, cada deal card gera 1
+            React error #418 — em prod com 12 deals = 12 hydration
+            warnings por load. O texto eh meramente informativo
+            ("3d", "1h") — pequena divergencia entre SSR e CSR e
+            inocua. */}
         {deal.updated_at && (
           <div className="mt-3 flex items-center gap-1 border-t border-border/40 pt-2 text-[10px] text-muted-foreground/80">
             <Clock className="size-3" />
-            <span>{formatRelativeShort(deal.updated_at)}</span>
+            <span suppressHydrationWarning>
+              {formatRelativeShort(deal.updated_at)}
+            </span>
           </div>
         )}
 

@@ -1269,7 +1269,14 @@ function StatCard({
           <div className={`text-lg font-bold tabular-nums ${accentClass}`}>
             {primary}
           </div>
-          <div className="text-[11px] text-muted-foreground truncate">
+          {/* PR-B8: suppressHydrationWarning — `detail` pode conter
+              tempo relativo (ex: "Última msg: 7d") computado com
+              Date.now() no caller. Sem o suppress, gera React #418
+              (3 stat cards renderizados = 3 mismatches potenciais). */}
+          <div
+            suppressHydrationWarning
+            className="text-[11px] text-muted-foreground truncate"
+          >
             {detail}
           </div>
         </>
@@ -1496,8 +1503,13 @@ function DealCard({ deal }: { deal: LeadDealItem }) {
         )}
       </div>
 
-      {/* Footer: criado ha X */}
-      <p className="mt-2 text-[10px] text-muted-foreground/70 tabular-nums">
+      {/* Footer: criado ha X.
+          PR-B8: suppressHydrationWarning — formatRelativeShort usa
+          Date.now() inline. Vide KanbanBoard pra contexto. */}
+      <p
+        suppressHydrationWarning
+        className="mt-2 text-[10px] text-muted-foreground/70 tabular-nums"
+      >
         Criado {formatRelativeShort(deal.created_at)}
       </p>
     </a>

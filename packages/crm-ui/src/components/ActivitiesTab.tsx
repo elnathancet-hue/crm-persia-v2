@@ -406,7 +406,13 @@ export function ActivitiesTab({
                         </div>
                       )}
                     </div>
+                    {/* PR-B8: suppressHydrationWarning — formatRelative
+                        usa Date.now() inline, divergindo SSR/CSR
+                        (cada atividade = 1 React error #418). Inocuo
+                        ("agora", "há 5 min") — tooltip mostra a data
+                        absoluta pra precisao. */}
                     <span
+                      suppressHydrationWarning
                       className="shrink-0 text-[11px] font-medium text-muted-foreground"
                       title={
                         item.created_at
