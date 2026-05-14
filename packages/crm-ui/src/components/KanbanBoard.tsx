@@ -17,6 +17,7 @@ import { Badge } from "@persia/ui/badge";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Checkbox } from "@persia/ui/checkbox";
+import { RelativeTime, formatRelativeShortPtBR } from "@persia/ui";
 import {
   Dialog,
   DialogContent,
@@ -82,23 +83,10 @@ import {
   CheckCheck,
 } from "lucide-react";
 
-// Formata "ha X" curto pra footer do card (PR-D).
-function formatRelativeShort(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "agora";
-  if (min < 60) return `${min}min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h`;
-  const days = Math.floor(h / 24);
-  if (days < 7) return `${days}d`;
-  return d.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-  });
-}
+// Sprint 3c: formatRelativeShort local removido — agora usa
+// <RelativeTime formatter={formatRelativeShortPtBR} /> do @persia/ui.
+// Resolve React #418 (hydration mismatch) que disparava 1x por card
+// em cada render (12+ deals = 12+ warnings/load em prod).
 import type {
   DealLossReason,
   DealWithLead,
@@ -2467,23 +2455,19 @@ const DealCard = React.memo(function DealCardImpl({
           );
         })()}
 
-        {/* Footer: horario relativo da ultima atividade (discreto).
-            Usa deal.updated_at que JA EXISTE — sem logica nova.
-
-            PR-B8: suppressHydrationWarning no <span> do tempo relativo.
-            formatRelativeShort usa Date.now() durante o render, que
-            diverge entre SSR e CSR (ms de diferenca entre os dois
-            momentos do render). Sem o suppress, cada deal card gera 1
-            React error #418 — em prod com 12 deals = 12 hydration
-            warnings por load. O texto eh meramente informativo
-            ("3d", "1h") — pequena divergencia entre SSR e CSR e
-            inocua. */}
+        {/* Sprint 3c: footer com horario relativo da ultima atividade.
+            Antes: span com suppressHydrationWarning + formatRelativeShort
+            que usava Date.now() inline (gerava React #418 por card).
+            Agora: <RelativeTime /> renderiza absoluto no SSR e troca pro
+            relativo curto apos mount (sem mismatch). */}
         {deal.updated_at && (
           <div className="mt-3 flex items-center gap-1 border-t border-border/40 pt-2 text-[10px] text-muted-foreground/80">
             <Clock className="size-3" />
-            <span suppressHydrationWarning>
-              {formatRelativeShort(deal.updated_at)}
-            </span>
+            <RelativeTime
+              iso={deal.updated_at}
+              formatter={formatRelativeShortPtBR}
+              fallback=""
+            />
           </div>
         )}
 

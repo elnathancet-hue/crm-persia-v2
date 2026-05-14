@@ -20,6 +20,7 @@ import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Card } from "@persia/ui/card";
 import { Checkbox } from "@persia/ui/checkbox";
+import { RelativeTime, formatRelativeShortPtBR } from "@persia/ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -413,16 +414,9 @@ export function LeadsList({
     fetchLeads({ search, status: statusFilter, tags: selectedTagIds, page });
   }
 
-  function formatDate(dateStr: string | null) {
-    if (!dateStr) return "-";
-    return new Date(dateStr).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
+  // Sprint 3c: formatDate local removido. Coluna "Ultima interacao"
+  // agora usa <RelativeTime />, que mostra absoluto no SSR e troca pro
+  // relativo curto ("3h", "5d") apos hydration. Resolve React #418.
 
   const handleEdit = onEditLead ?? onRowClick;
 
@@ -619,9 +613,12 @@ export function LeadsList({
       header: renderSortHeader("last_interaction_at", "Última interação"),
       sortable: true,
       render: (row) => (
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {formatDate(row.last_interaction_at)}
-        </span>
+        <RelativeTime
+          iso={row.last_interaction_at}
+          formatter={formatRelativeShortPtBR}
+          className="text-xs text-muted-foreground tabular-nums"
+          emptyText="-"
+        />
       ),
     },
     // ==================== PR-L3: 4 colunas enriquecidas ====================

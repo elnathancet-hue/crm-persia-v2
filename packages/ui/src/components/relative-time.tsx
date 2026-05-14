@@ -41,10 +41,35 @@ export interface RelativeTimeProps extends React.HTMLAttributes<HTMLTimeElement>
   emptyText?: string;
   /** Se true, adiciona "atrás" / "em" via `addSuffix`. Default true. */
   addSuffix?: boolean;
+  /**
+   * Função custom pra formatar o relativo após mount.
+   * Use `formatRelativeShortPtBR` pra formato curto ("agora", "5min", "3h", "5d").
+   * Default: `formatDistanceToNow(date, { addSuffix, locale: ptBR })`.
+   */
+  formatter?: (date: Date) => string;
 }
 
 function defaultFallback(date: Date): string {
   return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR });
+}
+
+/**
+ * Helper de formato curto pt-BR ("agora", "5min", "3h", "5d", "12 mai").
+ * Drop-in pros `formatRelativeShort` inline que existiam em vários
+ * componentes (KanbanBoard, LeadInfoDrawer, LeadCommentsTab, ActivitiesTab).
+ *
+ * Use como `<RelativeTime iso={x} formatter={formatRelativeShortPtBR} />`.
+ */
+export function formatRelativeShortPtBR(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min}min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d`;
+  return format(date, "dd MMM", { locale: ptBR });
 }
 
 export function RelativeTime({
@@ -53,6 +78,7 @@ export function RelativeTime({
   refreshMs = 60_000,
   emptyText = "—",
   addSuffix = true,
+  formatter,
   ...rest
 }: RelativeTimeProps) {
   const [mounted, setMounted] = useState(false);
@@ -104,7 +130,9 @@ export function RelativeTime({
     );
   }
 
-  const relative = formatDistanceToNow(date, { addSuffix, locale: ptBR });
+  const relative = formatter
+    ? formatter(date)
+    : formatDistanceToNow(date, { addSuffix, locale: ptBR });
 
   return (
     <time

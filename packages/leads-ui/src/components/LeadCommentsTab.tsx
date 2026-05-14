@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Textarea } from "@persia/ui/textarea";
+import { RelativeTime, formatRelativeShortPtBR } from "@persia/ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -326,14 +327,13 @@ function CommentItem({
           <span className="text-sm font-semibold text-foreground">
             {authorName}
           </span>
-          {/* PR-B8: suppressHydrationWarning — formatRelativeShort usa
-              Date.now() inline, divergindo SSR/CSR. Vide KanbanBoard
-              pra contexto do React #418. */}
-          <span
-            suppressHydrationWarning
-            className="text-[10px] text-muted-foreground tabular-nums"
-          >
-            {formatRelativeShort(comment.created_at)}
+          {/* Sprint 3c: <RelativeTime /> SSR-safe (sem React #418). */}
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            <RelativeTime
+              iso={comment.created_at}
+              formatter={formatRelativeShortPtBR}
+              fallback=""
+            />
             {isEdited && " · editado"}
           </span>
           {showMenu && !isEditing && (
@@ -458,16 +458,4 @@ function renderCommentContent(
   return parts.length > 0 ? parts : content;
 }
 
-function formatRelativeShort(iso: string): string {
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "agora";
-  if (min < 60) return `${min}m`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h`;
-  const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d`;
-  const month = Math.floor(day / 30);
-  return `${month}mes`;
-}
+// Sprint 3c: formatRelativeShort local removido — usa formatRelativeShortPtBR do @persia/ui.
