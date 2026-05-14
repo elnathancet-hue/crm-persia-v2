@@ -8,6 +8,7 @@
 // CRM wraps requireRole() actions; admin wraps requireSuperadminForOrg()
 // actions. The package itself stays auth-agnostic.
 
+import type { ActionResult } from "@persia/ui";
 import type {
   Deal,
   DealLossReason,
@@ -61,20 +62,44 @@ export interface ReorderStageInput {
 export interface KanbanActions {
   // Pipelines
   createPipeline: (name: string) => Promise<Pipeline>;
-  updatePipelineName: (pipelineId: string, name: string) => Promise<void>;
-  deletePipeline: (pipelineId: string) => Promise<void>;
+  /**
+   * Sprint 3e: migrado pra ActionResult.
+   */
+  updatePipelineName: (
+    pipelineId: string,
+    name: string,
+  ) => Promise<ActionResult<void>>;
+  /**
+   * Sprint 3e: migrado pra ActionResult.
+   */
+  deletePipeline: (pipelineId: string) => Promise<ActionResult<void>>;
 
   // Stages
-  createStage: (input: CreateStageInput) => Promise<Stage>;
-  updateStage: (stageId: string, data: UpdateStageInput) => Promise<void>;
-  deleteStage: (stageId: string) => Promise<void>;
+  /**
+   * Sprint 3e: migrado pra ActionResult<Stage>.
+   */
+  createStage: (input: CreateStageInput) => Promise<ActionResult<Stage>>;
+  /**
+   * Sprint 3e: migrado pra ActionResult.
+   */
+  updateStage: (
+    stageId: string,
+    data: UpdateStageInput,
+  ) => Promise<ActionResult<void>>;
+  /**
+   * Sprint 3e: migrado pra ActionResult.
+   */
+  deleteStage: (stageId: string) => Promise<ActionResult<void>>;
   /**
    * PR-CRMCFG: reorder em batch (drag-drop ou setas no editor de
    * configuracao). Opcional pra retro-compat com adapters antigos
    * que ainda nao implementam — UI degrada pra "1 update por etapa"
    * ao invez de batch nesse caso.
+   * Sprint 3e: migrado pra ActionResult.
    */
-  reorderStages?: (stages: ReorderStageInput[]) => Promise<void>;
+  reorderStages?: (
+    stages: ReorderStageInput[],
+  ) => Promise<ActionResult<void>>;
 
   // Deals
   createDeal: (input: CreateDealInput) => Promise<Deal>;

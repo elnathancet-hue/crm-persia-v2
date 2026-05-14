@@ -30,6 +30,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
+import { useDialogMutation } from "@persia/ui";
 import {
   Dialog,
   DialogContent,
@@ -78,19 +79,22 @@ export function EditKanbanStructureDrawer({
 }: Props) {
   const actions = useKanbanActions();
   const [renameOpen, setRenameOpen] = React.useState(false);
-  const [, startTransition] = React.useTransition();
+
+  // Sprint 3e: deletePipeline migrado pra ActionResult — usa
+  // useDialogMutation pra fechar o Dialog + toast PT-BR padronizado.
+  const deletePipelineMutation = useDialogMutation<void>({
+    mutation: () => actions.deletePipeline(pipelineId),
+    onOpenChange: (o) => {
+      if (!o) onOpenChange(false);
+    },
+    successToast: "Funil excluído",
+    errorToast: (err) => err,
+    toastId: `pipeline-delete-${pipelineId}`,
+    onSuccess: () => onDeleted?.(),
+  });
 
   const handleDeleteKanban = () => {
-    startTransition(async () => {
-      try {
-        await actions.deletePipeline(pipelineId);
-        onOpenChange(false);
-        onDeleted?.();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[EditKanbanStructureDrawer] deletePipeline:", err);
-      }
-    });
+    deletePipelineMutation.run(undefined);
   };
 
   return (
@@ -175,11 +179,21 @@ function RenameKanbanDialog({
 }) {
   const actions = useKanbanActions();
   const [name, setName] = React.useState(currentName);
-  const [isPending, startTransition] = React.useTransition();
 
   React.useEffect(() => {
     if (open) setName(currentName);
   }, [open, currentName]);
+
+  // Sprint 3e: useDialogMutation pra fechar + toast + erro PT-BR.
+  const renameMutation = useDialogMutation<string>({
+    mutation: (trimmed) => actions.updatePipelineName(pipelineId, trimmed),
+    onOpenChange,
+    successToast: "Funil renomeado",
+    errorToast: (err) => err,
+    toastId: `pipeline-rename-${pipelineId}`,
+    onSuccess: () => onChange?.(),
+  });
+  const isPending = renameMutation.pending;
 
   const handleSave = () => {
     const trimmed = name.trim();
@@ -187,16 +201,7 @@ function RenameKanbanDialog({
       onOpenChange(false);
       return;
     }
-    startTransition(async () => {
-      try {
-        await actions.updatePipelineName(pipelineId, trimmed);
-        onOpenChange(false);
-        onChange?.();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[RenameKanbanDialog] updatePipelineName:", err);
-      }
-    });
+    renameMutation.run(trimmed);
   };
 
   return (

@@ -40,30 +40,27 @@ export const crmKanbanActions: KanbanActions = {
     fd.set("name", name);
     return createPipeline(fd);
   },
+  // Sprint 3e: actions retornam ActionResult — repasse direto.
   updatePipelineName: (pipelineId, name) =>
     updatePipelineName(pipelineId, name),
   deletePipeline: (pipelineId) => deletePipeline(pipelineId),
 
   // ============ STAGES ============
+  // Sprint 3e: createStage aceita objeto + ActionResult (sem FormData).
+  // Se caller pediu outro bucket que nao em_andamento, faz update apos.
   createStage: async ({ pipelineId, name, sortOrder, outcome }) => {
-    const fd = new FormData();
-    fd.set("pipeline_id", pipelineId);
-    fd.set("name", name);
-    fd.set("sort_order", String(sortOrder));
-    const stage = await createStage(fd);
-    // O wrapper de createStage nao aceita outcome direto; se o caller
-    // pediu outro bucket, atualiza logo apos. Mantem compatibilidade
-    // com o comportamento original do PipelineConfigDrawer.
+    const result = await createStage({ pipelineId, name, sortOrder });
+    if (result && "error" in result && result.error) return result;
+    const stage = result && "data" in result ? result.data : undefined;
     if (stage && outcome && outcome !== "em_andamento") {
-      await updateStage(stage.id, { outcome });
-      return { ...stage, outcome };
+      const upd = await updateStage(stage.id, { outcome });
+      if (upd && "error" in upd && upd.error) return { error: upd.error };
+      return { data: { ...stage, outcome } };
     }
-    return stage;
+    return result;
   },
-  // PR-CRMCFG: passa todos os campos do UpdateStageInput (color,
-  // description, sortOrder, outcome) — o action server ja aceita todos
-  // desde o PR-K4. Antes o adapter ignorava silenciosamente cor + desc
-  // porque o KanbanBoard nao usava (so o modal de config usava).
+  // PR-CRMCFG: passa todos os campos do UpdateStageInput.
+  // Sprint 3e: ActionResult — repasse.
   updateStage: (stageId, data) =>
     updateStage(stageId, {
       name: data.name,
@@ -74,7 +71,7 @@ export const crmKanbanActions: KanbanActions = {
     }),
   deleteStage: (stageId) => deleteStage(stageId),
   // PR-CRMCFG: reorder em batch (drag-drop ou setas no editor de
-  // configuracao). Reusa o `updateStageOrder` do shared mutations.
+  // configuracao). Sprint 3e: ActionResult — repasse.
   reorderStages: (stages) =>
     updateStageOrder(stages.map((s) => ({ id: s.id, position: s.position }))),
 

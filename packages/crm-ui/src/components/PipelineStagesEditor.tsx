@@ -19,6 +19,7 @@
 // KanbanBoard — reusa, regra 11 do briefing).
 
 import * as React from "react";
+import { toast } from "sonner";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
@@ -148,6 +149,10 @@ export function PipelineStagesEditor({
 
   // ============ Stage handlers ============
 
+  // Sprint 3e: actions retornam ActionResult. Toast PT-BR padronizado +
+  // rollback otimista quando a action falha. Antes, erros viravam
+  // console.error silencioso — user nao via nada.
+
   const handleCreateStage = (
     name: string,
     color: string,
@@ -159,25 +164,35 @@ export function PipelineStagesEditor({
     const sortOrder = maxOrder + 1;
 
     startTransition(async () => {
-      try {
-        const created = await actions.createStage({
-          pipelineId,
-          name,
-          sortOrder,
-          outcome,
-        });
-        // Color pode precisar de update separado se o adapter nao
-        // suportar no create (compat). Tenta ja com o create, fallback
-        // pra updateStage.
-        setStages((prev) => [...prev, { ...created, color }]);
-        if (color !== created.color) {
-          await actions.updateStage(created.id, { color });
-        }
-        onChange?.();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[PipelineStagesEditor] createStage:", err);
+      const result = await actions.createStage({
+        pipelineId,
+        name,
+        sortOrder,
+        outcome,
+      });
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, { id: "stage-create", duration: 5000 });
+        return;
       }
+      const created =
+        result && "data" in result ? result.data : undefined;
+      if (!created) return;
+      // Color pode precisar de update separado se o adapter nao
+      // suportar no create (compat). Tenta ja com o create, fallback
+      // pra updateStage.
+      setStages((prev) => [...prev, { ...created, color }]);
+      if (color !== created.color) {
+        const upd = await actions.updateStage(created.id, { color });
+        if (upd && "error" in upd && upd.error) {
+          toast.error(upd.error, { id: "stage-create", duration: 5000 });
+          return;
+        }
+      }
+      toast.success("Etapa criada", {
+        id: "stage-create",
+        duration: 5000,
+      });
+      onChange?.();
     });
   };
 
@@ -185,28 +200,41 @@ export function PipelineStagesEditor({
     stageId: string,
     data: { name?: string; color?: string; description?: string | null; outcome?: StageOutcome; sortOrder?: number },
   ) => {
+    // Optimistic update — apos o snapshot pra possivel rollback.
+    const prevSnapshot = stages;
     setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, ...data } : s)));
     startTransition(async () => {
-      try {
-        await actions.updateStage(stageId, data);
-        onChange?.();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[PipelineStagesEditor] updateStage:", err);
+      const result = await actions.updateStage(stageId, data);
+      if (result && "error" in result && result.error) {
+        setStages(prevSnapshot); // rollback
+        toast.error(result.error, {
+          id: `stage-update-${stageId}`,
+          duration: 5000,
+        });
+        return;
       }
+      onChange?.();
     });
   };
 
   const handleDeleteStage = (stageId: string) => {
+    const prevSnapshot = stages;
     setStages((prev) => prev.filter((s) => s.id !== stageId));
     startTransition(async () => {
-      try {
-        await actions.deleteStage(stageId);
-        onChange?.();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[PipelineStagesEditor] deleteStage:", err);
+      const result = await actions.deleteStage(stageId);
+      if (result && "error" in result && result.error) {
+        setStages(prevSnapshot); // rollback
+        toast.error(result.error, {
+          id: `stage-delete-${stageId}`,
+          duration: 5000,
+        });
+        return;
       }
+      toast.success("Etapa excluída", {
+        id: `stage-delete-${stageId}`,
+        duration: 5000,
+      });
+      onChange?.();
     });
   };
 
@@ -235,25 +263,32 @@ export function PipelineStagesEditor({
       }),
     );
 
+    const prevSnapshot = stages;
     startTransition(async () => {
-      try {
-        if (actions.reorderStages) {
-          await actions.reorderStages([
-            { id: a.id, position: b.sort_order },
-            { id: b.id, position: a.sort_order },
-          ]);
-        } else {
-          // Fallback pra adapters antigos (compat).
-          await Promise.all([
-            actions.updateStage(a.id, { sortOrder: b.sort_order }),
-            actions.updateStage(b.id, { sortOrder: a.sort_order }),
-          ]);
-        }
-        onChange?.();
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[PipelineStagesEditor] reorderStages:", err);
+      let result: import("@persia/ui").ActionResult<void> | undefined;
+      if (actions.reorderStages) {
+        result = await actions.reorderStages([
+          { id: a.id, position: b.sort_order },
+          { id: b.id, position: a.sort_order },
+        ]);
+      } else {
+        // Fallback pra adapters antigos (compat).
+        const [r1, r2] = await Promise.all([
+          actions.updateStage(a.id, { sortOrder: b.sort_order }),
+          actions.updateStage(b.id, { sortOrder: a.sort_order }),
+        ]);
+        if (r1 && "error" in r1 && r1.error) result = { error: r1.error };
+        else if (r2 && "error" in r2 && r2.error) result = { error: r2.error };
       }
+      if (result && "error" in result && result.error) {
+        setStages(prevSnapshot); // rollback
+        toast.error(result.error, {
+          id: "stage-reorder",
+          duration: 5000,
+        });
+        return;
+      }
+      onChange?.();
     });
   };
 

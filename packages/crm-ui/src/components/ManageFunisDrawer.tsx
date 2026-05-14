@@ -88,16 +88,24 @@ export function ManageFunisDrawer({
     return map;
   }, [stages]);
 
+  // Sprint 3e: deletePipeline retorna ActionResult. Antes era try/catch
+  // manual; agora result.error check.
   const handleDelete = (pipelineId: string) => {
     startTransition(async () => {
-      try {
-        await actions.deletePipeline(pipelineId);
-        setPendingDeleteId(null);
-        toast.success("Funil excluído");
-        onChange?.();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Falha ao excluir funil");
+      const result = await actions.deletePipeline(pipelineId);
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, {
+          id: `pipeline-delete-${pipelineId}`,
+          duration: 5000,
+        });
+        return;
       }
+      setPendingDeleteId(null);
+      toast.success("Funil excluído", {
+        id: `pipeline-delete-${pipelineId}`,
+        duration: 5000,
+      });
+      onChange?.();
     });
   };
 

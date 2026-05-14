@@ -3,6 +3,12 @@
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
+import type { ActionResult } from "@persia/ui";
+
+function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamente."): string {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
 import {
   bulkApplyTagsToDealLeads as bulkApplyTagsShared,
   bulkDeleteDeals as bulkDeleteDealsShared,
@@ -64,27 +70,45 @@ export async function getStages(pipelineId: string) {
   return listStages({ db: supabase, orgId }, pipelineId);
 }
 
-export async function createStage(formData: FormData) {
-  const { supabase, orgId } = await requireRole("admin");
-  const stage = await createStageShared(
-    { db: supabase, orgId },
-    {
-      pipelineId: formData.get("pipeline_id") as string,
-      name: formData.get("name") as string,
-      sortOrder: parseInt(formData.get("sort_order") as string, 10) || 0,
-      color: (formData.get("color") as string) || undefined,
-    },
-  );
-  revalidatePath("/crm");
-  return stage;
+// Sprint 3e: createStage agora aceita objeto + retorna ActionResult.
+// Antes recebia FormData (legacy) e lancava em erro. Adapter converte
+// o input do KanbanActions (CreateStageInput) sem precisar de FormData.
+export async function createStage(input: {
+  pipelineId: string;
+  name: string;
+  sortOrder: number;
+  color?: string;
+}): Promise<ActionResult<import("@persia/shared/crm").Stage>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    const stage = await createStageShared(
+      { db: supabase, orgId },
+      {
+        pipelineId: input.pipelineId,
+        name: input.name,
+        sortOrder: input.sortOrder,
+        color: input.color,
+      },
+    );
+    revalidatePath("/crm");
+    return { data: stage };
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível criar a etapa.") };
+  }
 }
 
+// Sprint 3e: migra pra ActionResult.
 export async function updateStageOrder(
   stages: { id: string; position: number }[],
-) {
-  const { supabase, orgId } = await requireRole("admin");
-  await updateStageOrderShared({ db: supabase, orgId }, stages);
-  revalidatePath("/crm");
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    await updateStageOrderShared({ db: supabase, orgId }, stages);
+    revalidatePath("/crm");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível reordenar as etapas.") };
+  }
 }
 
 export async function updateStage(
@@ -97,38 +121,63 @@ export async function updateStage(
     /** Move a stage entre buckets (em_andamento/falha/bem_sucedido). */
     outcome?: "em_andamento" | "falha" | "bem_sucedido";
   },
-) {
-  const { supabase, orgId } = await requireRole("admin");
-  await updateStageShared({ db: supabase, orgId }, stageId, {
-    name: data.name,
-    color: data.color,
-    sortOrder: data.sort_order,
-    description: data.description,
-    outcome: data.outcome,
-  });
-  revalidatePath("/crm");
-  revalidatePath("/crm/settings");
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    await updateStageShared({ db: supabase, orgId }, stageId, {
+      name: data.name,
+      color: data.color,
+      sortOrder: data.sort_order,
+      description: data.description,
+      outcome: data.outcome,
+    });
+    revalidatePath("/crm");
+    revalidatePath("/crm/settings");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível atualizar a etapa.") };
+  }
 }
 
-export async function deleteStage(stageId: string) {
-  const { supabase, orgId } = await requireRole("admin");
-  await deleteStageShared({ db: supabase, orgId }, stageId);
-  revalidatePath("/crm");
-  revalidatePath("/crm/settings");
+export async function deleteStage(stageId: string): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    await deleteStageShared({ db: supabase, orgId }, stageId);
+    revalidatePath("/crm");
+    revalidatePath("/crm/settings");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível excluir a etapa.") };
+  }
 }
 
-export async function updatePipelineName(pipelineId: string, name: string) {
-  const { supabase, orgId } = await requireRole("admin");
-  await updatePipelineNameShared({ db: supabase, orgId }, pipelineId, name);
-  revalidatePath("/crm");
-  revalidatePath("/crm/settings");
+export async function updatePipelineName(
+  pipelineId: string,
+  name: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    await updatePipelineNameShared({ db: supabase, orgId }, pipelineId, name);
+    revalidatePath("/crm");
+    revalidatePath("/crm/settings");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível renomear o funil.") };
+  }
 }
 
-export async function deletePipeline(pipelineId: string) {
-  const { supabase, orgId } = await requireRole("admin");
-  await deletePipelineShared({ db: supabase, orgId }, pipelineId);
-  revalidatePath("/crm");
-  revalidatePath("/crm/settings");
+export async function deletePipeline(
+  pipelineId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    await deletePipelineShared({ db: supabase, orgId }, pipelineId);
+    revalidatePath("/crm");
+    revalidatePath("/crm/settings");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível excluir o funil.") };
+  }
 }
 
 // ============ DEALS ============
