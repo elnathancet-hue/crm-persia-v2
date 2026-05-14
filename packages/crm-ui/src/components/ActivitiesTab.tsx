@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import type { OrgActivityRow } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import { EmptyState } from "@persia/ui/empty-state";
+import { RelativeTime, formatRelativeShortPtBR } from "@persia/ui";
 
 /** Resultado paginado vindo do server action. Mesma shape do
  *  ListOrgActivitiesOptions/OrgActivitiesResult do @persia/shared/crm,
@@ -221,25 +222,9 @@ function getTypeMeta(type: string) {
   );
 }
 
-// Formata "ha X minutos / horas / dias" pra timestamps recentes,
-// fallback pra data PT-BR.
-function formatRelative(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const min = Math.floor(diffMs / 60000);
-  if (min < 1) return "agora";
-  if (min < 60) return `há ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `há ${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `há ${d}d`;
-  return date.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "short",
-    year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
-  });
-}
+// Sprint 3c: formatRelative local removido. Usa
+// <RelativeTime formatter={formatRelativeShortPtBR} /> do @persia/ui
+// pra evitar React #418 (hydration mismatch).
 
 export function ActivitiesTab({
   initialActivities,
@@ -406,22 +391,15 @@ export function ActivitiesTab({
                         </div>
                       )}
                     </div>
-                    {/* PR-B8: suppressHydrationWarning — formatRelative
-                        usa Date.now() inline, divergindo SSR/CSR
-                        (cada atividade = 1 React error #418). Inocuo
-                        ("agora", "há 5 min") — tooltip mostra a data
-                        absoluta pra precisao. */}
-                    <span
-                      suppressHydrationWarning
+                    {/* Sprint 3c: RelativeTime resolve React #418 — SSR
+                        mostra data absoluta, CSR troca pro relativo apos
+                        mount. O title vem do proprio component. */}
+                    <RelativeTime
+                      iso={item.created_at}
+                      formatter={formatRelativeShortPtBR}
                       className="shrink-0 text-[11px] font-medium text-muted-foreground"
-                      title={
-                        item.created_at
-                          ? new Date(item.created_at).toLocaleString("pt-BR")
-                          : undefined
-                      }
-                    >
-                      {formatRelative(item.created_at)}
-                    </span>
+                      fallback=""
+                    />
                   </div>
                 </div>
               </li>

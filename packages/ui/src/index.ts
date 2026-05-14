@@ -27,6 +27,7 @@ export {
 } from "./hooks/use-optimistic-list";
 export {
   RelativeTime,
+  formatRelativeShortPtBR,
   type RelativeTimeProps,
 } from "./components/relative-time";
 // -------------------------------------------------------------------------

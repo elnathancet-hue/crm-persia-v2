@@ -36,7 +36,11 @@ import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
-import { useDialogMutation } from "@persia/ui";
+import {
+  useDialogMutation,
+  RelativeTime,
+  formatRelativeShortPtBR,
+} from "@persia/ui";
 import {
   Sheet,
   SheetContent,
@@ -1418,9 +1422,16 @@ function LeadStatsCards({
         detail={
           stats && stats.conversations.count > 0
             ? stats.conversations.last_message_at
-              ? `Última msg: ${formatRelativeShort(
-                  stats.conversations.last_message_at,
-                )}`
+              ? (
+                  <>
+                    Última msg:{" "}
+                    <RelativeTime
+                      iso={stats.conversations.last_message_at}
+                      formatter={formatRelativeShortPtBR}
+                      fallback=""
+                    />
+                  </>
+                )
               : "Sem mensagens ainda"
             : stats
             ? "Nenhuma conversa"
@@ -1456,7 +1467,8 @@ function StatCard({
   icon: React.ReactNode;
   label: string;
   primary: string;
-  detail: string;
+  /** Sprint 3c: aceita ReactNode pra acomodar <RelativeTime />. */
+  detail: React.ReactNode;
   accentClass: string;
   loading: boolean;
 }) {
@@ -1476,14 +1488,9 @@ function StatCard({
           <div className={`text-lg font-bold tabular-nums ${accentClass}`}>
             {primary}
           </div>
-          {/* PR-B8: suppressHydrationWarning — `detail` pode conter
-              tempo relativo (ex: "Última msg: 7d") computado com
-              Date.now() no caller. Sem o suppress, gera React #418
-              (3 stat cards renderizados = 3 mismatches potenciais). */}
-          <div
-            suppressHydrationWarning
-            className="text-[11px] text-muted-foreground truncate"
-          >
+          {/* Sprint 3c: detail ja vem com <RelativeTime /> quando precisa
+              de tempo relativo. SuppressHydrationWarning nao precisa mais. */}
+          <div className="text-[11px] text-muted-foreground truncate">
             {detail}
           </div>
         </>
@@ -1501,19 +1508,7 @@ function formatBRL(value: number): string {
   });
 }
 
-function formatRelativeShort(iso: string): string {
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "agora";
-  if (min < 60) return `${min}m`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h`;
-  const day = Math.floor(hr / 24);
-  if (day < 30) return `${day}d`;
-  const month = Math.floor(day / 30);
-  return `${month}mes`;
-}
+// Sprint 3c: formatRelativeShort local removido — usa formatRelativeShortPtBR do @persia/ui.
 
 function humanizeDealStatus(status: string): string {
   const map: Record<string, string> = {
@@ -1710,14 +1705,14 @@ function DealCard({ deal }: { deal: LeadDealItem }) {
         )}
       </div>
 
-      {/* Footer: criado ha X.
-          PR-B8: suppressHydrationWarning — formatRelativeShort usa
-          Date.now() inline. Vide KanbanBoard pra contexto. */}
-      <p
-        suppressHydrationWarning
-        className="mt-2 text-[10px] text-muted-foreground/70 tabular-nums"
-      >
-        Criado {formatRelativeShort(deal.created_at)}
+      {/* Sprint 3c: Criado ha X com <RelativeTime /> SSR-safe (sem #418). */}
+      <p className="mt-2 text-[10px] text-muted-foreground/70 tabular-nums">
+        Criado{" "}
+        <RelativeTime
+          iso={deal.created_at}
+          formatter={formatRelativeShortPtBR}
+          fallback=""
+        />
       </p>
     </a>
   );
