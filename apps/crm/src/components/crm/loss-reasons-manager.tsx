@@ -322,6 +322,7 @@ function ReasonFormDialog({
             </Label>
             <Input
               id="reason-label"
+              name="loss_reason_label"
               autoFocus
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -360,6 +361,7 @@ function ReasonFormDialog({
             </Label>
             <Input
               id="reason-order"
+              name="loss_reason_order"
               type="number"
               min={0}
               value={sortOrder}
