@@ -370,15 +370,26 @@ export async function ensureDefaultPipeline() {
  * (activity log + onStageChanged + sync UAZAPI) — operacao em massa
  * usa update plano. Pra side-effects, mover individualmente.
  */
-export async function bulkMoveDeals(dealIds: string[], stageId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  const result = await bulkMoveDealsToStageShared(
-    { db: supabase, orgId },
-    dealIds,
-    stageId,
-  );
-  revalidatePath("/crm");
-  return result;
+// Sprint 7: 4 bulks migram pra ActionResult — antes lancavam em
+// erro (tela branca quando bulk falhava por validacao do shared).
+export async function bulkMoveDeals(
+  dealIds: string[],
+  stageId: string,
+): Promise<ActionResult<{ moved_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const result = await bulkMoveDealsToStageShared(
+      { db: supabase, orgId },
+      dealIds,
+      stageId,
+    );
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return {
+      error: asErrorMessage(err, "Não foi possível mover os negócios."),
+    };
+  }
 }
 
 /**
@@ -388,15 +399,21 @@ export async function bulkMoveDeals(dealIds: string[], stageId: string) {
 export async function bulkSetDealStatus(
   dealIds: string[],
   status: "open" | "won" | "lost",
-) {
-  const { supabase, orgId } = await requireRole("agent");
-  const result = await bulkUpdateDealStatusShared(
-    { db: supabase, orgId },
-    dealIds,
-    status,
-  );
-  revalidatePath("/crm");
-  return result;
+): Promise<ActionResult<{ updated_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const result = await bulkUpdateDealStatusShared(
+      { db: supabase, orgId },
+      dealIds,
+      status,
+    );
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return {
+      error: asErrorMessage(err, "Não foi possível atualizar os negócios."),
+    };
+  }
 }
 
 /**
@@ -404,14 +421,22 @@ export async function bulkSetDealStatus(
  * `admin` (era `agent`) — agentes regulares nao deletam em massa.
  * Pra excluir 1 deal individual, continua via deleteDeal (agent).
  */
-export async function bulkRemoveDeals(dealIds: string[]) {
-  const { supabase, orgId } = await requireRole("admin");
-  const result = await bulkDeleteDealsShared(
-    { db: supabase, orgId },
-    dealIds,
-  );
-  revalidatePath("/crm");
-  return result;
+export async function bulkRemoveDeals(
+  dealIds: string[],
+): Promise<ActionResult<{ deleted_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    const result = await bulkDeleteDealsShared(
+      { db: supabase, orgId },
+      dealIds,
+    );
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return {
+      error: asErrorMessage(err, "Não foi possível excluir os negócios."),
+    };
+  }
 }
 
 /**
@@ -421,15 +446,21 @@ export async function bulkRemoveDeals(dealIds: string[]) {
 export async function bulkApplyTagsToDeals(
   dealIds: string[],
   tagIds: string[],
-) {
-  const { supabase, orgId } = await requireRole("agent");
-  const result = await bulkApplyTagsShared(
-    { db: supabase, orgId },
-    dealIds,
-    tagIds,
-  );
-  revalidatePath("/crm");
-  return result;
+): Promise<ActionResult<{ leads_count: number; links_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const result = await bulkApplyTagsShared(
+      { db: supabase, orgId },
+      dealIds,
+      tagIds,
+    );
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return {
+      error: asErrorMessage(err, "Não foi possível aplicar as tags."),
+    };
+  }
 }
 
 // ============ LOSS TRACKING (PR-K3) ============
@@ -447,13 +478,21 @@ export async function getLossReasons() {
  * Marca um deal como perdido capturando motivo + concorrente + nota
  * pra analytics. Atualiza status='lost' + closed_at + colunas loss.
  */
+// Sprint 7: markDealAsLost + bulkMarkDealsAsLost migram pra ActionResult.
 export async function markDealAsLost(
   dealId: string,
   input: MarkDealAsLostInput,
-) {
-  const { supabase, orgId } = await requireRole("agent");
-  await markDealAsLostShared({ db: supabase, orgId }, dealId, input);
-  revalidatePath("/crm");
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    await markDealAsLostShared({ db: supabase, orgId }, dealId, input);
+    revalidatePath("/crm");
+    return;
+  } catch (err) {
+    return {
+      error: asErrorMessage(err, "Não foi possível marcar o negócio como perdido."),
+    };
+  }
 }
 
 /**
@@ -466,15 +505,21 @@ export async function markDealAsLost(
 export async function bulkMarkDealsAsLost(
   dealIds: string[],
   input: MarkDealAsLostInput,
-) {
-  const { supabase, orgId } = await requireRole("admin");
-  const result = await bulkMarkDealsAsLostShared(
-    { db: supabase, orgId },
-    dealIds,
-    input,
-  );
-  revalidatePath("/crm");
-  return result;
+): Promise<ActionResult<{ updated_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    const result = await bulkMarkDealsAsLostShared(
+      { db: supabase, orgId },
+      dealIds,
+      input,
+    );
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return {
+      error: asErrorMessage(err, "Não foi possível marcar os negócios como perdidos."),
+    };
+  }
 }
 
 // ============ LOSS REASONS CRUD (PR-K4) ============
