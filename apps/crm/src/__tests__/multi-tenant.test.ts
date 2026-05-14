@@ -200,9 +200,9 @@ describe("leads — every query scopes by caller's organization_id", () => {
     // lead lookup returns null — scoped select can't find foreign lead
     supabase.queue("leads", { data: null, error: null });
 
-    await expect(addTagToLead("lead-foreign", "tag-1")).rejects.toThrow(
-      /n[aã]o encontrado/i,
-    );
+    // Sprint 3d: retorna ActionResult.error em vez de throw.
+    const res = await addTagToLead("lead-foreign", "tag-1");
+    expect(res).toEqual({ error: expect.stringMatching(/n[aã]o encontrado/i) });
     // Never reached the insert
     expect(supabase.inserts.lead_tags).toBeUndefined();
   });
@@ -213,9 +213,8 @@ describe("leads — every query scopes by caller's organization_id", () => {
     supabase.queue("leads", { data: { id: "l1" }, error: null });
     supabase.queue("tags", { data: null, error: null }); // foreign tag
 
-    await expect(addTagToLead("l1", "tag-foreign")).rejects.toThrow(
-      /n[aã]o encontrada/i,
-    );
+    const res = await addTagToLead("l1", "tag-foreign");
+    expect(res).toEqual({ error: expect.stringMatching(/n[aã]o encontrada/i) });
     expect(supabase.inserts.lead_tags).toBeUndefined();
   });
 });

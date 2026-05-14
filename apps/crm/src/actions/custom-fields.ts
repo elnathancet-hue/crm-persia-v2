@@ -124,19 +124,29 @@ export async function getLeadCustomFields(
   return fetchLeadCustomFields({ db: supabase, orgId }, leadId);
 }
 
+// Sprint 3d: migra pra ActionResult.
 export async function setLeadCustomFieldValue(
   leadId: string,
   customFieldId: string,
   value: string,
-): Promise<{ success: boolean }> {
-  const { supabase, orgId } = await requireRole("agent");
-  const result = await upsertLeadCustomFieldValue(
-    { db: supabase, orgId },
-    leadId,
-    customFieldId,
-    value,
-  );
-  revalidatePath(`/leads/${leadId}`);
-  return result;
+): Promise<import("@persia/ui").ActionResult<{ success: boolean }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const result = await upsertLeadCustomFieldValue(
+      { db: supabase, orgId },
+      leadId,
+      customFieldId,
+      value,
+    );
+    revalidatePath(`/leads/${leadId}`);
+    return { data: result };
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível salvar o campo personalizado.",
+    };
+  }
 }
 

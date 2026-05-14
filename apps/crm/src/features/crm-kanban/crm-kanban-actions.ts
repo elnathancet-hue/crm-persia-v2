@@ -96,7 +96,13 @@ export const crmKanbanActions: KanbanActions = {
   updateDeal: (dealId, data) =>
     updateDeal(dealId, { title: data.title, value: data.value }),
   // Rich move — dispara activity log + onStageChanged + sync UAZAPI.
-  moveDealStage: (dealId, stageId) => updateDealStage(dealId, stageId),
+  // Sprint 3d: updateDealStage retorna ActionResult; abrimos o envelope
+  // pra manter o contrato Promise<void> da KanbanActions. Erros (raros)
+  // ficam silenciosos aqui — migrar KanbanActions pra ActionResult e
+  // tarefa da Sprint 3e.
+  moveDealStage: async (dealId, stageId) => {
+    await updateDealStage(dealId, stageId);
+  },
   deleteDeal: (dealId) => deleteDeal(dealId),
 
   // ============ BULK (PR-K2) ============
@@ -121,6 +127,8 @@ export const crmKanbanActions: KanbanActions = {
   assignLead: async (leadId, userId) => {
     await assignLead(leadId, userId);
   },
+  // Sprint 3d: actions retornam ActionResult; mantemos contrato void
+  // do KanbanActions (migra na Sprint 3e).
   addTagToLead: async (leadId, tagId) => {
     await addTagToLead(leadId, tagId);
   },

@@ -182,7 +182,7 @@ describe("deleteLead", () => {
 });
 
 describe("addTagToLead", () => {
-  it("swallows duplicate errors (23505)", async () => {
+  it("swallows duplicate errors (23505) and returns void success", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
     supabase.queue("leads", { data: { id: "l1" }, error: null });
@@ -191,10 +191,11 @@ describe("addTagToLead", () => {
       data: null,
       error: { message: "duplicate", code: "23505" },
     });
+    // Sprint 3d: action retorna ActionResult; sucesso silencioso = void/undefined.
     await expect(addTagToLead("l1", "t1")).resolves.toBeUndefined();
   });
 
-  it("throws on other errors", async () => {
+  it("returns ActionResult error on non-duplicate errors", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
     supabase.queue("leads", { data: { id: "l1" }, error: null });
@@ -203,6 +204,8 @@ describe("addTagToLead", () => {
       data: null,
       error: { message: "something", code: "23502" },
     });
-    await expect(addTagToLead("l1", "t1")).rejects.toThrow(/something/);
+    // Sprint 3d: nao lanca mais — retorna { error }.
+    const res = await addTagToLead("l1", "t1");
+    expect(res).toEqual({ error: expect.stringMatching(/something/) });
   });
 });

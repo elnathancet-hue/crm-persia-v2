@@ -47,36 +47,47 @@ export async function getLeadOpenDealWithStages(
   return findLeadOpenDealWithStages({ db: admin, orgId }, leadId);
 }
 
+// Sprint 3d: migra pra ActionResult — antes lancava em erro.
 export async function updateDealStage(
   dealId: string,
   stageId: string,
-): Promise<void> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const supabase = admin as unknown as SupabaseClient;
+): Promise<import("@persia/ui").ActionResult<void>> {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const supabase = admin as unknown as SupabaseClient;
 
-  // Defesa: confirma deal pertence ao org
-  const { data: deal } = await supabase
-    .from("deals")
-    .select("id, pipeline_id")
-    .eq("id", dealId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!deal) throw new Error("Deal não encontrado");
+    // Defesa: confirma deal pertence ao org
+    const { data: deal } = await supabase
+      .from("deals")
+      .select("id, pipeline_id")
+      .eq("id", dealId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!deal) return { error: "Negócio não encontrado nesta organização." };
 
-  // Defesa: confirma stage pertence ao mesmo pipeline
-  const { data: stage } = await supabase
-    .from("pipeline_stages")
-    .select("id")
-    .eq("id", stageId)
-    .eq("pipeline_id", deal.pipeline_id)
-    .maybeSingle();
-  if (!stage) throw new Error("Etapa não encontrada neste funil");
+    // Defesa: confirma stage pertence ao mesmo pipeline
+    const { data: stage } = await supabase
+      .from("pipeline_stages")
+      .select("id")
+      .eq("id", stageId)
+      .eq("pipeline_id", deal.pipeline_id)
+      .maybeSingle();
+    if (!stage) return { error: "Etapa não encontrada neste funil." };
 
-  const { error } = await supabase
-    .from("deals")
-    .update({ stage_id: stageId })
-    .eq("id", dealId);
-  if (error) throw new Error(error.message);
+    const { error } = await supabase
+      .from("deals")
+      .update({ stage_id: stageId })
+      .eq("id", dealId);
+    if (error) return { error: error.message };
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível mover o negócio.",
+    };
+  }
 }
 
 export async function getLeadCustomFields(
@@ -86,18 +97,29 @@ export async function getLeadCustomFields(
   return fetchLeadCustomFields({ db: admin, orgId }, leadId);
 }
 
+// Sprint 3d: migra pra ActionResult.
 export async function setLeadCustomFieldValue(
   leadId: string,
   customFieldId: string,
   value: string,
-): Promise<{ success: boolean }> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  return upsertLeadCustomFieldValue(
-    { db: admin, orgId },
-    leadId,
-    customFieldId,
-    value,
-  );
+): Promise<import("@persia/ui").ActionResult<{ success: boolean }>> {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const result = await upsertLeadCustomFieldValue(
+      { db: admin, orgId },
+      leadId,
+      customFieldId,
+      value,
+    );
+    return { data: result };
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível salvar o campo personalizado.",
+    };
+  }
 }
 
 export async function findOrCreateConversationByLead(
@@ -162,64 +184,85 @@ export async function deleteLeadForDrawer(
   }
 }
 
+// Sprint 3d: migra pra ActionResult — antes lancavam em erro.
 export async function addTagToLeadForDrawer(
   leadId: string,
   tagId: string,
-): Promise<void> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const supabase = admin as unknown as SupabaseClient;
+): Promise<import("@persia/ui").ActionResult<void>> {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const supabase = admin as unknown as SupabaseClient;
 
-  // Defesa: lead + tag do mesmo org
-  const [{ data: lead }, { data: tag }] = await Promise.all([
-    supabase
-      .from("leads")
-      .select("id")
-      .eq("id", leadId)
-      .eq("organization_id", orgId)
-      .maybeSingle(),
-    supabase
-      .from("tags")
-      .select("id")
-      .eq("id", tagId)
-      .eq("organization_id", orgId)
-      .maybeSingle(),
-  ]);
-  if (!lead) throw new Error("Lead não encontrado nesta organização");
-  if (!tag) throw new Error("Tag não encontrada nesta organização");
+    // Defesa: lead + tag do mesmo org
+    const [{ data: lead }, { data: tag }] = await Promise.all([
+      supabase
+        .from("leads")
+        .select("id")
+        .eq("id", leadId)
+        .eq("organization_id", orgId)
+        .maybeSingle(),
+      supabase
+        .from("tags")
+        .select("id")
+        .eq("id", tagId)
+        .eq("organization_id", orgId)
+        .maybeSingle(),
+    ]);
+    if (!lead) return { error: "Lead não encontrado nesta organização." };
+    if (!tag) return { error: "Tag não encontrada nesta organização." };
 
-  const { error } = await supabase
-    .from("lead_tags")
-    .insert({ lead_id: leadId, tag_id: tagId })
-    .select("lead_id")
-    .maybeSingle();
-  // ignore unique violation (tag ja atribuida) — outros erros throw
-  if (error && error.code !== "23505") {
-    throw new Error(error.message);
+    const { error } = await supabase
+      .from("lead_tags")
+      .insert({ lead_id: leadId, tag_id: tagId })
+      .select("lead_id")
+      .maybeSingle();
+    // unique violation (tag ja atribuida) e tratada como sucesso silencioso
+    if (error && error.code !== "23505") {
+      return { error: error.message };
+    }
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível adicionar a tag.",
+    };
   }
 }
 
 export async function removeTagFromLeadForDrawer(
   leadId: string,
   tagId: string,
-): Promise<void> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const supabase = admin as unknown as SupabaseClient;
+): Promise<import("@persia/ui").ActionResult<void>> {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const supabase = admin as unknown as SupabaseClient;
 
-  // Defesa: lead pertence ao org
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id")
-    .eq("id", leadId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!lead) throw new Error("Lead não encontrado nesta organização");
+    // Defesa: lead pertence ao org
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("id", leadId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!lead) return { error: "Lead não encontrado nesta organização." };
 
-  const { error } = await supabase
-    .from("lead_tags")
-    .delete()
-    .eq("lead_id", leadId)
-    .eq("tag_id", tagId);
-  if (error) throw new Error(error.message);
+    const { error } = await supabase
+      .from("lead_tags")
+      .delete()
+      .eq("lead_id", leadId)
+      .eq("tag_id", tagId);
+    if (error) return { error: error.message };
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível remover a tag.",
+    };
+  }
 }
 
 // === Agent handoff: normalizar signature (admin pega orgId do cookie,

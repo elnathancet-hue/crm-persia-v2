@@ -210,28 +210,44 @@ export async function createLeadWithDeal(input: CreateLeadWithDealInput) {
   return { lead, deal };
 }
 
-export async function updateDealStage(dealId: string, stageId: string) {
-  const { supabase, orgId } = await requireRole("agent");
+// Sprint 3d: migra pra ActionResult — antes lancava em erro.
+export async function updateDealStage(
+  dealId: string,
+  stageId: string,
+): Promise<import("@persia/ui").ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
 
-  // Movimentacao "rica" — passa por moveDealToStage que tambem dispara
-  // activity log + onStageChanged flows + sync UAZAPI. NAO usa
-  // moveDealKanban (que e versao leve so pra drag-drop).
-  const { moveDealToStage } = await import("@/lib/crm/move-deal");
-  const result = await moveDealToStage({
-    dealId,
-    stageId,
-    orgId,
-    source: "manual",
-    supabase,
-  });
+    // Movimentacao "rica" — passa por moveDealToStage que tambem dispara
+    // activity log + onStageChanged flows + sync UAZAPI. NAO usa
+    // moveDealKanban (que e versao leve so pra drag-drop).
+    const { moveDealToStage } = await import("@/lib/crm/move-deal");
+    const result = await moveDealToStage({
+      dealId,
+      stageId,
+      orgId,
+      source: "manual",
+      supabase,
+    });
 
-  if (!result.ok) throw new Error(result.error || "Erro ao mover deal");
+    if (!result.ok) {
+      return { error: result.error || "Não foi possível mover o negócio." };
+    }
 
-  // PR-K LEAD-SYNC: deal mudou de etapa -> tab Leads pode mudar
-  // (status do lead pode ter sido atualizado, ou colunas Negocios/
-  // Etapa atual no drawer/lista refletem). Antes deste PR, so /crm
-  // revalidava — Tab Leads ficava desync.
-  await revalidateLeadCaches();
+    // PR-K LEAD-SYNC: deal mudou de etapa -> tab Leads pode mudar
+    // (status do lead pode ter sido atualizado, ou colunas Negocios/
+    // Etapa atual no drawer/lista refletem). Antes deste PR, so /crm
+    // revalidava — Tab Leads ficava desync.
+    await revalidateLeadCaches();
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível mover o negócio.",
+    };
+  }
 }
 
 export async function updateDeal(
