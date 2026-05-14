@@ -229,23 +229,41 @@ export interface LeadsActions {
     leadId: string,
   ) => Promise<LeadOpenDealWithStages | null>;
 
-  /** Move um deal pra outra stage (popover acao). */
-  updateDealStage?: (dealId: string, stageId: string) => Promise<void>;
+  /**
+   * Move um deal pra outra stage (popover acao).
+   * Sprint 3d: migrado pra ActionResult.
+   */
+  updateDealStage?: (
+    dealId: string,
+    stageId: string,
+  ) => Promise<ActionResult<void>>;
 
-  /** Tags inline no drawer/detail (add/remove). */
-  addTagToLead?: (leadId: string, tagId: string) => Promise<void>;
-  removeTagFromLead?: (leadId: string, tagId: string) => Promise<void>;
+  /**
+   * Tags inline no drawer/detail (add/remove).
+   * Sprint 3d: migrado pra ActionResult.
+   */
+  addTagToLead?: (
+    leadId: string,
+    tagId: string,
+  ) => Promise<ActionResult<void>>;
+  removeTagFromLead?: (
+    leadId: string,
+    tagId: string,
+  ) => Promise<ActionResult<void>>;
 
   /** Campos personalizados por lead (tab Campos). */
   getLeadCustomFields?: (
     leadId: string,
   ) => Promise<LeadCustomFieldEntry[]>;
-  /** Salva valor TEXT de campo custom. Vazio = remove. */
+  /**
+   * Salva valor TEXT de campo custom. Vazio = remove.
+   * Sprint 3d: migrado pra ActionResult.
+   */
   setLeadCustomFieldValue?: (
     leadId: string,
     fieldId: string,
     value: string,
-  ) => Promise<{ success: boolean }>;
+  ) => Promise<ActionResult<{ success: boolean }>>;
 
   /** Cria ou encontra conversa do lead (botao "Abrir conversa"). */
   findOrCreateConversationByLead?: (

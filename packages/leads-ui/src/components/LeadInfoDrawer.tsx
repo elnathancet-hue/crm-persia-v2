@@ -268,38 +268,40 @@ export function LeadInfoDrawer({
     };
   }, [open, actions, orgTags.length]);
 
+  // Sprint 3d: actions agora retornam ActionResult { data, error } | void.
+  // tagPending continua sendo por-tag pra UI (loading state na chip),
+  // entao useDialogMutation nao seria ideal aqui — manter try com
+  // checagem de result.error.
   async function handleAddTag(tagId: string) {
     if (!actions.addTagToLead || tagPending) return;
     setTagPending(tagId);
-    try {
-      await actions.addTagToLead(lead.id, tagId);
-      toast.success("Tag adicionada", { id: `lead-${lead.id}-tag-${tagId}` });
-      onSaved?.({});
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Erro ao adicionar tag",
-        { id: `lead-${lead.id}-tag-${tagId}` },
-      );
-    } finally {
-      setTagPending(null);
+    const result = await actions.addTagToLead(lead.id, tagId);
+    setTagPending(null);
+    if (result && "error" in result && result.error) {
+      toast.error(result.error, { id: `lead-${lead.id}-tag-${tagId}` });
+      return;
     }
+    toast.success("Tag adicionada", {
+      id: `lead-${lead.id}-tag-${tagId}`,
+      duration: 5000,
+    });
+    onSaved?.({});
   }
 
   async function handleRemoveTag(tagId: string) {
     if (!actions.removeTagFromLead || tagPending) return;
     setTagPending(tagId);
-    try {
-      await actions.removeTagFromLead(lead.id, tagId);
-      toast.success("Tag removida", { id: `lead-${lead.id}-tag-${tagId}` });
-      onSaved?.({});
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Erro ao remover tag",
-        { id: `lead-${lead.id}-tag-${tagId}` },
-      );
-    } finally {
-      setTagPending(null);
+    const result = await actions.removeTagFromLead(lead.id, tagId);
+    setTagPending(null);
+    if (result && "error" in result && result.error) {
+      toast.error(result.error, { id: `lead-${lead.id}-tag-${tagId}` });
+      return;
     }
+    toast.success("Tag removida", {
+      id: `lead-${lead.id}-tag-${tagId}`,
+      duration: 5000,
+    });
+    onSaved?.({});
   }
 
   // Sprint 3b: mutation padronizada com useDialogMutation.
@@ -417,7 +419,10 @@ export function LeadInfoDrawer({
     };
   }, [open, lead.id, actions]);
 
-  function handleChangeStage(newStageId: string) {
+  // Sprint 3d: updateDealStage retorna ActionResult — checamos result.error
+  // e revertemos UI otimista em caso de erro. Mantemos manual em vez de
+  // useDialogMutation porque ha rollback otimista local especifico.
+  async function handleChangeStage(newStageId: string) {
     if (!currentDeal || newStageId === currentDeal.stage_id) return;
     if (!actions.updateDealStage) {
       toast.error("Ação indisponível neste app");
@@ -426,17 +431,23 @@ export function LeadInfoDrawer({
     const previousStageId = currentDeal.stage_id;
     setCurrentDeal({ ...currentDeal, stage_id: newStageId });
     setStageChangePending(true);
-    actions
-      .updateDealStage(currentDeal.id, newStageId)
-      .then(() => toast.success("Etapa atualizada"))
-      .catch((err) => {
-        // Revert
-        setCurrentDeal((prev) =>
-          prev ? { ...prev, stage_id: previousStageId } : prev,
-        );
-        toast.error(err instanceof Error ? err.message : "Erro ao mover");
-      })
-      .finally(() => setStageChangePending(false));
+    const result = await actions.updateDealStage(currentDeal.id, newStageId);
+    setStageChangePending(false);
+    if (result && "error" in result && result.error) {
+      // Revert
+      setCurrentDeal((prev) =>
+        prev ? { ...prev, stage_id: previousStageId } : prev,
+      );
+      toast.error(result.error, {
+        id: `deal-stage-${currentDeal.id}`,
+        duration: 5000,
+      });
+      return;
+    }
+    toast.success("Etapa atualizada", {
+      id: `deal-stage-${currentDeal.id}`,
+      duration: 5000,
+    });
   }
 
   // Stages agrupadas por outcome pra renderizar no Popover (3 grupos
@@ -1133,25 +1144,30 @@ function CustomFieldsTab({
       ),
     );
     setSavingFieldId(fieldId);
-    try {
-      await actions.setLeadCustomFieldValue(leadId, fieldId, newValue);
-      // Sem toast em cada save — auto-save deve ser silencioso.
-      // Se quiser feedback, mostrar dot pequeno "salvo" no field.
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Erro ao salvar campo",
-      );
+    // Sprint 3d: setLeadCustomFieldValue retorna ActionResult.
+    const result = await actions.setLeadCustomFieldValue(
+      leadId,
+      fieldId,
+      newValue,
+    );
+    setSavingFieldId(null);
+    if (result && "error" in result && result.error) {
+      toast.error(result.error, {
+        id: `custom-field-${fieldId}`,
+        duration: 5000,
+      });
       // Reload entries pra reverter o otimista que falhou
       try {
-        if (!actions.getLeadCustomFields) throw err;
-        const res = await actions.getLeadCustomFields(leadId);
-        setEntries(res);
+        if (actions.getLeadCustomFields) {
+          const res = await actions.getLeadCustomFields(leadId);
+          setEntries(res);
+        }
       } catch {
         /* swallow */
       }
-    } finally {
-      setSavingFieldId(null);
+      return;
     }
+    // Sucesso silencioso (auto-save) — sem toast no path feliz.
   }
 
   if (loading) {

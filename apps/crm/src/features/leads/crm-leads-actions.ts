@@ -75,15 +75,13 @@ export const crmLeadsActions: LeadsActions = {
   getLeadStats,
   getLeadDealsList,
   getLeadOpenDealWithStages,
-  updateDealStage: async (dealId, stageId) => {
-    // CRM action retorna mais data (UAZAPI sync etc); aqui devolve void
-    // pra alinhar com a interface (caller so precisa saber que rodou).
-    await updateDealStage(dealId, stageId);
-  },
-  addTagToLead,
-  removeTagFromLead,
+  // Sprint 3d: repasse direto — todos retornam ActionResult.
+  updateDealStage: (dealId, stageId) => updateDealStage(dealId, stageId),
+  addTagToLead: (leadId, tagId) => addTagToLead(leadId, tagId),
+  removeTagFromLead: (leadId, tagId) => removeTagFromLead(leadId, tagId),
   getLeadCustomFields,
-  setLeadCustomFieldValue,
+  setLeadCustomFieldValue: (leadId, fieldId, value) =>
+    setLeadCustomFieldValue(leadId, fieldId, value),
   findOrCreateConversationByLead,
   getLeadAgentHandoffState,
   reactivateLeadAgent: reactivateAgent,

@@ -209,43 +209,32 @@ export function LeadDetailClient({
   function handleAddTag(tagId: string) {
     if (!tagId) return;
     startAddTagTransition(async () => {
-      // PR-B7: try/catch + toast feedback. O handler anterior chamava
-      // addTagToLead sem try/catch; se a action throw (ex: RLS, lead
-      // ja com a tag, network), o erro era engolido silenciosamente —
-      // a auditoria E2E (2026-05-13, bug #22) capturou que clicar
-      // "Interessado" no combobox da pagina legacy nao persistia nem
-      // dava feedback. Toast.success/error revelam o estado real e
-      // confirmam o save (paridade com fluxo PR-B3 do drawer).
-      try {
-        await addTagToLead(lead.id, tagId);
-        setSelectedTagToAdd("");
-        router.refresh();
-        toast.success("Tag adicionada", {
-          id: `lead-${lead.id}-tag-${tagId}`,
-        });
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Erro ao adicionar tag",
-          { id: `lead-${lead.id}-tag-${tagId}` },
-        );
+      // Sprint 3d: addTagToLead retorna ActionResult { data, error } | void.
+      // Antes lancava em erro — agora caller checa result.error.
+      const result = await addTagToLead(lead.id, tagId);
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, { id: `lead-${lead.id}-tag-${tagId}` });
+        return;
       }
+      setSelectedTagToAdd("");
+      router.refresh();
+      toast.success("Tag adicionada", {
+        id: `lead-${lead.id}-tag-${tagId}`,
+      });
     });
   }
 
   function handleRemoveTag(tagId: string) {
     startAddTagTransition(async () => {
-      try {
-        await removeTagFromLead(lead.id, tagId);
-        router.refresh();
-        toast.success("Tag removida", {
-          id: `lead-${lead.id}-tag-${tagId}`,
-        });
-      } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Erro ao remover tag",
-          { id: `lead-${lead.id}-tag-${tagId}` },
-        );
+      const result = await removeTagFromLead(lead.id, tagId);
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, { id: `lead-${lead.id}-tag-${tagId}` });
+        return;
       }
+      router.refresh();
+      toast.success("Tag removida", {
+        id: `lead-${lead.id}-tag-${tagId}`,
+      });
     });
   }
 

@@ -497,26 +497,43 @@ export async function deleteLead(
   }
 }
 
-export async function addTagToLead(leadId: string, tagId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  await addTagToLeadShared(
-    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
-    leadId,
-    tagId,
-  );
-  // PR-K LEAD-SYNC: helper centralizado
-  await revalidateLeadCaches(leadId);
+// Sprint 3d: addTagToLead/removeTagFromLead migram pra ActionResult.
+export async function addTagToLead(
+  leadId: string,
+  tagId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    await addTagToLeadShared(
+      { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+      leadId,
+      tagId,
+    );
+    // PR-K LEAD-SYNC: helper centralizado
+    await revalidateLeadCaches(leadId);
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível adicionar a tag.") };
+  }
 }
 
-export async function removeTagFromLead(leadId: string, tagId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  await removeTagFromLeadShared(
-    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
-    leadId,
-    tagId,
-  );
-  // PR-K LEAD-SYNC: helper centralizado
-  await revalidateLeadCaches(leadId);
+export async function removeTagFromLead(
+  leadId: string,
+  tagId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    await removeTagFromLeadShared(
+      { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+      leadId,
+      tagId,
+    );
+    // PR-K LEAD-SYNC: helper centralizado
+    await revalidateLeadCaches(leadId);
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível remover a tag.") };
+  }
 }
 
 /**

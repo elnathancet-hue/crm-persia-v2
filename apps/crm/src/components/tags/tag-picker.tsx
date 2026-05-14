@@ -62,7 +62,9 @@ export function TagPicker({ leadId, initialTags, allTags: initialAllTags }: TagP
   async function handleAddTag(tag: Tag) {
     setLoading(true);
     try {
-      await addTagToLead(leadId, tag.id);
+      // Sprint 3d: addTagToLead retorna ActionResult.
+      const result = await addTagToLead(leadId, tag.id);
+      if (result && "error" in result && result.error) return; // silencia
       setSelectedTags((prev) => [...prev, tag]);
       setSearch("");
     } catch {
@@ -75,7 +77,8 @@ export function TagPicker({ leadId, initialTags, allTags: initialAllTags }: TagP
   async function handleRemoveTag(tagId: string) {
     setLoading(true);
     try {
-      await removeTagFromLead(leadId, tagId);
+      const result = await removeTagFromLead(leadId, tagId);
+      if (result && "error" in result && result.error) return;
       setSelectedTags((prev) => prev.filter((t) => t.id !== tagId));
     } catch {
       // silently fail
@@ -95,6 +98,7 @@ export function TagPicker({ leadId, initialTags, allTags: initialAllTags }: TagP
       if (result && "data" in result && result.data) {
         const tag = result.data as Tag;
         setAllTags((prev) => [tag, ...prev]);
+        // Sprint 3d: addTagToLead retorna ActionResult — ignora erro silenciosamente
         await addTagToLead(leadId, tag.id);
         setSelectedTags((prev) => [...prev, tag]);
         setSearch("");

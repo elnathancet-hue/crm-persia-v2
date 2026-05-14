@@ -104,26 +104,46 @@ export async function deleteTag(id: string): Promise<ActionResult<void>> {
   }
 }
 
-export async function addTagToLead(leadId: string, tagId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  await addTagToLeadShared(
-    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
-    leadId,
-    tagId,
-  );
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/crm");
+// Sprint 3d: addTagToLead/removeTagFromLead migram pra ActionResult.
+// Antes lancavam exception em erro (RLS, lead nao existe, network) — UI
+// muitas vezes nao mostrava nada porque chamadas eram inline em try/catch
+// sem feedback. Agora retornam { error: string } padronizado.
+export async function addTagToLead(
+  leadId: string,
+  tagId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    await addTagToLeadShared(
+      { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+      leadId,
+      tagId,
+    );
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${leadId}`);
+    revalidatePath("/crm");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível adicionar a tag.") };
+  }
 }
 
-export async function removeTagFromLead(leadId: string, tagId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  await removeTagFromLeadShared(
-    { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
-    leadId,
-    tagId,
-  );
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/crm");
+export async function removeTagFromLead(
+  leadId: string,
+  tagId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    await removeTagFromLeadShared(
+      { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) },
+      leadId,
+      tagId,
+    );
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${leadId}`);
+    revalidatePath("/crm");
+    return;
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível remover a tag.") };
+  }
 }
