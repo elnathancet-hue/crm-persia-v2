@@ -17,7 +17,11 @@ import { Badge } from "@persia/ui/badge";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Checkbox } from "@persia/ui/checkbox";
-import { RelativeTime, formatRelativeShortPtBR } from "@persia/ui";
+import {
+  RelativeTime,
+  formatRelativeShortPtBR,
+  type ActionResult,
+} from "@persia/ui";
 import {
   Dialog,
   DialogContent,
@@ -823,63 +827,85 @@ export function KanbanBoard({
   /**
    * Submit do MarkAsLostDialog — single ou bulk dependendo do mode.
    * Setado no lossTarget.
+   * Sprint 7: actions retornam ActionResult — checa result.error e
+   * exibe toast PT-BR vindo do server.
    */
   async function submitLoss(input: MarkAsLostInput) {
     if (!lossTarget) return;
     setLossPending(true);
-    try {
-      if (lossTarget.mode === "single") {
-        if (!actions.markDealAsLost) {
-          throw new Error("Acao indisponivel");
-        }
-        await actions.markDealAsLost(lossTarget.dealId, input);
-        setLocalDeals((prev) =>
-          prev.map((d) =>
-            d.id === lossTarget.dealId
-              ? {
-                  ...d,
-                  status: "lost",
-                  loss_reason: input.loss_reason,
-                  competitor: input.competitor ?? null,
-                  loss_note: input.loss_note ?? null,
-                }
-              : d,
-          ),
-        );
-        toast.success("Negocio marcado como perdido");
-      } else {
-        if (!actions.bulkMarkDealsAsLost) {
-          throw new Error("Acao em massa indisponivel");
-        }
-        const res = await actions.bulkMarkDealsAsLost(
-          lossTarget.dealIds,
-          input,
-        );
-        setLocalDeals((prev) =>
-          prev.map((d) =>
-            lossTarget.dealIds.includes(d.id)
-              ? {
-                  ...d,
-                  status: "lost",
-                  loss_reason: input.loss_reason,
-                  competitor: input.competitor ?? null,
-                  loss_note: input.loss_note ?? null,
-                }
-              : d,
-          ),
-        );
-        clearSelection();
-        toast.success(
-          `${res.updated_count} negócio${res.updated_count === 1 ? "" : "s"} marcado${res.updated_count === 1 ? "" : "s"} como perdido${res.updated_count === 1 ? "" : "s"}`,
-        );
+    if (lossTarget.mode === "single") {
+      if (!actions.markDealAsLost) {
+        toast.error("Ação indisponível");
+        setLossPending(false);
+        return;
       }
-      setLossTarget(null);
-      onChange?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao marcar perda");
-    } finally {
+      const result = await actions.markDealAsLost(lossTarget.dealId, input);
       setLossPending(false);
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, {
+          id: `deal-loss-${lossTarget.dealId}`,
+          duration: 5000,
+        });
+        return;
+      }
+      setLocalDeals((prev) =>
+        prev.map((d) =>
+          d.id === lossTarget.dealId
+            ? {
+                ...d,
+                status: "lost",
+                loss_reason: input.loss_reason,
+                competitor: input.competitor ?? null,
+                loss_note: input.loss_note ?? null,
+              }
+            : d,
+        ),
+      );
+      toast.success("Negócio marcado como perdido", {
+        id: `deal-loss-${lossTarget.dealId}`,
+        duration: 5000,
+      });
+    } else {
+      if (!actions.bulkMarkDealsAsLost) {
+        toast.error("Ação em massa indisponível");
+        setLossPending(false);
+        return;
+      }
+      const result = await actions.bulkMarkDealsAsLost(
+        lossTarget.dealIds,
+        input,
+      );
+      setLossPending(false);
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, {
+          id: "kanban-bulk-loss",
+          duration: 5000,
+        });
+        return;
+      }
+      const updatedCount =
+        result && "data" in result ? result.data!.updated_count : 0;
+      setLocalDeals((prev) =>
+        prev.map((d) =>
+          lossTarget.dealIds.includes(d.id)
+            ? {
+                ...d,
+                status: "lost",
+                loss_reason: input.loss_reason,
+                competitor: input.competitor ?? null,
+                loss_note: input.loss_note ?? null,
+              }
+            : d,
+        ),
+      );
+      clearSelection();
+      toast.success(
+        `${updatedCount} negócio${updatedCount === 1 ? "" : "s"} marcado${updatedCount === 1 ? "" : "s"} como perdido${updatedCount === 1 ? "" : "s"}`,
+        { id: "kanban-bulk-loss", duration: 5000 },
+      );
     }
+    setLossTarget(null);
+    onChange?.();
   }
 
   function handleDeleteDeal(dealId: string) {
@@ -918,16 +944,13 @@ export function KanbanBoard({
   const selectedCount = selectedIds.size;
 
   /**
-   * PR-AUDX: runBulk agora aceita um optimistic update OPCIONAL com
-   * revert. Antes os handlers aplicavam setLocalDeals depois do
-   * `runBulk(...)`, mesmo se falhasse — UI ficava inconsistente
-   * (cards na coluna errada ate o re-fetch do pai). Agora:
-   *   1. snapshot do estado anterior
-   *   2. optimisticUpdate aplicado ANTES do op()
-   *   3. se op() throw, restaura snapshot
+   * PR-AUDX: optimistic update com revert.
+   * Sprint 7: server actions retornam ActionResult em vez de lancar.
+   * Se result.error, reverte snapshot e mostra toast.error com mensagem
+   * PT-BR vinda do server.
    */
   async function runBulk<T>(
-    op: () => Promise<T>,
+    op: () => Promise<ActionResult<T>>,
     successMsg: (res: T) => string,
     optimisticUpdate?: (prev: Deal[]) => Deal[],
   ) {
@@ -946,18 +969,25 @@ export function KanbanBoard({
       });
     }
     setBulkPending(true);
-    try {
-      const res = await op();
-      toast.success(successMsg(res));
-      clearSelection();
-      onChange?.();
-    } catch (err) {
+    const result = await op();
+    setBulkPending(false);
+    if (result && "error" in result && result.error) {
       // Reverte UI antes de avisar o usuario.
       if (snapshot !== null) setLocalDeals(snapshot);
-      toast.error(err instanceof Error ? err.message : "Falha na operacao");
-    } finally {
-      setBulkPending(false);
+      toast.error(result.error, {
+        id: "kanban-bulk",
+        duration: 5000,
+      });
+      return;
     }
+    const data =
+      result && "data" in result ? (result.data as T) : (undefined as T);
+    toast.success(successMsg(data), {
+      id: "kanban-bulk",
+      duration: 5000,
+    });
+    clearSelection();
+    onChange?.();
   }
 
   async function handleBulkMove(stageId: string) {

@@ -139,37 +139,42 @@ export interface KanbanActions {
    * Bulk operations (PR-K2). Opcionais — admin pode nao implementar
    * (apenas CRM tem UI de selecao multipla por enquanto).
    * Cada metodo tem cap de 200 itens por chamada no shared.
+   *
+   * Sprint 7: migrados pra ActionResult — antes lancavam em erro,
+   * causando tela branca quando bulk falhava por validacao (ex:
+   * mais de 200 itens, deals fora do org, etc).
    */
   bulkMoveDeals?: (
     dealIds: string[],
     stageId: string,
-  ) => Promise<{ moved_count: number }>;
+  ) => Promise<ActionResult<{ moved_count: number }>>;
   bulkSetDealStatus?: (
     dealIds: string[],
     status: "open" | "won" | "lost",
-  ) => Promise<{ updated_count: number }>;
+  ) => Promise<ActionResult<{ updated_count: number }>>;
   bulkDeleteDeals?: (
     dealIds: string[],
-  ) => Promise<{ deleted_count: number }>;
+  ) => Promise<ActionResult<{ deleted_count: number }>>;
   bulkApplyTagsToDeals?: (
     dealIds: string[],
     tagIds: string[],
-  ) => Promise<{ leads_count: number; links_count: number }>;
+  ) => Promise<ActionResult<{ leads_count: number; links_count: number }>>;
 
   /**
    * Loss tracking (PR-K3) — substitui setStatus(lost) capturando
    * motivo + concorrente + nota pra analytics. Opcional (admin nao
    * implementa por enquanto).
+   * Sprint 7: markDealAsLost + bulkMarkDealsAsLost migrados pra ActionResult.
    */
   getLossReasons?: () => Promise<DealLossReason[]>;
   markDealAsLost?: (
     dealId: string,
     input: MarkAsLostInput,
-  ) => Promise<void>;
+  ) => Promise<ActionResult<void>>;
   bulkMarkDealsAsLost?: (
     dealIds: string[],
     input: MarkAsLostInput,
-  ) => Promise<{ updated_count: number }>;
+  ) => Promise<ActionResult<{ updated_count: number }>>;
 
   /**
    * PR-C: card connections — atribui responsavel + add/remove tag +
