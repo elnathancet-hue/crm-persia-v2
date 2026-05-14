@@ -245,6 +245,9 @@ importers:
         specifier: ^5.0.12
         version: 5.0.12(@types/react@19.2.14)(immer@11.1.4)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
     devDependencies:
+      '@persia/eslint-plugin':
+        specifier: workspace:*
+        version: link:../../packages/eslint-plugin-persia
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.3
@@ -392,6 +395,12 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+
+  packages/eslint-plugin-persia:
+    dependencies:
+      eslint:
+        specifier: '>=9'
+        version: 9.39.4(jiti@2.6.1)
 
   packages/leads-ui:
     dependencies:

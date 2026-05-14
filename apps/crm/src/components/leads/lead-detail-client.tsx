@@ -569,6 +569,7 @@ export function LeadDetailClient({
             <div className="space-y-2">
               <Label>Titulo</Label>
               <Input
+                name="deal_title"
                 value={dealTitle}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setDealTitle(e.target.value)
@@ -615,6 +616,7 @@ export function LeadDetailClient({
             <div className="space-y-2">
               <Label>Valor (R$)</Label>
               <Input
+                name="deal_value"
                 type="number"
                 step="0.01"
                 value={dealValue}
