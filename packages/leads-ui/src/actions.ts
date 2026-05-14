@@ -5,6 +5,7 @@
 // shared components never import server actions directly — they pull the
 // bag through `useLeadsActions()`.
 
+import type { ActionResult } from "@persia/ui";
 import type {
   LeadActivity,
   LeadDetail,
@@ -202,14 +203,20 @@ export interface LeadsActions {
     activities: LeadActivity[];
   }>;
 
-  /** Atualiza campos do lead (form do drawer). */
+  /**
+   * Atualiza campos do lead (form do drawer).
+   * Sprint 3b: contrato migrou pra ActionResult (antes era throw em erro).
+   */
   updateLead?: (
     leadId: string,
     data: UpdateLeadInput,
-  ) => Promise<{ id: string } | void>;
+  ) => Promise<ActionResult<{ id: string }>>;
 
-  /** Deleta lead (drawer ganha botao "Excluir" em PR-U2). */
-  deleteLead?: (leadId: string) => Promise<{ success: boolean }>;
+  /**
+   * Deleta lead (drawer ganha botao "Excluir" em PR-U2).
+   * Sprint 3b: contrato migrou pra ActionResult.
+   */
+  deleteLead?: (leadId: string) => Promise<ActionResult<{ success: true }>>;
 
   /** Stats agregados (3 cards do header do drawer). */
   getLeadStats?: (leadId: string) => Promise<LeadStats>;

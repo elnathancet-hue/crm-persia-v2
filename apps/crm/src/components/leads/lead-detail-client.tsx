@@ -178,14 +178,30 @@ export function LeadDetailClient({
   }, [isCreateDealOpen, selectedPipelineId]);
 
   async function handleUpdate(formData: FormData) {
-    await updateLead(lead.id, formData);
+    // Sprint 3b: actions retornam ActionResult { data, error } | void.
+    // Antes, throw em erro deixava a pagina branca (Application error
+    // digest). Agora o erro vai pro toast.
+    const result = await updateLead(lead.id, formData);
+    if (result && "error" in result && result.error) {
+      toast.error(result.error, { id: `lead-update-${lead.id}` });
+      return;
+    }
+    toast.success("Lead atualizado", {
+      id: `lead-update-${lead.id}`,
+      duration: 5000,
+    });
     setIsEditOpen(false);
     router.refresh();
   }
 
   function handleDelete() {
     startDeleteTransition(async () => {
-      await deleteLead(lead.id);
+      const result = await deleteLead(lead.id);
+      if (result && "error" in result && result.error) {
+        toast.error(result.error, { id: `lead-delete-${lead.id}` });
+        return;
+      }
+      toast.success("Lead excluído", { duration: 5000 });
       router.push("/leads");
     });
   }

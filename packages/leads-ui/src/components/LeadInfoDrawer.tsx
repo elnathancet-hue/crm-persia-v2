@@ -36,6 +36,7 @@ import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
+import { useDialogMutation } from "@persia/ui";
 import {
   Sheet,
   SheetContent,
@@ -210,12 +211,10 @@ export function LeadInfoDrawer({
   const [form, setForm] = React.useState<FormState>(() =>
     leadToFormState(lead),
   );
-  const [isPending, startTransition] = React.useTransition();
 
   // PR-U3: state pra exclusao. AlertDialog controlled via state pra
   // que o handler de deletar consiga fechar + chamar onDeleted.
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
-  const [isDeleting, setIsDeleting] = React.useState(false);
 
   // PR-B11 (auditoria E2E 2026-05-13, bug #15): tags no drawer.
   // Antes o drawer NAO tinha controle de tags — usuario precisava
@@ -299,26 +298,35 @@ export function LeadInfoDrawer({
     }
   }
 
-  async function handleDelete() {
-    if (!actions.deleteLead) {
-      toast.error("Ação indisponível neste app");
-      return;
-    }
-    setIsDeleting(true);
-    try {
-      await actions.deleteLead(lead.id);
-      toast.success("Lead excluído");
-      setDeleteDialogOpen(false);
-      onOpenChange(false);
-      onDeleted?.(lead.id);
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Erro ao excluir lead",
-      );
-    } finally {
-      setIsDeleting(false);
-    }
+  // Sprint 3b: mutation padronizada com useDialogMutation.
+  // Antes: try/catch + setIsDeleting + setOpen manual + tela branca se
+  // action lancasse (sem ActionResult).
+  // Agora: dialog fecha automatico apos sucesso, toast com id estavel,
+  // erro vira toast.error com mensagem PT-BR.
+  const deleteMutation = useDialogMutation<void, { success: true }>({
+    mutation: async () => {
+      if (!actions.deleteLead) {
+        return { error: "Ação indisponível neste app" };
+      }
+      return actions.deleteLead(lead.id);
+    },
+    onOpenChange: (o) => {
+      // Fecha tanto o AlertDialog (delete) quanto o Sheet (drawer) no sucesso.
+      if (!o) {
+        setDeleteDialogOpen(false);
+        onOpenChange(false);
+      }
+    },
+    successToast: "Lead excluído",
+    errorToast: (err) => err,
+    toastId: `lead-delete-${lead.id}`,
+    onSuccess: () => onDeleted?.(lead.id),
+  });
+
+  function handleDelete() {
+    deleteMutation.run(undefined);
   }
+  const isDeleting = deleteMutation.pending;
 
   // Subheader "Etapa atual" — busca o deal aberto + stages do pipeline
   // ao abrir, pra trocar etapa via Popover sem fechar o drawer (#2 do
@@ -454,66 +462,78 @@ export function LeadInfoDrawer({
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  // Sprint 3b: mutation padronizada com useDialogMutation.
+  // Antes: useTransition + try/catch + toast manual + setOpen manual.
+  // Agora: dialog fecha automatico, toast com id estavel + duration via
+  // helper, erro PT-BR vai pro toast.
+  type UpdateLeadPayload = {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    assigned_to: string | null;
+    website: string | null;
+    address_country: string | null;
+    address_state: string | null;
+    address_city: string | null;
+    address_zip: string | null;
+    address_street: string | null;
+    address_number: string | null;
+    address_neighborhood: string | null;
+    address_complement: string | null;
+    notes: string | null;
+  };
+
+  const updateMutation = useDialogMutation<UpdateLeadPayload, { id: string }>({
+    mutation: async (payload) => {
+      if (!actions.updateLead) {
+        return { error: "Ação indisponível neste app" };
+      }
+      return actions.updateLead(lead.id, payload);
+    },
+    onOpenChange,
+    successToast: "Lead atualizado",
+    errorToast: (err) => err,
+    toastId: `lead-update-${lead.id}`,
+    onSuccess: () => {
+      onSaved?.({
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        assigned_to: form.assigned_to || null,
+        website: form.website || null,
+        address_country: form.address_country || null,
+        address_state: form.address_state || null,
+        address_city: form.address_city || null,
+        address_zip: form.address_zip || null,
+        address_street: form.address_street || null,
+        address_number: form.address_number || null,
+        address_neighborhood: form.address_neighborhood || null,
+        address_complement: form.address_complement || null,
+        notes: form.notes || null,
+      });
+    },
+  });
+
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!actions.updateLead) {
-      toast.error("Ação indisponível neste app");
-      return;
-    }
-    startTransition(async () => {
-      try {
-        // updateLead agora aceita objeto direto (alem de FormData),
-        // entao mandamos todos os campos do drawer numa unica chamada.
-        await actions.updateLead!(lead.id, {
-          name: form.name || null,
-          email: form.email || null,
-          phone: form.phone || null,
-          assigned_to: form.assigned_to || null,
-          website: form.website || null,
-          address_country: form.address_country || null,
-          address_state: form.address_state || null,
-          address_city: form.address_city || null,
-          address_zip: form.address_zip || null,
-          address_street: form.address_street || null,
-          address_number: form.address_number || null,
-          address_neighborhood: form.address_neighborhood || null,
-          address_complement: form.address_complement || null,
-          notes: form.notes || null,
-        });
-        // PR-B3: id estavel + duracao explicita reforcam o feedback de
-        // sucesso. Antes a auditoria E2E (2026-05-13) capturou cenarios
-        // em que o toast nao era percebido pelo usuario — pode ter
-        // sumido rapido demais ou colidido com outro toast em rapidos
-        // re-clicks. id garante dedup (re-clicks atualizam o mesmo
-        // toast); duration 5s da tempo de leitura confortavel.
-        toast.success("Lead atualizado", {
-          id: `lead-update-${lead.id}`,
-          duration: 5000,
-        });
-        onSaved?.({
-          name: form.name,
-          phone: form.phone,
-          email: form.email,
-          assigned_to: form.assigned_to || null,
-          website: form.website || null,
-          address_country: form.address_country || null,
-          address_state: form.address_state || null,
-          address_city: form.address_city || null,
-          address_zip: form.address_zip || null,
-          address_street: form.address_street || null,
-          address_number: form.address_number || null,
-          address_neighborhood: form.address_neighborhood || null,
-          address_complement: form.address_complement || null,
-          notes: form.notes || null,
-        });
-        onOpenChange(false);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Erro ao salvar", {
-          id: `lead-update-${lead.id}`,
-        });
-      }
+    updateMutation.run({
+      name: form.name || null,
+      email: form.email || null,
+      phone: form.phone || null,
+      assigned_to: form.assigned_to || null,
+      website: form.website || null,
+      address_country: form.address_country || null,
+      address_state: form.address_state || null,
+      address_city: form.address_city || null,
+      address_zip: form.address_zip || null,
+      address_street: form.address_street || null,
+      address_number: form.address_number || null,
+      address_neighborhood: form.address_neighborhood || null,
+      address_complement: form.address_complement || null,
+      notes: form.notes || null,
     });
   }
+  const isPending = updateMutation.pending;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

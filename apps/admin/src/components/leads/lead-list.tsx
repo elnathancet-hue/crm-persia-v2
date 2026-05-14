@@ -122,8 +122,9 @@ export function LeadListPage() {
     ) {
       return;
     }
+    // Sprint 3b: deleteLead retorna ActionResult { data, error } | void.
     const result = await deleteLead(lead.id);
-    if (result.error) {
+    if (result && "error" in result && result.error) {
       toast.error(result.error);
       return;
     }
