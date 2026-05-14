@@ -2,6 +2,7 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import type { ActionResult } from "@persia/ui";
 import type { LeadFilters, LeadWithTags } from "@persia/shared/crm";
 import {
   createLead as createLeadShared,
@@ -17,8 +18,9 @@ import {
 // compatíveis.
 export type { LeadFilters, LeadWithTags };
 
-function asErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : "Erro desconhecido";
+function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamente."): string {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
 }
 
 // `getLeads`, `getLeadDetail` e `getLeadActivities` sao thin wrappers
@@ -72,32 +74,32 @@ export async function createLead(data: { name: string; phone?: string; email?: s
   }
 }
 
-export async function updateLead(leadId: string, updates: Record<string, unknown>) {
+// Sprint 3b: updateLead/deleteLead migram pra ActionResult canonico.
+// Antes retornavam { error: null } | { error: string }.
+export async function updateLead(
+  leadId: string,
+  updates: Record<string, unknown>,
+): Promise<ActionResult<{ id: string }>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
-    // Admin aceita Record<string, unknown> historicamente (qualquer
-    // campo). updateLeadShared filtra so os campos conhecidos
-    // (name, phone, email, source, status, channel) — campos extras
-    // sao ignorados. Pra preservar o contrato historico do admin (que
-    // permitia atualizar qualquer coluna), usamos fallback raw query
-    // SE o update tem campos fora do shape conhecido. Por enquanto so
-    // shape conhecido e suficiente.
     await updateLeadShared({ db: admin, orgId }, leadId, updates as Record<string, never>);
     revalidatePath("/leads");
-    return { error: null };
+    return { data: { id: leadId } };
   } catch (err) {
-    return { error: asErrorMessage(err) };
+    return { error: asErrorMessage(err, "Não foi possível atualizar o lead.") };
   }
 }
 
-export async function deleteLead(leadId: string) {
+export async function deleteLead(
+  leadId: string,
+): Promise<ActionResult<{ success: true }>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await deleteLeadShared({ db: admin, orgId }, leadId);
     revalidatePath("/leads");
-    return { error: null };
+    return { data: { success: true as const } };
   } catch (err) {
-    return { error: asErrorMessage(err) };
+    return { error: asErrorMessage(err, "Não foi possível excluir o lead.") };
   }
 }
 

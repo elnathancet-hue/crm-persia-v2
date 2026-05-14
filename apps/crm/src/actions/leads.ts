@@ -2,6 +2,7 @@
 
 import { requireRole } from "@/lib/auth";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
+import type { ActionResult } from "@persia/ui";
 import type {
   LeadActivity,
   LeadDetail,
@@ -39,6 +40,11 @@ function makeOnLeadChanged(orgId: string) {
       .then(({ syncLeadToUazapi }) => syncLeadToUazapi(orgId, leadId))
       .catch((err) => console.error("[lead-action] sync error:", err));
   };
+}
+
+function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamente."): string {
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
 }
 
 // ============================================================================
@@ -442,39 +448,53 @@ export async function createLead(formData: FormData) {
  * OU um objeto `UpdateLeadInput` (drawer "Informações do lead", Fase 2,
  * com endereço/notas/responsável/website).
  */
+// Sprint 3b: updateLead/deleteLead migram pra ActionResult.
+// Antes lancavam exception em erro (causando "Application error" digest
+// em tela branca quando a UI nao tinha try/catch). Agora retornam
+// { error: PT-BR } padronizado.
 export async function updateLead(
   id: string,
   data: FormData | UpdateLeadInput,
-) {
-  const { supabase, orgId } = await requireRole("agent");
-  const ctx = { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) };
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const ctx = { db: supabase, orgId, onLeadChanged: makeOnLeadChanged(orgId) };
 
-  const input: UpdateLeadInput =
-    data instanceof FormData
-      ? {
-          name: fdField(data, "name"),
-          phone: fdField(data, "phone"),
-          email: fdField(data, "email"),
-          source: (fdField(data, "source") as string) || undefined,
-          status: (fdField(data, "status") as string) || undefined,
-          channel: (fdField(data, "channel") as string) || undefined,
-        }
-      : data;
+    const input: UpdateLeadInput =
+      data instanceof FormData
+        ? {
+            name: fdField(data, "name"),
+            phone: fdField(data, "phone"),
+            email: fdField(data, "email"),
+            source: (fdField(data, "source") as string) || undefined,
+            status: (fdField(data, "status") as string) || undefined,
+            channel: (fdField(data, "channel") as string) || undefined,
+          }
+        : data;
 
-  const updated = await updateLeadShared(ctx, id, input);
-  // PR-K LEAD-SYNC: helper centralizado
-  await revalidateLeadCaches(id);
-  return updated;
+    const updated = await updateLeadShared(ctx, id, input);
+    // PR-K LEAD-SYNC: helper centralizado
+    await revalidateLeadCaches(id);
+    return { data: { id: (updated as { id: string }).id } };
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível atualizar o lead.") };
+  }
 }
 
-export async function deleteLead(id: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  await deleteLeadShared({ db: supabase, orgId }, id);
-  // PR-K LEAD-SYNC: helper centralizado (lead deletado sai da lista
-  // e do Kanban — invalida tudo, nao precisa /leads/:id pois rota
-  // deixa de existir)
-  await revalidateLeadCaches();
-  return { success: true };
+export async function deleteLead(
+  id: string,
+): Promise<ActionResult<{ success: true }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    await deleteLeadShared({ db: supabase, orgId }, id);
+    // PR-K LEAD-SYNC: helper centralizado (lead deletado sai da lista
+    // e do Kanban — invalida tudo, nao precisa /leads/:id pois rota
+    // deixa de existir)
+    await revalidateLeadCaches();
+    return { data: { success: true as const } };
+  } catch (err) {
+    return { error: asErrorMessage(err, "Não foi possível excluir o lead.") };
+  }
 }
 
 export async function addTagToLead(leadId: string, tagId: string) {

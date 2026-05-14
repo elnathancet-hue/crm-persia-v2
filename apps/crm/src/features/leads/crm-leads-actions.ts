@@ -68,11 +68,10 @@ export const crmLeadsActions: LeadsActions = {
   // PR-U1: actions usadas pelo LeadInfoDrawer (extracao em PR-U2).
   // Todas com requireRole("agent") + multi-tenant via orgId.
   getLead,
-  updateLead: async (leadId, data) => {
-    const updated = await updateLead(leadId, data);
-    return updated ? { id: updated.id } : undefined;
-  },
-  deleteLead,
+  // Sprint 3b: updateLead/deleteLead retornam ActionResult diretamente.
+  // Adapter virou repasse.
+  updateLead: (leadId, data) => updateLead(leadId, data),
+  deleteLead: (leadId) => deleteLead(leadId),
   getLeadStats,
   getLeadDealsList,
   getLeadOpenDealWithStages,

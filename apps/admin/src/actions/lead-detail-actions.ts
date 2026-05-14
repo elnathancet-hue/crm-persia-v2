@@ -123,24 +123,43 @@ export async function getLeadForDrawer(
   return { lead: leadResult.lead, activities: activitiesResult };
 }
 
+// Sprint 3b: migrado pra ActionResult — antes lancava em erro.
 export async function updateLeadForDrawer(
   leadId: string,
   data: import("@persia/shared/crm").UpdateLeadInput,
-): Promise<{ id: string }> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const { updateLead: updateLeadShared } = await import("@persia/shared/crm");
-  const updated = await updateLeadShared({ db: admin, orgId }, leadId, data);
-  if (!updated) throw new Error("Lead não atualizado");
-  return { id: updated.id };
+): Promise<import("@persia/ui").ActionResult<{ id: string }>> {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const { updateLead: updateLeadShared } = await import("@persia/shared/crm");
+    const updated = await updateLeadShared({ db: admin, orgId }, leadId, data);
+    if (!updated) return { error: "Lead não atualizado." };
+    return { data: { id: updated.id } };
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível atualizar o lead.",
+    };
+  }
 }
 
 export async function deleteLeadForDrawer(
   leadId: string,
-): Promise<{ success: boolean }> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  const { deleteLead: deleteLeadShared } = await import("@persia/shared/crm");
-  await deleteLeadShared({ db: admin, orgId }, leadId);
-  return { success: true };
+): Promise<import("@persia/ui").ActionResult<{ success: true }>> {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const { deleteLead: deleteLeadShared } = await import("@persia/shared/crm");
+    await deleteLeadShared({ db: admin, orgId }, leadId);
+    return { data: { success: true as const } };
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível excluir o lead.",
+    };
+  }
 }
 
 export async function addTagToLeadForDrawer(

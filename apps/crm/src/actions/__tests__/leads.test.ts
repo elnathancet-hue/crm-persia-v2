@@ -159,21 +159,25 @@ describe("updateLead", () => {
 });
 
 describe("deleteLead", () => {
-  it("scopes delete by org and returns success", async () => {
+  it("scopes delete by org and returns ActionResult success", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
     supabase.queue("leads", { data: null, error: null });
 
+    // Sprint 3b: shape de retorno migrado de { success: true } pra
+    // ActionResult<{ success: true }> -> { data: { success: true } }.
     const res = await deleteLead("l1");
-    expect(res).toEqual({ success: true });
+    expect(res).toEqual({ data: { success: true } });
     expect(supabase.deletes.leads).toBe(true);
   });
 
-  it("throws on delete error", async () => {
+  it("returns ActionResult error on delete failure", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
     supabase.queue("leads", { data: null, error: { message: "FK violation" } });
-    await expect(deleteLead("l1")).rejects.toThrow(/FK violation/);
+    // Sprint 3b: nao lanca mais — retorna { error: ... }.
+    const res = await deleteLead("l1");
+    expect(res).toEqual({ error: expect.stringMatching(/FK violation/) });
   });
 });
 
