@@ -102,12 +102,14 @@ export async function deleteDeal(dealId: string) {
   }
 }
 
+// Sprint 3e: migra pra ActionResult — antes retornava null em erro
+// (silencioso, user nao via nada). Agora { error } com mensagem PT-BR.
 export async function createStage(
   pipelineId: string,
   name: string,
   sortOrder: number,
   color?: string,
-) {
+): Promise<import("@persia/ui").ActionResult<import("@persia/shared/crm").Stage>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     const stage = await createStageShared(
@@ -115,9 +117,14 @@ export async function createStage(
       { pipelineId, name, sortOrder, color },
     );
     revalidatePath("/crm");
-    return stage;
-  } catch {
-    return null;
+    return { data: stage };
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível criar a etapa.",
+    };
   }
 }
 
@@ -134,6 +141,7 @@ export async function updateDealStatus(
   }
 }
 
+// Sprint 3e: migra pra ActionResult — antes era catch {} silencioso.
 export async function updateStage(
   stageId: string,
   data: {
@@ -143,7 +151,7 @@ export async function updateStage(
     description?: string | null;
     outcome?: "em_andamento" | "falha" | "bem_sucedido";
   },
-) {
+): Promise<import("@persia/ui").ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await updateStageShared({ db: admin, orgId }, stageId, {
@@ -154,18 +162,32 @@ export async function updateStage(
       outcome: data.outcome,
     });
     revalidatePath("/crm");
-  } catch {
-    // noop
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível atualizar a etapa.",
+    };
   }
 }
 
-export async function deleteStage(stageId: string) {
+export async function deleteStage(
+  stageId: string,
+): Promise<import("@persia/ui").ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await deleteStageShared({ db: admin, orgId }, stageId);
     revalidatePath("/crm");
-  } catch {
-    // noop
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível excluir a etapa.",
+    };
   }
 }
 
@@ -174,36 +196,60 @@ export async function deleteStage(stageId: string) {
  * (editor de configuracao em /crm/configurar). Reusa o shared mutation
  * (`updateStageOrder`) que ja serializa updates e e org-scoped via
  * defense-in-depth.
+ * Sprint 3e: migra pra ActionResult.
  */
 export async function updateStageOrder(
   stages: { id: string; position: number }[],
-) {
+): Promise<import("@persia/ui").ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await updateStageOrderShared({ db: admin, orgId }, stages);
     revalidatePath("/crm");
-  } catch {
-    // noop
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível reordenar as etapas.",
+    };
   }
 }
 
-export async function deletePipeline(pipelineId: string) {
+export async function deletePipeline(
+  pipelineId: string,
+): Promise<import("@persia/ui").ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await deletePipelineShared({ db: admin, orgId }, pipelineId);
     revalidatePath("/crm");
-  } catch {
-    // noop
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível excluir o funil.",
+    };
   }
 }
 
-export async function updatePipelineName(pipelineId: string, name: string) {
+export async function updatePipelineName(
+  pipelineId: string,
+  name: string,
+): Promise<import("@persia/ui").ActionResult<void>> {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
     await updatePipelineNameShared({ db: admin, orgId }, pipelineId, name);
     revalidatePath("/crm");
-  } catch {
-    // noop
+    return;
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : "Não foi possível renomear o funil.",
+    };
   }
 }
 

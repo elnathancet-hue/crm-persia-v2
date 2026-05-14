@@ -27,23 +27,28 @@ export const adminKanbanActions: KanbanActions = {
     if (!result) throw new Error("Erro ao criar funil");
     return result as Pipeline;
   },
+  // Sprint 3e: actions retornam ActionResult — repasse direto.
   updatePipelineName: (pipelineId, name) =>
     updatePipelineName(pipelineId, name),
   deletePipeline: (pipelineId) => deletePipeline(pipelineId),
 
   // ============ STAGES ============
+  // Sprint 3e: createStage retorna ActionResult<Stage>; se outcome difere,
+  // dispara updateStage subsequente. Repassa erro se algum dos 2 falhar.
   createStage: async ({ pipelineId, name, sortOrder, outcome }) => {
-    const stage = await createStage(pipelineId, name, sortOrder);
-    if (!stage) throw new Error("Erro ao criar etapa");
+    const result = await createStage(pipelineId, name, sortOrder);
+    if (result && "error" in result && result.error) return result;
+    const stage = result && "data" in result ? result.data : undefined;
+    if (!stage) return { error: "Erro ao criar etapa." };
     if (outcome && outcome !== "em_andamento") {
-      await updateStage(stage.id, { outcome });
-      return { ...stage, outcome } as Stage;
+      const upd = await updateStage(stage.id, { outcome });
+      if (upd && "error" in upd && upd.error) return { error: upd.error };
+      return { data: { ...stage, outcome } as Stage };
     }
-    return stage as Stage;
+    return { data: stage as Stage };
   },
-  // PR-CRMCFG: passa todos os campos do UpdateStageInput. Antes
-  // ignorava color/description/sortOrder porque o KanbanBoard nao
-  // usava — o editor de configuracao novo precisa.
+  // PR-CRMCFG: passa todos os campos do UpdateStageInput.
+  // Sprint 3e: ActionResult — repasse.
   updateStage: (stageId, data) =>
     updateStage(stageId, {
       name: data.name,
@@ -53,7 +58,7 @@ export const adminKanbanActions: KanbanActions = {
       outcome: data.outcome,
     }),
   deleteStage: (stageId) => deleteStage(stageId),
-  // PR-CRMCFG: reorder em batch (compartilhado com /crm/configurar).
+  // PR-CRMCFG: reorder em batch. Sprint 3e: ActionResult — repasse.
   reorderStages: (stages) =>
     updateStageOrder(stages.map((s) => ({ id: s.id, position: s.position }))),
 
