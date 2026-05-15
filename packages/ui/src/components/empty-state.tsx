@@ -18,12 +18,18 @@
 // Variants:
 //   - default: card border-dashed bg-muted/20 (descoberta)
 //   - subtle: sem border, bg transparente (dentro de outros containers)
+//
+// Tones (PR-A mai/2026 mockup ChatGPT):
+//   - muted (default): icone em bg-muted text-muted-foreground (neutro)
+//   - primary: icone size-14 rounded-2xl em bg-primary/10 text-primary
+//     (CTA proeminente, estado-zero de feature)
 
 import * as React from "react";
 
 import { cn } from "../utils";
 
 export type EmptyStateVariant = "default" | "subtle";
+export type EmptyStateTone = "muted" | "primary";
 
 export interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -31,6 +37,11 @@ export interface EmptyStateProps {
   description?: React.ReactNode;
   action?: React.ReactNode;
   variant?: EmptyStateVariant;
+  /**
+   * Cor do icone container. Default "muted" (cinza neutro). Use "primary"
+   * em estados-zero de feature onde voce quer destaque visual (CTA forte).
+   */
+  tone?: EmptyStateTone;
   className?: string;
 }
 
@@ -40,12 +51,20 @@ const VARIANT_CLASSES: Record<EmptyStateVariant, string> = {
   subtle: "",
 };
 
+const TONE_ICON_CLASSES: Record<EmptyStateTone, string> = {
+  muted:
+    "size-12 rounded-xl bg-muted text-muted-foreground [&_svg:not([class*='size-'])]:size-6",
+  primary:
+    "size-14 rounded-2xl bg-primary/10 text-primary [&_svg:not([class*='size-'])]:size-7",
+};
+
 export function EmptyState({
   icon,
   title,
   description,
   action,
   variant = "default",
+  tone = "muted",
   className,
 }: EmptyStateProps) {
   return (
@@ -60,7 +79,10 @@ export function EmptyState({
       {icon && (
         <div
           aria-hidden
-          className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg:not([class*='size-'])]:size-6"
+          className={cn(
+            "flex shrink-0 items-center justify-center",
+            TONE_ICON_CLASSES[tone],
+          )}
         >
           {icon}
         </div>
