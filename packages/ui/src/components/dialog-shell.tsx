@@ -79,7 +79,7 @@ function DialogShellRoot({
           className,
         )}
       >
-        <DialogHeader className="px-6 pt-5 pb-3 pr-12 border-b border-border bg-card shrink-0">
+        <DialogHeader className="px-card pt-5 pb-3 pr-12 border-b border-border bg-card shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <DialogTitle className="text-base font-semibold">
@@ -114,7 +114,7 @@ function DialogShellBody({
   return (
     <div
       data-slot="dialog-shell-body"
-      className={cn("flex-1 overflow-y-auto px-6 py-4", className)}
+      className={cn("flex-1 overflow-y-auto px-card py-4", className)}
       {...props}
     >
       {children}
@@ -142,7 +142,7 @@ function DialogShellFooter({
     <div
       data-slot="dialog-shell-footer"
       className={cn(
-        "px-6 py-4 border-t border-border bg-card shrink-0 flex flex-row items-center gap-3",
+        "px-card py-4 border-t border-border bg-card shrink-0 flex flex-row items-center gap-inline",
         justify === "between" ? "justify-between" : "justify-end",
         className,
       )}
