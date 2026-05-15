@@ -2,7 +2,7 @@ import { CalendarOff } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-slate-50 to-white px-4">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-muted to-background px-4">
       <div className="max-w-md rounded-3xl bg-card p-8 text-center ring-1 ring-border shadow-md">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground/70">
           <CalendarOff size={26} />

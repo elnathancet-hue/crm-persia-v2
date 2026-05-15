@@ -285,8 +285,8 @@ function EmptyTools({ onCreate }: { onCreate: () => void }) {
   return (
     <Card className="border-dashed">
       <CardContent className="py-12 flex flex-col items-center text-center gap-4">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-          <Plus className="size-7 text-white" />
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-progress to-primary flex items-center justify-center">
+          <Plus className="size-7 text-primary-foreground" />
         </div>
         <div className="space-y-1 max-w-md">
           <h3 className="font-semibold tracking-tight">Dê superpoderes ao agente</h3>

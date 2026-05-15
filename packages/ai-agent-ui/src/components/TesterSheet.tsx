@@ -183,8 +183,8 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
         >
           {turns.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center gap-3 py-12">
-              <div className="size-16 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shadow-sm">
-                <FlaskConical className="size-7 text-white" />
+              <div className="size-16 rounded-2xl bg-gradient-to-br from-progress to-primary flex items-center justify-center shadow-sm">
+                <FlaskConical className="size-7 text-primary-foreground" />
               </div>
               <div className="space-y-1 max-w-xs">
                 <p className="text-sm font-semibold tracking-tight">Conversa de teste</p>
