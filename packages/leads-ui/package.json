@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@persia/shared": "workspace:*",
+    "@persia/tags-ui": "workspace:*",
     "@persia/ui": "workspace:*",
     "lucide-react": "^1.7.0"
   },

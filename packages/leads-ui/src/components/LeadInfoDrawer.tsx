@@ -32,6 +32,7 @@ import {
   X,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
+import { TagBadge } from "@persia/tags-ui";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -584,7 +585,12 @@ export function LeadInfoDrawer({
                     <button
                       type="button"
                       disabled={stageChangePending}
-                      className="inline-flex items-center gap-1 font-medium text-cyan-600 hover:text-cyan-700 hover:underline transition-colors"
+                      // PR-ANTIBUG (mai/2026): cor da etapa reflete o
+                      // outcome (em_andamento=progress / falha=failure /
+                      // bem_sucedido=success). Antes era text-cyan-600
+                      // hardcoded — mesmo que a etapa fosse "Fechado",
+                      // aparecia ciano. Agora usa o token semantico.
+                      className={`inline-flex items-center gap-1 font-medium hover:underline transition-colors ${OUTCOME_COLOR[currentStageObj.outcome] ?? "text-foreground"}`}
                     />
                   }
                 >
@@ -804,33 +810,24 @@ export function LeadInfoDrawer({
                     )}
                     {currentTags.map((tag) => {
                       const isPending = tagPending === tag.id;
+                      // PR-ANTIBUG (mai/2026): substitui pill inline custom
+                      // (`${tag.color}40` reinventado) pelo <TagBadge>
+                      // compartilhado. Cada tag ja distingue visualmente
+                      // pela cor real do banco — antes tudo parecia azul
+                      // porque o calculo de alpha era manual.
                       return (
-                        <span
+                        <TagBadge
                           key={tag.id}
-                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
-                          style={{
-                            borderColor: `${tag.color}40`,
-                            backgroundColor: `${tag.color}20`,
-                            color: tag.color,
-                          }}
-                        >
-                          {tag.name}
-                          <button
-                            type="button"
-                            disabled={
-                              !actions.removeTagFromLead || isPending
-                            }
-                            onClick={() => handleRemoveTag(tag.id)}
-                            aria-label={`Remover tag ${tag.name}`}
-                            className="-mr-0.5 ml-0.5 inline-flex size-4 items-center justify-center rounded-full hover:bg-background/40 disabled:opacity-50"
-                          >
-                            {isPending ? (
-                              <Loader2 className="size-2.5 animate-spin" />
-                            ) : (
-                              <X className="size-2.5" />
-                            )}
-                          </button>
-                        </span>
+                          tag={tag}
+                          variant="soft"
+                          size="sm"
+                          className={isPending ? "opacity-50 pointer-events-none" : undefined}
+                          onRemove={
+                            actions.removeTagFromLead
+                              ? () => handleRemoveTag(tag.id)
+                              : undefined
+                          }
+                        />
                       );
                     })}
                     {actions.addTagToLead && availableTags.length > 0 && (

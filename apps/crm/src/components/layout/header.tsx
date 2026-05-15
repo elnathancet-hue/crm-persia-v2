@@ -22,6 +22,15 @@ export function Header() {
   const { organization } = useOrganization();
   const [isDark, setIsDark] = useState(false);
   const [toastMuted, setToastMuted] = useToastMuted();
+  // PR-HYDRATION (mai/2026): @base-ui/react gera IDs do <DropdownMenu>
+  // diferentes em SSR vs client (`base-ui-_R_79sndlb_` vs `_R_t7kndlb_`).
+  // Causava 90+ erros de hydration mismatch por navegacao em TODA tela.
+  // Solucao: skip render do menu/botoes ate hidratar — mostra placeholder
+  // estatico no SSR pra evitar layout shift.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const isDarkMode = document.documentElement.classList.contains("dark");
@@ -67,20 +76,30 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-md"
-          onClick={toggleTheme}
-          aria-label="Alternar tema"
-        >
-          {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-        </Button>
+        {/* PR-HYDRATION: placeholder ate mount pra evitar SSR/client diff.
+            Reserva o mesmo bounding-box (size-9 + size-8 do avatar)
+            que os botoes vao ocupar — nao causa layout shift visivel. */}
+        {!mounted ? (
+          <>
+            <div className="size-9 rounded-md" aria-hidden />
+            <div className="size-8 rounded-full bg-muted" aria-hidden />
+          </>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 rounded-md"
+              onClick={toggleTheme}
+              aria-label="Alternar tema"
+            >
+              {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </Button>
 
-        {/* PR-B1: removido botão Bell standalone — era decorativo
-            (sem onClick). O toggle de mute real vive dentro do menu do
-            avatar abaixo (item "Silenciar notificações") com ícone
-            BellOff/Bell que reflete o estado atual. */}
+            {/* PR-B1: removido botão Bell standalone — era decorativo
+                (sem onClick). O toggle de mute real vive dentro do menu do
+                avatar abaixo (item "Silenciar notificações") com ícone
+                BellOff/Bell que reflete o estado atual. */}
 
         <DropdownMenu>
           <DropdownMenuTrigger>
@@ -139,6 +158,8 @@ export function Header() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+          </>
+        )}
       </div>
     </header>
   );
