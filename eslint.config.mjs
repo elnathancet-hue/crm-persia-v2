@@ -63,6 +63,10 @@ const eslintConfig = defineConfig([
       // resolvem light/dark automaticamente. Veja apps/crm/src/app/
       // globals.css pra ver os tokens disponiveis.
       "@persia/no-hardcoded-tailwind-color": "error",
+      // PR-DS-POLISH (mai/2026): primitivos do @persia/ui sao a fonte
+      // de verdade visual — overrides no consumidor falam que o primitivo
+      // tem bug. Warn primeiro, promove pra error apos sweep.
+      "@persia/no-style-override-on-primitive": "warn",
     },
   },
   {
