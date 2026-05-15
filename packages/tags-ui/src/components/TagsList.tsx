@@ -19,7 +19,7 @@
 // ==========================================================================
 
 import * as React from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, MoreHorizontal, Tag as TagIcon } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import {
   Dialog,
@@ -32,7 +32,7 @@ import {
 } from "@persia/ui/dialog";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
-import { useDialogMutation } from "@persia/ui";
+import { useDialogMutation, ActionMenu, EmptyState } from "@persia/ui";
 import type { TagWithCount } from "@persia/shared/crm";
 
 import { TagBadge } from "./TagBadge";
@@ -212,35 +212,41 @@ export function TagsList({
       )}
 
       {tags.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed p-12 text-center">
-          <div className="rounded-full bg-muted p-3">
-            <Plus className="size-6 text-muted-foreground" />
-          </div>
-          <h3 className="mt-4 text-base font-medium">Nenhuma tag criada</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Crie tags para organizar seus leads
-          </p>
-          {canCreate && (
-            <Button className="mt-4" onClick={openCreateDialog}>
-              <Plus className="size-4" />
-              Criar primeira tag
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          tone="primary"
+          icon={<TagIcon />}
+          title="Nenhuma tag criada"
+          description="Crie tags para organizar e segmentar seus leads (ex: Cliente VIP, Aguardando proposta, Reativar)."
+          action={
+            canCreate ? (
+              <Button onClick={openCreateDialog}>
+                <Plus className="size-4" />
+                Criar primeira tag
+              </Button>
+            ) : null
+          }
+        />
       ) : (
+        // PR-A (mai/2026): card com border-left accent na cor da tag +
+        // dot pequeno + kebab sempre visivel. Pattern do mockup ChatGPT
+        // — "cor = informacao, nao decoracao". Antes era card branco
+        // homogeneo com dot grande + Pencil/Trash so no hover (acoes
+        // invisiveis a maior parte do tempo).
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {tags.map((tag) => (
             <div
               key={tag.id}
-              className="group flex items-center justify-between rounded-xl border bg-card p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted/50"
+              className="group flex items-center justify-between rounded-xl border-l-4 border-y border-r border-y-border border-r-border bg-card p-4 transition-colors hover:bg-muted/30"
+              style={{ borderLeftColor: tag.color }}
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <span
-                  className="size-4 shrink-0 rounded-full"
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full"
                   style={{ backgroundColor: tag.color }}
                 />
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{tag.name}</p>
+                  <p className="truncate font-medium text-sm">{tag.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {tag.lead_count}{" "}
                     {tag.lead_count === 1 ? "lead" : "leads"}
@@ -248,28 +254,34 @@ export function TagsList({
                 </div>
               </div>
               {(canEdit || canDelete) && (
-                <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                  {canEdit && (
+                <ActionMenu
+                  trigger={
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`Editar tag ${tag.name}`}
+                      aria-label={`Ações da tag ${tag.name}`}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </Button>
+                  }
+                >
+                  {canEdit && (
+                    <ActionMenu.Item
+                      icon={Pencil}
                       onClick={() => openEditDialog(tag)}
                     >
-                      <Pencil className="size-3.5" />
-                    </Button>
+                      Editar
+                    </ActionMenu.Item>
                   )}
                   {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Excluir tag ${tag.name}`}
+                    <ActionMenu.Destructive
+                      icon={Trash2}
                       onClick={() => openDeleteDialog(tag)}
                     >
-                      <Trash2 className="size-3.5 text-destructive" />
-                    </Button>
+                      Excluir
+                    </ActionMenu.Destructive>
                   )}
-                </div>
+                </ActionMenu>
               )}
             </div>
           ))}
