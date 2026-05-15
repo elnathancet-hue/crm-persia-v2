@@ -22,6 +22,10 @@ import { Card } from "@persia/ui/card";
 import { Checkbox } from "@persia/ui/checkbox";
 import { RelativeTime, formatRelativeShortPtBR } from "@persia/ui";
 import {
+  LeadsAdvancedFilters,
+  type LeadsAdvancedFiltersValue,
+} from "./LeadsAdvancedFilters";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -247,6 +251,10 @@ export function LeadsList({
   const [selectedTagIds, setSelectedTagIds] = React.useState<string[]>([]);
   const [isCreateOpen, setIsCreateOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
+  // PR Export+Filters: estado dos filtros avançados (data, última
+  // interação, responsável, origem). Sincroniza com fetchLeads.
+  const [advancedFilters, setAdvancedFilters] =
+    React.useState<LeadsAdvancedFiltersValue>({});
   const debounceRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // PR-L4: bulk select state
@@ -274,6 +282,35 @@ export function LeadsList({
     setSelectedIds(new Set());
   }, [leads]);
 
+  // PR Export+Filters: helper que converte LeadsAdvancedFiltersValue
+  // em campos do LeadFilters (resolve "ultima interacao mode + days"
+  // em datas absolutas). Memo pra evitar recomputar a cada render.
+  const advancedToBackend = React.useCallback(
+    (av: LeadsAdvancedFiltersValue) => {
+      const out: Record<string, unknown> = {};
+      if (av.dateFrom) out.dateFrom = `${av.dateFrom}T00:00:00.000Z`;
+      if (av.dateTo) out.dateTo = `${av.dateTo}T23:59:59.999Z`;
+      if (av.lastInteractionMode === "withinDays" && av.lastInteractionDays) {
+        const d = new Date();
+        d.setDate(d.getDate() - av.lastInteractionDays);
+        out.lastInteractionFrom = d.toISOString();
+      }
+      if (av.lastInteractionMode === "olderThanDays" && av.lastInteractionDays) {
+        const d = new Date();
+        d.setDate(d.getDate() - av.lastInteractionDays);
+        out.lastInteractionTo = d.toISOString();
+      }
+      if (av.assigneeIds && av.assigneeIds.length > 0) {
+        out.assigneeIds = av.assigneeIds;
+      }
+      if (av.sources && av.sources.length > 0) {
+        out.sources = av.sources;
+      }
+      return out;
+    },
+    [],
+  );
+
   const fetchLeads = React.useCallback(
     async (params: {
       search?: string;
@@ -282,6 +319,7 @@ export function LeadsList({
       page?: number;
       orderColumn?: SortColumn;
       orderDirection?: "asc" | "desc";
+      advanced?: LeadsAdvancedFiltersValue;
     }) => {
       setIsLoading(true);
       try {
@@ -301,6 +339,8 @@ export function LeadsList({
                 },
               }
             : {}),
+          // PR Export+Filters: filtros avançados convertidos pra backend
+          ...advancedToBackend(params.advanced ?? advancedFilters),
         });
         setLeads(result.leads);
         setTotal(result.total);
@@ -312,7 +352,7 @@ export function LeadsList({
         setIsLoading(false);
       }
     },
-    [actions],
+    [actions, advancedToBackend, advancedFilters],
   );
 
   React.useEffect(() => {
@@ -886,10 +926,40 @@ export function LeadsList({
     },
   ];
 
+  // PR Export+Filters: conta filtros avançados ativos pra incluir no
+  // contador "Limpar filtros". Cada categoria conta como 1.
+  const advancedActiveCount =
+    (advancedFilters.dateFrom || advancedFilters.dateTo ? 1 : 0) +
+    (advancedFilters.lastInteractionMode &&
+    advancedFilters.lastInteractionMode !== "any"
+      ? 1
+      : 0) +
+    (advancedFilters.assigneeIds && advancedFilters.assigneeIds.length > 0
+      ? 1
+      : 0) +
+    (advancedFilters.sources && advancedFilters.sources.length > 0 ? 1 : 0);
+
   const activeFilterCount =
     (search ? 1 : 0) +
     (statusFilter !== "all" ? 1 : 0) +
-    selectedTagIds.length;
+    selectedTagIds.length +
+    advancedActiveCount;
+
+  // PR Export+Filters: handler ao mudar filtros avançados — re-fetch
+  // imediato pro user ver o resultado.
+  const handleAdvancedChange = React.useCallback(
+    (next: LeadsAdvancedFiltersValue) => {
+      setAdvancedFilters(next);
+      fetchLeads({
+        search,
+        status: statusFilter,
+        tags: selectedTagIds,
+        page: 1,
+        advanced: next,
+      });
+    },
+    [fetchLeads, search, statusFilter, selectedTagIds],
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -961,6 +1031,22 @@ export function LeadsList({
           </SelectContent>
         </Select>
 
+        {/* PR Export+Filters: filtros avançados (data, última interação,
+            responsável, origem) num popover compacto. UX limpa: filtros
+            básicos visíveis, avançados atrás de 1 clique. */}
+        <LeadsAdvancedFilters
+          value={advancedFilters}
+          onChange={handleAdvancedChange}
+          assignees={assignees}
+          sources={(() => {
+            const set = new Set<string>();
+            for (const l of leads) {
+              if (l.source) set.add(l.source);
+            }
+            return Array.from(set).sort();
+          })()}
+        />
+
         {activeFilterCount > 0 && (
           <Button
             variant="ghost"
@@ -970,11 +1056,13 @@ export function LeadsList({
               setSelectedTagIds([]);
               setSearch("");
               setStatusFilter("all");
+              setAdvancedFilters({});
               fetchLeads({
                 search: "",
                 status: "all",
                 tags: [],
                 page: 1,
+                advanced: {},
               });
             }}
           >

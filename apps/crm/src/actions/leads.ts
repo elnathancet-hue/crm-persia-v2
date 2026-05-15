@@ -56,6 +56,59 @@ export async function getLeads(filters: LeadFilters = {}) {
   return listLeads({ db: supabase, orgId }, filters);
 }
 
+// ============================================================================
+// Exportacao com filtros (PR Export+Filters)
+// ============================================================================
+
+/**
+ * Conta quantos leads bateriam nos filtros — usado pra preview no Dialog
+ * "Exportar leads" antes do download. Sem limit = count sobre o universo
+ * todo (ate o cap do DB de 1M+).
+ */
+export async function countLeadsForExport(filters: LeadFilters = {}): Promise<number> {
+  const { supabase, orgId } = await requireRole("agent");
+  // Reutiliza listLeads forçando limit=1 page=1 — usamos so o `total`
+  // (count exato vem do { count: "exact" } da query)
+  const { total } = await listLeads(
+    { db: supabase, orgId },
+    { ...filters, page: 1, limit: 1 },
+  );
+  return total;
+}
+
+/**
+ * Busca TODOS os leads que batem nos filtros, paginando em chunks de 1000.
+ * Usado pelo Dialog Exportar quando o usuario confirma. Sem cap fixo —
+ * em prod, expectativa eh ate ~10k leads por org. Loop interno protege
+ * contra paginas vazias.
+ *
+ * Retorna array completo de LeadWithTags (caller transforma em CSV/XLSX
+ * client-side via @persia/crm-ui ExportMenu / xlsx lib).
+ */
+export async function fetchLeadsForExport(
+  filters: LeadFilters = {},
+): Promise<LeadWithTags[]> {
+  const { supabase, orgId } = await requireRole("agent");
+  const ctx = { db: supabase, orgId };
+  const PAGE_SIZE = 1000;
+  const all: LeadWithTags[] = [];
+  let page = 1;
+  // Hard cap defensivo: 100 paginas = 100k leads. Improvavel atingir,
+  // mas evita loop infinito por bug.
+  const MAX_PAGES = 100;
+  while (page <= MAX_PAGES) {
+    const result = await listLeads(ctx, {
+      ...filters,
+      page,
+      limit: PAGE_SIZE,
+    });
+    all.push(...result.leads);
+    if (result.leads.length < PAGE_SIZE) break;
+    page += 1;
+  }
+  return all;
+}
+
 export async function getLead(id: string) {
   const { supabase, orgId } = await requireRole("agent");
   return fetchLead({ db: supabase, orgId }, id);
