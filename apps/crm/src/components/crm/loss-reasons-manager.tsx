@@ -168,7 +168,7 @@ export function LossReasonsManager({ initialReasons }: Props) {
                     {r.label}
                   </span>
                   {r.requires_competitor && (
-                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                    <span className="inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-medium text-warning-soft-foreground">
                       Pede concorrente
                     </span>
                   )}

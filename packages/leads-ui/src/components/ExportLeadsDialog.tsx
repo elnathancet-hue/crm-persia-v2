@@ -235,7 +235,7 @@ export function ExportLeadsDialog({
               {previewLoading ? (
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
               ) : (
-                <div className="size-2 rounded-full bg-emerald-500" aria-hidden />
+                <div className="size-2 rounded-full bg-success" aria-hidden />
               )}
               <div className="flex-1">
                 <div className="text-2xl font-bold tabular-nums text-foreground">
@@ -319,7 +319,7 @@ export function ExportLeadsDialog({
               {exporting ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <FileText className="size-4 text-blue-600" />
+                <FileText className="size-4 text-primary" />
               )}
               CSV
             </Button>

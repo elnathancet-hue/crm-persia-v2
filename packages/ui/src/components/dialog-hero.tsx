@@ -43,10 +43,8 @@ const TONE_CLASSES: Record<DialogHeroTone, string> = {
   primary: "bg-primary text-primary-foreground",
   destructive:
     "bg-destructive/10 text-destructive dark:bg-destructive/20",
-  success:
-    "bg-emerald-500 text-white dark:bg-emerald-500/90",
-  warning:
-    "bg-amber-500 text-white dark:bg-amber-500/90",
+  success: "bg-success text-success-foreground",
+  warning: "bg-warning text-warning-foreground",
 };
 
 export interface DialogHeroProps {

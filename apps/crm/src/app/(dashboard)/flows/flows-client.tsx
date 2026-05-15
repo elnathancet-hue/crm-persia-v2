@@ -222,7 +222,7 @@ export function FlowsPageClient({ initialFlows }: { initialFlows: Flow[] }) {
                       {flow.is_active ? (
                         <PowerOff className="size-3.5 text-destructive" />
                       ) : (
-                        <Power className="size-3.5 text-green-600" />
+                        <Power className="size-3.5 text-success" />
                       )}
                     </Button>
                     <Button

@@ -143,7 +143,7 @@ export function WebhookClient({ orgId, initialWebhookUrl }: WebhookClientProps) 
                 Testar Conexão
               </Button>
               {testResult === "ok" && (
-                <div className="flex items-center gap-1 text-sm text-green-600">
+                <div className="flex items-center gap-1 text-sm text-success">
                   <CheckCircle2 className="size-4" />
                   Webhook respondeu com sucesso
                 </div>
@@ -200,7 +200,7 @@ export function WebhookClient({ orgId, initialWebhookUrl }: WebhookClientProps) 
           {saving ? "Salvando..." : "Salvar"}
         </Button>
         {saved && (
-          <span className="text-sm text-green-600">Salvo com sucesso!</span>
+          <span className="text-sm text-success">Salvo com sucesso!</span>
         )}
       </div>
     </div>

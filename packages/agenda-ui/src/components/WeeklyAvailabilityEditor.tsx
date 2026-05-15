@@ -183,7 +183,7 @@ export const WeeklyAvailabilityEditor: React.FC<
 
       <div className="flex items-center justify-end gap-3">
         {savedAt && Date.now() - savedAt < 4000 && (
-          <span className="text-xs font-semibold text-emerald-600">
+          <span className="text-xs font-semibold text-success">
             Salvo
           </span>
         )}

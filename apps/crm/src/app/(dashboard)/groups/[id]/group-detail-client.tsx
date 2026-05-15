@@ -280,7 +280,7 @@ export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
           {saving ? "Salvando..." : "Salvar"}
         </Button>
-        {saved && <span className="text-sm text-green-600">Salvo!</span>}
+        {saved && <span className="text-sm text-success">Salvo!</span>}
       </div>
 
       {/* Send Invite Dialog */}

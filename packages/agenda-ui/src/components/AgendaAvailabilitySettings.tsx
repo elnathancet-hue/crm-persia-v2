@@ -175,7 +175,7 @@ export const AgendaAvailabilitySettings: React.FC = () => {
             >
               {r.name}
               {r.is_default && (
-                <span className="rounded-full bg-emerald-200 px-1.5 py-0.5 text-[8px] text-emerald-900">
+                <span className="rounded-full bg-success-soft px-1.5 py-0.5 text-[8px] text-success-soft-foreground">
                   PADRÃO
                 </span>
               )}

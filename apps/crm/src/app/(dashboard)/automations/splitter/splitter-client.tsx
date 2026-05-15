@@ -168,7 +168,7 @@ export function SplitterClient({ initialAssistant }: SplitterClientProps) {
           {saving ? "Salvando..." : "Salvar"}
         </Button>
         {saved && (
-          <span className="text-sm text-green-600">Salvo com sucesso!</span>
+          <span className="text-sm text-success">Salvo com sucesso!</span>
         )}
       </div>
     </div>

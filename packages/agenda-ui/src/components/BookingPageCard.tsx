@@ -106,7 +106,7 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
               className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-card hover:text-primary"
             >
               {copied ? (
-                <CheckCircle2 size={12} className="text-emerald-600" />
+                <CheckCircle2 size={12} className="text-success" />
               ) : (
                 <Copy size={12} />
               )}

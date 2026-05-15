@@ -135,7 +135,7 @@ export const PublicSlotPicker: React.FC<PublicSlotPickerProps> = ({
               key={slot.start_at}
               type="button"
               onClick={() => onSelectSlot(slot, timezone)}
-              className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-bold tabular-nums text-foreground transition hover:border-indigo-400 hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="rounded-xl border border-border bg-card px-3 py-3 text-sm font-bold tabular-nums text-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               {slot.display_time}
             </button>
