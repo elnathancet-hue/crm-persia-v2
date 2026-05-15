@@ -63,6 +63,11 @@ export {
 } from "./components/MarkAsLostDialog";
 export { ExportMenu } from "./components/ExportMenu";
 export {
+  StageBadge,
+  type StageBadgeProps,
+  getOutcomeClasses,
+} from "./components/StageBadge";
+export {
   DialogHero,
   type DialogHeroProps,
   type DialogHeroTone,

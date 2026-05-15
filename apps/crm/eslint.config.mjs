@@ -28,6 +28,11 @@ const eslintConfig = defineConfig([
       "@persia/named-input": "error",
       // a11y: <Button> icon-only sem aria-label deixa screen reader mudo.
       "@persia/icon-only-needs-aria-label": "error",
+      // PR-ANTIBUG (mai/2026): cor cromatica hardcoded em className.
+      // Forca tokens semanticos do design system. WARNING durante a fase
+      // de migracao (~150 ocorrencias pre-existentes); virar ERROR depois
+      // do sweep completo. Ver memory/feedback_anti_bug.md.
+      "@persia/no-hardcoded-tailwind-color": "warn",
     },
   },
   // === Sprint 6 — overrides pra telas FORA do escopo /crm migrado ===

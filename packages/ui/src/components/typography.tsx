@@ -48,23 +48,41 @@ export const PageTitle = React.forwardRef<HTMLHeadingElement, PageTitleProps>(
 // Rotulo bold-uppercase usado em forms/filtros/drawers como divisor.
 // Default = `<div>` pra evitar conflito quando ja existe <label> aninhado
 // (caso comum em filtros). Use `as="label"` quando for label real.
-export interface SectionLabelProps extends React.HTMLAttributes<HTMLElement> {
+//
+// PR-ANTIBUG (mai/2026): aceita `icon` prop. Antes cada section label
+// renderizava `<Contact className="size-4 text-blue-500" />` ou
+// `<TagIcon className="size-4 text-orange-500" />` — cores aleatorias
+// sem semantica. Agora o icone vai sempre como `text-muted-foreground`:
+//
+//   import { Contact } from "lucide-react";
+//   <SectionLabel icon={Contact}>Contato</SectionLabel>
+export interface SectionLabelProps
+  extends Omit<React.HTMLAttributes<HTMLElement>, "children"> {
   as?: "div" | "span" | "label" | "p" | "h4";
+  /** Componente de icone (ex: Contact do lucide-react). Renderiza muted. */
+  icon?: React.ComponentType<{ className?: string }>;
+  children?: React.ReactNode;
 }
 
 export const SectionLabel = React.forwardRef<HTMLElement, SectionLabelProps>(
-  function SectionLabel({ as = "div", className, ...props }, ref) {
+  function SectionLabel(
+    { as = "div", className, icon: Icon, children, ...props },
+    ref,
+  ) {
     const Comp = as as React.ElementType;
     return (
       <Comp
         ref={ref as React.Ref<HTMLElement>}
         data-slot="section-label"
         className={cn(
-          "text-xs font-bold uppercase tracking-wide text-muted-foreground",
+          "inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground",
           className,
         )}
         {...props}
-      />
+      >
+        {Icon && <Icon className="size-3.5 text-muted-foreground" />}
+        {children}
+      </Comp>
     );
   },
 );

@@ -51,6 +51,7 @@ export * from "./components/combobox";
 export * from "./components/command";
 export * from "./components/context-menu";
 export * from "./components/dialog";
+export * from "./components/dialog-shell";
 export * from "./components/direction";
 export * from "./components/drawer";
 export * from "./components/dropdown-menu";
