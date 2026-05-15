@@ -261,18 +261,18 @@ function StageCard({
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-semibold tracking-tight">{stage.situation}</p>
             {stage.rag_enabled ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-700 dark:text-purple-400 font-medium uppercase tracking-wider">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-progress-soft text-progress-soft-foreground font-medium uppercase tracking-wider">
                 RAG
               </span>
             ) : null}
             {isLast ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-medium">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-soft text-success-soft-foreground font-medium">
                 Última etapa
               </span>
             ) : null}
             {missingTransition ? (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-300 font-medium"
+                className="text-[10px] px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground font-medium"
                 title="Sem dica de transição: o agente pode ficar preso aqui sem avançar pra próxima etapa"
               >
                 ⚠ Sem dica de transição
@@ -291,7 +291,7 @@ function StageCard({
               <span className="font-medium text-foreground/80">Transição:</span> {stage.transition_hint}
             </p>
           ) : missingTransition ? (
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-2 pt-2 border-t border-border/40">
+            <p className="text-xs text-warning mt-2 pt-2 border-t border-border/40">
               Adicione uma <strong>dica de transição</strong> pra orientar quando o agente deve avançar pra etapa {order + 1}.
             </p>
           ) : null}

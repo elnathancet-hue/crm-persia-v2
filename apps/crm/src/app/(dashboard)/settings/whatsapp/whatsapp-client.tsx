@@ -172,12 +172,12 @@ export function WhatsAppSettingsClient() {
           ) : (
             <div className="flex items-center gap-4">
               <div className={`size-14 rounded-full flex items-center justify-center ${
-                isConnected ? "bg-green-100 dark:bg-green-900/30"
-                  : status === "unreachable" ? "bg-amber-100 dark:bg-amber-900/30"
+                isConnected ? "bg-success-soft"
+                  : status === "unreachable" ? "bg-warning-soft"
                   : "bg-muted"
               }`}>
-                {isConnected ? <CheckCircle2 className="size-7 text-green-600" />
-                  : status === "unreachable" ? <AlertTriangle className="size-7 text-amber-600" />
+                {isConnected ? <CheckCircle2 className="size-7 text-success" />
+                  : status === "unreachable" ? <AlertTriangle className="size-7 text-warning" />
                   : <XCircle className="size-7 text-muted-foreground" />}
               </div>
               <div>
@@ -292,8 +292,8 @@ export function WhatsAppSettingsClient() {
               <X className="size-4" />
             </button>
             <div className="flex flex-col items-center gap-3 text-center">
-              <div className="size-14 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                <AlertTriangle className="size-8 text-amber-600" />
+              <div className="size-14 rounded-full bg-warning-soft flex items-center justify-center">
+                <AlertTriangle className="size-8 text-warning" />
               </div>
               <p className="text-sm font-medium">QR Code expirado</p>
               <p className="text-xs text-muted-foreground">O tempo expirou. Gere um novo.</p>

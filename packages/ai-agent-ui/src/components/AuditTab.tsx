@@ -208,7 +208,7 @@ function RunRow({
 function StepRow({ step }: { step: AgentStep }) {
   const iconColor =
     step.step_type === "guardrail"
-      ? "text-amber-600"
+      ? "text-warning"
       : step.step_type === "tool"
       ? "text-primary"
       : "text-muted-foreground";
@@ -252,7 +252,7 @@ function RunStatusBadge({ status }: { status: AgentRunStatus }) {
   const STATUS_STYLES: Record<AgentRunStatus, { label: string; className: string }> = {
     succeeded: {
       label: "Sucesso",
-      className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+      className: "bg-success-soft text-success-soft-foreground border-success-ring",
     },
     failed: {
       label: "Falhou",
@@ -260,11 +260,11 @@ function RunStatusBadge({ status }: { status: AgentRunStatus }) {
     },
     fallback: {
       label: "Handoff",
-      className: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+      className: "bg-warning-soft text-warning-soft-foreground border-warning-ring",
     },
     running: {
       label: "Rodando",
-      className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+      className: "bg-primary/15 text-primary border-primary/30",
     },
     pending: {
       label: "Pendente",

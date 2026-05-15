@@ -354,7 +354,7 @@ export function SetupWizard({
               ) : (
                 <div className="space-y-5">
                   <div className="flex items-center gap-2">
-                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                    <Badge className="bg-success-soft text-success border-success-ring">
                       <CheckCircle2 className="size-3 mr-1" />
                       Configuração gerada
                     </Badge>
@@ -552,8 +552,8 @@ export function SetupWizard({
           {/* STEP 4: Activate */}
           {step === 4 && (
             <div className="text-center py-6 space-y-6">
-              <div className="w-24 h-24 rounded-full bg-green-500/10 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="size-12 text-green-600" />
+              <div className="w-24 h-24 rounded-full bg-success-soft flex items-center justify-center mx-auto">
+                <CheckCircle2 className="size-12 text-success" />
               </div>
               <div className="space-y-2">
                 <h2 className="text-2xl font-bold">Tudo pronto!</h2>
@@ -582,7 +582,7 @@ export function SetupWizard({
                 size="lg"
                 onClick={handleActivate}
                 disabled={isPending}
-                className="h-12 px-8 bg-green-600 hover:bg-green-700"
+                className="h-12 px-8 bg-success text-success-foreground hover:bg-success/90"
               >
                 {isPending ? (
                   <>

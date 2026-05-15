@@ -65,12 +65,13 @@ const CATEGORY_LABELS: Record<string, string> = {
   alunos: "Alunos",
 };
 
+// PR-COLOR-SWEEP: categorias de grupos mapeadas pros tokens do DS.
 const CATEGORY_COLORS: Record<string, string> = {
-  geral: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
-  aquecimento: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
-  evento: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
-  oferta: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300",
-  alunos: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300",
+  geral: "bg-muted text-muted-foreground",
+  aquecimento: "bg-warning-soft text-warning-soft-foreground",
+  evento: "bg-primary/10 text-primary",
+  oferta: "bg-success-soft text-success-soft-foreground",
+  alunos: "bg-progress-soft text-progress-soft-foreground",
 };
 
 export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {

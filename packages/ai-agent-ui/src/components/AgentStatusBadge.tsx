@@ -9,14 +9,14 @@ const STATUS_LABEL: Record<AgentStatus, string> = {
 };
 
 const STATUS_STYLES: Record<AgentStatus, string> = {
-  active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-  draft: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  active: "bg-success-soft text-success-soft-foreground border-success-ring",
+  draft: "bg-warning-soft text-warning-soft-foreground border-warning-ring",
   paused: "bg-muted text-muted-foreground border-border",
 };
 
 const STATUS_DOT: Record<AgentStatus, string> = {
-  active: "bg-emerald-500",
-  draft: "bg-amber-500",
+  active: "bg-success",
+  draft: "bg-warning",
   paused: "bg-muted-foreground/60",
 };
 

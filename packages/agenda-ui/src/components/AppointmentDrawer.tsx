@@ -58,7 +58,7 @@ const ACTION_BUTTONS: ActionDef[] = [
     icon: Check,
     variant: "default",
     className:
-      "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/30",
+      "bg-success text-success-foreground hover:bg-success/90",
   },
   {
     status: "completed",

@@ -227,7 +227,7 @@ function ConnectionStatusBadge({ status, error }: StatusBadgeProps) {
     return (
       <Badge
         variant="outline"
-        className="text-xs gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-transparent"
+        className="text-xs gap-1 bg-success-soft text-success-soft-foreground border-transparent"
       >
         <CheckCircle2 className="size-3" />
         Ativa
@@ -238,7 +238,7 @@ function ConnectionStatusBadge({ status, error }: StatusBadgeProps) {
     return (
       <Badge
         variant="outline"
-        className="text-xs gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-transparent"
+        className="text-xs gap-1 bg-warning-soft text-warning-soft-foreground border-transparent"
         title={error ?? undefined}
       >
         <AlertCircle className="size-3" />

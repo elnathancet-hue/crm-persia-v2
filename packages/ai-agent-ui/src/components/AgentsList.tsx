@@ -158,9 +158,9 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
   return (
     <div className="space-y-4">
       {!enabled ? (
-        <Card className="border-amber-500/40 bg-amber-500/5">
+        <Card className="border-warning-ring bg-warning-soft/50">
           <CardContent className="p-4 flex items-start gap-3">
-            <AlertTriangle className="size-5 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="size-5 text-warning shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">Agente nativo desativado</p>
               <p className="text-sm text-muted-foreground mt-0.5">
@@ -178,9 +178,9 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-emerald-500/40 bg-emerald-500/5">
+        <Card className="border-success-ring bg-success-soft/50">
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="size-2 rounded-full bg-emerald-500" aria-hidden />
+            <div className="size-2 rounded-full bg-success" aria-hidden />
             <p className="text-sm flex-1">
               Agente nativo ativo. Conversas novas seguirao a configuração do agente com status <strong>Ativo</strong>.
             </p>

@@ -76,8 +76,8 @@ export function StagesFlowView({ stages, onEdit, onAdd }: Props) {
 
 function StartMarker() {
   return (
-    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[11px] font-semibold">
-      <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
+    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-success-soft text-success-soft-foreground text-[11px] font-semibold">
+      <span className="size-1.5 rounded-full bg-success" aria-hidden />
       Início da conversa
     </div>
   );
@@ -92,7 +92,7 @@ function FlowConnector({ hint, showHint }: { hint: string | null; showHint: bool
           {hint}
         </div>
       ) : showHint ? (
-        <div className="px-2 text-[10px] text-amber-700/70 dark:text-amber-400/70 italic">
+        <div className="px-2 text-[10px] text-warning italic">
           ⚠ sem dica de transição
         </div>
       ) : null}
@@ -126,12 +126,12 @@ function StageNode({
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-semibold text-sm tracking-tight">{stage.situation}</p>
               {stage.rag_enabled ? (
-                <span className="text-[9px] px-1.5 py-0 rounded bg-purple-500/10 text-purple-700 dark:text-purple-400 font-medium uppercase tracking-wider">
+                <span className="text-[9px] px-1.5 py-0 rounded bg-progress-soft text-progress-soft-foreground font-medium uppercase tracking-wider">
                   RAG
                 </span>
               ) : null}
               {isLast ? (
-                <span className="text-[9px] px-1.5 py-0 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-medium">
+                <span className="text-[9px] px-1.5 py-0 rounded bg-success-soft text-success-soft-foreground font-medium">
                   Última
                 </span>
               ) : null}

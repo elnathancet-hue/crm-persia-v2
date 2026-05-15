@@ -210,12 +210,12 @@ function ToolCard({
   const host = isWebhook ? extractHost(tool.webhook_url) : null;
 
   return (
-    <Card className={isWebhook ? "border-purple-500/30" : undefined}>
+    <Card className={isWebhook ? "border-progress/30" : undefined}>
       <CardContent className="p-4 flex items-start gap-3">
         <div
           className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${
             isWebhook
-              ? "bg-gradient-to-br from-purple-500 to-blue-500 text-white"
+              ? "bg-gradient-to-br from-progress to-primary text-progress-foreground"
               : "bg-primary/10 text-primary"
           }`}
         >
@@ -231,7 +231,7 @@ function ToolCard({
               {preset?.display_name ?? tool.name}
             </p>
             {isWebhook ? (
-              <Badge variant="outline" className="text-[10px] border-purple-500/40 text-purple-700 dark:text-purple-400">
+              <Badge variant="outline" className="text-[10px] border-progress/40 text-progress">
                 Webhook
               </Badge>
             ) : null}
@@ -256,7 +256,7 @@ function ToolCard({
             ) : (
               <Power
                 className={`size-3 ${
-                  tool.is_enabled ? "text-emerald-600" : "text-muted-foreground/50"
+                  tool.is_enabled ? "text-success" : "text-muted-foreground/50"
                 }`}
               />
             )}

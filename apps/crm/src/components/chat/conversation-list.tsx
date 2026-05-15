@@ -23,6 +23,10 @@ import { cn } from "@/lib/utils";
 
 // ---- Helpers ----
 
+// NOTA: paleta intencional (hash do nome -> 1 de 10 cores) — nao e
+// hardcode visual a corrigir. 10 cores distintas exigem variedade alem
+// dos tokens semanticos. Mesmo padrao de KanbanBoard/LeadsList/
+// LeadCommentsTab. Identidade visual, nao semantica.
 const AVATAR_COLORS = [
   "bg-red-500",
   "bg-orange-500",
@@ -258,8 +262,8 @@ export function ConversationList({
         <h2 className="text-sm font-semibold">Chat ao Vivo</h2>
         {/* Green pulsing dot = online */}
         <span className="relative ml-auto flex size-2.5">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400 opacity-75" />
-          <span className="relative inline-flex size-2.5 rounded-full bg-green-500" />
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-success/70 opacity-75" />
+          <span className="relative inline-flex size-2.5 rounded-full bg-success" />
         </span>
       </div>
 
@@ -459,9 +463,9 @@ export function ConversationList({
                     <span
                       className={cn(
                         "absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-background",
-                        isAi && "bg-blue-500",
-                        isWaiting && "bg-amber-500",
-                        !isAi && !isWaiting && "bg-green-500"
+                        isAi && "bg-primary",
+                        isWaiting && "bg-warning",
+                        !isAi && !isWaiting && "bg-success"
                       )}
                     />
                   </div>
@@ -508,7 +512,7 @@ export function ConversationList({
                       {isWaiting && (
                         <Badge
                           variant="outline"
-                          className="h-4 px-1 text-[10px] text-amber-600"
+                          className="h-4 px-1 text-[10px] text-warning"
                         >
                           Aguardando
                         </Badge>
