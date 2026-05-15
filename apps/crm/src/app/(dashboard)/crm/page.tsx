@@ -11,6 +11,7 @@ import {
 import { getTagsWithCount } from "@/actions/tags";
 import { getSegments } from "@/actions/segments";
 import { listPipelines, listDeals } from "@persia/shared/crm";
+import { PageTitle } from "@persia/ui/typography";
 import { CrmShell } from "./crm-shell";
 
 interface CrmPageProps {
@@ -52,9 +53,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
   if (pipelines.length === 0) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight font-heading">
-          CRM
-        </h1>
+        <PageTitle size="compact">CRM</PageTitle>
         <div className="rounded-xl border border-dashed border-border/60 bg-muted/20 p-12 text-center">
           <h2 className="text-base font-semibold">Nenhum funil disponivel</h2>
           <p className="mt-1 text-sm text-muted-foreground">

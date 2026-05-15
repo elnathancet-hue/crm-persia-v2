@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
+import { PageTitle } from "@persia/ui/typography";
 import {
   CreateKanbanDialog,
   KanbanProvider,
@@ -301,9 +302,7 @@ function CrmPageHeader({
           <Kanban className="size-6" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground font-heading leading-none">
-            CRM
-          </h1>
+          <PageTitle className="leading-none">CRM</PageTitle>
           <p className="mt-1.5 text-sm text-muted-foreground">
             Pipeline, leads, segmentação, tags e atividades — tudo num lugar só.
           </p>

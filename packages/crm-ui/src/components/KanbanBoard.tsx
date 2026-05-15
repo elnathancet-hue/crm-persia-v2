@@ -118,6 +118,10 @@ import { DialogHero } from "./DialogHero";
 
 // Buckets de outcome — define labels, cores e ordem visual dos 3
 // pills do filtro principal. Espelha o design da referencia.
+//
+// PR-DSBASE (mai/2026): cores migradas de hardcode emerald/red/purple
+// pra tokens semanticos do design system (--color-success/failure/progress).
+// Light/dark mode resolvidos automaticamente via CSS vars em globals.css.
 const OUTCOME_BUCKETS: Array<{
   outcome: StageOutcome;
   label: string;
@@ -133,29 +137,29 @@ const OUTCOME_BUCKETS: Array<{
   {
     outcome: "em_andamento",
     label: "Em andamento",
-    activeClass: "bg-purple-600 text-white shadow-md shadow-purple-600/20",
+    activeClass: "bg-progress text-progress-foreground shadow-md shadow-progress/20",
     inactiveClass:
-      "border border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-500/30 dark:text-purple-300 dark:hover:bg-purple-500/10",
-    headerBg: "bg-blue-500",
+      "border border-progress-ring text-progress hover:bg-progress-soft",
+    headerBg: "bg-progress",
     columnBg: "bg-muted/30 dark:bg-muted/20",
   },
   {
     outcome: "falha",
     label: "Falha",
-    activeClass: "bg-red-500 text-white shadow-md shadow-red-500/20",
+    activeClass: "bg-failure text-failure-foreground shadow-md shadow-failure/20",
     inactiveClass:
-      "border border-red-300 text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-300 dark:hover:bg-red-500/10",
-    headerBg: "bg-red-500",
-    columnBg: "bg-red-50/30 dark:bg-red-500/5",
+      "border border-failure-ring text-failure hover:bg-failure-soft",
+    headerBg: "bg-failure",
+    columnBg: "bg-failure-soft/40",
   },
   {
     outcome: "bem_sucedido",
     label: "Bem-sucedido",
-    activeClass: "bg-emerald-500 text-white shadow-md shadow-emerald-500/20",
+    activeClass: "bg-success text-success-foreground shadow-md shadow-success/20",
     inactiveClass:
-      "border border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/30 dark:text-emerald-300 dark:hover:bg-emerald-500/10",
-    headerBg: "bg-emerald-500",
-    columnBg: "bg-emerald-50/30 dark:bg-emerald-500/5",
+      "border border-success-ring text-success hover:bg-success-soft",
+    headerBg: "bg-success",
+    columnBg: "bg-success-soft/40",
   },
 ];
 
