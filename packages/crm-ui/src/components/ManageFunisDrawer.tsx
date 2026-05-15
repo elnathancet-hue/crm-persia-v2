@@ -37,11 +37,11 @@ import {
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
 import type { Pipeline, Stage } from "@persia/shared/crm";
 
 import { useKanbanActions } from "../context";
@@ -115,24 +115,25 @@ export function ManageFunisDrawer({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-[600px] flex flex-col gap-0 p-0"
+      {/* Frente B (UX produto-first): drawer lateral migrou pra Dialog
+          centralizado responsivo. Centralizado + scroll interno + max-h. */}
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className="w-[92vw] sm:max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 rounded-2xl overflow-hidden"
         >
           {/* Header */}
-          <SheetHeader className="border-b border-border bg-card px-6 py-4">
+          <DialogHeader className="border-b border-border bg-card px-6 py-4 shrink-0">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <SheetTitle className="text-xl font-bold tracking-tight font-heading">
+                <DialogTitle className="text-xl font-bold tracking-tight font-heading">
                   Configurar funis
-                </SheetTitle>
+                </DialogTitle>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   Crie, edite ou exclua os funis de venda do CRM.
                 </p>
               </div>
             </div>
-          </SheetHeader>
+          </DialogHeader>
 
           {/* Body — lista de funis */}
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
@@ -247,8 +248,8 @@ export function ManageFunisDrawer({
               Criar novo funil
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog "Novo funil" — reusa o componente existente */}
       <CreateKanbanDialog

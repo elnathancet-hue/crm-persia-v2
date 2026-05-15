@@ -1249,7 +1249,7 @@ export function LeadsList({
 
       {/* PR-L4: Dialog escolher responsavel pra bulk assign */}
       <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="rounded-2xl w-[92vw] sm:max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Atribuir {selectedIds.size} lead

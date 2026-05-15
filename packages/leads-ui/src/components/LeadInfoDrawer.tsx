@@ -42,13 +42,13 @@ import {
   formatRelativeShortPtBR,
 } from "@persia/ui";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -317,7 +317,7 @@ export function LeadInfoDrawer({
       return actions.deleteLead(lead.id);
     },
     onOpenChange: (o) => {
-      // Fecha tanto o AlertDialog (delete) quanto o Sheet (drawer) no sucesso.
+      // Fecha tanto o AlertDialog (delete) quanto o Dialog principal no sucesso.
       if (!o) {
         setDeleteDialogOpen(false);
         onOpenChange(false);
@@ -551,14 +551,20 @@ export function LeadInfoDrawer({
   const isPending = updateMutation.pending;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-2xl overflow-hidden p-0 flex flex-col"
+    // Frente B (UX produto-first): drawer lateral migrou pra Dialog
+    // centralizado responsivo. Critérios:
+    //   - Centralizado (não lateral)
+    //   - Responsivo (max-w escalável: 92vw mobile, 4xl desktop)
+    //   - Scroll interno (max-h-[92vh] + flex column + body overflow-y-auto)
+    //   - Rounded-2xl pra acabamento DesignFlow
+    //   - p-0 + flex column pra header/body/footer fixos com body scrollavel
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="w-[92vw] sm:max-w-4xl max-h-[92vh] overflow-hidden p-0 flex flex-col rounded-2xl gap-0"
       >
-        <SheetHeader className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <SheetTitle>Informações do lead</SheetTitle>
+            <DialogTitle>Informações do lead</DialogTitle>
             <PresenceAvatars
               watchers={watchers}
               othersCount={othersCount}
@@ -566,7 +572,7 @@ export function LeadInfoDrawer({
             />
           </div>
           {currentStageObj ? (
-            <SheetDescription className="flex items-center gap-1.5 text-xs">
+            <DialogDescription className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Etapa atual:</span>
               <Popover>
                 <PopoverTrigger
@@ -621,26 +627,26 @@ export function LeadInfoDrawer({
                   )}
                 </PopoverContent>
               </Popover>
-            </SheetDescription>
+            </DialogDescription>
           ) : currentStageName ? (
             // Fallback display estatico (caller pode ainda passar
             // currentStageName mesmo sem deal aberto — ex: contexto
             // sem permissao de edicao).
-            <SheetDescription className="flex items-center gap-1.5 text-xs">
+            <DialogDescription className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Etapa atual:</span>
               <span className="font-medium text-cyan-600">
                 {currentStageName}
               </span>
-            </SheetDescription>
+            </DialogDescription>
           ) : null}
-        </SheetHeader>
+        </DialogHeader>
 
         {/* PR-D: header rico — 3 cards de stats (Negocios / Conversas /
             Atividades). Mostram count + info "de uma olhada" pro agente
             entender historico do lead sem trocar de tab/pagina. */}
         <LeadStatsCards stats={stats} loading={statsLoading} />
 
-        <Tabs defaultValue="dados" className="flex-1 flex flex-col">
+        <Tabs defaultValue="dados" className="flex-1 flex flex-col min-h-0">
           {/* PR-L2: 4 tabs (era 3). Tab "Negócios" lista deals do lead
               — modelo conceitual "1 lead -> N negocios" (briefing user).
               Mobile: 2 cols (2 linhas); Desktop: 4 cols (1 linha). */}
@@ -994,7 +1000,7 @@ export function LeadInfoDrawer({
           </form>
         </Tabs>
 
-        <SheetFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-2 sm:space-x-0">
+        <DialogFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-2 sm:space-x-0">
           {/* PR-U3: Excluir no canto esquerdo, gated por canDelete.
               CRM passa canDelete=isAgent; admin passa true. */}
           {canDelete && (
@@ -1066,9 +1072,9 @@ export function LeadInfoDrawer({
               </Button>
             )}
           </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

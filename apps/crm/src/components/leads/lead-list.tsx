@@ -8,7 +8,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   LeadInfoDrawer,
   LeadsList,
@@ -34,6 +34,7 @@ import {
   assignLead,
   bulkAssignLeads,
   bulkDeleteLeads,
+  getLead,
   getOrgTags,
   type LeadListItemStats,
 } from "@/actions/leads";
@@ -58,6 +59,7 @@ interface Props {
 
 export function LeadList(props: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAgent } = useRole();
   const orgId = useCurrentOrgId();
   // PR-U2: supabase client pro <LeadInfoDrawer> (DI). Singleton — chamar
@@ -78,6 +80,45 @@ export function LeadList(props: Props) {
   // essa feature ainda.
   const [infoDrawerLead, setInfoDrawerLead] =
     React.useState<LeadWithTags | null>(null);
+
+  // === Deeplink ?lead=UUID (Frente A: unificação) ============================
+  // Suporta URL `/crm?tab=leads&lead={UUID}` abrindo o drawer naquele
+  // lead. Usado por:
+  //   - Redirect 308 de /leads/{UUID} (rota legacy deprecada)
+  //   - Links externos que queiram apontar pra um lead específico
+  //   - Bookmarks antigos (URL continua linkavel)
+  //
+  // 1. Procura primeiro na pagina atual de leads (rapido, sem fetch)
+  // 2. Fallback: getLead() pra buscar leads de paginas não-carregadas
+  // ==========================================================================
+  const deeplinkLeadId = searchParams.get("lead");
+  React.useEffect(() => {
+    if (!deeplinkLeadId) return;
+    // Evita re-abrir se o drawer ja esta com esse lead
+    if (infoDrawerLead?.id === deeplinkLeadId) return;
+
+    const found = props.initialLeads.find((l) => l.id === deeplinkLeadId);
+    if (found) {
+      setInfoDrawerLead(found);
+      return;
+    }
+
+    let cancelled = false;
+    // Lead nao esta na pagina atual — busca via server action.
+    // getLead retorna { lead, activities }; aqui usamos so o lead.
+    getLead(deeplinkLeadId)
+      .then((res) => {
+        if (!cancelled && res?.lead) {
+          setInfoDrawerLead(res.lead as unknown as LeadWithTags);
+        }
+      })
+      .catch(() => {
+        /* silencioso — lead nao encontrado/sem permissao, ignora */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deeplinkLeadId, props.initialLeads, infoDrawerLead?.id]);
 
   // Import wizard (PR-K1) — CRM-only por enquanto.
   const [importOpen, setImportOpen] = React.useState(false);
@@ -176,8 +217,14 @@ export function LeadList(props: Props) {
           assignees={props.assignees ?? []}
           canEdit={isAgent}
           onRowClick={(lead) => setInfoDrawerLead(lead)}
-          onEditLead={(lead) => router.push(`/leads/${lead.id}`)}
-          onDeleteLead={(lead) => router.push(`/leads/${lead.id}`)}
+          // Frente A (unificação): ⋮ → Editar/Excluir agora abrem o
+          // mesmo LeadInfoDrawer que clicar na linha. Resolve:
+          //   - bug crash da rota legacy (LeadsProvider missing)
+          //   - duplicação de fluxo (drawer já tem edit form + delete)
+          //   - inconsistência UX (2 caminhos pra mesma ação)
+          // A rota /leads/[id] agora redireciona pro /crm com drawer aberto.
+          onEditLead={(lead) => setInfoDrawerLead(lead)}
+          onDeleteLead={(lead) => setInfoDrawerLead(lead)}
           // PR-L3: CTAs inline por linha (menu ⋯ extendido)
           onAssignLead={async (leadId, userId) => {
             await assignLead(leadId, userId);
@@ -241,7 +288,16 @@ export function LeadList(props: Props) {
           <LeadInfoDrawer
             open={!!infoDrawerLead}
             onOpenChange={(open) => {
-              if (!open) setInfoDrawerLead(null);
+              if (!open) {
+                setInfoDrawerLead(null);
+                // Limpa ?lead=UUID da URL pra nao re-abrir em re-renders.
+                if (searchParams.get("lead")) {
+                  const next = new URLSearchParams(searchParams.toString());
+                  next.delete("lead");
+                  const qs = next.toString();
+                  router.replace(qs ? `/crm?${qs}` : "/crm", { scroll: false });
+                }
+              }
             }}
             lead={infoDrawerLead}
             onSaved={() => router.refresh()}

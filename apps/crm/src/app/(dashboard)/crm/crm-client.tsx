@@ -108,6 +108,12 @@ export function CrmClient({
       // PR-Q: presence — admin nao passa nada (compat)
       dealWatchers={watchersByDeal}
       onDealViewChange={setViewingDealId}
+      // Frente B: botão "Ver lead" no card do Kanban abre o
+      // LeadInfoDrawer via deeplink. Reusa o mesmo mecanismo da
+      // tab Leads (?lead=UUID), garantindo UX consistente.
+      onOpenLead={(leadId) => {
+        router.push(`/crm?tab=leads&lead=${leadId}`);
+      }}
     />
   );
 }

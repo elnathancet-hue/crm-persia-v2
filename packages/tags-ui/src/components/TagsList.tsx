@@ -278,7 +278,7 @@ export function TagsList({
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="rounded-2xl w-[92vw] sm:max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingTag ? "Editar Tag" : "Nova Tag"}
@@ -361,7 +361,7 @@ export function TagsList({
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="rounded-2xl w-[92vw] sm:max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Excluir Tag</DialogTitle>
             <DialogDescription>

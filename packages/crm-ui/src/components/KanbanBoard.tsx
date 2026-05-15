@@ -329,6 +329,14 @@ export interface KanbanBoardProps {
    * outros agentes verem. undefined = sem presence (compat).
    */
   onDealViewChange?: (dealId: string | null) => void;
+  /**
+   * Frente B: callback "Ver lead" do card. Quando setado, cada card
+   * com lead_id ganha um botão/menu "Ver lead" que dispara essa funcao.
+   * O caller é responsável por abrir o LeadInfoDrawer (ou navegar pra
+   * /crm?tab=leads&lead={id}, se preferir). undefined = botao nao aparece
+   * (compat — admin nao usa).
+   */
+  onOpenLead?: (leadId: string) => void;
 }
 
 export function KanbanBoard({
@@ -349,6 +357,7 @@ export function KanbanBoard({
   onPipelineChange,
   dealWatchers,
   onDealViewChange,
+  onOpenLead,
 }: KanbanBoardProps) {
   // PR-CRMOPS: defaults derivados de `canManagePipelines` pra preservar
   // compat com call-sites que ainda nao foram atualizados (admin etc).
@@ -1642,6 +1651,8 @@ export function KanbanBoard({
                       // o caller (admin) nao passa dealWatchers (compat).
                       watchers={dealWatchers?.get(deal.id) ?? []}
                       onViewChange={onDealViewChange}
+                      // Frente B: passa o callback "Ver lead" pra cada card.
+                      onOpenLead={onOpenLead}
                     />
                   ))}
                   {/* Empty state — discreto + clicavel pra adicionar deal */}
@@ -1848,6 +1859,7 @@ const DealCard = React.memo(function DealCardImpl({
   onChange,
   watchers,
   onViewChange,
+  onOpenLead,
 }: {
   deal: Deal;
   /** PR-KANBAN-UI: cor da etapa (vem do stage pai), usada como
@@ -1891,6 +1903,8 @@ const DealCard = React.memo(function DealCardImpl({
   watchers?: Array<{ user_id: string; full_name: string }>;
   /** PR-Q: dispara quando este user abre/fecha detalhe (pra presence). */
   onViewChange?: (dealId: string | null) => void;
+  /** Frente B: callback pro botao "Ver lead" (abre LeadInfoDrawer). */
+  onOpenLead?: (leadId: string) => void;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
 
@@ -2129,6 +2143,23 @@ const DealCard = React.memo(function DealCardImpl({
               </p>
             )}
           </div>
+          {/* Frente B: botao "Ver lead" abre o LeadInfoDrawer (Dialog
+              centralizado). Caller injeta `onOpenLead`. Sem ele (admin
+              ou tela legada), botao nao aparece — compat zero-risk. */}
+          {onOpenLead && deal.lead_id && (
+            <button
+              type="button"
+              aria-label="Ver lead"
+              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-blue-500/15 text-blue-600 hover:bg-blue-500/25 transition-colors"
+              title="Ver lead"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (deal.lead_id) onOpenLead(deal.lead_id);
+              }}
+            >
+              <User className="size-3.5" />
+            </button>
+          )}
           {/* PR-C: substitui o botao "Abrir WhatsApp" (wa.me externo) por
               "Abrir conversa" — find-or-create conversation interna e
               navega pro /chat. Fallback pra wa.me apenas se a action de
@@ -2973,7 +3004,7 @@ function DealDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md rounded-2xl">
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="sr-only">Detalhes do Negócio</DialogTitle>
           <DialogHero
@@ -3245,7 +3276,7 @@ function AddDealDialog({
           </button>
         }
       />
-      <DialogContent className="rounded-2xl sm:max-w-md">
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="sr-only">Novo Negócio</DialogTitle>
           <DialogHero
@@ -3637,7 +3668,7 @@ function BulkMoveDialog({
   const dialogTitle = `Mover ${selectedCount} negócio${selectedCount === 1 ? "" : "s"} pra outra etapa`;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
           <DialogHero
@@ -3719,7 +3750,7 @@ function BulkApplyTagsDialog({
   const dialogTitle = `Aplicar tags em ${selectedCount} negócio${selectedCount === 1 ? "" : "s"}`;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
           <DialogHero

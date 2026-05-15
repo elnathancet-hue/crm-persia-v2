@@ -67,7 +67,7 @@ export function CreateKanbanDialog({ open, onOpenChange, onCreated }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl">
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="sr-only">Novo funil</DialogTitle>
           <DialogHero
