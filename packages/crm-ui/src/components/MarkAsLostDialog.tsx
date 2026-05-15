@@ -105,7 +105,7 @@ export function MarkAsLostDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           {/* DialogTitle invisivel pra a11y do Radix; o titulo visivel
               vem do DialogHero. */}
