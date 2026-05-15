@@ -27,7 +27,7 @@ export function IndexingStatusBadge({ status, error, chunkCount }: Props) {
     return (
       <Badge
         variant="outline"
-        className="text-xs gap-1 bg-blue-500/10 text-blue-700 dark:text-blue-400 border-transparent"
+        className="text-xs gap-1 bg-primary/10 text-primary border-transparent"
       >
         <Loader2 className="size-3 animate-spin" />
         Indexando
@@ -38,7 +38,7 @@ export function IndexingStatusBadge({ status, error, chunkCount }: Props) {
     return (
       <Badge
         variant="outline"
-        className="text-xs gap-1 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-transparent"
+        className="text-xs gap-1 bg-success-soft text-success-soft-foreground border-transparent"
       >
         <CheckCircle2 className="size-3" />
         Indexada ({chunkCount} chunk{chunkCount === 1 ? "" : "s"})

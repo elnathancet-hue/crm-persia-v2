@@ -210,7 +210,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       </div>
 
       {activeTemplates.length === 0 ? (
-        <Card className="border-amber-500/40 bg-amber-500/5">
+        <Card className="border-warning-ring bg-warning-soft/50">
           <CardContent className="p-4 text-sm">
             <p className="font-medium">Nenhum template de notificação ativo</p>
             <p className="text-muted-foreground mt-0.5">
@@ -228,7 +228,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             return (
               <Card key={followup.id} className="transition-shadow hover:shadow-sm">
                 <CardContent className="p-4 flex items-start gap-4">
-                  <div className="size-10 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <div className="size-10 rounded-lg bg-warning-soft text-warning-soft-foreground flex items-center justify-center shrink-0">
                     <Clock className="size-5" />
                   </div>
                   <div className="flex-1 min-w-0 space-y-0.5">

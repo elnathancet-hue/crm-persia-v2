@@ -31,13 +31,14 @@ export default async function ReportsPage() {
 
   const aiRate = totalMessages && totalMessages > 0 ? Math.round(((aiMessages || 0) / totalMessages) * 100) : 0;
 
+  // PR-COLOR-SWEEP: KPIs mapeados pros tokens do DS.
   const stats = [
-    { title: "Total de Leads", value: totalLeads || 0, icon: Users, color: "text-blue-500" },
-    { title: "Conversas", value: totalConversations || 0, icon: MessageSquare, color: "text-green-500" },
-    { title: "Mensagens Totais", value: totalMessages || 0, icon: Send, color: "text-purple-500" },
-    { title: "Mensagens da IA", value: aiMessages || 0, icon: Bot, color: "text-cyan-500" },
-    { title: "Taxa da IA", value: `${aiRate}%`, icon: BarChart3, color: "text-amber-500" },
-    { title: "Campanhas", value: totalCampaigns || 0, icon: Send, color: "text-pink-500" },
+    { title: "Total de Leads", value: totalLeads || 0, icon: Users, color: "text-primary" },
+    { title: "Conversas", value: totalConversations || 0, icon: MessageSquare, color: "text-success" },
+    { title: "Mensagens Totais", value: totalMessages || 0, icon: Send, color: "text-progress" },
+    { title: "Mensagens da IA", value: aiMessages || 0, icon: Bot, color: "text-chart-2" },
+    { title: "Taxa da IA", value: `${aiRate}%`, icon: BarChart3, color: "text-warning" },
+    { title: "Campanhas", value: totalCampaigns || 0, icon: Send, color: "text-chart-5" },
   ];
 
   // Leads by status

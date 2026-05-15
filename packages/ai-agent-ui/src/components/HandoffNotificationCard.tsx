@@ -193,7 +193,7 @@ export function HandoffNotificationCard({
                 ))}
               </div>
               {unknownPlaceholders.length > 0 ? (
-                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
+                <p className="text-xs text-warning flex items-start gap-1.5">
                   <Info className="size-3.5 shrink-0 mt-0.5" />
                   Placeholders desconhecidos serão renderizados vazios:{" "}
                   {unknownPlaceholders.map((p) => `{{${p}}}`).join(", ")}
@@ -216,7 +216,7 @@ export function HandoffNotificationCard({
               </div>
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="flex items-start gap-2">
-                  <div className="size-7 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="size-7 rounded-full bg-success-soft text-success-soft-foreground flex items-center justify-center shrink-0 mt-0.5">
                     <MessageSquare className="size-3.5" />
                   </div>
                   <div className="flex-1 min-w-0">
