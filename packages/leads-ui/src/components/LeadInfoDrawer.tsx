@@ -566,7 +566,7 @@ export function LeadInfoDrawer({
       <DialogContent
         className="w-[92vw] sm:max-w-4xl max-h-[92vh] overflow-hidden p-0 flex flex-col rounded-2xl gap-0"
       >
-        <DialogHeader className="px-5 pt-5 pb-3 border-b border-border bg-card shrink-0">
+        <DialogHeader className="px-6 pt-5 pb-3 pr-12 border-b border-border bg-card shrink-0">
           <div className="flex items-start justify-between gap-3">
             <DialogTitle>Informações do lead</DialogTitle>
             <PresenceAvatars
@@ -684,7 +684,7 @@ export function LeadInfoDrawer({
           <form
             id="lead-info-form"
             onSubmit={handleSave}
-            className="flex-1 overflow-y-auto px-5 py-4 space-y-6"
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-6"
           >
             <TabsContent value="dados" className="space-y-6 mt-0">
               {/* ============ CONTATO ============ */}
@@ -1004,7 +1004,7 @@ export function LeadInfoDrawer({
           </form>
         </Tabs>
 
-        <DialogFooter className="px-5 py-3 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-2 sm:space-x-0">
+        <DialogFooter className="px-6 py-4 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-3 sm:space-x-0">
           {/* PR-U3: Excluir no canto esquerdo, gated por canDelete.
               CRM passa canDelete=isAgent; admin passa true. */}
           {canDelete && (
@@ -1420,7 +1420,7 @@ function LeadStatsCards({
   loading: boolean;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2 px-5 py-3 bg-muted/30 border-b border-border shrink-0">
+    <div className="grid grid-cols-3 gap-2 px-6 py-3 bg-muted/30 border-b border-border shrink-0">
       <StatCard
         icon={<CircleDollarSign className="size-3.5 text-emerald-600" />}
         label="Negócios"
