@@ -84,6 +84,26 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Spacing semantic tokens — PR 10/10 Fase 3 (mai/2026).
+     Por que: paddings/gaps eram chutados caso a caso (p-3 aqui, p-4 ali,
+     px-6 py-4 no DialogShell, space-y-6 em sections, gap-3 em forms).
+     Drift visual + dor pra ajustar densidade global.
+     Tokens semanticos:
+       - p-card        → padding interno de card (24px x 24px)
+       - p-card-lg     → card largo (32px)
+       - gap-section   → distancia entre secoes (32px) — usar em space-y/gap
+       - gap-stack     → distancia entre items relacionados (16px)
+       - gap-form      → distancia entre campos de form (16px)
+       - gap-inline    → gap horizontal pequeno (12px)
+     Tailwind expoe automaticamente via @theme inline. Quando precisar
+     ajustar densidade do app inteiro, edita aqui — propaga em toda parte. */
+  --spacing-card: 1.5rem;     /* p-card / px-card */
+  --spacing-card-lg: 2rem;    /* p-card-lg */
+  --spacing-section: 2rem;    /* gap-section / space-y-section */
+  --spacing-stack: 1rem;      /* gap-stack / space-y-stack */
+  --spacing-form: 1rem;       /* gap-form / space-y-form */
+  --spacing-inline: 0.75rem;  /* gap-inline */
 }
 
 /* ============================================
