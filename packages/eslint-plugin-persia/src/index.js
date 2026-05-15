@@ -12,6 +12,7 @@ import namedInput from "./rules/named-input.js";
 import iconOnlyNeedsAriaLabel from "./rules/icon-only-needs-aria-label.js";
 import noHardcodedTailwindColor from "./rules/no-hardcoded-tailwind-color.js";
 import noStyleOverrideOnPrimitive from "./rules/no-style-override-on-primitive.js";
+import noRawHtmlPrimitives from "./rules/no-raw-html-primitives.js";
 
 const plugin = {
   meta: {
@@ -24,6 +25,7 @@ const plugin = {
     "icon-only-needs-aria-label": iconOnlyNeedsAriaLabel,
     "no-hardcoded-tailwind-color": noHardcodedTailwindColor,
     "no-style-override-on-primitive": noStyleOverrideOnPrimitive,
+    "no-raw-html-primitives": noRawHtmlPrimitives,
   },
 };
 

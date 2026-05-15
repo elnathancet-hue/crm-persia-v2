@@ -101,8 +101,17 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
+      // PR-DS-POLISH (mai/2026): removido `-mx-4 -mb-4`. Eram negative
+      // margins que SO faziam sentido quando o pai DialogContent tinha
+      // `p-4` (default shadcn). Dialogs custom (DialogShell, LeadInfoDrawer)
+      // usam `p-0` — as margens negativas puxavam o footer pra dentro do
+      // viewport visivel, fazendo botoes Salvar/Excluir colarem nas
+      // bordas curvas. Agora footer respeita o box do pai sem extender.
+      //
+      // Tambem: bg-muted/50 -> bg-card (mais limpo) + px-card-lg (32px)
+      // pra Salvar/Excluir respirarem dos cantos curvos do dialog.
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-2 rounded-b-xl border-t bg-card px-card-lg py-4 sm:flex-row sm:justify-end",
         className
       )}
       {...props}

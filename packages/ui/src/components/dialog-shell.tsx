@@ -141,8 +141,11 @@ function DialogShellFooter({
   return (
     <div
       data-slot="dialog-shell-footer"
+      // PR-FOOTER-RESPIRO (mai/2026): px-card-lg (32px) em vez de
+      // px-card (24px) — Excluir esquerda e Salvar direita ficavam
+      // quase colando nas bordas do dialog. Agora respiram mais.
       className={cn(
-        "px-card py-4 border-t border-border bg-card shrink-0 flex flex-row items-center gap-inline",
+        "px-card-lg py-4 border-t border-border bg-card shrink-0 flex flex-row items-center gap-inline",
         justify === "between" ? "justify-between" : "justify-end",
         className,
       )}
