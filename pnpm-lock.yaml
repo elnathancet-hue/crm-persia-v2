@@ -407,6 +407,9 @@ importers:
       '@persia/shared':
         specifier: workspace:*
         version: link:../shared
+      '@persia/tags-ui':
+        specifier: workspace:*
+        version: link:../tags-ui
       '@persia/ui':
         specifier: workspace:*
         version: link:../ui
