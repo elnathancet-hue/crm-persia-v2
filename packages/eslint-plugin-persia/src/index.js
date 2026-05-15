@@ -10,6 +10,7 @@
 import noBareDateInJsx from "./rules/no-bare-date-in-jsx.js";
 import namedInput from "./rules/named-input.js";
 import iconOnlyNeedsAriaLabel from "./rules/icon-only-needs-aria-label.js";
+import noHardcodedTailwindColor from "./rules/no-hardcoded-tailwind-color.js";
 
 const plugin = {
   meta: {
@@ -20,6 +21,7 @@ const plugin = {
     "no-bare-date-in-jsx": noBareDateInJsx,
     "named-input": namedInput,
     "icon-only-needs-aria-label": iconOnlyNeedsAriaLabel,
+    "no-hardcoded-tailwind-color": noHardcodedTailwindColor,
   },
 };
 
