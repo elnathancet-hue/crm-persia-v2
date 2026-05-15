@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Badge } from "@persia/ui/badge";
+import { KpiValue, PageTitle } from "@persia/ui/typography";
 import { MessageSquare, Users, Bot, Send, BarChart3 } from "lucide-react";
 
 export default async function ReportsPage() {
@@ -62,7 +63,7 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight font-heading">Relatórios</h1>
+      <PageTitle size="compact">Relatórios</PageTitle>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {stats.map((stat) => {
@@ -74,7 +75,7 @@ export default async function ReportsPage() {
                   <Icon className={`h-6 w-6 ${stat.color}`} />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold tracking-tight font-heading">{stat.value}</p>
+                  <KpiValue size="md">{stat.value}</KpiValue>
                   <p className="text-sm text-muted-foreground">{stat.title}</p>
                 </div>
               </CardContent>

@@ -1,3 +1,4 @@
+import { PageTitle } from "@persia/ui/typography";
 import { getLandingPages } from "@/actions/landing-pages";
 import { LandingPagesClient } from "./landing-pages-client";
 
@@ -7,7 +8,7 @@ export default async function LandingPagesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight font-heading">Landing Pages</h1>
+        <PageTitle size="compact">Landing Pages</PageTitle>
         <p className="text-sm text-muted-foreground">
           Crie páginas de captura para converter visitantes em leads
         </p>
