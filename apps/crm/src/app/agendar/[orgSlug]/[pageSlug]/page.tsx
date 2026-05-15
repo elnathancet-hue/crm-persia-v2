@@ -30,7 +30,7 @@ export default async function PublicBookingPage({ params }: RouteParams) {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-4 py-12">
+    <main className="min-h-screen bg-gradient-to-b from-muted to-background px-4 py-12">
       <div className="mx-auto max-w-2xl">
         <BookingPagePublicClient resolved={resolved} />
       </div>

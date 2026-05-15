@@ -14,17 +14,21 @@
     "start:admin": "pnpm --filter @persia/admin start",
     "dev:crm": "pnpm --filter @persia/crm dev",
     "dev:admin": "pnpm --filter @persia/admin dev",
-    "lint": "pnpm --filter @persia/crm lint",
+    "lint": "pnpm --filter @persia/crm lint && pnpm lint:packages",
+    "lint:packages": "eslint packages/",
     "typecheck": "pnpm --filter @persia/crm typecheck",
     "test": "pnpm -r test",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@persia/eslint-plugin": "workspace:*",
+    "eslint": "^9",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.2"
   },
   "lint-staged": {
-    "apps/crm/**/*.{ts,tsx}": "pnpm --filter @persia/crm exec eslint"
+    "apps/crm/**/*.{ts,tsx}": "pnpm --filter @persia/crm exec eslint",
+    "packages/**/src/**/*.{ts,tsx}": "eslint"
   },
   "pnpm": {
     "overrides": {

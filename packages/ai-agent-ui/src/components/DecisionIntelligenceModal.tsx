@@ -92,8 +92,8 @@ export function DecisionIntelligenceModal({
       <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-              <Sparkles className="size-4 text-white" />
+            <div className="size-8 rounded-lg bg-gradient-to-br from-progress to-primary flex items-center justify-center">
+              <Sparkles className="size-4 text-primary-foreground" />
             </div>
             <DialogTitle>Adicionar Decisão Inteligente</DialogTitle>
           </div>

@@ -363,7 +363,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <Card className="border-dashed">
       <CardContent className="py-12 flex flex-col items-center text-center gap-4">
-        <div className="size-14 rounded-2xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+        <div className="size-14 rounded-2xl bg-gradient-to-br from-progress to-primary flex items-center justify-center">
           <Sparkles className="size-7 text-white" />
         </div>
         <div className="space-y-1 max-w-md">
@@ -393,7 +393,7 @@ function AgentCard({
       <CardContent className="p-6 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="size-10 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shrink-0">
+            <div className="size-10 rounded-xl bg-gradient-to-br from-progress to-primary flex items-center justify-center shrink-0">
               <Sparkles className="size-5 text-white" />
             </div>
             <div className="flex-1 min-w-0">
