@@ -1,3 +1,4 @@
+import { PageTitle } from "@persia/ui/typography";
 import { getCustomFields } from "@/actions/custom-fields";
 import { CustomFieldsClient } from "./custom-fields-client";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
@@ -9,7 +10,7 @@ export default async function CustomFieldsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight font-heading">Campos Personalizados</h1>
+        <PageTitle size="compact">Campos Personalizados</PageTitle>
         <p className="text-sm text-muted-foreground">
           Adicione campos extras aos seus leads para capturar dados especificos
         </p>

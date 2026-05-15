@@ -5,6 +5,7 @@ import Link from "next/link";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { MessageSquare, Users, Bot, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { PageTitle } from "@persia/ui/typography";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -49,7 +50,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <PageTitle size="compact">Dashboard</PageTitle>
         <p className="text-sm text-muted-foreground mt-1">Visao geral do seu CRM</p>
       </div>
 

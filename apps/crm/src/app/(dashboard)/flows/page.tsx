@@ -1,3 +1,4 @@
+import { PageTitle } from "@persia/ui/typography";
 import { getFlows } from "@/actions/flows";
 import { FlowsPageClient } from "./flows-client";
 
@@ -7,7 +8,7 @@ export default async function FlowsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight font-heading">Fluxos de Automação</h1>
+        <PageTitle size="compact">Fluxos de Automação</PageTitle>
         <p className="text-sm text-muted-foreground">
           Crie fluxos para automatizar ações com seus leads
         </p>
