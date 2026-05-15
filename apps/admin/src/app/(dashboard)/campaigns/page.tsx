@@ -11,12 +11,13 @@ import { NoContextFallback } from "@/components/no-context-fallback";
 import { toast } from "sonner";
 import type { ParamsSchema, TemplateVariableValues } from "@/lib/whatsapp/template-parser";
 
+// PR-COLOR-SWEEP: cores mapeadas pros tokens do DS (admin).
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  draft: { label: "Rascunho", color: "bg-gray-500" },
-  scheduled: { label: "Agendada", color: "bg-amber-500" },
-  sending: { label: "Enviando", color: "bg-blue-500" },
-  sent: { label: "Enviada", color: "bg-emerald-500" },
-  paused: { label: "Pausada", color: "bg-red-500" },
+  draft: { label: "Rascunho", color: "bg-muted-foreground" },
+  scheduled: { label: "Agendada", color: "bg-warning" },
+  sending: { label: "Enviando", color: "bg-primary" },
+  sent: { label: "Enviada", color: "bg-success" },
+  paused: { label: "Pausada", color: "bg-failure" },
 };
 
 export default function CampaignsPage() {
@@ -106,15 +107,15 @@ export default function CampaignsPage() {
                           const { sent, error } = await executeCampaign(c.id);
                           if (error) toast.error(error);
                           else { toast.success(`Campanha enviada para ${sent} leads`); load(); }
-                        }} className="text-emerald-400 hover:text-emerald-300 p-1" title="Enviar" aria-label="Enviar campanha"><Send className="size-4" /></button>
+                        }} className="text-success hover:text-success/80 p-1" title="Enviar" aria-label="Enviar campanha"><Send className="size-4" /></button>
                       )}
                       {c.status === "sending" && (
-                        <button onClick={() => handleStatusChange(c.id, "paused")} className="text-amber-400 hover:text-amber-300 p-1" title="Pausar" aria-label="Pausar campanha"><Pause className="size-4" /></button>
+                        <button onClick={() => handleStatusChange(c.id, "paused")} className="text-warning hover:text-warning/80 p-1" title="Pausar" aria-label="Pausar campanha"><Pause className="size-4" /></button>
                       )}
                       {c.status === "paused" && (
-                        <button onClick={() => handleStatusChange(c.id, "sending")} className="text-emerald-400 hover:text-emerald-300 p-1" title="Retomar" aria-label="Retomar campanha"><Play className="size-4" /></button>
+                        <button onClick={() => handleStatusChange(c.id, "sending")} className="text-success hover:text-success/80 p-1" title="Retomar" aria-label="Retomar campanha"><Play className="size-4" /></button>
                       )}
-                      <button onClick={() => handleDelete(c.id)} aria-label="Excluir campanha" className="text-muted-foreground/60 hover:text-red-500 p-1"><Trash2 className="size-4" /></button>
+                      <button onClick={() => handleDelete(c.id)} aria-label="Excluir campanha" className="text-muted-foreground/60 hover:text-destructive p-1"><Trash2 className="size-4" /></button>
                     </td>
                   </tr>
                 );
@@ -215,9 +216,9 @@ function CampaignForm({ onCreated }: { onCreated: () => void }) {
           value={name}
           onChange={e => { setName(e.target.value); clearFieldError("name"); }}
           onBlur={() => { if (!name.trim()) setFieldError("name", "Campo obrigatório"); }}
-          className={`w-full px-3 py-2 text-sm bg-muted border rounded-lg text-foreground outline-none focus:border-primary ${errors.name ? "border-red-500" : "border-border"}`}
+          className={`w-full px-3 py-2 text-sm bg-muted border rounded-lg text-foreground outline-none focus:border-primary ${errors.name ? "border-destructive" : "border-border"}`}
         />
-        {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+        {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
       </div>
 
       {/* Tipo: texto vs template */}
@@ -243,9 +244,9 @@ function CampaignForm({ onCreated }: { onCreated: () => void }) {
             onChange={e => { setMessage(e.target.value); clearFieldError("message"); }}
             onBlur={() => { if (!message.trim()) setFieldError("message", "Campo obrigatório"); else if (message.trim().length < 10) setFieldError("message", "Mínimo 10 caracteres"); }}
             rows={4}
-            className={`w-full px-3 py-2 text-sm bg-muted border rounded-lg text-foreground outline-none focus:border-primary resize-none ${errors.message ? "border-red-500" : "border-border"}`}
+            className={`w-full px-3 py-2 text-sm bg-muted border rounded-lg text-foreground outline-none focus:border-primary resize-none ${errors.message ? "border-destructive" : "border-border"}`}
           />
-          {errors.message && <p className="text-xs text-red-500 mt-1">{errors.message}</p>}
+          {errors.message && <p className="text-xs text-destructive mt-1">{errors.message}</p>}
         </div>
       ) : (
         <TemplateSection
@@ -356,7 +357,7 @@ function TemplateSection({
 
   if (templates.length === 0) {
     return (
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-300">
+      <div className="bg-warning-soft border border-warning-ring rounded-lg p-3 text-xs text-warning-soft-foreground">
         Nenhum template APPROVED disponivel. Configure uma conexao Meta Cloud e sincronize em{" "}
         <strong>Configuracoes &gt; Templates</strong>.
       </div>
@@ -370,7 +371,7 @@ function TemplateSection({
         <select
           value={selectedId}
           onChange={(e) => onSelect(e.target.value)}
-          className={`w-full px-3 py-2 text-sm bg-muted border rounded-lg text-foreground outline-none focus:border-primary ${error ? "border-red-500" : "border-border"}`}
+          className={`w-full px-3 py-2 text-sm bg-muted border rounded-lg text-foreground outline-none focus:border-primary ${error ? "border-destructive" : "border-border"}`}
         >
           <option value="">Escolha um template...</option>
           {templates.map((t) => (
@@ -379,7 +380,7 @@ function TemplateSection({
             </option>
           ))}
         </select>
-        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+        {error && <p className="text-xs text-destructive mt-1">{error}</p>}
       </div>
 
       {selected && schema && (

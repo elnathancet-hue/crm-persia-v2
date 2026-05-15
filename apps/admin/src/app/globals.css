@@ -39,6 +39,37 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --font-sans: var(--font-sans, "Inter"), ui-sans-serif, system-ui, sans-serif;
+
+  /* PR 10/10 Fase 5 (mai/2026): paridade DS com apps/crm. Tokens
+     semanticos de outcome (success/failure/progress/warning) +
+     chart-N. Antes admin tinha hardcodes amber/emerald/blue
+     espalhados — agora resolve light/dark via CSS vars iguais ao
+     CRM. Brand cohesion garantida. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-success-ring: var(--success-ring);
+  --color-failure: var(--failure);
+  --color-failure-foreground: var(--failure-foreground);
+  --color-failure-soft: var(--failure-soft);
+  --color-failure-soft-foreground: var(--failure-soft-foreground);
+  --color-failure-ring: var(--failure-ring);
+  --color-progress: var(--progress);
+  --color-progress-foreground: var(--progress-foreground);
+  --color-progress-soft: var(--progress-soft);
+  --color-progress-soft-foreground: var(--progress-soft-foreground);
+  --color-progress-ring: var(--progress-ring);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-warning-ring: var(--warning-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 }
 
 :root {
@@ -66,6 +97,33 @@
   --sidebar-accent-foreground: hsl(0, 0%, 96%);
   --sidebar-border: hsl(0, 0%, 14%);
   --sidebar-ring: hsl(217, 91%, 60%);
+
+  /* Outcome semantic tokens (light) — espelha apps/crm/src/app/globals.css. */
+  --success: hsl(142, 72%, 36%);
+  --success-foreground: hsl(0, 0%, 100%);
+  --success-soft: hsl(142, 70%, 95%);
+  --success-soft-foreground: hsl(142, 72%, 24%);
+  --success-ring: hsl(142, 65%, 70%);
+  --failure: hsl(0, 84%, 55%);
+  --failure-foreground: hsl(0, 0%, 100%);
+  --failure-soft: hsl(0, 86%, 96%);
+  --failure-soft-foreground: hsl(0, 70%, 35%);
+  --failure-ring: hsl(0, 90%, 75%);
+  --progress: hsl(265, 70%, 56%);
+  --progress-foreground: hsl(0, 0%, 100%);
+  --progress-soft: hsl(265, 100%, 97%);
+  --progress-soft-foreground: hsl(265, 60%, 35%);
+  --progress-ring: hsl(265, 80%, 80%);
+  --warning: hsl(38, 92%, 50%);
+  --warning-foreground: hsl(0, 0%, 100%);
+  --warning-soft: hsl(48, 100%, 96%);
+  --warning-soft-foreground: hsl(28, 80%, 30%);
+  --warning-ring: hsl(43, 96%, 70%);
+  --chart-1: hsl(43, 54%, 54%);
+  --chart-2: hsl(142, 72%, 29%);
+  --chart-3: hsl(230, 45%, 35%);
+  --chart-4: hsl(43, 80%, 65%);
+  --chart-5: hsl(330, 81%, 60%);
 }
 
 .dark {
@@ -93,6 +151,33 @@
   --sidebar-accent-foreground: hsl(30, 25%, 96%);
   --sidebar-border: hsl(230, 35%, 12%);
   --sidebar-ring: hsl(43, 54%, 54%);
+
+  /* Outcome semantic tokens (dark) — espelha apps/crm. */
+  --success: hsl(142, 69%, 50%);
+  --success-foreground: hsl(0, 0%, 8%);
+  --success-soft: hsl(142, 60%, 12%);
+  --success-soft-foreground: hsl(142, 70%, 75%);
+  --success-ring: hsl(142, 50%, 35%);
+  --failure: hsl(0, 84%, 60%);
+  --failure-foreground: hsl(0, 0%, 100%);
+  --failure-soft: hsl(0, 60%, 14%);
+  --failure-soft-foreground: hsl(0, 80%, 78%);
+  --failure-ring: hsl(0, 60%, 38%);
+  --progress: hsl(265, 75%, 65%);
+  --progress-foreground: hsl(0, 0%, 100%);
+  --progress-soft: hsl(265, 50%, 16%);
+  --progress-soft-foreground: hsl(265, 80%, 80%);
+  --progress-ring: hsl(265, 50%, 40%);
+  --warning: hsl(43, 96%, 56%);
+  --warning-foreground: hsl(0, 0%, 8%);
+  --warning-soft: hsl(28, 60%, 14%);
+  --warning-soft-foreground: hsl(48, 95%, 78%);
+  --warning-ring: hsl(28, 60%, 38%);
+  --chart-1: hsl(43, 60%, 60%);
+  --chart-2: hsl(142, 69%, 58%);
+  --chart-3: hsl(230, 50%, 65%);
+  --chart-4: hsl(43, 85%, 70%);
+  --chart-5: hsl(330, 86%, 70%);
 }
 
 body {
