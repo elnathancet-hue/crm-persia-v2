@@ -41,8 +41,8 @@ function AdminDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: "Clientes", value: stats.organizations, icon: Building2, color: "text-primary bg-primary/10" },
-          { label: "Total de Leads", value: stats.leads, icon: Users, color: "text-blue-500 bg-blue-500/10" },
-          { label: "Conversas", value: stats.conversations, icon: MessageSquare, color: "text-green-500 bg-green-500/10" },
+          { label: "Total de Leads", value: stats.leads, icon: Users, color: "text-progress bg-progress-soft" },
+          { label: "Conversas", value: stats.conversations, icon: MessageSquare, color: "text-success bg-success-soft" },
         ].map((stat) => (
           <div key={stat.label} className="border border-border rounded-xl bg-card p-6 hover:border-muted-foreground/30 transition-colors">
             <div className="flex items-start justify-between">
@@ -98,11 +98,11 @@ function ClientDashboard({ orgId, orgName }: { orgId: string; orgName: string })
   if (loading) return <div className="flex items-center justify-center h-64"><div className="size-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   const kpis = [
-    { label: "Leads", value: stats?.totalLeads ?? 0, icon: Users, color: "text-blue-500 bg-blue-500/10" },
-    { label: "Conversas", value: stats?.totalConversations ?? 0, icon: MessageSquare, color: "text-green-500 bg-green-500/10" },
+    { label: "Leads", value: stats?.totalLeads ?? 0, icon: Users, color: "text-progress bg-progress-soft" },
+    { label: "Conversas", value: stats?.totalConversations ?? 0, icon: MessageSquare, color: "text-success bg-success-soft" },
     // PR-H: terminologia "Funis" (plural pq e count) em vez de "Pipeline"
-    { label: "Funis", value: stats?.pipelineCount ?? 0, icon: Kanban, color: "text-purple-500 bg-purple-500/10" },
-    { label: "Automações", value: stats?.automationCount ?? 0, icon: Zap, color: "text-amber-500 bg-amber-500/10" },
+    { label: "Funis", value: stats?.pipelineCount ?? 0, icon: Kanban, color: "text-progress bg-progress-soft" },
+    { label: "Automações", value: stats?.automationCount ?? 0, icon: Zap, color: "text-warning bg-warning-soft" },
   ];
 
   return (
@@ -135,12 +135,12 @@ function ClientDashboard({ orgId, orgName }: { orgId: string; orgName: string })
           <p className="text-xs text-muted-foreground">Atendimento ao vivo</p>
         </Link>
         <Link href="/leads" className="border border-border rounded-xl bg-card p-5 hover:border-primary/30 transition-colors">
-          <Users className="size-5 text-blue-500 mb-2" />
+          <Users className="size-5 text-progress mb-2" />
           <p className="font-medium text-sm">Leads</p>
           <p className="text-xs text-muted-foreground">Gerenciar base de leads</p>
         </Link>
         <Link href="/reports" className="border border-border rounded-xl bg-card p-5 hover:border-primary/30 transition-colors">
-          <BarChart3 className="size-5 text-green-500 mb-2" />
+          <BarChart3 className="size-5 text-success mb-2" />
           <p className="font-medium text-sm">Relatorios</p>
           <p className="text-xs text-muted-foreground">Metricas e graficos</p>
         </Link>

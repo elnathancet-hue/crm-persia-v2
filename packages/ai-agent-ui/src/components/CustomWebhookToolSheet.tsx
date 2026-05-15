@@ -176,7 +176,7 @@ export function CustomWebhookToolSheet({
               required
             />
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
-              <ShieldCheck className="size-3.5 shrink-0 mt-0.5 text-emerald-600" />
+              <ShieldCheck className="size-3.5 shrink-0 mt-0.5 text-success" />
               O hostname precisa estar na allowlist da organização. Apenas HTTPS porta 443.
             </p>
             {allowedDomains.length > 0 ? (

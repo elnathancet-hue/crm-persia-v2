@@ -20,14 +20,14 @@ export function UsageStatsCards({ totals }: Props) {
       value: totals.run_count === 0 ? "—" : `${(totals.success_rate * 100).toFixed(1)}%`,
       sub: `${totals.fallback_count} handoff${totals.fallback_count === 1 ? "" : "s"}`,
       icon: CheckCircle2,
-      color: "text-emerald-600",
+      color: "text-success",
     },
     {
       label: "Custo acumulado",
       value: `US$ ${(totals.cost_usd_cents / 100).toFixed(2)}`,
       sub: `${(totals.tokens_input + totals.tokens_output).toLocaleString("pt-BR")} tokens`,
       icon: TriangleAlert,
-      color: "text-amber-600",
+      color: "text-warning",
     },
     {
       label: "Tempo médio",

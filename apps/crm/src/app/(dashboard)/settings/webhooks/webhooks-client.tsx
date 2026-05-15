@@ -177,9 +177,9 @@ export function WebhooksPageClient({
                 <TableCell>
                   <div className="flex items-center gap-1.5">
                     {webhook.direction === "inbound" ? (
-                      <ArrowDownToLine className="size-3.5 text-blue-500" />
+                      <ArrowDownToLine className="size-3.5 text-primary" />
                     ) : (
-                      <ArrowUpFromLine className="size-3.5 text-green-500" />
+                      <ArrowUpFromLine className="size-3.5 text-success" />
                     )}
                     <span className="text-sm">
                       {webhook.direction === "inbound" ? "Entrada" : "Saida"}
@@ -238,7 +238,7 @@ export function WebhooksPageClient({
                       {webhook.is_active ? (
                         <PowerOff className="size-3.5 text-destructive" />
                       ) : (
-                        <Power className="size-3.5 text-green-600" />
+                        <Power className="size-3.5 text-success" />
                       )}
                     </Button>
                     <Button

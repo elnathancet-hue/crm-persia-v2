@@ -275,7 +275,7 @@ export function InstancesClient() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {instances.map((inst) => (
-            <Card key={inst.id} className={inst.status === "connected" ? "border-green-500/30" : ""}>
+            <Card key={inst.id} className={inst.status === "connected" ? "border-success/30" : ""}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -321,7 +321,7 @@ export function InstancesClient() {
                     className="h-6 w-6"
                     onClick={() => copyToken(inst.token)}
                   >
-                    {copied === inst.token ? <Check className="size-3 text-green-500" /> : <Copy className="size-3" />}
+                    {copied === inst.token ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
                   </Button>
                 </div>
 

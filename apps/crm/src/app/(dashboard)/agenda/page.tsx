@@ -2,6 +2,7 @@ import { getAppointments } from "@/actions/agenda/appointments";
 import { getAgendaServices } from "@/actions/agenda/services";
 import { getOrgMeta } from "@/actions/agenda/org";
 import { getAuthContext } from "@/lib/auth";
+import { PageTitle } from "@persia/ui/typography";
 import { AgendaPageClient } from "./agenda-page-client";
 
 export const metadata = { title: "Agenda" };
@@ -31,7 +32,7 @@ export default async function AgendaPage() {
   return (
     <div className="space-y-8">
       <header>
-        <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
+        <PageTitle size="compact">Agenda</PageTitle>
         <p className="mt-1 text-sm text-muted-foreground">
           Acompanhe seus compromissos, organize a semana e cancele/reagende sem
           sair do CRM.

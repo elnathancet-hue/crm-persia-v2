@@ -81,7 +81,7 @@ function LimitRow({
           <div
             className={cn(
               "h-full transition-all",
-              over ? "bg-destructive" : warn ? "bg-amber-500" : "bg-emerald-500",
+              over ? "bg-destructive" : warn ? "bg-warning" : "bg-success",
             )}
             style={{ width: `${Math.max(2, pct)}%` }}
           />
@@ -90,7 +90,7 @@ function LimitRow({
       {over ? (
         <p className="text-[10px] text-destructive">Limite excedido — novas execuções caem em handoff.</p>
       ) : warn ? (
-        <p className="text-[10px] text-amber-600 dark:text-amber-400">Acima de 80% do limite.</p>
+        <p className="text-[10px] text-warning">Acima de 80% do limite.</p>
       ) : null}
     </div>
   );

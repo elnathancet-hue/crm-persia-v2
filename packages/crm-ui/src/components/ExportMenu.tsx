@@ -93,7 +93,7 @@ export function ExportMenu<T>({
           onClick={() => handleExport("xlsx")}
           className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-muted"
         >
-          <FileSpreadsheet className="size-4 text-emerald-600" />
+          <FileSpreadsheet className="size-4 text-success" />
           <div className="flex-1">
             <div className="font-medium">Excel (.xlsx)</div>
             <div className="text-[11px] text-muted-foreground">
@@ -106,7 +106,7 @@ export function ExportMenu<T>({
           onClick={() => handleExport("csv")}
           className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-muted"
         >
-          <FileText className="size-4 text-blue-600" />
+          <FileText className="size-4 text-primary" />
           <div className="flex-1">
             <div className="font-medium">CSV (.csv)</div>
             <div className="text-[11px] text-muted-foreground">

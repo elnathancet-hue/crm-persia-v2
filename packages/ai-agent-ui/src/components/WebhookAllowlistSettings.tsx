@@ -100,7 +100,7 @@ export function WebhookAllowlistSettings({ initialDomains, onChange }: Props) {
 
         {domains.length === 0 ? (
           <div className="border border-dashed rounded-md p-4 flex items-start gap-3">
-            <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="size-4 text-warning shrink-0 mt-0.5" />
             <div className="text-xs space-y-0.5">
               <p className="font-medium">Nenhum domínio cadastrado</p>
               <p className="text-muted-foreground">

@@ -1,3 +1,4 @@
+import { PageTitle } from "@persia/ui/typography";
 import { getEmailCampaigns } from "@/actions/email-campaigns";
 import { EmailPageClient } from "./email-client";
 
@@ -7,7 +8,7 @@ export default async function EmailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight font-heading">Email Marketing</h1>
+        <PageTitle size="compact">Email Marketing</PageTitle>
         <p className="text-sm text-muted-foreground">
           Crie e gerencie campanhas de email para seus leads
         </p>

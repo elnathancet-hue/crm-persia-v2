@@ -353,7 +353,7 @@ function NotificationCard({
                 className={cn(
                   "size-2 rounded-full",
                   template.status === "active"
-                    ? "bg-emerald-500"
+                    ? "bg-success"
                     : "bg-muted-foreground/40",
                 )}
                 aria-hidden
@@ -614,7 +614,7 @@ function NotificationEditorDialog({
               </span>
             </div>
             {unknownFixed.length > 0 ? (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+              <p className="text-xs text-warning">
                 Placeholders desconhecidos serão renderizados vazios:{" "}
                 {unknownFixed.map((p) => `{{${p.name}}}`).join(", ")}
               </p>

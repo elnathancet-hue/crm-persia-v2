@@ -29,10 +29,14 @@ const eslintConfig = defineConfig([
       // a11y: <Button> icon-only sem aria-label deixa screen reader mudo.
       "@persia/icon-only-needs-aria-label": "error",
       // PR-ANTIBUG (mai/2026): cor cromatica hardcoded em className.
-      // Forca tokens semanticos do design system. WARNING durante a fase
-      // de migracao (~150 ocorrencias pre-existentes); virar ERROR depois
-      // do sweep completo. Ver memory/feedback_anti_bug.md.
-      "@persia/no-hardcoded-tailwind-color": "warn",
+      // Forca tokens semanticos do design system.
+      //
+      // PR 10/10 (mai/2026): FLIPADO PRA ERROR. Sweep cumulativo
+      // (PRs #192-#196 + locais) zerou ~516 hardcodes. Restam apenas
+      // paletas intencionais (avatars) em arquivos especificos —
+      // tratados via override em packages/eslint root config.
+      // Agora qualquer novo callsite com bg-emerald-500 etc QUEBRA o build.
+      "@persia/no-hardcoded-tailwind-color": "error",
     },
   },
   // === Sprint 6 — overrides pra telas FORA do escopo /crm migrado ===
