@@ -291,7 +291,7 @@ export function ChatWindow({ conversationId, onBack }: Props) {
           <p className="text-sm font-medium text-foreground truncate">{lead?.name || lead?.phone || "Lead"}</p>
           <p className="text-[11px] text-muted-foreground">
             {lead?.phone && <span>{lead.phone}</span>}
-            {conversation?.assigned_to === "ai" && <span className="ml-2 text-emerald-400">IA</span>}
+            {conversation?.assigned_to === "ai" && <span className="ml-2 text-success">IA</span>}
           </p>
         </div>
 
@@ -307,7 +307,7 @@ export function ChatWindow({ conversationId, onBack }: Props) {
                 <button onClick={handleTransferToAI} className="w-full text-left px-4 py-2 text-sm text-foreground hover:bg-muted flex items-center gap-2">
                   <Bot className="size-4" /> Transferir p/ IA
                 </button>
-                <button onClick={handleClose} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-muted flex items-center gap-2">
+                <button onClick={handleClose} className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-muted flex items-center gap-2">
                   <X className="size-4" /> Fechar conversa
                 </button>
               </div>
@@ -338,15 +338,15 @@ export function ChatWindow({ conversationId, onBack }: Props) {
                   className={`max-w-[70%] px-3 py-2 rounded-2xl text-sm ${
                     isAgent
                       ? msg.sender === "ai"
-                        ? "bg-emerald-900/40 text-emerald-100 rounded-br-md"
+                        ? "bg-success-soft text-success-soft-foreground rounded-br-md"
                         : failed
-                          ? "bg-red-900/30 text-red-100 rounded-br-md border border-red-500/40"
-                          : "bg-primary/20 text-[#F8F5F0] rounded-br-md"
+                          ? "bg-failure-soft text-failure-soft-foreground rounded-br-md border border-failure-ring"
+                          : "bg-primary/20 text-primary-foreground rounded-br-md"
                       : "bg-card text-foreground rounded-bl-md"
                   } ${pending ? "opacity-70" : ""}`}
                 >
                   {msg.sender === "ai" && (
-                    <span className="text-[10px] text-emerald-400 block mb-0.5">IA</span>
+                    <span className="text-[10px] text-success block mb-0.5">IA</span>
                   )}
                   <MessageContent msg={msg} />
                   <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-muted-foreground/60">
@@ -363,10 +363,10 @@ export function ChatWindow({ conversationId, onBack }: Props) {
 
       {/* WhatsApp disconnected banner */}
       {waConnected === false && (
-        <div className="px-4 py-2 bg-amber-900/30 border-t border-amber-500/40 text-xs text-amber-200 flex items-center gap-2 shrink-0">
+        <div className="px-4 py-2 bg-warning-soft border-t border-warning-ring text-xs text-warning-soft-foreground flex items-center gap-2 shrink-0">
           <AlertCircle className="size-4 shrink-0" aria-hidden />
-          <span className="flex-1">WhatsApp desconectado. Mensagens enviadas vao falhar.</span>
-          <a href="/settings/whatsapp" className="underline hover:text-amber-100 shrink-0">Conectar</a>
+          <span className="flex-1">WhatsApp desconectado. Mensagens enviadas vão falhar.</span>
+          <a href="/settings/whatsapp" className="underline hover:text-warning shrink-0">Conectar</a>
         </div>
       )}
 
@@ -482,7 +482,7 @@ function StatusIndicator({
       <button
         onClick={onRetry}
         disabled={!onRetry}
-        className="inline-flex items-center gap-0.5 text-red-300 hover:text-red-100 transition-colors disabled:cursor-not-allowed"
+        className="inline-flex items-center gap-0.5 text-failure hover:text-failure/80 transition-colors disabled:cursor-not-allowed"
         title="Reenviar mensagem"
         aria-label="Reenviar mensagem falhada"
       >
