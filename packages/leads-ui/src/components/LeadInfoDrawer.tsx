@@ -101,15 +101,19 @@ import {
 
 // Buckets pra agrupar stages no Popover do subheader. Espelha o
 // schema de outcome (Fase 1) e as cores usadas no Kanban.
+//
+// PR-DSBASE (mai/2026): cores migradas pra tokens semanticos. Cada
+// outcome mapeia pra `text-progress|failure|success` que resolvem
+// light/dark via CSS vars.
 const OUTCOME_LABEL: Record<StageOutcome, string> = {
   em_andamento: "EM ANDAMENTO",
   falha: "FALHA",
   bem_sucedido: "BEM-SUCEDIDO",
 };
 const OUTCOME_COLOR: Record<StageOutcome, string> = {
-  em_andamento: "text-purple-700",
-  falha: "text-red-600",
-  bem_sucedido: "text-emerald-600",
+  em_andamento: "text-progress",
+  falha: "text-failure",
+  bem_sucedido: "text-success",
 };
 
 interface DrawerStage {

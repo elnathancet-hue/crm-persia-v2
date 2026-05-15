@@ -32,6 +32,25 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  /* Outcome semantic tokens — DS base PR (mai/2026)
+     Substitui hardcodes emerald/red/blue espalhados por
+     KanbanBoard, LeadInfoDrawer, PipelineStagesEditor.
+     Cada outcome tem 3 facets: solido (bg+fg), soft (bg+fg) e ring. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-success-ring: var(--success-ring);
+  --color-failure: var(--failure);
+  --color-failure-foreground: var(--failure-foreground);
+  --color-failure-soft: var(--failure-soft);
+  --color-failure-soft-foreground: var(--failure-soft-foreground);
+  --color-failure-ring: var(--failure-ring);
+  --color-progress: var(--progress);
+  --color-progress-foreground: var(--progress-foreground);
+  --color-progress-soft: var(--progress-soft);
+  --color-progress-soft-foreground: var(--progress-soft-foreground);
+  --color-progress-ring: var(--progress-ring);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -90,6 +109,27 @@
   --chart-4: hsl(43, 80%, 65%);            /* gold-light */
   --chart-5: hsl(330, 81%, 60%);           /* #EC4899 */
 
+  /* Outcome semantic tokens (light)
+     - success = bem_sucedido (emerald)
+     - failure = falha (red)
+     - progress = em_andamento (purple)
+     "soft" = chip/coluna fundo claro + foreground escuro pra contraste AA. */
+  --success: hsl(142, 72%, 36%);            /* emerald 600 */
+  --success-foreground: hsl(0, 0%, 100%);
+  --success-soft: hsl(142, 70%, 95%);       /* emerald 50 */
+  --success-soft-foreground: hsl(142, 72%, 24%);
+  --success-ring: hsl(142, 65%, 70%);       /* emerald 300 */
+  --failure: hsl(0, 84%, 55%);              /* red 500 */
+  --failure-foreground: hsl(0, 0%, 100%);
+  --failure-soft: hsl(0, 86%, 96%);         /* red 50 */
+  --failure-soft-foreground: hsl(0, 70%, 35%);
+  --failure-ring: hsl(0, 90%, 75%);         /* red 300 */
+  --progress: hsl(265, 70%, 56%);           /* purple 600 */
+  --progress-foreground: hsl(0, 0%, 100%);
+  --progress-soft: hsl(265, 100%, 97%);     /* purple 50 */
+  --progress-soft-foreground: hsl(265, 60%, 35%);
+  --progress-ring: hsl(265, 80%, 80%);      /* purple 300 */
+
   --radius: 0.5rem;
 
   /* Sidebar — PR-NAVUI (mai/2026): tema Clean ganhou sidebar PRETA com
@@ -143,6 +183,24 @@
   --chart-3: hsl(230, 50%, 65%);           /* navy-blue */
   --chart-4: hsl(43, 85%, 70%);            /* gold-light */
   --chart-5: hsl(330, 86%, 70%);           /* #F472B6 */
+
+  /* Outcome semantic tokens (dark)
+     "soft" usa transparency baixa pra integrar com o navy do background. */
+  --success: hsl(142, 69%, 50%);            /* emerald brightened */
+  --success-foreground: hsl(0, 0%, 8%);
+  --success-soft: hsl(142, 60%, 12%);       /* emerald deep */
+  --success-soft-foreground: hsl(142, 70%, 75%);
+  --success-ring: hsl(142, 50%, 35%);
+  --failure: hsl(0, 84%, 60%);
+  --failure-foreground: hsl(0, 0%, 100%);
+  --failure-soft: hsl(0, 60%, 14%);         /* red deep */
+  --failure-soft-foreground: hsl(0, 80%, 78%);
+  --failure-ring: hsl(0, 60%, 38%);
+  --progress: hsl(265, 75%, 65%);           /* purple brightened */
+  --progress-foreground: hsl(0, 0%, 100%);
+  --progress-soft: hsl(265, 50%, 16%);      /* purple deep */
+  --progress-soft-foreground: hsl(265, 80%, 80%);
+  --progress-ring: hsl(265, 50%, 40%);
 
   /* Sidebar - deeper navy */
   --sidebar: hsl(230, 45%, 5%);            /* deep navy */

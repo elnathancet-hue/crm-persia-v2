@@ -54,10 +54,10 @@ const PRESET_COLORS = [
   "#14b8a6", "#06b6d4", "#64748b", "#1e293b",
 ];
 
-// DesignFlow Kit: cores por outcome usando os Chart Colors do kit
-// (mesmas que aparecem nos graficos do dashboard) com alpha pra ficar
-// flat/borderless. Dark mode tem contrapartida explicita (regra 8 do
-// kit: dark mode first).
+// PR-DSBASE (mai/2026): cores por outcome via tokens semanticos
+// (--color-success/failure/progress + soft variants). Antes era
+// emerald/red/blue hardcoded com `dark:` overrides — agora as CSS
+// vars resolvem light/dark sozinhas.
 const OUTCOME_BUCKETS: ReadonlyArray<{
   key: StageOutcome;
   label: string;
@@ -70,25 +70,25 @@ const OUTCOME_BUCKETS: ReadonlyArray<{
     key: "em_andamento",
     label: "Em andamento",
     helper: "O lead ainda esta sendo trabalhado",
-    bgClass: "bg-blue-50/60 dark:bg-blue-950/30",
-    textClass: "text-blue-700 dark:text-blue-300",
-    ringClass: "ring-blue-300 dark:ring-blue-700",
+    bgClass: "bg-progress-soft/60",
+    textClass: "text-progress-soft-foreground",
+    ringClass: "ring-progress-ring",
   },
   {
     key: "falha",
     label: "Falha",
     helper: "O lead foi perdido / recusou",
-    bgClass: "bg-red-50/60 dark:bg-red-950/30",
-    textClass: "text-red-700 dark:text-red-300",
-    ringClass: "ring-red-300 dark:ring-red-700",
+    bgClass: "bg-failure-soft/60",
+    textClass: "text-failure-soft-foreground",
+    ringClass: "ring-failure-ring",
   },
   {
     key: "bem_sucedido",
     label: "Bem-sucedido",
     helper: "O lead virou cliente / fechou",
-    bgClass: "bg-emerald-50/60 dark:bg-emerald-950/30",
-    textClass: "text-emerald-700 dark:text-emerald-300",
-    ringClass: "ring-emerald-300 dark:ring-emerald-700",
+    bgClass: "bg-success-soft/60",
+    textClass: "text-success-soft-foreground",
+    ringClass: "ring-success-ring",
   },
 ];
 
