@@ -1216,7 +1216,7 @@ export function KanbanBoard({
             </MetricChip>
           )}
           <MetricChip icon={<TrendingUp className="size-3.5" />}>
-            <strong className="font-semibold text-emerald-600 dark:text-emerald-400">
+            <strong className="font-semibold text-success">
               {boardMetrics.won}
             </strong>{" "}
             <span className="text-muted-foreground">ganhos</span>
@@ -1342,7 +1342,7 @@ export function KanbanBoard({
               />
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-full bg-emerald-500 transition-all duration-300"
+                  className="h-full bg-success transition-all duration-300"
                   style={{ width: `${wonProgress}%` }}
                 />
               </div>
@@ -1405,7 +1405,7 @@ export function KanbanBoard({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 rounded-md text-emerald-600 hover:text-emerald-700"
+              className="h-8 rounded-md text-success hover:text-success hover:bg-success-soft"
               disabled={bulkPending}
               onClick={() => setBulkConfirm({ kind: "won" })}
             >
@@ -2012,6 +2012,13 @@ const DealCard = React.memo(function DealCardImpl({
 
   // Avatar inicial colorido — hash do nome -> 1 de 8 paletas saturadas
   // (espelha o "avatar colorido" do studio).
+  //
+  // NOTA: estas cores SAO paleta intencional (avatars distinguiveis), nao
+  // hardcode visual a corrigir. Mantidas como Tailwind cromaticas porque:
+  //   - 8 cores distintas exige variedade alem dos 4 outcome tokens
+  //   - cada cor existe so como `bg-{X}-500` (sem light/dark variantes)
+  //   - eslint-disable opcional se a rule no-hardcoded-tailwind-color
+  //     virar erro no futuro.
   const avatarColor = React.useMemo(() => {
     const palette = [
       "bg-blue-500",
@@ -2154,7 +2161,7 @@ const DealCard = React.memo(function DealCardImpl({
             <button
               type="button"
               aria-label="Ver lead"
-              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-blue-500/15 text-blue-600 hover:bg-blue-500/25 transition-colors"
+              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
               title="Ver lead"
               onClick={(e) => {
                 e.stopPropagation();
@@ -2172,7 +2179,7 @@ const DealCard = React.memo(function DealCardImpl({
           {phone && (
             <button
               type="button"
-              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 transition-colors"
+              className="inline-flex shrink-0 items-center justify-center size-7 rounded-full bg-success/15 text-success hover:bg-success/25 transition-colors"
               title={
                 actionsRef.findOrCreateConversationByLead && deal.lead_id
                   ? "Abrir conversa"
@@ -2303,13 +2310,13 @@ const DealCard = React.memo(function DealCardImpl({
         {(deal.value > 0 || editingField === "value") && (
           <div className="mt-3">
             {editingField === "value" && canEdit ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 dark:bg-emerald-500/10">
-                <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex items-center gap-2 rounded-xl bg-success-soft px-3 py-2">
+                <CircleDollarSign className="size-4 shrink-0 text-success" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-success-soft-foreground/70">
                     Valor estimado
                   </div>
-                  <div className="flex items-center gap-1 text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                  <div className="flex items-center gap-1 text-sm font-bold text-success-soft-foreground">
                     <span>R$</span>
                     <InlineEdit
                       initialValue={String(deal.value ?? 0)}
@@ -2318,7 +2325,7 @@ const DealCard = React.memo(function DealCardImpl({
                       pending={editPending}
                       onCommit={(v) => saveEdit("value", v)}
                       onCancel={() => setEditingField(null)}
-                      className="flex-1 text-emerald-800 dark:text-emerald-200"
+                      className="flex-1 text-success-soft-foreground"
                     />
                   </div>
                 </div>
@@ -2326,7 +2333,7 @@ const DealCard = React.memo(function DealCardImpl({
             ) : (
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-left transition-colors hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20"
+                className="flex w-full items-center gap-2 rounded-xl bg-success-soft px-3 py-2 text-left transition-colors hover:bg-success-soft/70"
                 title={canEdit ? "Duplo-click para editar valor" : undefined}
                 onDoubleClick={(e) => {
                   if (!canEdit) return;
@@ -2335,12 +2342,12 @@ const DealCard = React.memo(function DealCardImpl({
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <CircleDollarSign className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <CircleDollarSign className="size-4 shrink-0 text-success" />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-bold uppercase tracking-wide text-emerald-700/70 dark:text-emerald-300/70">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-success-soft-foreground/70">
                     Valor estimado
                   </div>
-                  <div className="text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                  <div className="text-sm font-bold text-success-soft-foreground">
                     R$ {formatCurrency(deal.value)}
                   </div>
                 </div>
@@ -2354,7 +2361,7 @@ const DealCard = React.memo(function DealCardImpl({
           <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               type="button"
-              className="text-[10px] font-medium text-muted-foreground hover:text-emerald-600 transition-colors"
+              className="text-[10px] font-medium text-muted-foreground hover:text-success transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
                 setEditingField("value");
@@ -2401,18 +2408,18 @@ const DealCard = React.memo(function DealCardImpl({
               );
             }
             return (
-              <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 dark:bg-blue-500/10">
+              <div className="mt-2 flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2">
                 <span
-                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[10px] font-bold text-white"
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-[10px] font-bold text-primary-foreground"
                   aria-hidden
                 >
                   {initials}
                 </span>
                 <div className="flex-1 min-w-0 text-left">
-                  <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
+                  <div className="text-[9px] font-bold uppercase tracking-wide text-primary/70">
                     Responsável
                   </div>
-                  <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
+                  <div className="truncate text-sm font-semibold text-primary">
                     {assigneeName}
                   </div>
                 </div>
@@ -2429,29 +2436,29 @@ const DealCard = React.memo(function DealCardImpl({
                   assigneeName ? (
                     <button
                       type="button"
-                      className="mt-2 flex w-full items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-left transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20"
+                      className="mt-2 flex w-full items-center gap-2 rounded-xl bg-primary/10 px-3 py-2 text-left transition-colors hover:bg-primary/15"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <span
-                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-blue-600 text-[10px] font-bold text-white"
+                        className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-[10px] font-bold text-primary-foreground"
                         aria-hidden
                       >
                         {initials}
                       </span>
                       <div className="flex-1 min-w-0 text-left">
-                        <div className="text-[9px] font-bold uppercase tracking-wide text-blue-700/70 dark:text-blue-300/70">
+                        <div className="text-[9px] font-bold uppercase tracking-wide text-primary/70">
                           Responsável
                         </div>
-                        <div className="truncate text-sm font-semibold text-blue-800 dark:text-blue-200">
+                        <div className="truncate text-sm font-semibold text-primary">
                           {assigneeName}
                         </div>
                       </div>
-                      <ChevronDown className="size-3.5 shrink-0 text-blue-700/60 dark:text-blue-300/60" />
+                      <ChevronDown className="size-3.5 shrink-0 text-primary/60" />
                     </button>
                   ) : (
                     <button
                       type="button"
-                      className="mt-2 inline-flex items-center gap-1 px-1 text-xs font-medium text-muted-foreground/70 hover:text-blue-600 transition-colors"
+                      className="mt-2 inline-flex items-center gap-1 px-1 text-xs font-medium text-muted-foreground/70 hover:text-primary transition-colors"
                       onClick={(e) => e.stopPropagation()}
                     >
                       Sem responsável
@@ -2554,7 +2561,7 @@ const DealCard = React.memo(function DealCardImpl({
                 ? "Marcar como perdido (registra motivo)"
                 : "Sem etapa de falha configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-red-50 px-2 py-1.5 text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-failure-soft px-2 py-1.5 text-[11px] font-semibold text-failure hover:bg-failure-soft/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <X className="size-3" />
             Negócio descartado
@@ -2571,7 +2578,7 @@ const DealCard = React.memo(function DealCardImpl({
                 ? "Marcar como ganho"
                 : "Sem etapa de sucesso configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-600 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-success-soft px-2 py-1.5 text-[11px] font-semibold text-success hover:bg-success-soft/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Check className="size-3" />
             Negócio fechado
@@ -3095,7 +3102,7 @@ function DealDetailDialog({
                       href={`https://wa.me/55${cleanPhone(lead.phone)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-green-600 hover:underline"
+                      className="text-success hover:underline"
                     >
                       {lead.phone}
                     </a>
@@ -3592,7 +3599,7 @@ function AdvancedFiltersPopover({
                     onClick={() => onChange({ ...value, staleDays: opt.value })}
                     className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                       active
-                        ? "border-amber-500 bg-amber-500 text-white"
+                        ? "border-primary bg-primary text-primary-foreground"
                         : "border-border bg-muted text-foreground hover:bg-muted/70"
                     }`}
                   >
