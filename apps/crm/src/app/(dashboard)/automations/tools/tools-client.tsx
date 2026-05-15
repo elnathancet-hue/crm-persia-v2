@@ -61,11 +61,12 @@ interface Tool {
   created_at: string;
 }
 
+// PR-COLOR-SWEEP: tipos de tool mapeados pros tokens do DS.
 const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof FileText; color: string }> = {
-  documento: { label: "Documento", icon: FileText, color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
-  imagem: { label: "Imagem", icon: ImageIcon, color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" },
-  video: { label: "Video", icon: Film, color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" },
-  outro: { label: "Outro", icon: File, color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
+  documento: { label: "Documento", icon: FileText, color: "bg-primary/10 text-primary" },
+  imagem: { label: "Imagem", icon: ImageIcon, color: "bg-success-soft text-success-soft-foreground" },
+  video: { label: "Video", icon: Film, color: "bg-progress-soft text-progress-soft-foreground" },
+  outro: { label: "Outro", icon: File, color: "bg-muted text-muted-foreground" },
 };
 
 function formatFileSize(bytes: number): string {

@@ -62,12 +62,16 @@ interface Assistant {
   created_at: string;
 }
 
+// PR-COLOR-SWEEP: categorias mapeadas pros tokens semanticos do DS.
+// 5 categorias, cada uma com semantica clara — geral=neutro, vendas=success
+// (positivo), suporte=primary (info), educacao=progress (em-fluxo),
+// consultoria=warning (atencao).
 const CATEGORY_CONFIG: Record<string, { label: string; icon: typeof Bot; color: string }> = {
-  geral: { label: "Geral", icon: Bot, color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
-  vendas: { label: "Vendas", icon: ShoppingCart, color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300" },
-  suporte: { label: "Suporte", icon: Headphones, color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
-  educacao: { label: "Educação", icon: GraduationCap, color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300" },
-  consultoria: { label: "Consultoria", icon: Briefcase, color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300" },
+  geral: { label: "Geral", icon: Bot, color: "bg-muted text-muted-foreground" },
+  vendas: { label: "Vendas", icon: ShoppingCart, color: "bg-success-soft text-success-soft-foreground" },
+  suporte: { label: "Suporte", icon: Headphones, color: "bg-primary/10 text-primary" },
+  educacao: { label: "Educação", icon: GraduationCap, color: "bg-progress-soft text-progress-soft-foreground" },
+  consultoria: { label: "Consultoria", icon: Briefcase, color: "bg-warning-soft text-warning-soft-foreground" },
 };
 
 export function AssistantListClient({ initialAssistants }: { initialAssistants: Assistant[] }) {
@@ -265,7 +269,7 @@ export function AssistantListClient({ initialAssistants }: { initialAssistants: 
                   )}
 
                   <div className="flex items-center gap-2 mt-3">
-                    <div className={`size-2 rounded-full ${a.is_active ? "bg-green-500" : "bg-gray-400"}`} />
+                    <div className={`size-2 rounded-full ${a.is_active ? "bg-success" : "bg-muted-foreground"}`} />
                     <span className="text-xs text-muted-foreground">{a.is_active ? "Ativo" : "Inativo"}</span>
                     <span className="text-xs text-muted-foreground ml-auto">{a.model || "gpt-4.1-mini"}</span>
                   </div>
