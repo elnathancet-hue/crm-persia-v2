@@ -177,7 +177,7 @@ export function BillingPageClient({
                       key={feature}
                       className="flex items-start gap-2 text-sm"
                     >
-                      <Check className="size-4 text-green-500 shrink-0 mt-0.5" />
+                      <Check className="size-4 text-success shrink-0 mt-0.5" />
                       <span>{feature}</span>
                     </li>
                   ))}

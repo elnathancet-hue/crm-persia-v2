@@ -150,7 +150,7 @@ function PickStep({
               >
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-mono text-foreground">{t.name}</h3>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 inline-flex items-center gap-1">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-soft text-success-soft-foreground inline-flex items-center gap-1">
                     <CheckCircle2 className="size-3" /> APPROVED
                   </span>
                 </div>
@@ -293,7 +293,7 @@ function FillStep({
         <button
           onClick={handleSend}
           disabled={sending}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-success hover:bg-success/90 text-success-foreground rounded-xl text-sm disabled:opacity-50 transition-colors"
         >
           {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           Enviar template

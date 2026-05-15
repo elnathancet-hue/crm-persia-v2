@@ -158,7 +158,7 @@ function LimitRowEditor({
           <p className="text-xs text-muted-foreground mt-0.5">{row.help}</p>
         </div>
         {current ? (
-          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+          <span className="text-[10px] px-2 py-0.5 rounded bg-success-soft text-success-soft-foreground uppercase tracking-wider">
             Ativo
           </span>
         ) : null}

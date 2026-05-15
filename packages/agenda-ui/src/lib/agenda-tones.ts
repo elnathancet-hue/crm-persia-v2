@@ -8,21 +8,18 @@
 //
 // Solucao: 1 mapa central `TONE_CLASSES` por intencao semantica.
 // Cada componente importa e consome via tom (warning, success, info...).
-// Padrao visual unificado:
-//   - bg de baixa intensidade (50/15) pra nao competir com conteudo
-//   - texto de alta legibilidade (700/300)
-//   - ring sutil (200/30) — alinha com pattern shadcn
 //
-// Como evoluir: quando o design system promover --status-* CSS vars,
-// trocar as classes aqui sem mexer em quem consome. Single point of
-// change.
+// PR-COLOR-SWEEP (mai/2026): migrado de cores cromaticas (amber/emerald/
+// blue/sky/rose-*) pros tokens semanticos do design system. Light/dark
+// resolve automaticamente via CSS vars em globals.css. Trocar paleta
+// agora e 1 edicao em globals.css, nao 56 classes aqui.
 
 export type AgendaTone =
   | "brand" // primary tokens — destaque visual da marca (overview KPI, menus)
-  | "warning" // amber — aguardando confirmacao, rascunho, alerta de mudanca
-  | "success" // emerald — confirmado, ativo, OK
-  | "info" // blue — concluido / informativo
-  | "accent" // sky — reagendado / acao secundaria
+  | "warning" // amber → warning token — aguardando, rascunho, alerta de mudanca
+  | "success" // emerald → success token — confirmado, ativo, OK
+  | "info" // blue → primary — concluido / informativo
+  | "accent" // sky → chart-2 — reagendado / acao secundaria (token de variacao)
   | "danger" // destructive — cancelado / erro
   | "neutral"; // muted — no_show, inativo, secundario
 
@@ -33,18 +30,12 @@ export type AgendaTone =
  *   font-medium uppercase tracking-wide ring-1 ring-inset
  */
 export const TONE_BADGE_CLASSES: Record<AgendaTone, string> = {
-  brand:
-    "bg-primary/10 text-primary ring-primary/30 dark:bg-primary/15 dark:text-primary dark:ring-primary/40",
-  warning:
-    "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/30",
-  success:
-    "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/30",
-  info:
-    "bg-blue-50 text-blue-800 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:ring-blue-500/30",
-  accent:
-    "bg-sky-50 text-sky-800 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30",
-  danger:
-    "bg-destructive/10 text-destructive ring-destructive/30 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30",
+  brand: "bg-primary/10 text-primary ring-primary/30",
+  warning: "bg-warning-soft text-warning-soft-foreground ring-warning-ring",
+  success: "bg-success-soft text-success-soft-foreground ring-success-ring",
+  info: "bg-primary/10 text-primary ring-primary/30",
+  accent: "bg-chart-2/15 text-chart-2 ring-chart-2/40",
+  danger: "bg-destructive/10 text-destructive ring-destructive/30",
   neutral: "bg-muted text-muted-foreground ring-border",
 };
 
@@ -54,18 +45,12 @@ export const TONE_BADGE_CLASSES: Record<AgendaTone, string> = {
  *   rounded-md p-3 text-sm ring-1
  */
 export const TONE_ALERT_CLASSES: Record<AgendaTone, string> = {
-  brand:
-    "bg-primary/5 text-foreground ring-primary/20 dark:bg-primary/10 dark:text-foreground dark:ring-primary/30",
-  warning:
-    "bg-amber-50 text-amber-900 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30",
-  success:
-    "bg-emerald-50 text-emerald-900 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30",
-  info:
-    "bg-blue-50 text-blue-900 ring-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/30",
-  accent:
-    "bg-sky-50 text-sky-900 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30",
-  danger:
-    "bg-destructive/10 text-destructive ring-destructive/30 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30",
+  brand: "bg-primary/5 text-foreground ring-primary/20",
+  warning: "bg-warning-soft text-warning-soft-foreground ring-warning-ring",
+  success: "bg-success-soft text-success-soft-foreground ring-success-ring",
+  info: "bg-primary/5 text-primary ring-primary/20",
+  accent: "bg-chart-2/10 text-chart-2 ring-chart-2/30",
+  danger: "bg-destructive/10 text-destructive ring-destructive/30",
   neutral: "bg-muted text-muted-foreground ring-border",
 };
 
@@ -76,15 +61,10 @@ export const TONE_ALERT_CLASSES: Record<AgendaTone, string> = {
  */
 export const TONE_PILL_CLASSES: Record<AgendaTone, string> = {
   brand: "bg-primary/10 text-primary",
-  warning:
-    "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
-  success:
-    "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
-  info:
-    "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300",
-  accent:
-    "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
-  danger:
-    "bg-destructive/10 text-destructive dark:bg-rose-500/10 dark:text-rose-300",
+  warning: "bg-warning-soft text-warning-soft-foreground",
+  success: "bg-success-soft text-success-soft-foreground",
+  info: "bg-primary/10 text-primary",
+  accent: "bg-chart-2/15 text-chart-2",
+  danger: "bg-destructive/10 text-destructive",
   neutral: "bg-muted text-muted-foreground",
 };

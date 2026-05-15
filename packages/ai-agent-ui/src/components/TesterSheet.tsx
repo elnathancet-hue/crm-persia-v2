@@ -274,7 +274,7 @@ function ChatBubble({ turn, stages }: { turn: ChatTurn; stages: AgentStage[] }) 
         )}
       </div>
       {transition ? (
-        <div className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
+        <div className="ml-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
           <span aria-hidden>→</span>
           Avançou pra Etapa {transition.order}: {transition.situation}
         </div>

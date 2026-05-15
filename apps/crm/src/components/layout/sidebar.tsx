@@ -129,7 +129,7 @@ export function Sidebar() {
                   <Icon className="size-5" />
                   <span className="text-[10px] font-medium leading-tight">{item.label}</span>
                   {item.badge && unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 size-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    <span className="absolute top-1 right-1 size-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
                       {unreadCount > 9 ? "9+" : unreadCount}
                     </span>
                   )}
@@ -181,7 +181,7 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="py-3">
-        <div className="size-2 rounded-full bg-green-500 animate-pulse" />
+        <div className="size-2 rounded-full bg-success animate-pulse" />
       </div>
     </aside>
   );

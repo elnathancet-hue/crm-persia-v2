@@ -147,7 +147,7 @@ export default function LoginPage() {
           href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-medium hover:bg-emerald-500/20 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-success-soft text-success text-sm font-medium hover:bg-success-soft/70 transition-colors"
         >
           <MessageCircle className="size-4" />
           Fale conosco pelo WhatsApp
