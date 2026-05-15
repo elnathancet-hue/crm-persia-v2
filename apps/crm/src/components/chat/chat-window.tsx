@@ -256,7 +256,7 @@ function TransferDialog({
               onOpenChange(false);
             }}
           >
-            <Bot className="size-4 text-blue-500" />
+            <Bot className="size-4 text-primary" />
             Transferir para IA
           </Button>
 
@@ -779,7 +779,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 >
                   {/* Sender label */}
                   {isAi && (
-                    <div className="flex items-center gap-1 text-[11px] text-blue-500">
+                    <div className="flex items-center gap-1 text-[11px] text-primary">
                       <Bot className="size-3" />
                       <span className="font-medium">IA</span>
                     </div>
@@ -806,10 +806,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                     className={cn(
                       "rounded-2xl px-3.5 py-2.5 text-sm relative",
                       isAgent && msg.status === "failed"
-                        ? "rounded-br-md bg-red-500/90 text-white border border-red-700"
+                        ? "rounded-br-md bg-failure/90 text-failure-foreground border border-failure"
                         : isAgent && "rounded-br-md bg-primary text-primary-foreground",
                       isAi &&
-                        "rounded-br-md bg-blue-100 dark:bg-blue-900/40 text-blue-950 dark:text-blue-100 border border-blue-200/60 dark:border-blue-700/30",
+                        "rounded-br-md bg-primary/15 text-foreground border border-primary/20",
                       isLead && "rounded-bl-md bg-card text-foreground border border-border",
                       isAgent && msg.status === "sending" && "opacity-70"
                     )}

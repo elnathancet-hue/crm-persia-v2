@@ -218,19 +218,19 @@ export function MessageInput({
     <div className="border-t bg-card p-3 md:px-8 lg:px-16">
       {/* 24h window banner (Meta Cloud apenas) */}
       {composerLocked && (
-        <div className="mb-3 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-          <Clock className="size-5 text-amber-400 shrink-0" />
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-warning-ring bg-warning-soft p-3">
+          <Clock className="size-5 text-warning shrink-0" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-amber-300">Fora da janela de 24h</p>
-            <p className="text-xs text-amber-300/80 mt-0.5">
-              A Meta so permite texto livre ate 24h depois da ultima mensagem do lead.
+            <p className="text-sm font-medium text-warning-soft-foreground">Fora da janela de 24h</p>
+            <p className="text-xs text-warning-soft-foreground/80 mt-0.5">
+              A Meta só permite texto livre até 24h depois da última mensagem do lead.
               Use um template aprovado para reabrir a conversa.
             </p>
           </div>
           <Button
             size="sm"
             onClick={() => setTemplateOpen(true)}
-            className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white"
+            className="shrink-0 bg-success text-success-foreground hover:bg-success/90"
           >
             <FileText className="size-4" />
             Enviar template
@@ -240,7 +240,7 @@ export function MessageInput({
 
       {/* Meta Cloud dentro da janela: aviso sutil quando faltar pouco */}
       {isMeta && inWindow && hoursLeft <= 4 && (
-        <div className="mb-2 flex items-center gap-2 text-xs text-amber-400/90">
+        <div className="mb-2 flex items-center gap-2 text-xs text-warning">
           <Clock className="size-3" />
           Janela de 24h expira em {Math.round(hoursLeft)}h — envie um template antes para nao perder o contato.
         </div>
