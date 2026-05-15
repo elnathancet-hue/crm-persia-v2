@@ -37,6 +37,10 @@ const eslintConfig = defineConfig([
       // tratados via override em packages/eslint root config.
       // Agora qualquer novo callsite com bg-emerald-500 etc QUEBRA o build.
       "@persia/no-hardcoded-tailwind-color": "error",
+      // PR-DS-POLISH (mai/2026): bloqueia override visual em primitivos
+      // do @persia/ui. Force DS a mandar no produto. Warn primeiro
+      // (sweep gradual de overrides legados); promover pra error depois.
+      "@persia/no-style-override-on-primitive": "warn",
     },
   },
   // === Sprint 6 — overrides pra telas FORA do escopo /crm migrado ===
