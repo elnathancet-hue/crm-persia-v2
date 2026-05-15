@@ -46,6 +46,23 @@ export interface LeadFilters {
     column: "created_at" | "name" | "last_interaction_at" | "updated_at";
     direction?: "asc" | "desc";
   };
+  /**
+   * Filtros de exportacao + filtros visiveis no header da lista.
+   * Sao opcionais e combinaveis. Aplicados no shared `listLeads`
+   * via .gte()/.lte() no Supabase.
+   */
+  /** ISO 8601 — leads criados >= dateFrom */
+  dateFrom?: string;
+  /** ISO 8601 — leads criados <= dateTo (inclusivo, end-of-day no caller) */
+  dateTo?: string;
+  /** ISO 8601 — leads com last_interaction_at >= */
+  lastInteractionFrom?: string;
+  /** ISO 8601 — leads com last_interaction_at <= (frios = data antiga) */
+  lastInteractionTo?: string;
+  /** UUIDs de responsaveis. Vazio = todos. ["__none__"] = sem responsavel. */
+  assigneeIds?: string[];
+  /** Origens (whatsapp, manual, import, etc). Vazio = todas. */
+  sources?: string[];
 }
 
 /**

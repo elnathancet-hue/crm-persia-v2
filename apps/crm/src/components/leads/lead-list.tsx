@@ -10,6 +10,8 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ExportLeadsDialog,
+  type ExportLeadsDialogProps,
   LeadInfoDrawer,
   LeadsList,
   LeadsProvider,
@@ -17,14 +19,14 @@ import {
   useLeadsRealtime,
 } from "@persia/leads-ui";
 import {
-  ExportMenu,
   ImportLeadsWizard,
-  type ExportColumn,
   type ImportTag,
+  downloadExport,
+  makeExportFilename,
 } from "@persia/crm-ui";
 import type { LeadWithTags } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
-import { Filter, Upload, X } from "lucide-react";
+import { Download, Filter, Upload, X } from "lucide-react";
 import { useRole } from "@/lib/hooks/use-role";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
@@ -34,6 +36,8 @@ import {
   assignLead,
   bulkAssignLeads,
   bulkDeleteLeads,
+  countLeadsForExport,
+  fetchLeadsForExport,
   getLead,
   getOrgTags,
   type LeadListItemStats,
@@ -136,45 +140,92 @@ export function LeadList(props: Props) {
     setImportOpen(true);
   }, []);
 
-  // Export columns (PR-K3) — exporta a pagina atual de leads. Pra
-  // exportar TUDO, usuario aplica filtro ou usa CSV pelo SQL Editor.
-  const leadExportColumns = React.useMemo<ExportColumn<LeadWithTags>[]>(
+  // Export columns — Dialog de exportar com filtros + selector de colunas.
+  // Substitui o antigo ExportMenu que so baixava a pagina atual (max 20).
+  // Cada coluna tem `default: false` se nao queremos marcar por padrao.
+  const exportColumns = React.useMemo(
     () => [
-      { header: "Nome", accessor: (l) => l.name ?? "" },
-      { header: "Telefone", accessor: (l) => l.phone ?? "" },
-      { header: "E-mail", accessor: (l) => l.email ?? "" },
-      { header: "Status", accessor: (l) => l.status ?? "" },
-      { header: "Origem", accessor: (l) => l.source ?? "" },
-      { header: "Score", accessor: (l) => l.score ?? 0 },
-      { header: "Canal", accessor: (l) => l.channel ?? "" },
+      { key: "name", label: "Nome", accessor: (l: LeadWithTags) => l.name ?? "" },
+      { key: "phone", label: "Telefone", accessor: (l: LeadWithTags) => l.phone ?? "" },
+      { key: "email", label: "E-mail", accessor: (l: LeadWithTags) => l.email ?? "" },
+      { key: "status", label: "Status", accessor: (l: LeadWithTags) => l.status ?? "" },
+      { key: "source", label: "Origem", accessor: (l: LeadWithTags) => l.source ?? "" },
+      { key: "score", label: "Score", accessor: (l: LeadWithTags) => l.score ?? 0 },
+      { key: "channel", label: "Canal", accessor: (l: LeadWithTags) => l.channel ?? "" },
       {
-        header: "Tags",
-        accessor: (l) =>
+        key: "tags",
+        label: "Tags",
+        accessor: (l: LeadWithTags) =>
           (l.lead_tags ?? [])
             .map((lt) => lt.tags?.name ?? "")
             .filter(Boolean)
             .join(", "),
       },
       {
-        header: "Cidade",
-        accessor: (l) => l.address_city ?? "",
+        key: "address_city",
+        label: "Cidade",
+        accessor: (l: LeadWithTags) => l.address_city ?? "",
+        default: false,
       },
       {
-        header: "Estado",
-        accessor: (l) => l.address_state ?? "",
+        key: "address_state",
+        label: "Estado",
+        accessor: (l: LeadWithTags) => l.address_state ?? "",
+        default: false,
       },
       {
-        header: "Ultima interacao",
-        accessor: (l) =>
+        key: "last_interaction_at",
+        label: "Última interação",
+        accessor: (l: LeadWithTags) =>
           l.last_interaction_at ? new Date(l.last_interaction_at) : "",
       },
       {
-        header: "Criado em",
-        accessor: (l) => (l.created_at ? new Date(l.created_at) : ""),
+        key: "created_at",
+        label: "Criado em",
+        accessor: (l: LeadWithTags) => (l.created_at ? new Date(l.created_at) : ""),
+      },
+      {
+        key: "notes",
+        label: "Anotações",
+        accessor: (l: LeadWithTags) => l.notes ?? "",
+        default: false,
       },
     ],
     [],
   );
+
+  // === Dialog Exportar Leads (PR Export+Filters) ===
+  const [exportOpen, setExportOpen] = React.useState(false);
+
+  // Origens conhecidas — deriva do props.initialLeads (auto-extracao).
+  // Senao tiver dados, comeca com lista comum.
+  const knownSources = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const l of props.initialLeads) {
+      if (l.source) set.add(l.source);
+    }
+    if (set.size === 0) {
+      // fallback default
+      ["whatsapp", "manual", "import", "form", "api"].forEach((s) => set.add(s));
+    }
+    return Array.from(set).sort();
+  }, [props.initialLeads]);
+
+  // Handler de download — reusa downloadExport do @persia/crm-ui mas
+  // adapta os ExportLeadColumn pro shape esperado (header/accessor).
+  const handleDownload: ExportLeadsDialogProps["onDownload"] = (
+    rows,
+    cols,
+    format,
+  ) => {
+    return downloadExport({
+      rows,
+      columns: cols.map((c) => ({ header: c.label, accessor: c.accessor })),
+      filename: makeExportFilename("leads"),
+      format,
+      sheetName: "Leads",
+    });
+  };
 
   return (
     <>
@@ -260,14 +311,14 @@ export function LeadList(props: Props) {
           }}
           headerActions={
             <>
-              <ExportMenu
-                rows={props.initialLeads}
-                columns={leadExportColumns}
-                filenamePrefix="leads"
-                sheetName="Leads"
-                triggerSize="default"
-                className="h-9 rounded-md px-3"
-              />
+              <Button
+                variant="outline"
+                onClick={() => setExportOpen(true)}
+                className="h-9 rounded-md"
+              >
+                <Download className="size-4" data-icon="inline-start" />
+                Exportar
+              </Button>
               {isAgent ? (
                 <Button
                   variant="outline"
@@ -329,6 +380,22 @@ export function LeadList(props: Props) {
         onImport={importLeads}
         onImported={() => router.refresh()}
         segmentsBasePath="/segments"
+      />
+
+      {/* PR Export+Filters: Dialog centralizado pra exportar com filtros.
+          Substitui o ExportMenu antigo (popover) que so baixava a pagina
+          atual. Agora pagina internamente em chunks de 1000 ate trazer
+          todos os leads que batem nos filtros (cap 100k defensivo). */}
+      <ExportLeadsDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        initialFilters={{}}
+        countLeads={(filters) => countLeadsForExport(filters)}
+        fetchAllLeads={(filters) => fetchLeadsForExport(filters)}
+        onDownload={handleDownload}
+        assignees={props.assignees ?? []}
+        sources={knownSources}
+        availableColumns={exportColumns}
       />
     </>
   );

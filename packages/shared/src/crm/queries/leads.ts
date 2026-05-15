@@ -41,6 +41,12 @@ export async function listLeads(
     page = 1,
     limit = 20,
     orderBy,
+    dateFrom,
+    dateTo,
+    lastInteractionFrom,
+    lastInteractionTo,
+    assigneeIds,
+    sources,
   } = filters;
 
   // PR-L4: orderBy validado (defesa contra SQL injection mesmo Supabase
@@ -146,6 +152,42 @@ export async function listLeads(
   // CRM passa "all" pra dizer "sem filtro" — admin nunca passa "all".
   if (status && status !== "all") {
     query = query.eq("status", status);
+  }
+
+  // ============================================================
+  // Filtros adicionais (PR Export+Filters): aplicados via .gte/.lte
+  // direto na query principal pra eficiencia (RLS + indices cobrem).
+  // ============================================================
+  if (dateFrom) {
+    query = query.gte("created_at", dateFrom);
+  }
+  if (dateTo) {
+    query = query.lte("created_at", dateTo);
+  }
+  if (lastInteractionFrom) {
+    query = query.gte("last_interaction_at", lastInteractionFrom);
+  }
+  if (lastInteractionTo) {
+    query = query.lte("last_interaction_at", lastInteractionTo);
+  }
+  if (assigneeIds && assigneeIds.length > 0) {
+    // Sentinela "__none__" = leads sem responsavel (assigned_to IS NULL).
+    if (assigneeIds.includes("__none__")) {
+      const realIds = assigneeIds.filter((id) => id !== "__none__");
+      if (realIds.length > 0) {
+        // OR explicit: assigned_to IN (realIds) OR assigned_to IS NULL
+        query = query.or(
+          `assigned_to.in.(${realIds.join(",")}),assigned_to.is.null`,
+        );
+      } else {
+        query = query.is("assigned_to", null);
+      }
+    } else {
+      query = query.in("assigned_to", assigneeIds);
+    }
+  }
+  if (sources && sources.length > 0) {
+    query = query.in("source", sources);
   }
 
   // PR-CRMOPS3: combina filtros de tags + segmento via intersect quando

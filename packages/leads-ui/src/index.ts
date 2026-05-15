@@ -27,6 +27,15 @@ export {
 
 export { LeadsList, type LeadsListProps } from "./components/LeadsList";
 export { LeadForm } from "./components/LeadForm";
+export {
+  LeadsAdvancedFilters,
+  type LeadsAdvancedFiltersValue,
+  type LeadsAdvancedFiltersProps,
+} from "./components/LeadsAdvancedFilters";
+export {
+  ExportLeadsDialog,
+  type ExportLeadsDialogProps,
+} from "./components/ExportLeadsDialog";
 export { DataTable, type ColumnDef } from "./components/DataTable";
 export {
   LeadCommentsTab,
