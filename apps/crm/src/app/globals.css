@@ -107,9 +107,22 @@
 }
 
 /* ============================================
-   PérsiaCRM - Brand Theme
-   Navy + Gold palette
-   Contraste minimo 4.5:1 WCAG AA
+   PérsiaCRM — Brand Theme
+   Identidade dual INTENCIONAL: light/dark NAO sao espelhos.
+   - Light mode ("Clean") = primary AZUL (#3B82F6)
+     Tema padrao do mercado SaaS BR, mais acessivel pro publico
+     amplo do CRM cliente (operadores/SDRs).
+   - Dark mode ("Black") = primary DOURADO (#C9A84C)
+     Identidade premium "Persia Navy+Gold" pro positioning de marca.
+     Usado tambem em landing page de auth e materials de marketing.
+   - Sidebar = sempre PRETA com primary do tema vigente — ponto
+     de ancoragem visual independente de light/dark.
+   Quando aplicar/mudar: sempre via --primary (e seus tokens
+   derivados primary-foreground, ring, sidebar-primary). NUNCA
+   force gold ou blue hardcoded em telas — quebra o split.
+   Auditoria mai/2026: confirmado intencional pelo PO. Veja
+   memory/feedback_ds_primitive_rule.md.
+   Contraste minimo 4.5:1 WCAG AA.
    ============================================ */
 
 :root {

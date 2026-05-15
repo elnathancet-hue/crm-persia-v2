@@ -67,6 +67,19 @@ const eslintConfig = defineConfig([
       // de verdade visual — overrides no consumidor falam que o primitivo
       // tem bug. Warn primeiro, promove pra error apos sweep.
       "@persia/no-style-override-on-primitive": "warn",
+      // PR-AUDIT (mai/2026): packages tambem nao podem usar HTML crus —
+      // se um pacote precisa de button/input/etc deve importar do
+      // @persia/ui. So o proprio @persia/ui pode usar primitives HTML
+      // (override mais abaixo).
+      "@persia/no-raw-html-primitives": "warn",
+    },
+  },
+  {
+    // @persia/ui pode usar HTML crus — e onde os primitives sao
+    // construidos. Restante dos packages nao.
+    files: ["packages/ui/src/**/*.{ts,tsx}"],
+    rules: {
+      "@persia/no-raw-html-primitives": "off",
     },
   },
   {

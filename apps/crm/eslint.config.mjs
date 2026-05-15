@@ -41,6 +41,11 @@ const eslintConfig = defineConfig([
       // do @persia/ui. Force DS a mandar no produto. Warn primeiro
       // (sweep gradual de overrides legados); promover pra error depois.
       "@persia/no-style-override-on-primitive": "warn",
+      // PR-AUDIT (mai/2026): bloqueia <button>/<input>/<textarea>/<select>
+      // HTML crus. Use Button/Input/Textarea/Select do @persia/ui pra
+      // consistencia em foco/hover/disabled/a11y. Warn primeiro (sweep),
+      // promover pra error depois.
+      "@persia/no-raw-html-primitives": "warn",
     },
   },
   // === Sprint 6 — overrides pra telas FORA do escopo /crm migrado ===

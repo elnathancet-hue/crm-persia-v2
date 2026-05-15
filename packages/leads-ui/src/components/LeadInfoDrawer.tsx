@@ -1001,7 +1001,7 @@ export function LeadInfoDrawer({
           </form>
         </Tabs>
 
-        <DialogFooter className="px-6 py-4 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-3 sm:space-x-0">
+        <DialogFooter className="px-card-lg py-4 border-t border-border bg-card shrink-0 flex-row items-center justify-between gap-3 sm:space-x-0">
           {/* PR-U3: Excluir no canto esquerdo, gated por canDelete.
               CRM passa canDelete=isAgent; admin passa true. */}
           {canDelete && (
@@ -1064,12 +1064,8 @@ export function LeadInfoDrawer({
                 form="lead-info-form"
                 disabled={isPending}
               >
-                {isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Save className="size-4" />
-                )}
-                Salvar
+                {isPending && <Loader2 className="size-4 animate-spin" />}
+                {isPending ? "Salvando…" : "Salvar"}
               </Button>
             )}
           </div>
