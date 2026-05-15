@@ -274,7 +274,7 @@ export function LeadForm({
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* ============ SECAO 1: IDENTIFICACAO ============ */}
       <FormSection
-        icon={<Contact className="size-4 text-cyan-600" />}
+        icon={<Contact className="size-4 text-muted-foreground" />}
         title="Identificação"
         description="Pelo menos telefone ou email é obrigatório"
       >
@@ -372,15 +372,15 @@ export function LeadForm({
           </p>
         )}
         {duplicateMatch && !duplicateDismissed && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10 p-3">
+          <div className="rounded-lg border border-warning-ring bg-warning-soft p-3">
             <div className="flex items-start gap-2">
-              <AlertCircle className="size-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <AlertCircle className="size-4 shrink-0 text-warning mt-0.5" />
               <div className="flex-1 min-w-0 space-y-2">
                 <div>
-                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  <p className="text-sm font-semibold text-warning-soft-foreground">
                     Lead já existe nesta organização
                   </p>
-                  <p className="text-xs text-amber-700 dark:text-amber-300/90 mt-0.5">
+                  <p className="text-xs text-warning-soft-foreground/80 mt-0.5">
                     <strong className="font-semibold">
                       {duplicateMatch.name?.trim() || "Sem nome"}
                     </strong>
@@ -396,7 +396,7 @@ export function LeadForm({
                       type="button"
                       variant="default"
                       size="sm"
-                      className="h-7 rounded-md gap-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white dark:bg-amber-500 dark:hover:bg-amber-600"
+                      className="h-7 rounded-md gap-1.5 text-xs bg-warning text-warning-foreground hover:bg-warning/90"
                       onClick={() => onDuplicateFound(duplicateMatch)}
                     >
                       <ExternalLink className="size-3" />
@@ -407,7 +407,7 @@ export function LeadForm({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 rounded-md text-xs border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-200 dark:hover:bg-amber-500/20"
+                    className="h-7 rounded-md text-xs border-warning-ring text-warning-soft-foreground hover:bg-warning-soft/70"
                     onClick={() => setDuplicateDismissed(true)}
                   >
                     Criar mesmo assim
@@ -421,7 +421,7 @@ export function LeadForm({
 
       {/* ============ SECAO 2: ORIGEM & STATUS ============ */}
       <FormSection
-        icon={<Filter className="size-4 text-violet-600" />}
+        icon={<Filter className="size-4 text-muted-foreground" />}
         title="Origem & Status"
         description="Como o lead chegou e em que momento da jornada está"
       >
@@ -493,7 +493,7 @@ export function LeadForm({
 
       {/* ============ SECAO 3: NOTAS INTERNAS ============ */}
       <FormSection
-        icon={<StickyNote className="size-4 text-amber-600" />}
+        icon={<StickyNote className="size-4 text-muted-foreground" />}
         title="Notas internas"
         description="Contexto adicional pra equipe (não visível pro lead)"
       >
@@ -507,7 +507,7 @@ export function LeadForm({
         />
         <p
           className={`mt-1 text-right text-[11px] ${
-            notesNearLimit ? "text-amber-600" : "text-muted-foreground"
+            notesNearLimit ? "text-warning" : "text-muted-foreground"
           }`}
         >
           {notesLength}/2000 caracteres

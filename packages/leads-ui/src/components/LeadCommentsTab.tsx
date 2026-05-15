@@ -297,6 +297,9 @@ function CommentItem({
     .toUpperCase();
 
   const avatarColor = React.useMemo(() => {
+    // NOTA: paleta intencional (hash do nome -> 1 de 6 cores) — nao e
+    // hardcode visual a corrigir. 6 cores distintas exigem variedade
+    // alem dos tokens semanticos. Mesmo padrao de KanbanBoard/LeadsList.
     const palette = [
       "bg-blue-500",
       "bg-emerald-500",
