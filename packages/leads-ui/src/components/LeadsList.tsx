@@ -531,7 +531,10 @@ export function LeadsList({
           .map((p) => p[0])
           .join("")
           .toUpperCase();
-        // Hash → cor saturada (8 paletas) — mesmo padrao do KanbanBoard
+        // Hash → cor saturada (8 paletas) — mesmo padrao do KanbanBoard.
+        // NOTA: paleta intencional, nao hardcode visual a corrigir.
+        // 8 cores distintas exigem variedade alem dos 4 outcome tokens
+        // do design system. Identidade visual, nao semantica.
         const palette = [
           "bg-blue-500",
           "bg-emerald-500",
@@ -586,18 +589,21 @@ export function LeadsList({
           label: row.status,
           variant: "outline" as const,
         };
-        // Bullet de cor baseado no status (visual mais consistente)
+        // Bullet de cor baseado no status — usa tokens semanticos
+        // do DS. 5 estados precisam de 5 cores distintas, entao alem
+        // dos 3 outcomes (success/failure/progress) usamos primary
+        // (azul/dourado) pra "new" e chart-1 (gold) pra "contacted".
         const dotColor =
           row.status === "new"
-            ? "bg-blue-500"
+            ? "bg-primary"
             : row.status === "contacted"
-              ? "bg-amber-500"
+              ? "bg-chart-1"
               : row.status === "qualified"
-                ? "bg-violet-500"
+                ? "bg-progress"
                 : row.status === "customer"
-                  ? "bg-emerald-500"
+                  ? "bg-success"
                   : row.status === "lost"
-                    ? "bg-red-500"
+                    ? "bg-failure"
                     : "bg-muted-foreground";
         return (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-0.5 text-xs font-medium">
@@ -766,7 +772,7 @@ export function LeadsList({
                     {stats.deals.open_count}
                   </span>
                   {stats.deals.open_total_value > 0 && (
-                    <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    <span className="text-[10px] font-medium text-success tabular-nums">
                       R$ {formatBRL(stats.deals.open_total_value)}
                     </span>
                   )}
@@ -815,7 +821,7 @@ export function LeadsList({
               return (
                 <div className="flex flex-col gap-0.5 max-w-[180px]">
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground tabular-nums">
-                    <ActivityIcon className="size-3 text-violet-600" />
+                    <ActivityIcon className="size-3 text-progress" />
                     {stats.activities.count}
                   </span>
                   {stats.activities.latest_description && (

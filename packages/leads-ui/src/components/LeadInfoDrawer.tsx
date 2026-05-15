@@ -644,7 +644,7 @@ export function LeadInfoDrawer({
             // sem permissao de edicao).
             <DialogDescription className="flex items-center gap-1.5 text-xs">
               <span className="text-muted-foreground">Etapa atual:</span>
-              <span className="font-medium text-cyan-600">
+              <span className="font-medium text-foreground">
                 {currentStageName}
               </span>
             </DialogDescription>
@@ -696,7 +696,7 @@ export function LeadInfoDrawer({
               {/* ============ CONTATO ============ */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Contact className="size-4 text-cyan-600" />
+                  <Contact className="size-4 text-muted-foreground" />
                   CONTATO
                 </h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -799,7 +799,7 @@ export function LeadInfoDrawer({
               {canEdit && (
                 <section className="space-y-3">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <TagIcon className="size-4 text-amber-600" />
+                    <TagIcon className="size-4 text-muted-foreground" />
                     TAGS
                   </h3>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -886,7 +886,7 @@ export function LeadInfoDrawer({
               {/* ============ ENDEREÇO ============ */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <MapPin className="size-4 text-cyan-600" />
+                  <MapPin className="size-4 text-muted-foreground" />
                   ENDEREÇO
                 </h3>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -964,7 +964,7 @@ export function LeadInfoDrawer({
               {/* ============ ANOTAÇÕES ============ */}
               <section className="space-y-3">
                 <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <StickyNote className="size-4 text-amber-600" />
+                  <StickyNote className="size-4 text-muted-foreground" />
                   ANOTAÇÕES
                 </h3>
                 <Textarea
@@ -1419,9 +1419,9 @@ function LeadStatsCards({
   return (
     <div className="grid grid-cols-3 gap-2 px-6 py-3 bg-muted/30 border-b border-border shrink-0">
       <StatCard
-        icon={<CircleDollarSign className="size-3.5 text-emerald-600" />}
+        icon={<CircleDollarSign className="size-3.5 text-success" />}
         label="Negócios"
-        accentClass="text-emerald-700 dark:text-emerald-400"
+        accentClass="text-success"
         loading={loading}
         primary={stats ? String(stats.deals.count) : "—"}
         detail={
@@ -1437,9 +1437,9 @@ function LeadStatsCards({
         }
       />
       <StatCard
-        icon={<MessageCircle className="size-3.5 text-blue-600" />}
+        icon={<MessageCircle className="size-3.5 text-primary" />}
         label="Conversas"
-        accentClass="text-blue-700 dark:text-blue-400"
+        accentClass="text-primary"
         loading={loading}
         primary={stats ? String(stats.conversations.count) : "—"}
         detail={
@@ -1462,9 +1462,9 @@ function LeadStatsCards({
         }
       />
       <StatCard
-        icon={<ActivityIcon className="size-3.5 text-violet-600" />}
+        icon={<ActivityIcon className="size-3.5 text-progress" />}
         label="Atividades"
-        accentClass="text-violet-700 dark:text-violet-400"
+        accentClass="text-progress"
         loading={loading}
         primary={stats ? String(stats.activities.count) : "—"}
         detail={
@@ -1639,7 +1639,7 @@ function LeadNegociosTab({
           {totalAbertos > 0 && (
             <>
               {" · "}
-              <strong className="text-emerald-600 dark:text-emerald-400 tabular-nums">
+              <strong className="text-success tabular-nums">
                 R$ {formatBRL(totalAbertos)}
               </strong>
             </>
@@ -1672,11 +1672,11 @@ function DealCard({ deal }: { deal: LeadDealItem }) {
   const statusBadge = (() => {
     switch (deal.status) {
       case "open":
-        return { label: "Aberto", className: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300" };
+        return { label: "Aberto", className: "bg-primary/10 text-primary" };
       case "won":
-        return { label: "Ganho", className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" };
+        return { label: "Ganho", className: "bg-success-soft text-success-soft-foreground" };
       case "lost":
-        return { label: "Perdido", className: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" };
+        return { label: "Perdido", className: "bg-failure-soft text-failure-soft-foreground" };
       default:
         return { label: deal.status, className: "bg-muted text-muted-foreground" };
     }
@@ -1722,7 +1722,7 @@ function DealCard({ deal }: { deal: LeadDealItem }) {
 
         {/* Valor */}
         {deal.value > 0 && (
-          <span className="ml-auto font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+          <span className="ml-auto font-semibold text-success tabular-nums">
             R$ {formatBRL(deal.value)}
           </span>
         )}
