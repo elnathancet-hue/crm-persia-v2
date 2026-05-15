@@ -133,14 +133,23 @@ const FILTERS: {
 const PAGE_SIZE = 30;
 
 // Mapeia tipo -> descricao default + cor + icone (pra quando description=null)
+//
+// PR-COLOR-SWEEP (mai/2026): cores migradas de hardcode emerald/blue/violet/
+// amber/pink/cyan/indigo pros tokens semanticos do DS. Mapeamento intencional
+// por tipo de evento:
+//   - eventos POSITIVOS (criado, mensagem enviada) → success
+//   - eventos INFORMATIVOS (importado, mensagem recebida) → primary
+//   - eventos EM-FLUXO (merged, assigned, stage_change) → progress
+//   - eventos de ATENCAO (status alterado) → warning
+//   - eventos NEUTROS (edited, score_changed, tags) → chart-N pra variedade
 const TYPE_META: Record<
   string,
   { label: string; tone: string; iconBg: string }
 > = {
   created: {
     label: "Lead cadastrado",
-    tone: "text-emerald-700 dark:text-emerald-300",
-    iconBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400",
+    tone: "text-success",
+    iconBg: "bg-success-soft text-success",
   },
   edited: {
     label: "Lead atualizado",
@@ -149,56 +158,55 @@ const TYPE_META: Record<
   },
   imported: {
     label: "Lead importado",
-    tone: "text-blue-700 dark:text-blue-300",
-    iconBg: "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400",
+    tone: "text-primary",
+    iconBg: "bg-primary/10 text-primary",
   },
   merged: {
     label: "Lead mesclado",
-    tone: "text-violet-700 dark:text-violet-300",
-    iconBg: "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400",
+    tone: "text-progress",
+    iconBg: "bg-progress-soft text-progress",
   },
   tag_added: {
     label: "Tag adicionada",
-    tone: "text-cyan-700 dark:text-cyan-300",
-    iconBg: "bg-cyan-100 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400",
+    tone: "text-chart-2",
+    iconBg: "bg-chart-2/15 text-chart-2",
   },
   tag_removed: {
     label: "Tag removida",
-    tone: "text-amber-700 dark:text-amber-300",
-    iconBg: "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
+    tone: "text-muted-foreground",
+    iconBg: "bg-muted text-muted-foreground",
   },
   message_sent: {
     label: "Mensagem enviada",
-    tone: "text-emerald-700 dark:text-emerald-300",
-    iconBg: "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400",
+    tone: "text-success",
+    iconBg: "bg-success-soft text-success",
   },
   message_received: {
     label: "Mensagem recebida",
-    tone: "text-blue-700 dark:text-blue-300",
-    iconBg: "bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400",
+    tone: "text-primary",
+    iconBg: "bg-primary/10 text-primary",
   },
   assigned: {
     label: "Responsável atribuído",
-    tone: "text-violet-700 dark:text-violet-300",
-    iconBg: "bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-400",
+    tone: "text-progress",
+    iconBg: "bg-progress-soft text-progress",
   },
   status_changed: {
     label: "Status alterado",
-    tone: "text-amber-700 dark:text-amber-300",
-    iconBg: "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400",
+    tone: "text-warning",
+    iconBg: "bg-warning-soft text-warning",
   },
   score_changed: {
     label: "Score atualizado",
-    tone: "text-pink-700 dark:text-pink-300",
-    iconBg: "bg-pink-100 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400",
+    tone: "text-chart-5",
+    iconBg: "bg-chart-5/15 text-chart-5",
   },
   // PR-B2: deal movido entre etapas do funil. Antes ficava sem entry e
   // o fallback mostrava o type cru ("stage_change") na timeline.
   stage_change: {
     label: "Etapa do funil alterada",
-    tone: "text-indigo-700 dark:text-indigo-300",
-    iconBg:
-      "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400",
+    tone: "text-progress",
+    iconBg: "bg-progress-soft text-progress",
   },
   flow_entered: {
     label: "Entrou no fluxo",

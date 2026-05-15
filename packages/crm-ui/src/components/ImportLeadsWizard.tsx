@@ -693,7 +693,7 @@ function Step1Upload({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
+                <CheckCircle2 className="size-4 shrink-0 text-success" />
                 <span className="truncate text-sm font-medium text-foreground">
                   {file.filename}
                 </span>
@@ -842,7 +842,7 @@ function Step2Mapping({
       </div>
 
       {!valid && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        <div className="flex items-start gap-2 rounded-lg border border-warning-ring bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
           <AlertCircle className="size-4 shrink-0" />
           <span>
             Mapeie pelo menos uma coluna como <strong>Nome</strong> pra
@@ -1133,7 +1133,7 @@ function Step4Review({
       </div>
 
       {stats.missingBoth > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        <div className="flex items-start gap-2 rounded-lg border border-warning-ring bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">
           <AlertCircle className="size-4 shrink-0" />
           <span>
             {stats.missingBoth} linha{stats.missingBoth === 1 ? "" : "s"} sem
@@ -1226,9 +1226,9 @@ function StatCard({
 }) {
   const toneClass =
     tone === "positive"
-      ? "text-emerald-600 dark:text-emerald-400"
+      ? "text-success"
       : tone === "warning"
-        ? "text-amber-600 dark:text-amber-400"
+        ? "text-warning"
         : "text-foreground";
   return (
     <div className="rounded-xl border border-border bg-card p-3">
@@ -1250,13 +1250,13 @@ function Step5Result({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-        <CheckCircle2 className="size-8 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      <div className="flex items-center gap-3 rounded-xl border border-success-ring bg-success-soft p-4">
+        <CheckCircle2 className="size-8 shrink-0 text-success" />
         <div>
-          <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+          <h3 className="text-sm font-semibold text-success-soft-foreground">
             Importação concluída!
           </h3>
-          <p className="text-xs text-emerald-800 dark:text-emerald-200">
+          <p className="text-xs text-success-soft-foreground">
             Veja abaixo o resumo do que aconteceu.
           </p>
         </div>
@@ -1300,20 +1300,20 @@ function Step5Result({
       )}
 
       {result.invalid.length > 0 && (
-        <details className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
-          <summary className="cursor-pointer text-xs font-medium text-amber-900 dark:text-amber-200">
+        <details className="rounded-xl border border-warning-ring bg-warning-soft p-3">
+          <summary className="cursor-pointer text-xs font-medium text-warning-soft-foreground">
             {result.invalid.length} linha
             {result.invalid.length === 1 ? "" : "s"} inválida
             {result.invalid.length === 1 ? "" : "s"} (clique pra ver)
           </summary>
-          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-amber-900 dark:text-amber-200">
+          <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-warning-soft-foreground">
             {result.invalid.slice(0, 50).map((iv) => (
               <li key={iv.row_index}>
                 Linha {iv.row_index + 1}: {iv.reason}
               </li>
             ))}
             {result.invalid.length > 50 && (
-              <li className="text-amber-700 dark:text-amber-400">
+              <li className="text-warning-soft-foreground/70">
                 + {result.invalid.length - 50} outras…
               </li>
             )}

@@ -51,6 +51,16 @@
   --color-progress-soft: var(--progress-soft);
   --color-progress-soft-foreground: var(--progress-soft-foreground);
   --color-progress-ring: var(--progress-ring);
+  /* Warning semantic token — adicionado mai/2026 (PR sweep
+     ImportLeadsWizard). Nao e outcome do schema, mas e padrao
+     de UI muito recorrente em alertas/avisos (import com erros,
+     validacao, banners de "atencao"). Antes: amber-50/300/600/900
+     hardcoded em ~30 lugares. */
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-warning-ring: var(--warning-ring);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -129,6 +139,12 @@
   --progress-soft: hsl(265, 100%, 97%);     /* purple 50 */
   --progress-soft-foreground: hsl(265, 60%, 35%);
   --progress-ring: hsl(265, 80%, 80%);      /* purple 300 */
+  /* Warning (light): amber. */
+  --warning: hsl(38, 92%, 50%);             /* amber 500 */
+  --warning-foreground: hsl(0, 0%, 100%);
+  --warning-soft: hsl(48, 100%, 96%);       /* amber 50 */
+  --warning-soft-foreground: hsl(28, 80%, 30%);
+  --warning-ring: hsl(43, 96%, 70%);        /* amber 300 */
 
   --radius: 0.5rem;
 
@@ -201,6 +217,12 @@
   --progress-soft: hsl(265, 50%, 16%);      /* purple deep */
   --progress-soft-foreground: hsl(265, 80%, 80%);
   --progress-ring: hsl(265, 50%, 40%);
+  /* Warning (dark): amber brightened. */
+  --warning: hsl(43, 96%, 56%);             /* amber 400 */
+  --warning-foreground: hsl(0, 0%, 8%);
+  --warning-soft: hsl(28, 60%, 14%);        /* amber deep */
+  --warning-soft-foreground: hsl(48, 95%, 78%);
+  --warning-ring: hsl(28, 60%, 38%);
 
   /* Sidebar - deeper navy */
   --sidebar: hsl(230, 45%, 5%);            /* deep navy */
