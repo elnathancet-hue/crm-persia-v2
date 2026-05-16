@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalIcon, Plus } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalIcon,
+  Plus,
+} from "lucide-react";
+import { Button } from "@persia/ui/button";
 import type { AgendaViewMode } from "../hooks/useAgendaFilters";
 
 interface AgendaHeaderProps {
@@ -21,6 +27,11 @@ const VIEW_LABELS: Record<AgendaViewMode, string> = {
   list: "Lista",
 };
 
+// PR-AGENDA-DS (mai/2026): refactor pra usar primitivos do DS.
+// Antes: botoes HTML raw com `rounded-2xl` + `font-black uppercase
+// tracking-widest` + `text-white` hardcoded — destoava do resto do CRM.
+// Agora: Button do @persia/ui (hover azul automatico) + tipografia
+// consistente com o padrao DS Polish.
 export const AgendaHeader: React.FC<AgendaHeaderProps> = ({
   periodTitle,
   viewMode,
@@ -33,67 +44,67 @@ export const AgendaHeader: React.FC<AgendaHeaderProps> = ({
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1 rounded-2xl bg-muted p-1">
-          <button
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-0.5">
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onPrev}
             aria-label="Período anterior"
-            className="rounded-xl p-2 text-muted-foreground transition hover:bg-card hover:text-primary"
           >
-            <ChevronLeft size={16} />
-          </button>
-          <button
+            <ChevronLeft className="size-4" />
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={onToday}
-            className="rounded-xl bg-card px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-foreground shadow-sm transition hover:text-primary"
+            className="font-semibold"
           >
             Hoje
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-sm"
             onClick={onNext}
             aria-label="Próximo período"
-            className="rounded-xl p-2 text-muted-foreground transition hover:bg-card hover:text-primary"
           >
-            <ChevronRight size={16} />
-          </button>
+            <ChevronRight className="size-4" />
+          </Button>
         </div>
 
-        <div className="flex items-center gap-2 text-sm font-bold capitalize text-foreground">
-          <CalIcon size={14} className="text-primary" />
+        <div className="flex items-center gap-2 text-sm font-semibold capitalize text-foreground">
+          <CalIcon className="size-4 text-primary" />
           {periodTitle}
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-0.5 rounded-2xl bg-muted p-1">
-          {(Object.keys(VIEW_LABELS) as AgendaViewMode[]).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => onSetViewMode(mode)}
-              aria-pressed={viewMode === mode}
-              className={[
-                "rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition",
-                viewMode === mode
-                  ? "bg-card text-primary shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              ].join(" ")}
-            >
-              {VIEW_LABELS[mode]}
-            </button>
-          ))}
+        <div className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5">
+          {(Object.keys(VIEW_LABELS) as AgendaViewMode[]).map((mode) => {
+            const isActive = viewMode === mode;
+            return (
+              <Button
+                key={mode}
+                type="button"
+                variant={isActive ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => onSetViewMode(mode)}
+                aria-pressed={isActive}
+                className="font-medium"
+              >
+                {VIEW_LABELS[mode]}
+              </Button>
+            );
+          })}
         </div>
 
         {onCreate && (
-          <button
-            type="button"
-            onClick={onCreate}
-            className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90"
-          >
-            <Plus size={14} />
+          <Button type="button" variant="default" onClick={onCreate}>
+            <Plus className="size-4" data-icon="inline-start" />
             Novo
-          </button>
+          </Button>
         )}
       </div>
     </header>

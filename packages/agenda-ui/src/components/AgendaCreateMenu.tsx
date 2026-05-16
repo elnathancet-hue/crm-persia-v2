@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Calendar, Coffee, Plus, Users } from "lucide-react";
+import { Button } from "@persia/ui/button";
 import type { AppointmentKind } from "@persia/shared/agenda";
 import { TONE_PILL_CLASSES, type AgendaTone } from "../lib/agenda-tones";
 
@@ -81,23 +82,23 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
+      <Button
         type="button"
+        variant="default"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90"
       >
-        <Plus size={14} />
+        <Plus className="size-4" data-icon="inline-start" />
         Novo
-      </button>
+      </Button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-2xl border border-border bg-card shadow-lg"
+          className="absolute right-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10"
         >
-          <ul>
+          <ul className="p-1">
             {visible.map((opt) => {
               const Icon = opt.icon;
               return (
@@ -106,21 +107,21 @@ export const AgendaCreateMenu: React.FC<AgendaCreateMenuProps> = ({
                     type="button"
                     role="menuitem"
                     onClick={() => handlePick(opt.kind)}
-                    className="flex w-full items-start gap-3 px-3 py-3 text-left transition hover:bg-muted"
+                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-primary/10 hover:text-primary"
                   >
                     <div
                       className={[
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                        "flex size-9 shrink-0 items-center justify-center rounded-lg",
                         TONE_PILL_CLASSES[opt.tone],
                       ].join(" ")}
                     >
                       <Icon size={16} />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-foreground">
+                      <p className="text-sm font-semibold text-foreground">
                         {opt.label}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {opt.description}
                       </p>
                     </div>

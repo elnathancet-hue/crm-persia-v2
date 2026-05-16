@@ -32,18 +32,20 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
 
   const handleClick = () => onClick?.(appointment);
 
+  // PR-AGENDA-DS (mai/2026): tokens alinhados com primitivos DS.
+  // rounded-2xl → rounded-xl; ring-1 → border; font-bold → font-semibold.
   return (
     <button
       type="button"
       onClick={handleClick}
       className={[
-        "group flex w-full flex-col gap-3 rounded-2xl bg-card p-4 text-left ring-1 ring-border shadow-sm transition hover:shadow-md hover:ring-primary/40",
+        "group flex w-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-primary/[0.02]",
         className,
       ].join(" ")}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h4 className="truncate text-sm font-bold text-foreground">
+          <h4 className="truncate text-sm font-semibold text-foreground">
             {appointment.title}
           </h4>
           <p className="mt-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">

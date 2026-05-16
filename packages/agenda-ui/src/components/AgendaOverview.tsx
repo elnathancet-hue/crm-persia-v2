@@ -33,22 +33,26 @@ interface MetricCardProps {
   tone: Extract<AgendaTone, "brand" | "warning" | "success" | "danger">;
 }
 
+// PR-AGENDA-DS (mai/2026): MetricCard usa tokens consistentes com o resto
+// do CRM (rounded-xl, SectionLabel-style pra label, KpiValue-style pra valor).
+// Antes: rounded-3xl + font-black uppercase tracking-widest + text-2xl
+// font-black — pattern proprio nao alinhado com primitivos DS.
 const MetricCard: React.FC<MetricCardProps> = ({ icon, label, value, tone }) => (
-  <div className="rounded-3xl bg-card p-5 ring-1 ring-border shadow-sm">
+  <div className="rounded-xl bg-card p-4 border border-border shadow-xs">
     <div className="flex items-center gap-3">
       <div
         className={[
-          "flex h-10 w-10 items-center justify-center rounded-2xl",
+          "flex h-10 w-10 items-center justify-center rounded-lg",
           TONE_PILL_CLASSES[tone],
         ].join(" ")}
       >
         {icon}
       </div>
       <div>
-        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
-        <p className="text-2xl font-black tabular-nums text-foreground">{value}</p>
+        <p className="text-2xl font-bold tabular-nums text-foreground">{value}</p>
       </div>
     </div>
   </div>
@@ -73,7 +77,7 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-3xl bg-muted ring-1 ring-border"
+            className="h-24 animate-pulse rounded-xl bg-muted border border-border"
           />
         ))}
       </div>
