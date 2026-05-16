@@ -76,6 +76,13 @@ export {
   useLeadsRealtime,
   type LeadRealtimeEvent,
 } from "./hooks/use-leads-realtime";
+// PR-K-CENTRIC realtime fix (mai/2026): hook especifico do Kanban —
+// filtra leads por pipeline_id. Necessario porque drag-drop/AI/n8n
+// atualizam leads.stage_id mas useDealsRealtime so escuta deals.
+export {
+  useKanbanLeadsRealtime,
+  type KanbanLeadRealtimeEvent,
+} from "./hooks/use-kanban-leads-realtime";
 export {
   useDealsRealtime,
   type DealRealtimeEvent,

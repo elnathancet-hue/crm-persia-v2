@@ -30,6 +30,7 @@ import {
   useDealPresence,
   useDealsRealtime,
   useDebouncedCallback,
+  useKanbanLeadsRealtime,
 } from "@persia/leads-ui";
 import { createClient } from "@/lib/supabase/client";
 
@@ -73,7 +74,14 @@ export function CrmClient({
   // (parte do S2) e recebem supabase via DI.
   const supabase = createClient();
   const debouncedRefresh = useDebouncedCallback(() => router.refresh());
+  // PR-K-CENTRIC realtime fix (mai/2026): apos refactor lead-centric,
+  // o source-of-truth do Kanban e leads.stage_id. Drag-drop / AI Agent /
+  // /api/crm / bulkMoveLeads atualizam leads, NAO deals — entao
+  // useDealsRealtime sozinho perde 100% das mudancas pos-refactor.
+  // Mantemos os 2 hooks: useDealsRealtime continua valido pra mudancas
+  // na tab "Negocios" do drawer (criar/editar/excluir deal).
   useDealsRealtime(supabase, pipelineId ?? null, debouncedRefresh);
+  useKanbanLeadsRealtime(supabase, pipelineId ?? null, debouncedRefresh);
 
   // PR-Q: presence-only do pipeline pra mostrar quem ta vendo cada card.
   // Canal proprio (`pipeline-presence-${pipelineId}`) — separa o concern

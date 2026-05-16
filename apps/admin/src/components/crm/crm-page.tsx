@@ -20,6 +20,7 @@ import {
   useDealPresence,
   useDealsRealtime,
   useDebouncedCallback,
+  useKanbanLeadsRealtime,
 } from "@persia/leads-ui";
 import type {
   LeadKanbanCard,
@@ -79,7 +80,12 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
       /* erro tratado no useEffect inicial */
     });
   });
+  // PR-K-CENTRIC realtime fix (mai/2026): drag-drop/AI/n8n atualizam
+  // leads.stage_id (nao deals). useDealsRealtime sozinho perde mudancas
+  // pos-refactor lead-centric. Ambos ficam — deals continua valido pra
+  // tab "Negocios" do drawer.
   useDealsRealtime(supabase, activePipelineId, debouncedReload);
+  useKanbanLeadsRealtime(supabase, activePipelineId, debouncedReload);
   const { watchersByDeal: _watchersByDeal, setViewingDealId: _setViewingDealId } =
     useDealPresence({
       supabase,
