@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { moveDealToStage } from "@/lib/crm/move-deal";
+import { moveLeadToStage as moveLeadToStageShared } from "@persia/shared/crm";
+import { onStageChanged } from "@/lib/flows/triggers";
 import { phoneBROptional, leadUpdateSchema } from "@persia/shared/validation";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 
@@ -101,9 +102,13 @@ export async function POST(request: NextRequest) {
     }
 
     switch (action) {
-      // ============ MOVE DEAL ============
+      // ============ MOVE LEAD (legacy alias: move_deal) ============
+      // PR-K-CENTRIC (mai/2026): action move_deal renomeada pra move_lead
+      // semanticamente — Kanban opera em lead agora. Aceita "move_deal"
+      // como alias pra compat com n8n flows existentes.
+      case "move_lead":
       case "move_deal": {
-        const { stageId, stageName, pipelineId, reason } = body;
+        const { stageId, stageName, reason } = body;
 
         // Resolve stage by name if stageId not provided
         let targetStageId = stageId;
@@ -123,68 +128,113 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "stage not found" }, { status: 404 });
         }
 
-        // Find or create deal for this lead
-        let { data: deal } = await supabase
-          .from("deals")
-          .select("id")
-          .eq("lead_id", resolvedLeadId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
-
-        if (!deal) {
-          // Auto-create deal — get pipeline_id from target stage
-          const { data: targetStage } = await supabase
+        // Busca stage destino + lead atual
+        const [stageRes, leadRes] = await Promise.all([
+          supabase
             .from("pipeline_stages")
-            .select("pipeline_id")
+            .select("id, name, pipeline_id, organization_id")
             .eq("id", targetStageId)
-            .single();
-
-          const { data: lead } = await supabase
+            .single(),
+          supabase
             .from("leads")
-            .select("name, organization_id")
+            .select("id, pipeline_id, stage_id")
             .eq("id", resolvedLeadId)
-            .single();
+            .eq("organization_id", resolvedOrgId)
+            .single(),
+        ]);
 
-          const { data: newDeal } = await supabase.from("deals").insert({
-            organization_id: lead?.organization_id || resolvedOrgId,
-            pipeline_id: targetStage?.pipeline_id || pipelineId,
-            lead_id: resolvedLeadId,
-            stage_id: targetStageId,
-            title: `${lead?.name || "Lead"} - Negocio`,
-            value: 0,
-            status: "open",
-          }).select("id").single();
+        const targetStage = stageRes.data as {
+          id: string;
+          name: string;
+          pipeline_id: string;
+          organization_id: string;
+        } | null;
+        const leadRow = leadRes.data as {
+          id: string;
+          pipeline_id: string | null;
+          stage_id: string | null;
+        } | null;
 
-          deal = newDeal;
+        if (!targetStage) {
+          return NextResponse.json({ error: "stage not found" }, { status: 404 });
+        }
+        if (!leadRow) {
+          return NextResponse.json({ error: "lead not found" }, { status: 404 });
+        }
+        if (targetStage.organization_id !== resolvedOrgId) {
+          return NextResponse.json(
+            { error: "stage does not belong to this org" },
+            { status: 403 },
+          );
+        }
+        if (
+          leadRow.pipeline_id &&
+          leadRow.pipeline_id !== targetStage.pipeline_id
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "lead is in another pipeline — use moveLeadToPipeline action",
+              current_pipeline_id: leadRow.pipeline_id,
+            },
+            { status: 409 },
+          );
         }
 
-        if (!deal) {
-          return NextResponse.json({ error: "failed to find or create deal" }, { status: 500 });
+        const fromStageId = leadRow.stage_id;
+        const noop = fromStageId === targetStageId;
+
+        // Captura nome da stage de origem (audit trail)
+        let fromStageName = "";
+        if (fromStageId) {
+          const { data: from } = await supabase
+            .from("pipeline_stages")
+            .select("name")
+            .eq("id", fromStageId)
+            .maybeSingle();
+          if (from?.name) fromStageName = from.name as string;
         }
 
-        // Use shared moveDealToStage — handles idempotency, activity log, triggers, sync
-        const result = await moveDealToStage({
-          dealId: deal.id,
-          stageId: targetStageId,
-          orgId: resolvedOrgId,
-          source: "automation",
-          reason,
-        });
+        if (!noop) {
+          try {
+            await moveLeadToStageShared(
+              { db: supabase, orgId: resolvedOrgId },
+              resolvedLeadId,
+              targetStageId,
+              0,
+            );
+          } catch (err) {
+            return NextResponse.json(
+              {
+                error: err instanceof Error ? err.message : "failed to move lead",
+              },
+              { status: 500 },
+            );
+          }
+
+          // Side effects: flows + sync UAZAPI (fire-and-forget)
+          void onStageChanged(resolvedOrgId, resolvedLeadId, targetStageId).catch(
+            (e) => console.error("[/api/crm move_lead] onStageChanged:", e),
+          );
+          void import("@/lib/whatsapp/sync")
+            .then(({ syncLeadToUazapi }) =>
+              syncLeadToUazapi(resolvedOrgId, resolvedLeadId),
+            )
+            .catch((e) =>
+              console.error("[/api/crm move_lead] syncLeadToUazapi:", e),
+            );
+        }
 
         // PR-K LEAD-SYNC: invalida caches /crm + /leads + /leads/:id
-        // pra Tab Leads refletir que o deal mudou (e potencialmente o
-        // status do lead). Sem isso, n8n move o deal mas user nao ve.
         await revalidateLeadCaches(resolvedLeadId);
 
         return NextResponse.json({
-          ok: result.ok,
-          action: "move_deal",
-          noop: result.noop || false,
+          ok: true,
+          action: "move_lead",
+          noop,
           stageId: targetStageId,
-          fromStage: result.fromStage,
-          toStage: result.toStage,
-          ...(result.error ? { error: result.error } : {}),
+          fromStage: fromStageName,
+          toStage: targetStage.name,
         });
       }
 

@@ -194,22 +194,20 @@ async function filterByPipelineStages(
 ): Promise<LeadRow[]> {
   if (!filter.pipeline_stage_ids?.length || leads.length === 0) return leads;
 
+  // PR-K-CENTRIC (mai/2026): query agora direto em `leads.stage_id`.
+  // Antes consultava deals.stage_id + dedupe — agora 1 query, sem JOIN
+  // e sem etapa de dedupe.
   const { data, error } = await db
-    .from("deals")
-    .select("lead_id, stage_id")
+    .from("leads")
+    .select("id, stage_id")
     .eq("organization_id", organizationId)
-    .in(
-      "lead_id",
-      leads.map((lead) => lead.id),
-    )
+    .in("id", leads.map((lead) => lead.id))
     .in("stage_id", filter.pipeline_stage_ids);
 
   if (error) throw new Error(error.message);
 
   const matchingLeadIds = new Set(
-    ((data ?? []) as Array<{ lead_id: string | null }>)
-      .map((row) => row.lead_id)
-      .filter((value): value is string => typeof value === "string"),
+    ((data ?? []) as Array<{ id: string }>).map((row) => row.id),
   );
 
   return leads.filter((lead) => matchingLeadIds.has(lead.id));

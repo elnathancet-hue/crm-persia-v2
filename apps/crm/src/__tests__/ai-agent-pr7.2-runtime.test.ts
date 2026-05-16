@@ -350,8 +350,10 @@ describe("ai-agent PR7.2 scheduler runtime", () => {
       ],
       error: null,
     });
-    supabase.queue("deals", {
-      data: [{ lead_id: "lead-a", stage_id: "stage-a" }],
+    // PR-K-CENTRIC (mai/2026): filterByPipelineStages agora consulta
+    // `leads.stage_id` direto (era deals.stage_id + dedupe).
+    supabase.queue("leads", {
+      data: [{ id: "lead-a", stage_id: "stage-a" }],
       error: null,
     });
     supabase.queue("agent_conversations", {
@@ -385,7 +387,8 @@ describe("ai-agent PR7.2 scheduler runtime", () => {
       "organization_id",
       "org-a",
     ]);
-    expect(supabase.filters.deals.eq).toContainEqual(["organization_id", "org-a"]);
+    // PR-K-CENTRIC: filterByPipelineStages agora consulta `leads` direto
+    // (era `deals`) — assertion de deals.eq removida.
     expect(supabase.filters.agent_conversations.eq).toContainEqual([
       "organization_id",
       "org-a",

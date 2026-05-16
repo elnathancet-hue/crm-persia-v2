@@ -258,12 +258,17 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     try {
       await provider.setTyping(msg.phone, true).catch(() => {});
 
-      let dealContext: {
+      // PR-K-CENTRIC (mai/2026): contexto enviado ao n8n agora vem do
+      // LEAD direto (lead.pipeline_id + lead.stage_id), nao mais do
+      // deal mais recente. 1 query, sem JOIN, sem ambiguidade.
+      // Compat: campos dealId/dealValue mantidos no payload do n8n,
+      // mas agora ficam null/0 (n8n flows que ainda os consomem
+      // continuam funcionando — null/0 e degradação graciosa).
+      let leadContext: {
         stage?: string;
         pipeline?: string;
         pipelineId?: string;
-        dealId?: string;
-        dealValue?: number;
+        expectedValue?: number;
       } = {};
       let leadTags: string[] = [];
       let leadStatus: string | null = null;
@@ -272,16 +277,15 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       let funnelStages: { name: string; description: string | null; sort_order: number }[] = [];
 
       try {
-        const [dealRes, tagsRes, leadRes, assistantRes] = await Promise.all([
+        const [leadCtxRes, tagsRes, assistantRes] = await Promise.all([
           supabase
-            .from("deals")
-            .select("id, value, pipeline_id, pipeline_stages(name), pipelines(name)")
-            .eq("lead_id", lead.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
+            .from("leads")
+            .select(
+              "status, pipeline_id, stage_id, expected_value, pipeline_stages(name), pipelines(name)",
+            )
+            .eq("id", lead.id)
             .maybeSingle(),
           supabase.from("lead_tags").select("tags(name)").eq("lead_id", lead.id),
-          supabase.from("leads").select("status").eq("id", lead.id).maybeSingle(),
           supabase
             .from("ai_assistants")
             .select("prompt, tone")
@@ -292,24 +296,23 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
             .maybeSingle(),
         ]);
 
-        if (dealRes.data) {
-          const d = dealRes.data as Record<string, unknown>;
-          dealContext = {
-            stage: (d.pipeline_stages as Record<string, unknown>)?.name as string | undefined,
-            pipeline: (d.pipelines as Record<string, unknown>)?.name as string | undefined,
-            pipelineId: d.pipeline_id as string | undefined,
-            dealId: d.id as string | undefined,
-            dealValue: d.value as number | undefined,
+        if (leadCtxRes.data) {
+          const l = leadCtxRes.data as Record<string, unknown>;
+          leadContext = {
+            stage: (l.pipeline_stages as Record<string, unknown>)?.name as string | undefined,
+            pipeline: (l.pipelines as Record<string, unknown>)?.name as string | undefined,
+            pipelineId: l.pipeline_id as string | undefined,
+            expectedValue: l.expected_value as number | undefined,
           };
+          leadStatus = (l.status as string | undefined) || null;
         }
         leadTags = (tagsRes.data || [])
           .map((t: Record<string, unknown>) => (t.tags as Record<string, unknown>)?.name as string)
           .filter(Boolean);
-        leadStatus = (leadRes.data as { status?: string } | null)?.status || null;
         assistantPrompt = (assistantRes.data as { prompt?: string } | null)?.prompt || null;
         assistantTone = (assistantRes.data as { tone?: string } | null)?.tone || null;
 
-        const pipelineId = dealContext.pipelineId;
+        const pipelineId = leadContext.pipelineId;
         if (pipelineId) {
           const { data: stages } = await supabase
             .from("pipeline_stages")
@@ -361,10 +364,14 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
           orgId,
           messageType: msg.type,
           mediaUrl: msg.mediaUrl || null,
-          currentStage: dealContext.stage || null,
-          currentPipeline: dealContext.pipeline || null,
-          dealId: dealContext.dealId || null,
-          dealValue: dealContext.dealValue ?? null,
+          // PR-K-CENTRIC: campos vêm do lead (não mais do deal aberto).
+          // dealId/dealValue mantidos como null/0 pra retrocompat com
+          // flows n8n existentes — quando o flow precisar de deal especifico,
+          // usar a action /api/crm get_deal pra resolver.
+          currentStage: leadContext.stage || null,
+          currentPipeline: leadContext.pipeline || null,
+          dealId: null,
+          dealValue: leadContext.expectedValue ?? null,
           tags: leadTags,
           leadStatus,
           orgName: org?.name || null,
