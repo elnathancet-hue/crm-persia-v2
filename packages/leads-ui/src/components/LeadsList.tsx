@@ -575,7 +575,12 @@ export function LeadsList({
       key: "email",
       header: "E-mail",
       render: (row) => (
-        <span className="text-sm text-muted-foreground">
+        // PR-UX-POLISH (mai/2026): truncate pra emails longos nao quebrarem
+        // a coluna. Tooltip (title) mostra completo no hover.
+        <span
+          className="block max-w-[180px] truncate text-sm text-muted-foreground"
+          title={row.email ?? undefined}
+        >
           {row.email || "—"}
         </span>
       ),
@@ -686,9 +691,15 @@ export function LeadsList({
               const canAssign =
                 canEdit && !!onAssignLead && assignees.length > 0;
 
+              // PR-UX-POLISH (mai/2026): truncate nome completo do
+              // responsavel pra nao alargar a coluna. Tooltip mostra nome
+              // inteiro no hover.
               if (!canAssign) {
                 return (
-                  <span className="text-xs text-muted-foreground">
+                  <span
+                    className="block max-w-[140px] truncate text-xs text-muted-foreground"
+                    title={currentAssignee?.name ?? undefined}
+                  >
                     {currentAssignee?.name || "—"}
                   </span>
                 );
@@ -700,16 +711,17 @@ export function LeadsList({
                     render={
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted text-foreground"
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted text-foreground max-w-[160px]"
                         onClick={(e) => e.stopPropagation()}
+                        title={currentAssignee?.name ?? undefined}
                       />
                     }
                   >
                     <span
                       className={
                         currentAssignee
-                          ? "text-foreground"
-                          : "text-muted-foreground/70"
+                          ? "truncate text-foreground"
+                          : "truncate text-muted-foreground/70"
                       }
                     >
                       {currentAssignee?.name || "Sem responsável"}
@@ -858,17 +870,10 @@ export function LeadsList({
             <MoreHorizontal className="size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {onRowClick && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRowClick(row);
-                }}
-              >
-                <Eye className="size-4" />
-                Ver detalhes
-              </DropdownMenuItem>
-            )}
+            {/* PR-UX-POLISH (mai/2026): item "Ver detalhes" removido —
+                duplicava "Editar" (ambos abrem o drawer do lead). Clique
+                na linha continua abrindo o drawer; "Editar" no menu mantem
+                affordance explicita pra quem nao sabe que pode clicar. */}
             {/* PR-L3: 3 CTAs novos por linha — operacionais (atendimento) */}
             {canEdit && onCreateDeal && (
               <DropdownMenuItem
@@ -969,23 +974,21 @@ export function LeadsList({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header — titulo + contador + acoes alinhadas */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
-            <Users className="size-6" />
+      {/* Header — contador + acoes alinhadas.
+          PR-UX-POLISH (mai/2026): removido <h1>Leads</h1> que duplicava
+          o titulo "CRM" externo (header sticky do shell). Mantido so
+          contador "X leads encontrados" alinhado ao icone. */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Users className="size-5" />
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground font-heading leading-none">
-              Leads
-            </h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground tabular-nums">
-                {total.toLocaleString("pt-BR")}
-              </span>{" "}
-              {total === 1 ? "lead encontrado" : "leads encontrados"}
-            </p>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-semibold text-foreground tabular-nums">
+              {total.toLocaleString("pt-BR")}
+            </span>{" "}
+            {total === 1 ? "lead encontrado" : "leads encontrados"}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {/* headerActions vem do app: Importar + Exportar (secundarios) */}
@@ -1085,16 +1088,19 @@ export function LeadsList({
           </span>
           {orgTags.map((tag) => {
             const active = selectedTagIds.includes(tag.id);
+            // PR-UX-POLISH (mai/2026): regra global DS = tags com contorno
+            // azul (border-2 border-primary). Inativo: contorno azul + texto
+            // azul + fundo transparente. Ativo: contorno azul + bg da cor.
             return (
               <button
                 key={tag.id}
                 type="button"
                 onClick={() => handleTagToggle(tag.id)}
                 aria-pressed={active}
-                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-all ${
+                className={`inline-flex items-center rounded-full border-2 border-primary px-2.5 py-1 text-xs font-medium transition-all ${
                   active
-                    ? "border-transparent shadow-sm"
-                    : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "shadow-sm"
+                    : "bg-transparent text-primary hover:bg-primary/10"
                 }`}
                 style={
                   active

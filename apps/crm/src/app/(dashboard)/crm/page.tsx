@@ -160,7 +160,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
     // PR-K7: timeline pra alimentar a tab "Atividades"
     (async () => {
       try {
-        return await getOrgActivities({ page: 1, limit: 30 });
+        return await getOrgActivities({ page: 1, limit: 20 });
       } catch (err) {
         console.error("[/crm page] getOrgActivities falhou:", err);
         return { activities: [], total: 0, page: 1, totalPages: 0 };

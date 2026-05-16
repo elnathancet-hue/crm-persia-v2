@@ -130,7 +130,8 @@ const FILTERS: {
   },
 ];
 
-const PAGE_SIZE = 30;
+// PR-UX-POLISH (mai/2026): 20 por página (paridade com LeadsList).
+const PAGE_SIZE = 20;
 
 // Mapeia tipo -> descricao default + cor + icone (pra quando description=null)
 //
