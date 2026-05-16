@@ -21,7 +21,6 @@ import {
   listPipelines,
   listStages as listStagesShared,
   listStagesForOrg,
-  moveDealKanban,
   updateDeal as updateDealShared,
   updateDealStatus as updateDealStatusShared,
   updatePipelineName as updatePipelineNameShared,
@@ -83,19 +82,6 @@ export async function createDeal(data: {
   }
 }
 
-export async function moveDeal(
-  dealId: string,
-  stageId: string,
-  sortOrder: number,
-) {
-  try {
-    const { admin, orgId } = await requireSuperadminForOrg();
-    await moveDealKanban({ db: admin, orgId }, dealId, stageId, sortOrder);
-    revalidatePath("/crm");
-  } catch {
-    // Comportamento historico: noop em validation failure.
-  }
-}
 
 export async function deleteDeal(dealId: string) {
   try {

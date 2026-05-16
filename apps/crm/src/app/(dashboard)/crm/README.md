@@ -328,16 +328,22 @@ pnpm --filter @persia/crm dev                  # dev local
 
 ## 10. Pendências conhecidas (`@deprecated`)
 
-### Funções deal-centric mantidas pra compat
+### Funções deal-centric removidas
 
-PR #214 (mai/2026) removeu **3 server actions legacy** (`updateDealStage` em CRM e admin, `getLeadOpenDealWithStages` em CRM e admin, `moveDealStage` da KanbanActions) + a função `moveDealToStage` em `apps/crm/src/lib/crm/move-deal.ts`. Drawer agora opera 100% lead-centric.
-
-Restante (Fase B do cleanup) — têm callers em adapters (`crm-kanban-actions.ts`, `admin-kanban-actions.ts`):
-
-| Arquivo | Funções @deprecated |
+| PR | Removeu |
 |---|---|
-| `packages/shared/src/crm/mutations/deals.ts` | `moveDealKanban`, `bulkMoveDealsToStage`, `bulkUpdateDealStatus`, `bulkMarkDealsAsLost` |
-| `packages/crm-ui/src/actions.ts` | 10 métodos KanbanActions (`createDeal`, `createLeadWithDeal`, `updateDeal`, `deleteDeal`, `bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) |
+| #214 (Fase A) | `updateDealStage` (CRM+admin), `getLeadOpenDealWithStages` (CRM+admin), `moveDealStage` da KanbanActions, `moveDealToStage` em `apps/crm/src/lib/crm/move-deal.ts`. Drawer 100% lead-centric. |
+| #215 (Fase B) | 6 métodos `KanbanActions` sem callers em UI (`bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) + 7 server actions wrappers CRM correspondentes + admin `moveDeal` server action + dead code `apps/crm/src/components/crm/kanban-board.tsx` (componente órfão pré-refactor) + limpeza do shim `apps/crm/src/actions/pipelines.ts`. |
+
+### Mantidos (UI ativa)
+
+| Método | Onde é usado |
+|---|---|
+| `createDeal` | KanbanBoard.tsx:3310 — botão "+ Negócio" |
+| `createLeadWithDeal` | KanbanBoard.tsx:1621/1850 + CreateLeadFromKanbanDialog — "+" das colunas |
+| `updateDeal` | KanbanBoard.tsx:3061 — editar deal inline |
+| `deleteDeal` | KanbanBoard.tsx:990 — excluir deal |
+| Mutations shared `packages/shared/src/crm/mutations/deals.ts` | Funções auditadas multi-tenant (29 testes em `crm-bulk-mutations.test.ts` + `crm-shared-pipelines.test.ts`). Podem ser reusadas por features futuras. |
 
 ### Outras pendências
 
@@ -361,6 +367,7 @@ Restante (Fase B do cleanup) — têm callers em adapters (`crm-kanban-actions.t
 | [#209](https://github.com/elnathancet-hue/crm-persia-v2/pull/209) | UX 7 fixes (header sticky, scrollbar sem setas, tags contorno azul, etc) | — |
 | [#213](https://github.com/elnathancet-hue/crm-persia-v2/pull/213) | fix: realtime Kanban escutando `leads` (pós refactor lead-centric) — `useKanbanLeadsRealtime` em paralelo ao `useDealsRealtime` | — |
 | [#214](https://github.com/elnathancet-hue/crm-persia-v2/pull/214) | Cleanup lead-centric Fase A — admin agora opera 100% lead-centric. Remove `updateDealStage` / `getLeadOpenDealWithStages` / `moveDealStage` / `moveDealToStage` | [project_kanban_lead_centric.md](../../../../../../../../../../Users/ELNATHAN/.claude/projects/D--tmp-crm-persia-monorepo/memory/project_kanban_lead_centric.md) |
+| [#215](https://github.com/elnathancet-hue/crm-persia-v2/pull/215) | Cleanup lead-centric Fase B — remove 6 métodos `KanbanActions` sem callers (`bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) + 8 server actions + dead code `kanban-board.tsx` | idem |
 
 ### Decisões fundamentais
 

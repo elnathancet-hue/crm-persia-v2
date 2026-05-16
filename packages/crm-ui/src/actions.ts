@@ -196,45 +196,14 @@ export interface KanbanActions {
   deleteDeal: (dealId: string) => Promise<void>;
 
   /**
-   * Bulk operations (PR-K2). Opcionais — admin pode nao implementar
-   * (apenas CRM tem UI de selecao multipla por enquanto).
-   * Cada metodo tem cap de 200 itens por chamada no shared.
-   *
-   * Sprint 7: migrados pra ActionResult — antes lancavam em erro,
-   * causando tela branca quando bulk falhava por validacao (ex:
-   * mais de 200 itens, deals fora do org, etc).
-   */
-  bulkMoveDeals?: (
-    dealIds: string[],
-    stageId: string,
-  ) => Promise<ActionResult<{ moved_count: number }>>;
-  bulkSetDealStatus?: (
-    dealIds: string[],
-    status: "open" | "won" | "lost",
-  ) => Promise<ActionResult<{ updated_count: number }>>;
-  bulkDeleteDeals?: (
-    dealIds: string[],
-  ) => Promise<ActionResult<{ deleted_count: number }>>;
-  bulkApplyTagsToDeals?: (
-    dealIds: string[],
-    tagIds: string[],
-  ) => Promise<ActionResult<{ leads_count: number; links_count: number }>>;
-
-  /**
-   * Loss tracking (PR-K3) — substitui setStatus(lost) capturando
-   * motivo + concorrente + nota pra analytics. Opcional (admin nao
-   * implementa por enquanto).
-   * Sprint 7: markDealAsLost + bulkMarkDealsAsLost migrados pra ActionResult.
+   * Loss tracking (PR-K3) — catalog de motivos de perda. Mantido
+   * pos PR-K-CENTRIC cleanup Fase B: bulk loss vai por
+   * `bulkMarkLeadsAsLost` (lead-centric). Individual loss usa
+   * trigger DB `trg_lead_stage_status_sync` ao mover lead pra stage
+   * com outcome=falha — entao markDealAsLost individual nao precisa
+   * mais existir aqui.
    */
   getLossReasons?: () => Promise<DealLossReason[]>;
-  markDealAsLost?: (
-    dealId: string,
-    input: MarkAsLostInput,
-  ) => Promise<ActionResult<void>>;
-  bulkMarkDealsAsLost?: (
-    dealIds: string[],
-    input: MarkAsLostInput,
-  ) => Promise<ActionResult<{ updated_count: number }>>;
 
   /**
    * PR-C: card connections — atribui responsavel + add/remove tag +

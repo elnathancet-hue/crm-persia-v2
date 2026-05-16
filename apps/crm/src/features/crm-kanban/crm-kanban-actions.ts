@@ -6,11 +6,6 @@
 
 import type { KanbanActions } from "@persia/crm-ui";
 import {
-  bulkApplyTagsToDeals,
-  bulkMarkDealsAsLost,
-  bulkMoveDeals,
-  bulkRemoveDeals,
-  bulkSetDealStatus,
   createDeal,
   createLeadWithDeal,
   createPipeline,
@@ -19,7 +14,6 @@ import {
   deletePipeline,
   deleteStage,
   getLossReasons,
-  markDealAsLost,
   updateDeal,
   updatePipelineName,
   updateStage,
@@ -113,21 +107,13 @@ export const crmKanbanActions: KanbanActions = {
     updateDeal(dealId, { title: data.title, value: data.value }),
   deleteDeal: (dealId) => deleteDeal(dealId),
 
-  // ============ BULK (PR-K2) ============
-  // Cap de 200 itens / chamada (validado no shared). Bulk move usa
-  // update plano (sem flow rico) — pra fluxo "ganhei/perdi" individual,
-  // o caller deve usar moveDealStage que dispara activity log + sync.
-  bulkMoveDeals: (dealIds, stageId) => bulkMoveDeals(dealIds, stageId),
-  bulkSetDealStatus: (dealIds, status) => bulkSetDealStatus(dealIds, status),
-  bulkDeleteDeals: (dealIds) => bulkRemoveDeals(dealIds),
-  bulkApplyTagsToDeals: (dealIds, tagIds) =>
-    bulkApplyTagsToDeals(dealIds, tagIds),
-
   // ============ LOSS TRACKING (PR-K3) ============
+  // Pos PR-K-CENTRIC cleanup Fase B (mai/2026): bulk loss vai por
+  // `bulkMarkLeadsAsLost` (lead-centric, ja wired acima). Individual
+  // loss usa trigger DB `trg_lead_stage_status_sync` quando lead vai
+  // pra stage outcome=falha. So mantemos getLossReasons aqui pro
+  // catalog dropdown.
   getLossReasons: () => getLossReasons(),
-  markDealAsLost: (dealId, input) => markDealAsLost(dealId, input),
-  bulkMarkDealsAsLost: (dealIds, input) =>
-    bulkMarkDealsAsLost(dealIds, input),
 
   // ============ CARD CONNECTIONS (PR-C) ============
   // Botao + Tag, dropdown Atribuir e "Abrir conversa" interna direto

@@ -9,11 +9,6 @@ function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamen
   return fallback;
 }
 import {
-  bulkApplyTagsToDealLeads as bulkApplyTagsShared,
-  bulkDeleteDeals as bulkDeleteDealsShared,
-  bulkMarkDealsAsLost as bulkMarkDealsAsLostShared,
-  bulkMoveDealsToStage as bulkMoveDealsToStageShared,
-  bulkUpdateDealStatus as bulkUpdateDealStatusShared,
   createDeal as createDealShared,
   createLead as createLeadShared,
   createLossReason as createLossReasonShared,
@@ -29,17 +24,13 @@ import {
   listLossReasons as listLossReasonsShared,
   listPipelines,
   listStages,
-  markDealAsLost as markDealAsLostShared,
-  moveDealKanban,
   updateDeal as updateDealShared,
-  updateDealStatus as updateDealStatusShared,
   updateLossReason as updateLossReasonShared,
   updatePipelineName as updatePipelineNameShared,
   updateStage as updateStageShared,
   updateStageOrder as updateStageOrderShared,
   type CreateLeadInput,
   type CreateLossReasonInput,
-  type MarkDealAsLostInput,
   type UpdateLossReasonInput,
 } from "@persia/shared/crm";
 
@@ -271,28 +262,6 @@ export async function deleteDeal(dealId: string) {
   revalidatePath("/crm");
 }
 
-// ============ DEAL OPS (used by kanban) ============
-
-export async function moveDeal(
-  dealId: string,
-  stageId: string,
-  sortOrder: number,
-) {
-  const { supabase, orgId } = await requireRole("agent");
-  await moveDealKanban({ db: supabase, orgId }, dealId, stageId, sortOrder);
-  revalidatePath("/crm");
-}
-
-export async function updateDealStatus(dealId: string, status: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  await updateDealStatusShared(
-    { db: supabase, orgId },
-    dealId,
-    status as "open" | "won" | "lost",
-  );
-  revalidatePath("/crm");
-}
-
 // ============ LEADS (for deal assignment) ============
 
 export async function getLeads() {
@@ -309,164 +278,21 @@ export async function ensureDefaultPipeline() {
   return id;
 }
 
-// ============ BULK OPS (PR-K2) ============
-
-/**
- * Move N deals pra mesma stage. Validacao no shared garante que TODOS
- * sao do mesmo pipeline da stage de destino. NAO dispara o flow rico
- * (activity log + onStageChanged + sync UAZAPI) — operacao em massa
- * usa update plano. Pra side-effects, mover individualmente.
- */
-// Sprint 7: 4 bulks migram pra ActionResult — antes lancavam em
-// erro (tela branca quando bulk falhava por validacao do shared).
-export async function bulkMoveDeals(
-  dealIds: string[],
-  stageId: string,
-): Promise<ActionResult<{ moved_count: number }>> {
-  try {
-    const { supabase, orgId } = await requireRole("agent");
-    const result = await bulkMoveDealsToStageShared(
-      { db: supabase, orgId },
-      dealIds,
-      stageId,
-    );
-    revalidatePath("/crm");
-    return { data: result };
-  } catch (err) {
-    return {
-      error: asErrorMessage(err, "Não foi possível mover os negócios."),
-    };
-  }
-}
-
-/**
- * Marca N deals como won/lost/open de uma vez. Seta closed_at
- * automaticamente.
- */
-export async function bulkSetDealStatus(
-  dealIds: string[],
-  status: "open" | "won" | "lost",
-): Promise<ActionResult<{ updated_count: number }>> {
-  try {
-    const { supabase, orgId } = await requireRole("agent");
-    const result = await bulkUpdateDealStatusShared(
-      { db: supabase, orgId },
-      dealIds,
-      status,
-    );
-    revalidatePath("/crm");
-    return { data: result };
-  } catch (err) {
-    return {
-      error: asErrorMessage(err, "Não foi possível atualizar os negócios."),
-    };
-  }
-}
-
-/**
- * PR-AUDX: bulk delete e operacao critica + irreversivel. Eleva pra
- * `admin` (era `agent`) — agentes regulares nao deletam em massa.
- * Pra excluir 1 deal individual, continua via deleteDeal (agent).
- */
-export async function bulkRemoveDeals(
-  dealIds: string[],
-): Promise<ActionResult<{ deleted_count: number }>> {
-  try {
-    const { supabase, orgId } = await requireRole("admin");
-    const result = await bulkDeleteDealsShared(
-      { db: supabase, orgId },
-      dealIds,
-    );
-    revalidatePath("/crm");
-    return { data: result };
-  } catch (err) {
-    return {
-      error: asErrorMessage(err, "Não foi possível excluir os negócios."),
-    };
-  }
-}
-
-/**
- * Aplica tags nas LEADS dos deals selecionados (nao no deal — tag eh
- * propriedade do lead). Idempotente (UNIQUE em lead_tags).
- */
-export async function bulkApplyTagsToDeals(
-  dealIds: string[],
-  tagIds: string[],
-): Promise<ActionResult<{ leads_count: number; links_count: number }>> {
-  try {
-    const { supabase, orgId } = await requireRole("agent");
-    const result = await bulkApplyTagsShared(
-      { db: supabase, orgId },
-      dealIds,
-      tagIds,
-    );
-    revalidatePath("/crm");
-    return { data: result };
-  } catch (err) {
-    return {
-      error: asErrorMessage(err, "Não foi possível aplicar as tags."),
-    };
-  }
-}
-
 // ============ LOSS TRACKING (PR-K3) ============
 
 /**
  * Lista motivos de perda cadastrados na org. Auto-seeda defaults
  * se vier vazio (first-touch).
+ *
+ * PR-K-CENTRIC cleanup Fase B (mai/2026): markDealAsLost +
+ * bulkMarkDealsAsLost foram removidos (sem callers em UI). Loss
+ * individual agora vai por mover lead pra stage com outcome=falha
+ * (trigger DB sincroniza). Bulk loss usa bulkMarkLeadsAsLost
+ * (lead-centric, em leads-kanban.ts).
  */
 export async function getLossReasons() {
   const { supabase, orgId } = await requireRole("agent");
   return listLossReasonsShared({ db: supabase, orgId });
-}
-
-/**
- * Marca um deal como perdido capturando motivo + concorrente + nota
- * pra analytics. Atualiza status='lost' + closed_at + colunas loss.
- */
-// Sprint 7: markDealAsLost + bulkMarkDealsAsLost migram pra ActionResult.
-export async function markDealAsLost(
-  dealId: string,
-  input: MarkDealAsLostInput,
-): Promise<ActionResult<void>> {
-  try {
-    const { supabase, orgId } = await requireRole("agent");
-    await markDealAsLostShared({ db: supabase, orgId }, dealId, input);
-    revalidatePath("/crm");
-    return;
-  } catch (err) {
-    return {
-      error: asErrorMessage(err, "Não foi possível marcar o negócio como perdido."),
-    };
-  }
-}
-
-/**
- * Marca varios deals como perdidos com mesmo motivo (bulk). Cap 200.
- *
- * PR-AUDX: operacao destrutiva pro funil (fecha N deals como lost,
- * impacta relatorios e taxa de conversao). Eleva pra `admin` —
- * agentes regulares marcam 1 a 1 via markDealAsLost.
- */
-export async function bulkMarkDealsAsLost(
-  dealIds: string[],
-  input: MarkDealAsLostInput,
-): Promise<ActionResult<{ updated_count: number }>> {
-  try {
-    const { supabase, orgId } = await requireRole("admin");
-    const result = await bulkMarkDealsAsLostShared(
-      { db: supabase, orgId },
-      dealIds,
-      input,
-    );
-    revalidatePath("/crm");
-    return { data: result };
-  } catch (err) {
-    return {
-      error: asErrorMessage(err, "Não foi possível marcar os negócios como perdidos."),
-    };
-  }
 }
 
 // ============ LOSS REASONS CRUD (PR-K4) ============
