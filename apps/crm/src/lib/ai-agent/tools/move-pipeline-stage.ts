@@ -1,32 +1,37 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
-import { moveDealToStage } from "@/lib/crm/move-deal";
+import { moveLeadToStage as moveLeadToStageShared } from "@persia/shared/crm";
+import { onStageChanged } from "@/lib/flows/triggers";
 import { failureResult, getHandlerDb, successResult, trimReason } from "./shared";
 
-// Move o deal ativo do lead para outra etapa do mesmo funil.
+// PR-K-CENTRIC (mai/2026): move o LEAD (nao o deal) para outra etapa do
+// funil em que ele esta. Lead aparece 1x no Kanban; deals viram historico
+// dentro do drawer.
 //
 // Diferenca pra `transfer_to_stage` (que move entre etapas DO AGENTE):
 // este handler mexe no Kanban do CRM (pipeline_stages), nao no fluxo
 // interno do agente.
 //
+// Simplificacao pos-refactor: nao precisa mais buscar deal aberto.
+//   - 1 query menos por chamada (vs 2 antes)
+//   - Sem ambiguidade multi-deal — lead esta em 1 funil so
+//
 // Edge cases:
-//   - Lead sem deal aberto       -> error "lead nao esta em nenhum funil"
-//   - Lead em multiplos funis +
-//     pipeline_id NAO informado  -> error "ambiguo, especifique pipeline_id"
-//   - Stage de outro funil       -> error (validado em moveDealToStage)
-//   - Idempotencia (mesma stage) -> retorna sucesso com noop=true
+//   - Lead sem pipeline atribuido -> error "lead nao esta em nenhum funil"
+//   - pipeline_id informado mas diferente -> error
+//   - Stage de outro funil         -> error (validado abaixo)
+//   - Idempotencia (mesma stage)   -> retorna sucesso com noop=true
 const moveStageSchema = z.object({
   stage_id: z.string().uuid(),
   pipeline_id: z.string().uuid().optional(),
   reason: z.string().trim().min(1).max(500).optional(),
 });
 
-interface DealRow {
+interface LeadRow {
   id: string;
-  pipeline_id: string;
-  stage_id: string;
-  status: string | null;
+  pipeline_id: string | null;
+  stage_id: string | null;
 }
 
 interface StageRow {
@@ -49,43 +54,32 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
 
   const reason = trimReason(parsed.data.reason, "agent_requested_kanban_move");
 
-  // 1. Busca deals ativos do lead (status open). Se pipeline_id foi informado,
-  //    filtra. Se nao, pega todos pra detectar ambiguidade.
-  const dealsQuery = db
-    .from("deals")
-    .select("id, pipeline_id, stage_id, status")
+  // 1. Busca o lead direto (pipeline/stage atuais).
+  const { data: leadRow, error: leadError } = await db
+    .from("leads")
+    .select("id, pipeline_id, stage_id")
     .eq("organization_id", context.organization_id)
-    .eq("lead_id", context.lead_id)
-    .eq("status", "open");
+    .eq("id", context.lead_id)
+    .maybeSingle();
 
-  if (parsed.data.pipeline_id) {
-    dealsQuery.eq("pipeline_id", parsed.data.pipeline_id);
+  if (leadError) return failureResult(leadError.message);
+  if (!leadRow) return failureResult("lead nao encontrado");
+
+  const lead = leadRow as LeadRow;
+
+  if (!lead.pipeline_id || !lead.stage_id) {
+    return failureResult("lead nao esta em nenhum funil");
   }
 
-  const { data: deals, error: dealsError } = await dealsQuery;
-  if (dealsError) return failureResult(dealsError.message);
-
-  const activeDeals = (deals ?? []) as DealRow[];
-
-  if (activeDeals.length === 0) {
+  if (parsed.data.pipeline_id && lead.pipeline_id !== parsed.data.pipeline_id) {
     return failureResult(
-      parsed.data.pipeline_id
-        ? "lead nao tem deal aberto neste funil"
-        : "lead nao esta em nenhum funil aberto do CRM",
+      "lead esta em outro funil — informe pipeline_id correto ou use moveLeadToPipeline pra trocar",
+      { current_pipeline_id: lead.pipeline_id },
     );
   }
-
-  if (activeDeals.length > 1) {
-    return failureResult(
-      "lead esta em mais de um funil aberto — informe pipeline_id pra escolher qual mover",
-      { pipeline_ids: activeDeals.map((d) => d.pipeline_id) },
-    );
-  }
-
-  const deal = activeDeals[0];
 
   // 2. Valida stage de destino: existe + pertence ao org + pertence ao mesmo
-  //    funil do deal.
+  //    funil do lead.
   const { data: targetStage, error: stageError } = await db
     .from("pipeline_stages")
     .select("id, name, pipeline_id, organization_id")
@@ -99,18 +93,18 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
   if (stage.organization_id !== context.organization_id) {
     return failureResult("etapa nao pertence a esta organizacao");
   }
-  if (stage.pipeline_id !== deal.pipeline_id) {
-    return failureResult("etapa nao pertence ao funil do deal do lead");
+  if (stage.pipeline_id !== lead.pipeline_id) {
+    return failureResult("etapa nao pertence ao funil do lead");
   }
 
   // 3. Idempotencia — ja esta na stage de destino.
-  if (deal.stage_id === stage.id) {
+  if (lead.stage_id === stage.id) {
     return successResult(
       {
-        deal_id: deal.id,
+        lead_id: lead.id,
         stage_id: stage.id,
         stage_name: stage.name,
-        pipeline_id: deal.pipeline_id,
+        pipeline_id: lead.pipeline_id,
         noop: true,
         reason,
       },
@@ -122,7 +116,7 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
   const { data: fromStageRow } = await db
     .from("pipeline_stages")
     .select("name")
-    .eq("id", deal.stage_id)
+    .eq("id", lead.stage_id)
     .maybeSingle();
   const fromStageName =
     typeof fromStageRow?.name === "string" ? fromStageRow.name : "";
@@ -130,53 +124,61 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
   if (context.dry_run) {
     return successResult(
       {
-        deal_id: deal.id,
-        from_stage_id: deal.stage_id,
+        lead_id: lead.id,
+        from_stage_id: lead.stage_id,
         from_stage_name: fromStageName,
         to_stage_id: stage.id,
         to_stage_name: stage.name,
-        pipeline_id: deal.pipeline_id,
+        pipeline_id: lead.pipeline_id,
         reason,
       },
       [
-        `would move lead from "${fromStageName || deal.stage_id}" to "${stage.name}" in CRM Kanban`,
+        `would move lead from "${fromStageName || lead.stage_id}" to "${stage.name}" in CRM Kanban`,
       ],
     );
   }
 
-  // 5. Real run — delega pra `moveDealToStage` que e a fonte unica de verdade
-  //    pra movimentacao de deal (manual + automation). Reuso garante:
-  //    - lead_activities entry com source: 'automation'
-  //    - onStageChanged() flows disparados
-  //    - syncLeadToUazapi() apos a mudanca
-  const result = await moveDealToStage({
-    dealId: deal.id,
-    stageId: stage.id,
-    orgId: context.organization_id,
-    source: "automation",
-    reason,
-    supabase: db as unknown as SupabaseClient,
+  // 5. Real run — chama shared `moveLeadToStage` (activity log automatico).
+  //    Em seguida dispara onStageChanged flows e syncLeadToUazapi
+  //    (paridade com o caminho manual de moveDealToStage legado).
+  try {
+    await moveLeadToStageShared(
+      { db, orgId: context.organization_id },
+      lead.id,
+      stage.id,
+      0, // sortOrder=0 — AI move pro topo da coluna
+    );
+  } catch (err) {
+    return failureResult(
+      err instanceof Error ? err.message : "falha ao mover lead",
+    );
+  }
+
+  // 6. Side effects: onStageChanged + sync UAZAPI (fire-and-forget).
+  void onStageChanged(context.organization_id, lead.id, stage.id).catch((err) => {
+    console.error("[move-pipeline-stage] onStageChanged failed:", err);
   });
 
-  if (!result.ok) {
-    return failureResult(result.error ?? "falha ao mover deal");
-  }
+  // syncLeadToUazapi assincrono (modulo dinamico pra nao puxar pra bundle)
+  void import("@/lib/whatsapp/sync")
+    .then(({ syncLeadToUazapi }) => syncLeadToUazapi(context.organization_id, lead.id))
+    .catch((err) => {
+      console.error("[move-pipeline-stage] syncLeadToUazapi failed:", err);
+    });
 
   return successResult(
     {
-      deal_id: deal.id,
-      from_stage_id: deal.stage_id,
-      from_stage_name: result.fromStage ?? fromStageName,
+      lead_id: lead.id,
+      from_stage_id: lead.stage_id,
+      from_stage_name: fromStageName,
       to_stage_id: stage.id,
-      to_stage_name: result.toStage ?? stage.name,
-      pipeline_id: deal.pipeline_id,
-      noop: !!result.noop,
+      to_stage_name: stage.name,
+      pipeline_id: lead.pipeline_id,
+      noop: false,
       reason,
     },
     [
-      result.noop
-        ? `lead ja estava na etapa "${stage.name}" — sem alteracao`
-        : `moved lead from "${result.fromStage ?? fromStageName}" to "${result.toStage ?? stage.name}" in CRM Kanban`,
+      `moved lead from "${fromStageName}" to "${stage.name}" in CRM Kanban`,
     ],
   );
 };
