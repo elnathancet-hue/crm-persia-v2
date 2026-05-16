@@ -754,11 +754,11 @@ export function LeadInfoDrawer({
                     <PopoverContent className="w-64 p-1" align="start">
                       {pipelinesLoading ? (
                         <p className="px-2 py-2 text-xs text-muted-foreground">
-                          Carregando...
+                          Carregando funis...
                         </p>
                       ) : pipelinesList.length === 0 ? (
                         <p className="px-2 py-2 text-xs text-muted-foreground">
-                          Nenhum funil disponivel.
+                          Nenhum funil cadastrado.
                         </p>
                       ) : (
                         pipelinesList.map((p) => (
@@ -1695,9 +1695,10 @@ function CreateDealForLeadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Novo negócio</DialogTitle>
+          <DialogTitle>Adicionar negócio</DialogTitle>
           <DialogDescription>
-            Registre uma oportunidade comercial dentro do funil atual do lead.
+            Esse lead está fechando uma venda? Cadastre aqui pra acompanhar o
+            valor e o histórico.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -1708,18 +1709,18 @@ function CreateDealForLeadDialog({
           className="space-y-4 py-2"
         >
           <div className="space-y-2">
-            <Label htmlFor="new-deal-title">Título *</Label>
+            <Label htmlFor="new-deal-title">Nome do negócio *</Label>
             <Input
               id="new-deal-title"
               name="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex.: Plano Premium · Renovação · Pacote anual"
+              placeholder="Ex.: Plano Anual · Renovação · Pacote Premium"
               autoFocus
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new-deal-value">Valor (R$)</Label>
+            <Label htmlFor="new-deal-value">Valor previsto (R$)</Label>
             <Input
               id="new-deal-value"
               name="value"
@@ -1730,7 +1731,7 @@ function CreateDealForLeadDialog({
               placeholder="0,00"
             />
             <p className="text-[11px] text-muted-foreground">
-              Opcional. Use vírgula ou ponto pra decimal.
+              Opcional. Quanto você espera receber se fechar essa venda.
             </p>
           </div>
           <DialogFooter className="flex-row justify-end gap-2">
@@ -1743,7 +1744,7 @@ function CreateDealForLeadDialog({
               Cancelar
             </Button>
             <Button type="submit" variant="default" disabled={!canSubmit}>
-              {pending ? "Criando..." : "Criar negócio"}
+              {pending ? "Adicionando..." : "Adicionar negócio"}
             </Button>
           </DialogFooter>
         </form>
@@ -1832,11 +1833,11 @@ function PipelinePicker({
         <div className="pl-2 py-1">
           {loading ? (
             <p className="px-2 py-1 text-[11px] text-muted-foreground">
-              Carregando...
+              Carregando etapas...
             </p>
           ) : stages.length === 0 ? (
             <p className="px-2 py-1 text-[11px] text-muted-foreground">
-              Sem etapas neste funil.
+              Esse funil ainda não tem etapas cadastradas.
             </p>
           ) : (
             stages.map((s) => (
@@ -1960,7 +1961,7 @@ function LeadNegociosTab({
     try {
       const ctx = await actions.getLeadStageContext(leadId);
       if (!ctx || !ctx.lead.pipeline_id || !ctx.lead.stage_id) {
-        toast.error("Lead sem funil — atribua a um funil primeiro");
+        toast.error("Coloque o lead em um funil antes de adicionar negócio");
         return;
       }
       await actions.createDealForLead({
@@ -1972,10 +1973,10 @@ function LeadNegociosTab({
       });
       setCreateOpen(false);
       await reload();
-      toast.success("Negócio criado", { duration: 4000 });
+      toast.success("Negócio adicionado", { duration: 4000 });
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Erro ao criar negócio",
+        err instanceof Error ? err.message : "Não foi possível adicionar o negócio",
         { duration: 5000 },
       );
     } finally {
@@ -1991,11 +1992,11 @@ function LeadNegociosTab({
         <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
           <Briefcase className="size-6 mx-auto mb-2 text-muted-foreground/60" />
           <p className="font-medium text-foreground">
-            Nenhum negócio vinculado a este lead
+            Nenhum negócio cadastrado ainda
           </p>
           <p className="mt-1 text-xs">
-            Lead nao tem oportunidade comercial cadastrada ainda. Quando houver
-            valor a negociar, registre o negócio aqui pra acompanhar.
+            Quando esse lead estiver fechando uma venda, cadastre o negócio
+            aqui pra registrar o valor e acompanhar o resultado.
           </p>
           {canCreate && (
             <Button
@@ -2005,7 +2006,7 @@ function LeadNegociosTab({
               className="mt-4"
               onClick={() => setCreateOpen(true)}
             >
-              + Novo negócio
+              + Adicionar negócio
             </Button>
           )}
         </div>
@@ -2057,7 +2058,7 @@ function LeadNegociosTab({
             size="sm"
             onClick={() => setCreateOpen(true)}
           >
-            + Novo negócio
+            + Adicionar negócio
           </Button>
         )}
       </div>
