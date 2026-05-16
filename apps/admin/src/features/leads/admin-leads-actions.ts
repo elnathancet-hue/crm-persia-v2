@@ -22,14 +22,23 @@ import {
   getLeadCustomFields,
   getLeadDealsList,
   getLeadForDrawer,
-  getLeadOpenDealWithStages,
   getLeadStats,
   reactivateLeadAgentForDrawer,
   removeTagFromLeadForDrawer,
   setLeadCustomFieldValue,
-  updateDealStage,
   updateLeadForDrawer,
 } from "@/actions/lead-detail-actions";
+// PR-K-CENTRIC cleanup (mai/2026): admin agora opera lead-centric
+// (igual ao CRM). Substitui getLeadOpenDealWithStages + updateDealStage
+// (legacy) por getLeadStageContext + moveLeadStage + listPipelinesForLead
+// + listStagesForPipeline + moveLeadToPipeline.
+import {
+  getLeadStageContext,
+  listPipelinesForLead,
+  listStagesForPipeline,
+  moveLeadStage,
+  moveLeadToPipeline,
+} from "@/actions/leads-kanban";
 
 export const adminLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -75,8 +84,26 @@ export const adminLeadsActions: LeadsActions = {
   deleteLead: deleteLeadForDrawer,
   getLeadStats,
   getLeadDealsList,
-  getLeadOpenDealWithStages,
-  updateDealStage,
+  // PR-K-CENTRIC cleanup (mai/2026): lead-centric stage/pipeline ops.
+  getLeadStageContext,
+  listPipelines: listPipelinesForLead,
+  listStagesForPipeline,
+  moveLeadStage: async (leadId, stageId, sortOrder) => {
+    try {
+      await moveLeadStage(leadId, stageId, sortOrder);
+      return { data: undefined };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Erro ao mover etapa" };
+    }
+  },
+  moveLeadToPipeline: async (leadId, pipelineId, stageId) => {
+    try {
+      await moveLeadToPipeline(leadId, pipelineId, stageId);
+      return { data: undefined };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Erro ao trocar funil" };
+    }
+  },
   addTagToLead: addTagToLeadForDrawer,
   removeTagFromLead: removeTagFromLeadForDrawer,
   getLeadCustomFields,

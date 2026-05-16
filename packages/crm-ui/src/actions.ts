@@ -192,8 +192,6 @@ export interface KanbanActions {
   }) => Promise<{ lead: { id: string }; deal: Deal }>;
   /** @deprecated CRUD do deal (subentidade) sera movido pro drawer do lead na Fase 3 */
   updateDeal: (dealId: string, data: UpdateDealInput) => Promise<void>;
-  /** @deprecated use moveLeadStage */
-  moveDealStage: (dealId: string, stageId: string) => Promise<void>;
   /** @deprecated CRUD do deal sera movido pro drawer */
   deleteDeal: (dealId: string) => Promise<void>;
 

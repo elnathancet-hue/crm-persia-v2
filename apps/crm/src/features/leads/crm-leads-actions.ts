@@ -19,10 +19,6 @@ import {
   updateLead,
 } from "@/actions/leads";
 import {
-  getLeadOpenDealWithStages,
-  updateDealStage,
-} from "@/actions/crm";
-import {
   createDealForLead,
   deleteDealForLead,
   getLeadStageContext,
@@ -84,7 +80,6 @@ export const crmLeadsActions: LeadsActions = {
   deleteLead: (leadId) => deleteLead(leadId),
   getLeadStats,
   getLeadDealsList,
-  getLeadOpenDealWithStages,
   // PR-K-CENTRIC (mai/2026): lead-centric stage/pipeline ops
   getLeadStageContext,
   listPipelines: listPipelinesForLead,
@@ -112,8 +107,6 @@ export const crmLeadsActions: LeadsActions = {
   createDealForLead,
   updateDealMeta,
   deleteDeal: deleteDealForLead,
-  // Sprint 3d: repasse direto — todos retornam ActionResult.
-  updateDealStage: (dealId, stageId) => updateDealStage(dealId, stageId),
   addTagToLead: (leadId, tagId) => addTagToLead(leadId, tagId),
   removeTagFromLead: (leadId, tagId) => removeTagFromLead(leadId, tagId),
   getLeadCustomFields,

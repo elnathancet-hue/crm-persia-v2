@@ -95,19 +95,6 @@ export interface DrawerStageRef {
 }
 
 /**
- * PR-U1: retorno de getLeadOpenDealWithStages — deal aberto do lead
- * + stages do mesmo pipeline (pra popover trocar etapa).
- */
-export interface LeadOpenDealWithStages {
-  deal: {
-    id: string;
-    pipeline_id: string;
-    stage_id: string;
-  };
-  stages: DrawerStageRef[];
-}
-
-/**
  * PR-U1: definicao de campo customizado da org. Espelha
  * LeadCustomFieldDef em apps/crm/src/actions/custom-fields.ts.
  */
@@ -225,14 +212,6 @@ export interface LeadsActions {
   getLeadDealsList?: (leadId: string) => Promise<LeadDealItem[]>;
 
   /**
-   * @deprecated PR-K-CENTRIC — use `getLeadStageContext`. Mantido pra
-   * compat com legacy callers, sera removido na Fase 5.
-   */
-  getLeadOpenDealWithStages?: (
-    leadId: string,
-  ) => Promise<LeadOpenDealWithStages | null>;
-
-  /**
    * PR-K-CENTRIC (mai/2026): pipeline + stage atual do lead + lista
    * de stages do pipeline (popover "Mudar etapa").
    */
@@ -267,15 +246,6 @@ export interface LeadsActions {
       sort_order: number;
     }>
   >;
-
-  /**
-   * @deprecated PR-K-CENTRIC — use `moveLeadStage`. Mantido pra compat
-   * com legacy callers, sera removido na Fase 5.
-   */
-  updateDealStage?: (
-    dealId: string,
-    stageId: string,
-  ) => Promise<ActionResult<void>>;
 
   /**
    * PR-K-CENTRIC (mai/2026): move o lead pra outra stage do mesmo
