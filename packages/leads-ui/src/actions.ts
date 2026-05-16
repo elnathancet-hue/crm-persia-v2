@@ -224,19 +224,104 @@ export interface LeadsActions {
   /** Lista de deals do lead (tab Negocios). */
   getLeadDealsList?: (leadId: string) => Promise<LeadDealItem[]>;
 
-  /** Deal aberto + stages do pipeline (popover "trocar etapa"). */
+  /**
+   * @deprecated PR-K-CENTRIC — use `getLeadStageContext`. Mantido pra
+   * compat com legacy callers, sera removido na Fase 5.
+   */
   getLeadOpenDealWithStages?: (
     leadId: string,
   ) => Promise<LeadOpenDealWithStages | null>;
 
   /**
-   * Move um deal pra outra stage (popover acao).
-   * Sprint 3d: migrado pra ActionResult.
+   * PR-K-CENTRIC (mai/2026): pipeline + stage atual do lead + lista
+   * de stages do pipeline (popover "Mudar etapa").
+   */
+  getLeadStageContext?: (
+    leadId: string,
+  ) => Promise<{
+    lead: { id: string; pipeline_id: string | null; stage_id: string | null };
+    stages: Array<{
+      id: string;
+      name: string;
+      color: string;
+      outcome: "em_andamento" | "falha" | "bem_sucedido";
+      sort_order: number;
+    }>;
+  } | null>;
+
+  /**
+   * Lista de pipelines da org pra "Mudar funil".
+   */
+  listPipelines?: () => Promise<Array<{ id: string; name: string }>>;
+
+  /**
+   * Lista stages de um pipeline especifico (popover "Mudar funil"
+   * mostra stages do pipeline destino).
+   */
+  listStagesForPipeline?: (pipelineId: string) => Promise<
+    Array<{
+      id: string;
+      name: string;
+      color: string;
+      outcome: "em_andamento" | "falha" | "bem_sucedido";
+      sort_order: number;
+    }>
+  >;
+
+  /**
+   * @deprecated PR-K-CENTRIC — use `moveLeadStage`. Mantido pra compat
+   * com legacy callers, sera removido na Fase 5.
    */
   updateDealStage?: (
     dealId: string,
     stageId: string,
   ) => Promise<ActionResult<void>>;
+
+  /**
+   * PR-K-CENTRIC (mai/2026): move o lead pra outra stage do mesmo
+   * pipeline (popover "Mudar etapa" no drawer).
+   */
+  moveLeadStage?: (
+    leadId: string,
+    stageId: string,
+    sortOrder: number,
+  ) => Promise<ActionResult<void>>;
+
+  /**
+   * PR-K-CENTRIC (mai/2026): troca o lead pra outro pipeline + stage
+   * (botao "Mudar funil" no drawer).
+   */
+  moveLeadToPipeline?: (
+    leadId: string,
+    pipelineId: string,
+    stageId: string,
+  ) => Promise<ActionResult<void>>;
+
+  /**
+   * PR-K-CENTRIC (mai/2026): cria deal vinculado ao lead (tab Negocios
+   * → botao '+ Novo negocio'). Deal vira opt-in agora.
+   */
+  createDealForLead?: (input: {
+    leadId: string;
+    pipelineId: string;
+    stageId: string;
+    title: string;
+    value?: number;
+  }) => Promise<{ id: string }>;
+
+  /**
+   * Atualiza title/value de um deal existente (lista de negocios do
+   * drawer — edicao inline).
+   */
+  updateDealMeta?: (
+    dealId: string,
+    data: { title?: string; value?: number },
+  ) => Promise<ActionResult<void>>;
+
+  /**
+   * Apaga um deal do lead (tab Negocios → botao excluir).
+   */
+  deleteDeal?: (dealId: string) => Promise<ActionResult<void>>;
 
   /**
    * Tags inline no drawer/detail (add/remove).

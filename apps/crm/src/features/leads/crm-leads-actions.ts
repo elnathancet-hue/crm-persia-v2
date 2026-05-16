@@ -23,6 +23,16 @@ import {
   updateDealStage,
 } from "@/actions/crm";
 import {
+  createDealForLead,
+  deleteDealForLead,
+  getLeadStageContext,
+  listPipelinesForLead,
+  listStagesForPipeline,
+  moveLeadStage,
+  moveLeadToPipeline,
+  updateDealMeta,
+} from "@/actions/leads-kanban";
+import {
   getLeadCustomFields,
   setLeadCustomFieldValue,
 } from "@/actions/custom-fields";
@@ -75,6 +85,33 @@ export const crmLeadsActions: LeadsActions = {
   getLeadStats,
   getLeadDealsList,
   getLeadOpenDealWithStages,
+  // PR-K-CENTRIC (mai/2026): lead-centric stage/pipeline ops
+  getLeadStageContext,
+  listPipelines: listPipelinesForLead,
+  listStagesForPipeline,
+  moveLeadStage: async (leadId, stageId, sortOrder) => {
+    try {
+      await moveLeadStage(leadId, stageId, sortOrder);
+      return { data: undefined };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Erro ao mover lead",
+      };
+    }
+  },
+  moveLeadToPipeline: async (leadId, pipelineId, stageId) => {
+    try {
+      await moveLeadToPipeline(leadId, pipelineId, stageId);
+      return { data: undefined };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Erro ao trocar funil",
+      };
+    }
+  },
+  createDealForLead,
+  updateDealMeta,
+  deleteDeal: deleteDealForLead,
   // Sprint 3d: repasse direto — todos retornam ActionResult.
   updateDealStage: (dealId, stageId) => updateDealStage(dealId, stageId),
   addTagToLead: (leadId, tagId) => addTagToLead(leadId, tagId),

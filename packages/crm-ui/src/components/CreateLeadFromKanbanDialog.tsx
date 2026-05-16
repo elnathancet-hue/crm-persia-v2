@@ -55,10 +55,13 @@ export function CreateLeadFromKanbanDialog({
   const actions = useKanbanActions();
 
   const handleSubmit = async (formData: FormData) => {
-    if (!actions.createLeadWithDeal) {
-      // Fallback defensivo (compat com adapters antigos): nao faz nada.
-      // Em producao, o adapter do CRM SEMPRE implementa, entao isso
-      // nao deve acontecer.
+    // PR-K-CENTRIC (mai/2026): cria so o LEAD em pipeline/stage.
+    // Deal nao e mais criado automaticamente (vira opt-in no drawer).
+    // Fallback no createLeadWithDeal legacy se adapter nao tiver
+    // createLeadInPipeline (compat ate Fase 5).
+    const useLeadCentric = Boolean(actions.createLeadInPipeline);
+    const useLegacy = Boolean(actions.createLeadWithDeal);
+    if (!useLeadCentric && !useLegacy) {
       toast.error("Funcionalidade indisponivel neste contexto.");
       return;
     }
@@ -71,12 +74,20 @@ export function CreateLeadFromKanbanDialog({
     const channel = (formData.get("channel") as string) || "whatsapp";
 
     try {
-      await actions.createLeadWithDeal({
-        lead: { name, phone, email, source, status, channel },
-        pipelineId,
-        stageId,
-        dealTitle: name,
-      });
+      if (useLeadCentric) {
+        await actions.createLeadInPipeline!({
+          lead: { name, phone, email, source, status, channel },
+          pipelineId,
+          stageId,
+        });
+      } else {
+        await actions.createLeadWithDeal!({
+          lead: { name, phone, email, source, status, channel },
+          pipelineId,
+          stageId,
+          dealTitle: name,
+        });
+      }
       toast.success(`Lead adicionado em "${stageName}"`);
       onOpenChange(false);
       onCreated?.();
