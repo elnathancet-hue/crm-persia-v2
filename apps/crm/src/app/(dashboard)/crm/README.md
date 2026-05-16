@@ -347,8 +347,18 @@ pnpm --filter @persia/crm dev                  # dev local
 
 ### Outras pendências
 
-- Filtros Kanban/Audit Admin/ConditionBuilder ainda aplicam onChange ao vivo (deveriam ter botão "Aplicar filtros" + "Limpar filtros" — só `LeadsAdvancedFilters` foi migrado).
 - `DealCard` na tab Negócios do drawer não tem botões editar/excluir inline (actions já prontas: `updateDealMeta` + `deleteDeal`).
+
+### Padrão global de filtros (Aplicar / Limpar)
+
+Filtros não devem aplicar ao vivo no `onChange` — usuário edita localmente e confirma via botão **"Aplicar filtros"** (primary). **"Limpar filtros"** (ghost) reseta. Pattern de referência: [LeadsAdvancedFilters](../../../../../../packages/leads-ui/src/components/LeadsAdvancedFilters.tsx). Estado interno (`pendingValue`) separado do externo (`value`), re-sync no abrir do popover, `isDirty` controla disabled do botão Aplicar.
+
+| Lugar | Status |
+|---|---|
+| `LeadsAdvancedFilters` (tab Leads) | ✅ Pattern original |
+| `AdvancedFiltersPopover` (KanbanBoard) | ✅ Migrado em PR #216 |
+| `AuditClient` (admin) | ✅ Migrado em PR #216 (já tinha botões; polimento DS + isDirty) |
+| `ConditionBuilder` (segments-ui) | ❌ N/A — é form dentro de Dialog (Salvar/Cancelar do dialog já cumpre o papel) |
 
 ---
 
@@ -368,6 +378,7 @@ pnpm --filter @persia/crm dev                  # dev local
 | [#213](https://github.com/elnathancet-hue/crm-persia-v2/pull/213) | fix: realtime Kanban escutando `leads` (pós refactor lead-centric) — `useKanbanLeadsRealtime` em paralelo ao `useDealsRealtime` | — |
 | [#214](https://github.com/elnathancet-hue/crm-persia-v2/pull/214) | Cleanup lead-centric Fase A — admin agora opera 100% lead-centric. Remove `updateDealStage` / `getLeadOpenDealWithStages` / `moveDealStage` / `moveDealToStage` | [project_kanban_lead_centric.md](../../../../../../../../../../Users/ELNATHAN/.claude/projects/D--tmp-crm-persia-monorepo/memory/project_kanban_lead_centric.md) |
 | [#215](https://github.com/elnathancet-hue/crm-persia-v2/pull/215) | Cleanup lead-centric Fase B — remove 6 métodos `KanbanActions` sem callers (`bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) + 8 server actions + dead code `kanban-board.tsx` | idem |
+| [#216](https://github.com/elnathancet-hue/crm-persia-v2/pull/216) | Padrão global de filtros "Aplicar / Limpar" — migra Kanban `AdvancedFiltersPopover` + polimento DS no Audit admin. Pattern de referência: `LeadsAdvancedFilters` | — |
 
 ### Decisões fundamentais
 

@@ -3,6 +3,7 @@
 import { Fragment, useState, useTransition, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight, Filter, X } from "lucide-react";
+import { Button } from "@persia/ui/button";
 import type { AuditLogRow } from "@/actions/admin";
 
 interface Filters {
@@ -124,6 +125,23 @@ export function AuditClient({
     [filters]
   );
 
+  // PR-FILTERS (mai/2026): isDirty distingue "filtros aplicados" do
+  // "filtros pendentes". Botao Aplicar fica disabled quando o draft
+  // local == aplicado (URL params). Padrao DS global de filtros.
+  const appliedFilters = useMemo<Filters>(
+    () => ({
+      ...initialFilters,
+      since: toLocalDt(initialFilters.since),
+      until: toLocalDt(initialFilters.until),
+    }),
+    [initialFilters],
+  );
+
+  const isDirty = useMemo(
+    () => JSON.stringify(filters) !== JSON.stringify(appliedFilters),
+    [filters, appliedFilters],
+  );
+
   function navigate(nextFilters: Filters, offset: number) {
     const qs = buildQuery(nextFilters, offset);
     startTransition(() => {
@@ -148,18 +166,16 @@ export function AuditClient({
 
   return (
     <div className="space-y-4">
-      {/* Filter bar */}
+      {/* Filter bar — padrao DS: filtros nao aplicam ao vivo, usuario
+          edita e confirma com Aplicar. Limpar reseta + reaplica vazio. */}
       <div className="rounded-xl border border-border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Filter className="size-4" />
           Filtros
-          {hasFilters && (
-            <button
-              onClick={clearFilters}
-              className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-            >
-              <X className="size-3" /> Limpar
-            </button>
+          {isDirty && (
+            <span className="ml-2 text-xs font-normal text-amber-700 dark:text-amber-500">
+              (alterações pendentes — clique em Aplicar)
+            </span>
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -225,14 +241,26 @@ export function AuditClient({
             />
           </div>
         </div>
-        <div className="flex justify-end">
-          <button
-            onClick={applyFilters}
-            disabled={isPending}
-            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={clearFilters}
+            disabled={isPending || !hasFilters}
           >
-            {isPending ? "Aplicando..." : "Aplicar"}
-          </button>
+            <X className="size-3.5" data-icon="inline-start" />
+            Limpar filtros
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={applyFilters}
+            disabled={isPending || !isDirty}
+          >
+            {isPending ? "Aplicando..." : "Aplicar filtros"}
+          </Button>
         </div>
       </div>
 
