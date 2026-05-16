@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
+import { ensureCanActOnUser } from "@/lib/agenda/security";
 import {
   cancelAppointment as cancelShared,
   createAppointment as createShared,
@@ -47,6 +48,7 @@ function buildMutationCtx(
   };
 }
 
+
 // ============================================================================
 // Read
 // ============================================================================
@@ -71,6 +73,8 @@ export async function createAppointment(
   input: Omit<CreateAppointmentInput, "user_id"> & { user_id?: string },
 ): Promise<Appointment> {
   const { supabase, orgId, userId, role } = await requireRole("agent");
+  // PR-AGENDA-SEC: agent/viewer so cria pra si; admin/owner delega livre.
+  ensureCanActOnUser(input.user_id, userId, role);
   // Default user_id = quem ta criando (pra appointment pessoal/avulso).
   const final: CreateAppointmentInput = {
     ...input,
@@ -132,6 +136,9 @@ export async function rescheduleAppointment(
   input: RescheduleAppointmentInput,
 ): Promise<{ original: Appointment; replacement: Appointment }> {
   const { supabase, orgId, userId, role } = await requireRole("agent");
+  // PR-AGENDA-SEC: bloqueia reagendar atribuindo a outro user (mesmo
+  // hole do createAppointment). Admin/owner podem delegar.
+  ensureCanActOnUser(input.new_user_id, userId, role);
   const result = await rescheduleShared(
     buildMutationCtx(supabase, orgId, userId, role === "viewer" ? "agent" : role),
     id,
