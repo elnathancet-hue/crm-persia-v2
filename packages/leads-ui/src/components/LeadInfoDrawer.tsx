@@ -339,10 +339,11 @@ export function LeadInfoDrawer({
   }
   const isDeleting = deleteMutation.pending;
 
-  // Subheader "Etapa atual" — busca o deal aberto + stages do pipeline
-  // ao abrir, pra trocar etapa via Popover sem fechar o drawer (#2 do
-  // polish do Kanban). currentStageName (prop) ainda eh suportada como
-  // fallback caso o caller queira display estatico.
+  // PR-K-CENTRIC (mai/2026): subheader "Etapa atual" agora opera no
+  // LEAD (lead.stage_id), nao mais no deal. Lead aparece 1x no Kanban.
+  // currentDeal estado renomeado mentalmente pra "current lead stage" —
+  // o shape ainda chama `id`/`stage_id` por compat com o UI legado
+  // (id na verdade carrega lead.id, mesma estrategia do KanbanBoard).
   const [currentDeal, setCurrentDeal] = React.useState<{
     id: string;
     pipeline_id: string;
@@ -350,6 +351,12 @@ export function LeadInfoDrawer({
   } | null>(null);
   const [drawerStages, setDrawerStages] = React.useState<DrawerStage[]>([]);
   const [stageChangePending, setStageChangePending] = React.useState(false);
+  // PR-K-CENTRIC: state pra "Mudar funil" — lista pipelines + stages do
+  // pipeline alvo. Lazy load no abrir do popover.
+  const [pipelinesList, setPipelinesList] = React.useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [pipelinesLoading, setPipelinesLoading] = React.useState(false);
 
   // PR-D: stats do lead pros 3 cards do header (Negocios / Conversas /
   // Atividades). Carregado em paralelo ao deal+stages, sem bloquear o
@@ -375,12 +382,29 @@ export function LeadInfoDrawer({
     if (open) setForm(leadToFormState(lead));
   }, [open, lead]);
 
-  // Busca deal aberto + stages quando abrir.
+  // PR-K-CENTRIC (mai/2026): busca pipeline/stage atual do LEAD + stages
+  // do pipeline. Fallback pro legacy getLeadOpenDealWithStages se action
+  // nova nao estiver wireada no adapter.
   React.useEffect(() => {
-    if (!open || !actions.getLeadOpenDealWithStages) return;
+    if (!open) return;
+    const fetchStage = actions.getLeadStageContext;
+    const fetchLegacy = actions.getLeadOpenDealWithStages;
+    if (!fetchStage && !fetchLegacy) return;
     let cancelled = false;
-    actions
-      .getLeadOpenDealWithStages(lead.id)
+    const promise = fetchStage
+      ? fetchStage(lead.id).then((res) => {
+          if (!res || !res.lead.pipeline_id || !res.lead.stage_id) return null;
+          return {
+            deal: {
+              id: res.lead.id, // PR-K-CENTRIC: id carrega lead.id
+              pipeline_id: res.lead.pipeline_id,
+              stage_id: res.lead.stage_id,
+            },
+            stages: res.stages,
+          };
+        })
+      : fetchLegacy!(lead.id);
+    promise
       .then((res) => {
         if (cancelled) return;
         if (res) {
@@ -427,16 +451,22 @@ export function LeadInfoDrawer({
   // Sprint 3d: updateDealStage retorna ActionResult — checamos result.error
   // e revertemos UI otimista em caso de erro. Mantemos manual em vez de
   // useDialogMutation porque ha rollback otimista local especifico.
+  // PR-K-CENTRIC (mai/2026): muda stage do LEAD (era do deal).
+  // Fallback pro legacy updateDealStage se moveLeadStage nao wireado.
   async function handleChangeStage(newStageId: string) {
     if (!currentDeal || newStageId === currentDeal.stage_id) return;
-    if (!actions.updateDealStage) {
+    const moveLead = actions.moveLeadStage;
+    const moveDeal = actions.updateDealStage;
+    if (!moveLead && !moveDeal) {
       toast.error("Ação indisponível neste app");
       return;
     }
     const previousStageId = currentDeal.stage_id;
     setCurrentDeal({ ...currentDeal, stage_id: newStageId });
     setStageChangePending(true);
-    const result = await actions.updateDealStage(currentDeal.id, newStageId);
+    const result = moveLead
+      ? await moveLead(currentDeal.id, newStageId, 0)
+      : await moveDeal!(currentDeal.id, newStageId);
     setStageChangePending(false);
     if (result && "error" in result && result.error) {
       // Revert
@@ -444,13 +474,78 @@ export function LeadInfoDrawer({
         prev ? { ...prev, stage_id: previousStageId } : prev,
       );
       toast.error(result.error, {
-        id: `deal-stage-${currentDeal.id}`,
+        id: `lead-stage-${currentDeal.id}`,
         duration: 5000,
       });
       return;
     }
     toast.success("Etapa atualizada", {
-      id: `deal-stage-${currentDeal.id}`,
+      id: `lead-stage-${currentDeal.id}`,
+      duration: 5000,
+    });
+  }
+
+  // PR-K-CENTRIC (mai/2026): lazy load lista de pipelines quando user
+  // abrir o popover "Mudar funil".
+  async function loadPipelinesList() {
+    if (pipelinesList.length > 0 || pipelinesLoading) return;
+    if (!actions.listPipelines) return;
+    setPipelinesLoading(true);
+    try {
+      const res = await actions.listPipelines();
+      setPipelinesList(res);
+    } catch (err) {
+      console.error("[LeadInfoDrawer] listPipelines failed:", err);
+    } finally {
+      setPipelinesLoading(false);
+    }
+  }
+
+  // PR-K-CENTRIC: troca o lead pra outro pipeline + 1a stage.
+  // Caller (UI) escolhe pipeline + stage; aqui apenas dispara a action.
+  async function handleChangePipeline(
+    targetPipelineId: string,
+    targetStageId: string,
+  ) {
+    if (!currentDeal) return;
+    if (
+      currentDeal.pipeline_id === targetPipelineId &&
+      currentDeal.stage_id === targetStageId
+    ) {
+      return;
+    }
+    if (!actions.moveLeadToPipeline) {
+      toast.error("Ação indisponível neste app");
+      return;
+    }
+    setStageChangePending(true);
+    const result = await actions.moveLeadToPipeline(
+      currentDeal.id,
+      targetPipelineId,
+      targetStageId,
+    );
+    setStageChangePending(false);
+    if (result && "error" in result && result.error) {
+      toast.error(result.error, {
+        id: `lead-pipeline-${currentDeal.id}`,
+        duration: 5000,
+      });
+      return;
+    }
+    // Re-busca contexto pra refletir stages do novo pipeline
+    if (actions.getLeadStageContext) {
+      const res = await actions.getLeadStageContext(lead.id);
+      if (res && res.lead.pipeline_id && res.lead.stage_id) {
+        setCurrentDeal({
+          id: res.lead.id,
+          pipeline_id: res.lead.pipeline_id,
+          stage_id: res.lead.stage_id,
+        });
+        setDrawerStages(res.stages as DrawerStage[]);
+      }
+    }
+    toast.success("Funil atualizado", {
+      id: `lead-pipeline-${currentDeal.id}`,
       duration: 5000,
     });
   }
@@ -637,6 +732,52 @@ export function LeadInfoDrawer({
                   )}
                 </PopoverContent>
               </Popover>
+              {/* PR-K-CENTRIC (mai/2026): botao "Mudar funil" — popover
+                  lista pipelines + 1a stage do pipeline selecionado.
+                  Lazy load da lista de pipelines no abrir. */}
+              {actions.moveLeadToPipeline && actions.listPipelines && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <Popover onOpenChange={(o) => o && loadPipelinesList()}>
+                    <PopoverTrigger
+                      render={
+                        <button
+                          type="button"
+                          disabled={stageChangePending}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary hover:underline transition-colors"
+                        />
+                      }
+                    >
+                      Mudar funil
+                      <ChevronDown className="size-3" />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-1" align="start">
+                      {pipelinesLoading ? (
+                        <p className="px-2 py-2 text-xs text-muted-foreground">
+                          Carregando...
+                        </p>
+                      ) : pipelinesList.length === 0 ? (
+                        <p className="px-2 py-2 text-xs text-muted-foreground">
+                          Nenhum funil disponivel.
+                        </p>
+                      ) : (
+                        pipelinesList.map((p) => (
+                          <PipelinePicker
+                            key={p.id}
+                            pipeline={p}
+                            currentPipelineId={currentDeal?.pipeline_id ?? null}
+                            disabled={stageChangePending}
+                            onSelect={(stageId) =>
+                              handleChangePipeline(p.id, stageId)
+                            }
+                            listStages={actions.listStagesForPipeline}
+                          />
+                        ))
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                </>
+              )}
             </DialogDescription>
           ) : currentStageName ? (
             // Fallback display estatico (caller pode ainda passar
@@ -1518,6 +1659,206 @@ function StatCard({
   );
 }
 
+// ============================================================================
+// CreateDealForLeadDialog (PR-K-CENTRIC mai/2026)
+// ----------------------------------------------------------------------------
+// Dialog inline pra criar negócio dentro do drawer do lead. Form leve
+// (title + value) — pipeline/stage herdados do lead atual no caller.
+// ============================================================================
+
+function CreateDealForLeadDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  pending,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  onSubmit: (title: string, value: number) => void | Promise<void>;
+  pending: boolean;
+}) {
+  const [title, setTitle] = React.useState("");
+  const [value, setValue] = React.useState("");
+
+  React.useEffect(() => {
+    if (open) {
+      setTitle("");
+      setValue("");
+    }
+  }, [open]);
+
+  const trimmedTitle = title.trim();
+  const numericValue = Number(value.replace(",", ".")) || 0;
+  const canSubmit = trimmedTitle.length > 0 && !pending;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Novo negócio</DialogTitle>
+          <DialogDescription>
+            Registre uma oportunidade comercial dentro do funil atual do lead.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSubmit) void onSubmit(trimmedTitle, numericValue);
+          }}
+          className="space-y-4 py-2"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="new-deal-title">Título *</Label>
+            <Input
+              id="new-deal-title"
+              name="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex.: Plano Premium · Renovação · Pacote anual"
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-deal-value">Valor (R$)</Label>
+            <Input
+              id="new-deal-value"
+              name="value"
+              type="text"
+              inputMode="decimal"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="0,00"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Opcional. Use vírgula ou ponto pra decimal.
+            </p>
+          </div>
+          <DialogFooter className="flex-row justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" variant="default" disabled={!canSubmit}>
+              {pending ? "Criando..." : "Criar negócio"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================================================
+// PipelinePicker (PR-K-CENTRIC mai/2026)
+// ----------------------------------------------------------------------------
+// Linha do popover "Mudar funil". Mostra nome do pipeline + lazy-load
+// das stages do pipeline ao expandir. Click numa stage chama onSelect
+// com o stageId. Indica o pipeline atual visualmente.
+// ============================================================================
+
+function PipelinePicker({
+  pipeline,
+  currentPipelineId,
+  disabled,
+  onSelect,
+  listStages,
+}: {
+  pipeline: { id: string; name: string };
+  currentPipelineId: string | null;
+  disabled: boolean;
+  onSelect: (stageId: string) => void;
+  listStages?: (pipelineId: string) => Promise<
+    Array<{
+      id: string;
+      name: string;
+      color: string;
+      outcome: "em_andamento" | "falha" | "bem_sucedido";
+      sort_order: number;
+    }>
+  >;
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+  const [stages, setStages] = React.useState<
+    Array<{ id: string; name: string; color: string; sort_order: number }>
+  >([]);
+  const [loading, setLoading] = React.useState(false);
+  const isCurrent = pipeline.id === currentPipelineId;
+
+  async function toggle() {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    setExpanded(true);
+    if (stages.length === 0 && listStages) {
+      setLoading(true);
+      try {
+        const res = await listStages(pipeline.id);
+        setStages(res.sort((a, b) => a.sort_order - b.sort_order));
+      } catch (err) {
+        console.error("[PipelinePicker] listStages failed:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }
+
+  return (
+    <div className="rounded">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={disabled}
+        className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-primary/10 transition-colors ${
+          isCurrent ? "bg-primary/5 font-medium text-primary" : ""
+        }`}
+      >
+        <span className="truncate">{pipeline.name}</span>
+        {isCurrent ? (
+          <span className="text-[10px] text-primary">atual</span>
+        ) : (
+          <ChevronDown
+            className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        )}
+      </button>
+      {expanded && !isCurrent && (
+        <div className="pl-2 py-1">
+          {loading ? (
+            <p className="px-2 py-1 text-[11px] text-muted-foreground">
+              Carregando...
+            </p>
+          ) : stages.length === 0 ? (
+            <p className="px-2 py-1 text-[11px] text-muted-foreground">
+              Sem etapas neste funil.
+            </p>
+          ) : (
+            stages.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onSelect(s.id)}
+                disabled={disabled}
+                className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-left hover:bg-primary/10 transition-colors"
+              >
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{ backgroundColor: s.color }}
+                />
+                <span className="truncate">{s.name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Helpers locais — formato BR de moeda (sem dependencia nova),
 // "ha X" curto, e truncate seguro pra UTF-8.
 function formatBRL(value: number): string {
@@ -1571,27 +1912,28 @@ function LeadNegociosTab({
   const actions = useLeadsActions();
   const [deals, setDeals] = React.useState<LeadDealItem[]>([]);
   const [loading, setLoading] = React.useState(false);
+  // PR-K-CENTRIC (mai/2026): create dialog state
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [createPending, setCreatePending] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    if (!actions.getLeadDealsList) return;
+    setLoading(true);
+    try {
+      const res = await actions.getLeadDealsList(leadId);
+      setDeals(res);
+    } catch (err) {
+      console.error("[LeadNegociosTab] failed:", err);
+      setDeals([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId, actions]);
 
   React.useEffect(() => {
-    if (!open || !actions.getLeadDealsList) return;
-    let cancelled = false;
-    setLoading(true);
-    actions
-      .getLeadDealsList(leadId)
-      .then((res) => {
-        if (!cancelled) setDeals(res);
-      })
-      .catch((err) => {
-        console.error("[LeadNegociosTab] failed:", err);
-        if (!cancelled) setDeals([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, leadId, actions]);
+    if (!open) return;
+    void reload();
+  }, [open, reload]);
 
   if (loading) {
     return (
@@ -1603,19 +1945,73 @@ function LeadNegociosTab({
     );
   }
 
+  // PR-K-CENTRIC (mai/2026): deals viram opt-in. User cria negocio
+  // explicitamente clicando "+ Novo negocio" no header.
+  async function handleCreate(title: string, value: number) {
+    if (!actions.createDealForLead || !actions.getLeadStageContext) {
+      toast.error("Ação indisponível neste app");
+      return;
+    }
+    setCreatePending(true);
+    try {
+      const ctx = await actions.getLeadStageContext(leadId);
+      if (!ctx || !ctx.lead.pipeline_id || !ctx.lead.stage_id) {
+        toast.error("Lead sem funil — atribua a um funil primeiro");
+        return;
+      }
+      await actions.createDealForLead({
+        leadId,
+        pipelineId: ctx.lead.pipeline_id,
+        stageId: ctx.lead.stage_id,
+        title,
+        value,
+      });
+      setCreateOpen(false);
+      await reload();
+      toast.success("Negócio criado", { duration: 4000 });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao criar negócio",
+        { duration: 5000 },
+      );
+    } finally {
+      setCreatePending(false);
+    }
+  }
+
+  const canCreate = Boolean(actions.createDealForLead && actions.getLeadStageContext);
+
   if (deals.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
-        <Briefcase className="size-6 mx-auto mb-2 text-muted-foreground/60" />
-        <p className="font-medium text-foreground">
-          Nenhum negócio vinculado a este lead
-        </p>
-        <p className="mt-1 text-xs">
-          Negócios são criados automaticamente quando o lead chega no funil
-          (PR-A LEADFIX). Crie negócios adicionais via Kanban → coluna →
-          ícone &quot;+&quot;.
-        </p>
-      </div>
+      <>
+        <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+          <Briefcase className="size-6 mx-auto mb-2 text-muted-foreground/60" />
+          <p className="font-medium text-foreground">
+            Nenhum negócio vinculado a este lead
+          </p>
+          <p className="mt-1 text-xs">
+            Lead nao tem oportunidade comercial cadastrada ainda. Quando houver
+            valor a negociar, registre o negócio aqui pra acompanhar.
+          </p>
+          {canCreate && (
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="mt-4"
+              onClick={() => setCreateOpen(true)}
+            >
+              + Novo negócio
+            </Button>
+          )}
+        </div>
+        <CreateDealForLeadDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onSubmit={handleCreate}
+          pending={createPending}
+        />
+      </>
     );
   }
 
@@ -1625,7 +2021,7 @@ function LeadNegociosTab({
 
   return (
     <div className="space-y-3">
-      {/* Header com resumo */}
+      {/* Header com resumo + acao de criar */}
       <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/40">
         <div className="text-xs text-muted-foreground">
           <strong className="text-foreground tabular-nums">
@@ -1650,6 +2046,16 @@ function LeadNegociosTab({
             </>
           )}
         </div>
+        {canCreate && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
+            + Novo negócio
+          </Button>
+        )}
       </div>
 
       {/* Lista de negocios */}
@@ -1658,6 +2064,13 @@ function LeadNegociosTab({
           <DealCard key={deal.id} deal={deal} />
         ))}
       </div>
+
+      <CreateDealForLeadDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSubmit={handleCreate}
+        pending={createPending}
+      />
     </div>
   );
 }
