@@ -25,6 +25,8 @@ export type {
   StageOutcome,
   Deal,
   DealWithLead,
+  // PR-K-CENTRIC (mai/2026): Lead-centric Kanban card
+  LeadKanbanCard,
   StageWithDeals,
   PipelineWithStages,
   PipelineWithStagesAndDeals,
@@ -60,6 +62,9 @@ export type {
   LeadDealItem,
   LeadCustomFieldDef,
   LeadCustomFieldEntry,
+  // PR-K-CENTRIC (mai/2026)
+  ListLeadsKanbanOptions,
+  LeadStageContext,
 } from "./queries";
 
 export {
@@ -75,6 +80,9 @@ export {
   getDefaultPipelineStage,
   listDeals,
   findLeadOpenDealWithStages,
+  // PR-K-CENTRIC (mai/2026): lead-centric Kanban queries
+  listLeadsKanban,
+  findLeadStageContext,
   listLossReasons,
   listOrgActivities,
   // PR-S5: queries do drawer
@@ -107,6 +115,8 @@ export type {
   MarkDealAsLostInput,
   CreateLossReasonInput,
   UpdateLossReasonInput,
+  // PR-K-CENTRIC (mai/2026): lead-centric Kanban
+  MarkLeadAsLostInput,
 } from "./mutations";
 
 export {
@@ -143,6 +153,12 @@ export {
   sanitizeMutationError,
   // PR-S5: find-or-create conversa por lead
   findOrCreateConversationByLead,
+  // PR-K-CENTRIC (mai/2026): lead-centric Kanban mutations
+  moveLeadToStage,
+  moveLeadToPipeline,
+  bulkMoveLeads,
+  bulkMarkLeadsAsLost,
+  bulkMarkLeadsAsWon,
 } from "./mutations";
 
 // PR-S5: type tambem exportado pro caller wrappear retorno

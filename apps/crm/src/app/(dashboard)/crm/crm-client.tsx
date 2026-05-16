@@ -19,7 +19,7 @@
 import { useRouter } from "next/navigation";
 import { KanbanBoard } from "@persia/crm-ui";
 import type {
-  DealWithLead,
+  LeadKanbanCard,
   Pipeline,
   Stage,
   TagRef,
@@ -36,7 +36,8 @@ import { createClient } from "@/lib/supabase/client";
 interface Props {
   pipelines: Pipeline[];
   stages: Stage[];
-  deals: DealWithLead[];
+  /** PR-K-CENTRIC (mai/2026): leads sao a entidade do Kanban. */
+  kanbanLeads: LeadKanbanCard[];
   leads: { id: string; name: string; phone: string | null; email: string | null }[];
   /** Tags da org pra filtros + bulk apply (PR-K2). */
   tags?: TagRef[];
@@ -52,7 +53,7 @@ interface Props {
 export function CrmClient({
   pipelines,
   stages,
-  deals,
+  kanbanLeads,
   leads,
   tags = [],
   assignees = [],
@@ -93,7 +94,7 @@ export function CrmClient({
     <KanbanBoard
       pipelines={pipelines}
       stages={stages}
-      deals={deals}
+      kanbanLeads={kanbanLeads}
       leads={leads}
       canEdit={isAgent}
       canManagePipelines={isAdmin}

@@ -10,7 +10,7 @@ import {
 } from "@/actions/leads";
 import { getTagsWithCount } from "@/actions/tags";
 import { getSegments } from "@/actions/segments";
-import { listPipelines, listDeals } from "@persia/shared/crm";
+import { listPipelines, listLeadsKanban } from "@persia/shared/crm";
 import { PageTitle } from "@persia/ui/typography";
 import { CrmShell } from "./crm-shell";
 
@@ -82,7 +82,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
 
   const [
     stages,
-    deals,
+    kanbanLeads,
     pipelineLeads,
     tags,
     members,
@@ -100,11 +100,13 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
           .eq("organization_id", orgId)
           .order("sort_order", { ascending: true }),
     ),
+    // PR-K-CENTRIC (mai/2026): query principal do Kanban agora retorna LEADS
+    // (1 lead = 1 card). Deals viram subentidade visivel no drawer.
     (async () => {
       try {
-        return await listDeals({ db: supabase, orgId });
+        return await listLeadsKanban({ db: supabase, orgId });
       } catch (err) {
-        console.error("[/crm page] listDeals falhou:", err);
+        console.error("[/crm page] listLeadsKanban falhou:", err);
         return [];
       }
     })(),
@@ -238,7 +240,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
     <CrmShell
       pipelines={pipelines as never}
       stages={stages as never}
-      deals={deals as never}
+      kanbanLeads={kanbanLeads as never}
       pipelineLeads={pipelineLeads as never}
       tags={tags as never}
       assignees={assignees}
@@ -266,7 +268,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       segments={segmentsResult as never}
       tagsList={tagsWithCountResult as never}
       leadCount={leadsListResult.total}
-      dealCount={deals.length}
+      dealCount={kanbanLeads.length}
       activityCount={activitiesResult.total}
       segmentCount={(segmentsResult as unknown[]).length}
       tagCount={(tagsWithCountResult as unknown[]).length}

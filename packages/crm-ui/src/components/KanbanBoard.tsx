@@ -94,6 +94,7 @@ import {
 import type {
   DealLossReason,
   DealWithLead,
+  LeadKanbanCard,
   LeadTagJoin,
   Pipeline,
   PipelineGoal,
@@ -275,7 +276,15 @@ const ALL_ASSIGNEES = "__all__";
 export interface KanbanBoardProps {
   pipelines: Pipeline[];
   stages: Stage[];
-  deals: Deal[];
+  /**
+   * PR-K-CENTRIC (mai/2026): leads sao a entidade do Kanban.
+   * 1 lead = 1 card. Deals viram subentidade no drawer.
+   * Internamente o componente converte pra shape DealWithLead pra
+   * minimizar refactor da UI legada — `deal.id` na verdade carrega
+   * `lead.id` e drag-drop chama `actions.moveLeadStage`.
+   */
+  kanbanLeads: LeadKanbanCard[];
+  /** Lookup de leads pra dialogs de assignment (LeadList). */
   leads: KanbanLead[];
   /** agent+: pode criar/editar/mover/excluir negocios. */
   canEdit: boolean;
@@ -346,7 +355,7 @@ export interface KanbanBoardProps {
 export function KanbanBoard({
   pipelines,
   stages: initialStages,
-  deals: initialDeals,
+  kanbanLeads,
   leads,
   canEdit,
   canManagePipelines,
@@ -363,6 +372,51 @@ export function KanbanBoard({
   onDealViewChange,
   onOpenLead,
 }: KanbanBoardProps) {
+  // PR-K-CENTRIC (mai/2026): adapter Lead → Deal-like.
+  //
+  // Converte LeadKanbanCard[] em DealWithLead[] compativel com a UI
+  // legada do board. Cada card tem `id = lead.id` — drag-drop e bulks
+  // que recebem "dealId" na verdade carregam `leadId`. Os handlers
+  // chamam `actions.moveLeadStage`/`bulkMoveLeads` etc.
+  //
+  // Vai ser apagado quando o board for refatorado pra renderizar
+  // direto `LeadKanbanCard[]` (Fase 5).
+  const initialDeals = React.useMemo<DealWithLead[]>(
+    () =>
+      kanbanLeads.map(
+        (lead): DealWithLead => ({
+          id: lead.id,
+          pipeline_id: lead.pipeline_id ?? "",
+          stage_id: lead.stage_id ?? "",
+          sort_order: lead.sort_order,
+          lead_id: lead.id,
+          title: lead.name ?? "",
+          value: lead.expected_value ?? 0,
+          status:
+            lead.status === "lost"
+              ? "lost"
+              : lead.status === "customer"
+                ? "won"
+                : "open",
+          loss_reason: null,
+          competitor: null,
+          loss_note: null,
+          created_at: lead.created_at,
+          updated_at: lead.updated_at,
+          assigned_to: lead.assigned_to,
+          leads: {
+            name: lead.name ?? "",
+            phone: lead.phone,
+            email: lead.email,
+            assigned_to: lead.assigned_to,
+            lead_tags: lead.lead_tags ?? [],
+            assignee: lead.assignee ?? null,
+          },
+        }),
+      ),
+    [kanbanLeads],
+  );
+
   // PR-CRMOPS: defaults derivados de `canManagePipelines` pra preservar
   // compat com call-sites que ainda nao foram atualizados (admin etc).
   const effectiveCanCreateKanban = canCreateKanban ?? canManagePipelines;
@@ -758,7 +812,8 @@ export function KanbanBoard({
 
     startTransition(async () => {
       try {
-        await actions.moveDealStage(dealId, stageId);
+        // PR-K-CENTRIC: drag-drop move LEAD agora (deal.id === lead.id no adapter)
+        await actions.moveLeadStage(dealId, stageId, deal.sort_order ?? 0);
         onChange?.();
       } catch {
         setLocalDeals((prev) =>
@@ -780,7 +835,8 @@ export function KanbanBoard({
     // motivo + concorrente + nota). Fallback no comportamento antigo
     // (move sem capturar) se a action nao estiver disponivel — mantem
     // compat retroativa pra clients antigos.
-    if (outcome === "falha" && actions.markDealAsLost) {
+    // PR-K-CENTRIC: marca lead como perdido (dealId === leadId no adapter)
+    if (outcome === "falha" && actions.bulkMarkLeadsAsLost) {
       const deal = localDeals.find((d) => d.id === dealId);
       void loadLossReasons();
       setLossTarget({
@@ -823,7 +879,8 @@ export function KanbanBoard({
 
     startTransition(async () => {
       try {
-        await actions.moveDealStage(dealId, terminalStage.id);
+        // PR-K-CENTRIC: move LEAD (deal.id === lead.id no adapter)
+        await actions.moveLeadStage(dealId, terminalStage.id, deal.sort_order ?? 0);
         onChange?.();
       } catch {
         setLocalDeals((prev) =>
@@ -843,20 +900,23 @@ export function KanbanBoard({
    * Sprint 7: actions retornam ActionResult — checa result.error e
    * exibe toast PT-BR vindo do server.
    */
+  // PR-K-CENTRIC (mai/2026): markAsLost opera em LEAD agora.
+  // dealId/dealIds nos lossTarget na verdade carregam leadId/leadIds.
   async function submitLoss(input: MarkAsLostInput) {
     if (!lossTarget) return;
     setLossPending(true);
     if (lossTarget.mode === "single") {
-      if (!actions.markDealAsLost) {
+      // Use bulkMarkLeadsAsLost com array de 1 elemento — evita api dupla
+      if (!actions.bulkMarkLeadsAsLost) {
         toast.error("Ação indisponível");
         setLossPending(false);
         return;
       }
-      const result = await actions.markDealAsLost(lossTarget.dealId, input);
+      const result = await actions.bulkMarkLeadsAsLost([lossTarget.dealId], input);
       setLossPending(false);
       if (result && "error" in result && result.error) {
         toast.error(result.error, {
-          id: `deal-loss-${lossTarget.dealId}`,
+          id: `lead-loss-${lossTarget.dealId}`,
           duration: 5000,
         });
         return;
@@ -874,17 +934,17 @@ export function KanbanBoard({
             : d,
         ),
       );
-      toast.success("Negócio marcado como perdido", {
-        id: `deal-loss-${lossTarget.dealId}`,
+      toast.success("Lead marcado como perdido", {
+        id: `lead-loss-${lossTarget.dealId}`,
         duration: 5000,
       });
     } else {
-      if (!actions.bulkMarkDealsAsLost) {
+      if (!actions.bulkMarkLeadsAsLost) {
         toast.error("Ação em massa indisponível");
         setLossPending(false);
         return;
       }
-      const result = await actions.bulkMarkDealsAsLost(
+      const result = await actions.bulkMarkLeadsAsLost(
         lossTarget.dealIds,
         input,
       );
@@ -913,7 +973,7 @@ export function KanbanBoard({
       );
       clearSelection();
       toast.success(
-        `${updatedCount} negócio${updatedCount === 1 ? "" : "s"} marcado${updatedCount === 1 ? "" : "s"} como perdido${updatedCount === 1 ? "" : "s"}`,
+        `${updatedCount} lead${updatedCount === 1 ? "" : "s"} marcado${updatedCount === 1 ? "" : "s"} como perdido${updatedCount === 1 ? "" : "s"}`,
         { id: "kanban-bulk-loss", duration: 5000 },
       );
     }
@@ -1003,17 +1063,18 @@ export function KanbanBoard({
     onChange?.();
   }
 
+  // PR-K-CENTRIC (mai/2026): bulks operam em LEAD (deal.id === lead.id no adapter)
   async function handleBulkMove(stageId: string) {
-    if (!actions.bulkMoveDeals) {
+    if (!actions.bulkMoveLeads) {
       toast.error("Mover em massa indisponivel.");
       return;
     }
     const ids = Array.from(selectedIds);
     setBulkMoveOpen(false);
     await runBulk(
-      () => actions.bulkMoveDeals!(ids, stageId),
+      () => actions.bulkMoveLeads!(ids, stageId),
       (r) =>
-        `${r.moved_count} negócio${r.moved_count === 1 ? "" : "s"} movido${r.moved_count === 1 ? "" : "s"}`,
+        `${r.updated_count} lead${r.updated_count === 1 ? "" : "s"} movido${r.updated_count === 1 ? "" : "s"}`,
       (prev) =>
         prev.map((d) =>
           selectedIds.has(d.id) ? { ...d, stage_id: stageId } : d,
@@ -1022,38 +1083,43 @@ export function KanbanBoard({
   }
 
   async function handleBulkSetStatus(status: "won" | "lost") {
-    if (!actions.bulkSetDealStatus) {
-      toast.error("Operacao em massa indisponivel.");
+    if (status === "won") {
+      if (!actions.bulkMarkLeadsAsWon) {
+        toast.error("Operacao em massa indisponivel.");
+        return;
+      }
+      const ids = Array.from(selectedIds);
+      await runBulk(
+        () => actions.bulkMarkLeadsAsWon!(ids),
+        (r) =>
+          `${r.updated_count} lead${r.updated_count === 1 ? "" : "s"} marcado${r.updated_count === 1 ? "" : "s"} como ganho`,
+        (prev) =>
+          prev.map((d) =>
+            selectedIds.has(d.id) ? { ...d, status: "won" } : d,
+          ),
+      );
       return;
     }
-    const ids = Array.from(selectedIds);
-    await runBulk(
-      () => actions.bulkSetDealStatus!(ids, status),
-      (r) =>
-        `${r.updated_count} negócio${r.updated_count === 1 ? "" : "s"} marcado${r.updated_count === 1 ? "" : "s"} como ${status === "won" ? "ganho" : "perdido"}`,
-      (prev) =>
-        prev.map((d) =>
-          selectedIds.has(d.id) ? { ...d, status } : d,
-        ),
-    );
+    // status === "lost" → captura motivo via MarkAsLostDialog (handleBulkConfirmLost)
+    toast.info("Use o botão 'Marcar perdido' pra capturar motivo.");
   }
 
   async function handleBulkDelete() {
-    if (!actions.bulkDeleteDeals) {
+    if (!actions.bulkDeleteLeadsFromKanban) {
       toast.error("Exclusao em massa indisponivel.");
       return;
     }
     const ids = Array.from(selectedIds);
     await runBulk(
-      () => actions.bulkDeleteDeals!(ids),
+      () => actions.bulkDeleteLeadsFromKanban!(ids),
       (r) =>
-        `${r.deleted_count} negócio${r.deleted_count === 1 ? "" : "s"} excluído${r.deleted_count === 1 ? "" : "s"}`,
+        `${r.deleted_count} lead${r.deleted_count === 1 ? "" : "s"} excluído${r.deleted_count === 1 ? "" : "s"}`,
       (prev) => prev.filter((d) => !selectedIds.has(d.id)),
     );
   }
 
   async function handleBulkApplyTags(tagIds: string[]) {
-    if (!actions.bulkApplyTagsToDeals) {
+    if (!actions.bulkApplyTagsToLeads) {
       toast.error("Aplicacao em massa indisponivel.");
       return;
     }
@@ -1063,11 +1129,9 @@ export function KanbanBoard({
     }
     const ids = Array.from(selectedIds);
     setBulkTagOpen(false);
-    // Tags aplicadas no LEAD, nao no Deal — nao ha optimistic update visivel
-    // no Kanban (cards nao mudam). onChange cuida do refresh.
     await runBulk(
-      () => actions.bulkApplyTagsToDeals!(ids, tagIds),
-      (r) => `${r.leads_count} lead${r.leads_count === 1 ? "" : "s"} marcado${r.leads_count === 1 ? "" : "s"} com ${tagIds.length} tag${tagIds.length === 1 ? "" : "s"}`,
+      () => actions.bulkApplyTagsToLeads!(ids, tagIds),
+      (r) => `${r.links_count} tag${r.links_count === 1 ? "" : "s"} aplicada${r.links_count === 1 ? "" : "s"} a ${ids.length} lead${ids.length === 1 ? "" : "s"}`,
     );
   }
 
@@ -1418,8 +1482,9 @@ export function KanbanBoard({
               className="h-8 rounded-md"
               disabled={bulkPending}
               onClick={() => {
-                if (actions.bulkMarkDealsAsLost) {
+                if (actions.bulkMarkLeadsAsLost) {
                   // PR-K3: abre MarkAsLostDialog pra capturar motivo
+                  // PR-K-CENTRIC: dealIds na verdade carrega leadIds (adapter)
                   void loadLossReasons();
                   setLossTarget({
                     mode: "bulk",
@@ -1640,7 +1705,7 @@ export function KanbanBoard({
                       // inline criava nova ref em todo render -> 50+ cards
                       // re-renderizavam mesmo se nada mudasse.
                       onToggleSelected={
-                        canEdit && actions.bulkMoveDeals
+                        canEdit && actions.bulkMoveLeads
                           ? toggleSelected
                           : undefined
                       }

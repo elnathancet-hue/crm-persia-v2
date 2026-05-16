@@ -11,6 +11,13 @@ import {
   deleteStage as deleteStageShared,
   ensureDefaultPipeline as ensureDefaultPipelineShared,
   listDeals as listDealsShared,
+  listLeadsKanban as listLeadsKanbanShared,
+  moveLeadToStage as moveLeadToStageShared,
+  bulkMoveLeads as bulkMoveLeadsShared,
+  bulkMarkLeadsAsLost as bulkMarkLeadsAsLostShared,
+  bulkMarkLeadsAsWon as bulkMarkLeadsAsWonShared,
+  createLead as createLeadShared,
+  type MarkLeadAsLostInput,
   listLeadsForDealAssignment,
   listPipelines,
   listStages as listStagesShared,
@@ -314,6 +321,111 @@ export async function getDeals(pipelineId?: string) {
     return await listDealsShared({ db: admin, orgId }, { pipelineId });
   } catch {
     return [];
+  }
+}
+
+// PR-K-CENTRIC (mai/2026): query principal do Kanban admin retorna LEADS.
+export async function getKanbanLeads(pipelineId?: string) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    return await listLeadsKanbanShared({ db: admin, orgId }, { pipelineId });
+  } catch (err) {
+    console.error("[admin] getKanbanLeads falhou:", err);
+    return [];
+  }
+}
+
+export async function createLeadInPipeline(input: {
+  lead: {
+    name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    source?: string;
+    status?: string;
+    channel?: string;
+    expected_value?: number | null;
+  };
+  pipelineId: string;
+  stageId: string;
+}): Promise<{ lead: { id: string } }> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const created = await createLeadShared(
+    { db: admin, orgId },
+    {
+      name: input.lead.name ?? null,
+      phone: input.lead.phone ?? null,
+      email: input.lead.email ?? null,
+      source: input.lead.source ?? "manual",
+      status: input.lead.status ?? "new",
+      channel: input.lead.channel ?? "manual",
+    },
+  );
+  const { error: updErr } = await admin
+    .from("leads")
+    .update({
+      pipeline_id: input.pipelineId,
+      stage_id: input.stageId,
+      sort_order: 0,
+      expected_value: input.lead.expected_value ?? null,
+    })
+    .eq("id", created.id)
+    .eq("organization_id", orgId);
+  if (updErr) {
+    throw new Error(`Lead criado mas falhou ao vincular ao funil: ${updErr.message}`);
+  }
+  return { lead: { id: created.id } };
+}
+
+export async function moveLeadStage(
+  leadId: string,
+  stageId: string,
+  sortOrder: number,
+): Promise<void> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  await moveLeadToStageShared({ db: admin, orgId }, leadId, stageId, sortOrder);
+}
+
+export async function bulkMoveLeads(leadIds: string[], stageId: string) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const result = await bulkMoveLeadsShared(
+      { db: admin, orgId },
+      leadIds,
+      stageId,
+    );
+    return { data: result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro inesperado" };
+  }
+}
+
+export async function bulkMarkLeadsAsWon(leadIds: string[]) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const result = await bulkMarkLeadsAsWonShared(
+      { db: admin, orgId },
+      leadIds,
+    );
+    return { data: result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro inesperado" };
+  }
+}
+
+export async function bulkMarkLeadsAsLost(
+  leadIds: string[],
+  input: MarkLeadAsLostInput,
+) {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    const result = await bulkMarkLeadsAsLostShared(
+      { db: admin, orgId },
+      leadIds,
+      input,
+    );
+    return { data: result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro inesperado" };
   }
 }
 
