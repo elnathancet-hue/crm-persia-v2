@@ -274,11 +274,14 @@ Payload enviado ao n8n inclui (campos do `/crm`):
 
 Renderiza o **mesmo `KanbanBoard`** mas com `<LeadsProvider actions={adminLeadsActions}>` + `<KanbanProvider actions={adminKanbanActions}>`. Auth: `requireSuperadminForOrg()` (cookie assinado + service-role bypassa RLS).
 
-### Realtime (`apps/crm/src/app/(dashboard)/crm/crm-client.tsx`)
+### Realtime (`apps/crm/src/app/(dashboard)/crm/crm-client.tsx` + `apps/admin/src/components/crm/crm-page.tsx`)
 
-- `useDealsRealtime(supabase, pipelineId, debouncedRefresh)` — postgres_changes em `deals` filtrado por pipeline. INSERT+UPDATE+DELETE.
+- `useKanbanLeadsRealtime(supabase, pipelineId, debouncedRefresh)` — postgres_changes em **`leads`** filtrado por `pipeline_id`. Captura drag-drop / AI Agent / `/api/crm` / bulk move — todos atualizam `leads.stage_id` pós-refactor lead-centric. **Sem este hook, mudanças via AI ou n8n só aparecem após refresh manual.**
+- `useDealsRealtime(supabase, pipelineId, debouncedRefresh)` — postgres_changes em **`deals`** filtrado por pipeline. Mantido pra cobrir mudanças na tab "Negócios" do drawer (criar/editar/excluir deal).
 - `useDealPresence({ supabase, pipelineId, currentUser })` — canal próprio `pipeline-presence-${pipelineId}`, mostra quem está vendo cada card.
 - Debounce 200ms trailing.
+
+> **Por que 2 hooks?** Pós-refactor lead-centric (PR #202), o source of truth do Kanban é `leads.stage_id`. `useDealsRealtime` sozinho perde 100% das movimentações de lead (`deals` não muda). Ambos rodam em paralelo: o de leads cobre o Kanban; o de deals cobre o drawer.
 
 ---
 
