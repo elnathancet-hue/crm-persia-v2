@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { CalendarDays } from "lucide-react";
+import { PageTitle } from "@persia/ui/typography";
 import {
   AgendaActionsProvider,
   AgendaAvailabilitySettings,
@@ -152,13 +154,18 @@ export function AgendaPageClient({
   return (
     <AgendaActionsProvider actions={crmAgendaActions} callbacks={callbacks}>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Header sticky com icone grande + titulo + "+ Novo" no canto direito.
+            PR-AGENDA-VISUAL (mai/2026): paridade visual com /crm — antes a
+            Agenda tinha <header> simples sem icone e tabs em pill (drift do
+            resto do produto). Agora segue o mesmo pattern do CrmShell:
+            sticky top, icone azul size-12, tabs underline. */}
+        <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
+          <AgendaPageHeader onNovoSelect={handleNovoMenuSelect} />
           <AgendaTabs
             active={activeTab}
             onChange={setActiveTab}
             hidden={tabHidden}
           />
-          <AgendaCreateMenu onSelect={handleNovoMenuSelect} />
         </div>
 
         {showCalendarHeader && (
@@ -237,5 +244,36 @@ export function AgendaPageClient({
         />
       </div>
     </AgendaActionsProvider>
+  );
+}
+
+// ============================================================================
+// Header da pagina — icone grande + titulo + tagline + botao "+ Novo"
+// PR-AGENDA-VISUAL (mai/2026): mesmo pattern do CrmPageHeader (crm-shell.tsx).
+// Centralizar como primitive em packages/ui ainda nao vale a pena (2 callers
+// so) — extrair quando aparecer 3o lugar pedindo a mesma estrutura.
+// ============================================================================
+
+function AgendaPageHeader({
+  onNovoSelect,
+}: {
+  onNovoSelect: (kind: AppointmentKind) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex items-start gap-3.5">
+        <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
+          <CalendarDays className="size-6" />
+        </div>
+        <div className="min-w-0">
+          <PageTitle className="leading-none">Agenda</PageTitle>
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            Acompanhe seus compromissos, organize a semana e cancele/reagende
+            sem sair do CRM.
+          </p>
+        </div>
+      </div>
+      <AgendaCreateMenu onSelect={onNovoSelect} />
+    </div>
   );
 }

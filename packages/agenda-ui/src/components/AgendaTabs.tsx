@@ -9,7 +9,6 @@ import {
   List as ListIcon,
   Settings as SettingsIcon,
 } from "lucide-react";
-import { Tabs, TabsList, TabsTrigger } from "@persia/ui/tabs";
 
 export type AgendaTab =
   | "overview"
@@ -29,7 +28,7 @@ interface AgendaTabsProps {
 interface TabDef {
   id: AgendaTab;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ className?: string }>;
 }
 
 const TABS: TabDef[] = [
@@ -42,9 +41,12 @@ const TABS: TabDef[] = [
 ];
 
 /**
- * Tabs controlado da Agenda. Wrappa <Tabs> do shadcn (que via base-ui).
- * O conteudo de cada tab eh renderizado FORA pelo parent (agenda-page-client)
- * — isso permite render condicional que nao re-monta panels invisiveis.
+ * Tabs da Agenda — padrao visual identico ao CrmTabs (PR-AGENDA-VISUAL
+ * mai/2026): underline azul + icone + label + bg-primary/5 quando ativa.
+ * Antes usava shadcn `<Tabs>` pill — driftava do resto do produto.
+ *
+ * Conteudo de cada tab eh renderizado FORA pelo parent (agenda-page-client)
+ * — esse componente eh so o sub-nav, sem TabsContent.
  */
 export const AgendaTabs: React.FC<AgendaTabsProps> = ({
   active,
@@ -54,22 +56,33 @@ export const AgendaTabs: React.FC<AgendaTabsProps> = ({
   const visible = TABS.filter((t) => !hidden.includes(t.id));
 
   return (
-    <Tabs value={active} onValueChange={(v) => onChange(v as AgendaTab)}>
-      <TabsList className="flex flex-wrap">
-        {visible.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <TabsTrigger
-              key={tab.id}
-              value={tab.id}
-              className="inline-flex items-center gap-2"
-            >
-              <Icon size={14} />
-              <span>{tab.label}</span>
-            </TabsTrigger>
-          );
-        })}
-      </TabsList>
-    </Tabs>
+    <div className="flex gap-0.5 border-b border-border overflow-x-auto">
+      {visible.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = active === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            aria-pressed={isActive}
+            className={`relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-md px-4 py-3 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+              isActive
+                ? "text-primary bg-primary/5"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            }`}
+          >
+            <Icon className={`size-4 ${isActive ? "text-primary" : ""}`} />
+            <span>{tab.label}</span>
+            {isActive && (
+              <span
+                className="absolute inset-x-2 -bottom-px h-0.5 rounded-t-full bg-primary"
+                aria-hidden
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 };
