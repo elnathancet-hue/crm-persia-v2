@@ -2,7 +2,6 @@ import { getAppointments } from "@/actions/agenda/appointments";
 import { getAgendaServices } from "@/actions/agenda/services";
 import { getOrgMeta } from "@/actions/agenda/org";
 import { getAuthContext } from "@/lib/auth";
-import { PageTitle } from "@persia/ui/typography";
 import { AgendaPageClient } from "./agenda-page-client";
 
 export const metadata = { title: "Agenda" };
@@ -29,23 +28,16 @@ export default async function AgendaPage() {
     getOrgMeta(),
   ]);
 
+  // PR-AGENDA-VISUAL (mai/2026): header + tabs movidos pro client (paridade com
+  // /crm — icone grande no header + tabs underline + sticky). Page server apenas
+  // hidrata dados iniciais.
   return (
-    <div className="space-y-8">
-      <header>
-        <PageTitle size="compact">Agenda</PageTitle>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Acompanhe seus compromissos, organize a semana e cancele/reagende sem
-          sair do CRM.
-        </p>
-      </header>
-
-      <AgendaPageClient
-        initialAppointments={initialAppointments}
-        initialRange={range}
-        services={services}
-        currentUserId={ctx.userId}
-        orgSlug={org.slug}
-      />
-    </div>
+    <AgendaPageClient
+      initialAppointments={initialAppointments}
+      initialRange={range}
+      services={services}
+      currentUserId={ctx.userId}
+      orgSlug={org.slug}
+    />
   );
 }
