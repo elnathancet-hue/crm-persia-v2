@@ -91,32 +91,46 @@ export function LeadsAdvancedFilters({
   footerExtras,
 }: LeadsAdvancedFiltersProps) {
   const [open, setOpen] = React.useState(false);
+  // Estado pendente: edicoes ficam locais ate "Aplicar filtros". Resync com
+  // value sempre que o popover abre, pra refletir estado externo (URL params,
+  // limpeza por outro caminho, etc). Regra global DS (mai/2026): filtros
+  // tem botao Aplicar + Limpar, nao mais onChange ao vivo.
+  const [pendingValue, setPendingValue] = React.useState<LeadsAdvancedFiltersValue>(value);
+  React.useEffect(() => {
+    if (open) setPendingValue(value);
+  }, [open, value]);
+
   const activeCount = countActive(value);
+  const pendingCount = countActive(pendingValue);
+  const isDirty = React.useMemo(
+    () => JSON.stringify(pendingValue) !== JSON.stringify(value),
+    [pendingValue, value],
+  );
 
   const applyPreset = (days: number) => {
-    onChange({
-      ...value,
+    setPendingValue({
+      ...pendingValue,
       dateFrom: daysAgoISO(days),
       dateTo: todayISO(),
     });
   };
 
   const toggleAssignee = (id: string) => {
-    const cur = value.assigneeIds ?? [];
+    const cur = pendingValue.assigneeIds ?? [];
     const next = cur.includes(id)
       ? cur.filter((x) => x !== id)
       : [...cur, id];
-    onChange({ ...value, assigneeIds: next });
+    setPendingValue({ ...pendingValue, assigneeIds: next });
   };
 
   const toggleSource = (s: string) => {
-    const cur = value.sources ?? [];
+    const cur = pendingValue.sources ?? [];
     const next = cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s];
-    onChange({ ...value, sources: next });
+    setPendingValue({ ...pendingValue, sources: next });
   };
 
   const clearAll = () => {
-    onChange({
+    setPendingValue({
       dateFrom: undefined,
       dateTo: undefined,
       lastInteractionMode: "any",
@@ -124,6 +138,24 @@ export function LeadsAdvancedFilters({
       assigneeIds: [],
       sources: [],
     });
+  };
+
+  const applyAndClose = () => {
+    onChange(pendingValue);
+    setOpen(false);
+  };
+
+  const clearAndApply = () => {
+    const empty: LeadsAdvancedFiltersValue = {
+      dateFrom: undefined,
+      dateTo: undefined,
+      lastInteractionMode: "any",
+      lastInteractionDays: undefined,
+      assigneeIds: [],
+      sources: [],
+    };
+    setPendingValue(empty);
+    onChange(empty);
   };
 
   return (
@@ -158,17 +190,12 @@ export function LeadsAdvancedFilters({
         <div className="border-b border-border px-4 py-3 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">
             Filtros avançados
+            {pendingCount > 0 && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({pendingCount} {pendingCount === 1 ? "filtro" : "filtros"})
+              </span>
+            )}
           </h3>
-          {activeCount > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3.5" />
-              Limpar tudo
-            </button>
-          )}
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto px-4 py-3 space-y-5">
@@ -189,9 +216,9 @@ export function LeadsAdvancedFilters({
                   id="filter-date-from"
                   name="filter_date_from"
                   type="date"
-                  value={value.dateFrom ?? ""}
+                  value={pendingValue.dateFrom ?? ""}
                   onChange={(e) =>
-                    onChange({ ...value, dateFrom: e.target.value || undefined })
+                    setPendingValue({ ...pendingValue, dateFrom: e.target.value || undefined })
                   }
                   className="h-9"
                 />
@@ -204,9 +231,9 @@ export function LeadsAdvancedFilters({
                   id="filter-date-to"
                   name="filter_date_to"
                   type="date"
-                  value={value.dateTo ?? ""}
+                  value={pendingValue.dateTo ?? ""}
                   onChange={(e) =>
-                    onChange({ ...value, dateTo: e.target.value || undefined })
+                    setPendingValue({ ...pendingValue, dateTo: e.target.value || undefined })
                   }
                   className="h-9"
                 />
@@ -226,7 +253,7 @@ export function LeadsAdvancedFilters({
               <button
                 type="button"
                 onClick={() =>
-                  onChange({ ...value, dateFrom: undefined, dateTo: undefined })
+                  setPendingValue({ ...pendingValue, dateFrom: undefined, dateTo: undefined })
                 }
                 className="rounded-full border border-dashed border-border bg-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
@@ -245,9 +272,9 @@ export function LeadsAdvancedFilters({
                 <input
                   type="radio"
                   name="last-interaction"
-                  checked={!value.lastInteractionMode || value.lastInteractionMode === "any"}
+                  checked={!pendingValue.lastInteractionMode || pendingValue.lastInteractionMode === "any"}
                   onChange={() =>
-                    onChange({ ...value, lastInteractionMode: "any", lastInteractionDays: undefined })
+                    setPendingValue({ ...pendingValue, lastInteractionMode: "any", lastInteractionDays: undefined })
                   }
                   className="size-3.5"
                 />
@@ -257,12 +284,12 @@ export function LeadsAdvancedFilters({
                 <input
                   type="radio"
                   name="last-interaction"
-                  checked={value.lastInteractionMode === "withinDays"}
+                  checked={pendingValue.lastInteractionMode === "withinDays"}
                   onChange={() =>
-                    onChange({
-                      ...value,
+                    setPendingValue({
+                      ...pendingValue,
                       lastInteractionMode: "withinDays",
-                      lastInteractionDays: value.lastInteractionDays ?? 7,
+                      lastInteractionDays: pendingValue.lastInteractionDays ?? 7,
                     })
                   }
                   className="size-3.5"
@@ -274,18 +301,18 @@ export function LeadsAdvancedFilters({
                   min={1}
                   max={365}
                   value={
-                    value.lastInteractionMode === "withinDays"
-                      ? value.lastInteractionDays ?? 7
+                    pendingValue.lastInteractionMode === "withinDays"
+                      ? pendingValue.lastInteractionDays ?? 7
                       : ""
                   }
                   onChange={(e) =>
-                    onChange({
-                      ...value,
+                    setPendingValue({
+                      ...pendingValue,
                       lastInteractionMode: "withinDays",
                       lastInteractionDays: parseInt(e.target.value || "0", 10) || undefined,
                     })
                   }
-                  disabled={value.lastInteractionMode !== "withinDays"}
+                  disabled={pendingValue.lastInteractionMode !== "withinDays"}
                   className="h-7 w-16 text-sm"
                 />
                 <span className="text-sm text-muted-foreground">dias</span>
@@ -294,12 +321,12 @@ export function LeadsAdvancedFilters({
                 <input
                   type="radio"
                   name="last-interaction"
-                  checked={value.lastInteractionMode === "olderThanDays"}
+                  checked={pendingValue.lastInteractionMode === "olderThanDays"}
                   onChange={() =>
-                    onChange({
-                      ...value,
+                    setPendingValue({
+                      ...pendingValue,
                       lastInteractionMode: "olderThanDays",
-                      lastInteractionDays: value.lastInteractionDays ?? 30,
+                      lastInteractionDays: pendingValue.lastInteractionDays ?? 30,
                     })
                   }
                   className="size-3.5"
@@ -311,18 +338,18 @@ export function LeadsAdvancedFilters({
                   min={1}
                   max={3650}
                   value={
-                    value.lastInteractionMode === "olderThanDays"
-                      ? value.lastInteractionDays ?? 30
+                    pendingValue.lastInteractionMode === "olderThanDays"
+                      ? pendingValue.lastInteractionDays ?? 30
                       : ""
                   }
                   onChange={(e) =>
-                    onChange({
-                      ...value,
+                    setPendingValue({
+                      ...pendingValue,
                       lastInteractionMode: "olderThanDays",
                       lastInteractionDays: parseInt(e.target.value || "0", 10) || undefined,
                     })
                   }
-                  disabled={value.lastInteractionMode !== "olderThanDays"}
+                  disabled={pendingValue.lastInteractionMode !== "olderThanDays"}
                   className="h-7 w-16 text-sm"
                 />
                 <span className="text-sm text-muted-foreground">dias ou mais</span>
@@ -337,9 +364,9 @@ export function LeadsAdvancedFilters({
                 Responsável
               </Label>
               <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer">
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-primary/10 cursor-pointer">
                   <Checkbox
-                    checked={value.assigneeIds?.includes("__none__") ?? false}
+                    checked={pendingValue.assigneeIds?.includes("__none__") ?? false}
                     onCheckedChange={() => toggleAssignee("__none__")}
                   />
                   <span className="text-sm italic text-muted-foreground">
@@ -349,10 +376,10 @@ export function LeadsAdvancedFilters({
                 {assignees.map((a) => (
                   <label
                     key={a.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/50 cursor-pointer"
+                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-primary/10 cursor-pointer"
                   >
                     <Checkbox
-                      checked={value.assigneeIds?.includes(a.id) ?? false}
+                      checked={pendingValue.assigneeIds?.includes(a.id) ?? false}
                       onCheckedChange={() => toggleAssignee(a.id)}
                     />
                     <span className="text-sm truncate">{a.name}</span>
@@ -370,17 +397,17 @@ export function LeadsAdvancedFilters({
               </Label>
               <div className="flex flex-wrap gap-1.5">
                 {sources.map((s) => {
-                  const active = value.sources?.includes(s) ?? false;
+                  const active = pendingValue.sources?.includes(s) ?? false;
                   return (
                     <button
                       key={s}
                       type="button"
                       onClick={() => toggleSource(s)}
                       aria-pressed={active}
-                      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      className={`rounded-full border-2 border-primary px-2.5 py-1 text-xs font-medium transition-colors ${
                         active
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-primary hover:bg-primary/10"
                       }`}
                     >
                       {s}
@@ -395,6 +422,36 @@ export function LeadsAdvancedFilters({
         {footerExtras && (
           <div className="border-t border-border px-4 py-3">{footerExtras}</div>
         )}
+
+        {/* Footer com botoes Aplicar (azul, primary) + Limpar.
+            Regra global DS (mai/2026): filtros nao aplicam mais ao vivo —
+            usuario edita pendingValue e confirma. */}
+        <div className="border-t border-border px-4 py-3 flex items-center justify-between gap-2 bg-card/50">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={clearAndApply}
+            disabled={activeCount === 0 && pendingCount === 0}
+          >
+            <X className="size-3.5" data-icon="inline-start" />
+            Limpar filtros
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={applyAndClose}
+            disabled={!isDirty}
+          >
+            Aplicar filtros
+            {pendingCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-bold min-w-[1.25rem] h-4">
+                {pendingCount}
+              </span>
+            )}
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   );

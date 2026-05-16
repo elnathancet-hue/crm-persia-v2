@@ -130,8 +130,12 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
+      // Regra global DS (mai/2026): titulos com hierarquia clara —
+      // font-heading (DM Sans) + text-lg + font-semibold + tracking
+      // apertado. Antes text-base font-medium ficava visualmente "raso"
+      // (titulo do dialog parecia label).
       className={cn(
-        "font-heading text-base leading-none font-medium",
+        "font-heading text-lg font-semibold leading-tight tracking-tight text-foreground",
         className
       )}
       {...props}

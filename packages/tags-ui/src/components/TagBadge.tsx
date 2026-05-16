@@ -117,11 +117,16 @@ export function TagBadge({
           color: getContrastColor(color),
         };
 
+  // Regra global DS (mai/2026): toda tag tem contorno azul (primary).
+  // - solid: bg na cor da tag + borda azul externa (identifica como "tag")
+  // - soft : bg translucido + borda na cor da tag (mantem identidade da cor)
+  // O contorno azul no solid substitui as antigas tags "circulo cinza" em
+  // filtros e unifica visual entre cards/filtros.
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full font-medium whitespace-nowrap",
-        variant === "soft" && "border",
+        "inline-flex items-center gap-1 rounded-full font-medium whitespace-nowrap border-2",
+        variant === "solid" && "border-primary",
         size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs",
         className,
       )}

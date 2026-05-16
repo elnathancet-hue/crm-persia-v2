@@ -1404,8 +1404,8 @@ export function KanbanBoard({
             )}
             <Button
               size="sm"
-              variant="outline"
-              className="h-8 rounded-md text-success hover:text-success hover:bg-success-soft"
+              variant="success"
+              className="h-8 rounded-md"
               disabled={bulkPending}
               onClick={() => setBulkConfirm({ kind: "won" })}
             >
@@ -1414,8 +1414,8 @@ export function KanbanBoard({
             </Button>
             <Button
               size="sm"
-              variant="outline"
-              className="h-8 rounded-md text-destructive hover:text-destructive"
+              variant="destructive"
+              className="h-8 rounded-md"
               disabled={bulkPending}
               onClick={() => {
                 if (actions.bulkMarkDealsAsLost) {
@@ -1437,8 +1437,8 @@ export function KanbanBoard({
             {canEdit && (
               <Button
                 size="sm"
-                variant="ghost"
-                className="h-8 rounded-md text-destructive hover:text-destructive hover:bg-destructive/10"
+                variant="destructive"
+                className="h-8 rounded-md"
                 disabled={bulkPending}
                 onClick={() => setBulkConfirm({ kind: "delete" })}
                 title="Excluir negócios selecionados"
@@ -1542,7 +1542,7 @@ export function KanbanBoard({
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <h3
-                            className="truncate font-bold text-sm uppercase tracking-wide"
+                            className="truncate font-heading font-bold text-sm uppercase tracking-wider"
                             style={{ color: headerText }}
                           >
                             {stage.name}
@@ -2561,10 +2561,10 @@ const DealCard = React.memo(function DealCardImpl({
                 ? "Marcar como perdido (registra motivo)"
                 : "Sem etapa de falha configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-failure-soft px-2 py-1.5 text-[11px] font-semibold text-failure hover:bg-failure-soft/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-failure px-2 py-1.5 text-[11px] font-semibold text-failure-foreground hover:bg-failure/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
           >
             <X className="size-3" />
-            Negócio descartado
+            Descartado
           </button>
           <button
             type="button"
@@ -2578,10 +2578,10 @@ const DealCard = React.memo(function DealCardImpl({
                 ? "Marcar como ganho"
                 : "Sem etapa de sucesso configurada"
             }
-            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-success-soft px-2 py-1.5 text-[11px] font-semibold text-success hover:bg-success-soft/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-success px-2 py-1.5 text-[11px] font-semibold text-success-foreground hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
           >
             <Check className="size-3" />
-            Negócio fechado
+            Fechado
           </button>
         </div>
       </div>
@@ -2818,7 +2818,7 @@ function ColoredTagPill({ tag }: { tag: Tag }) {
 
   return (
     <span
-      className="inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm"
+      className="inline-flex items-center rounded-md border-2 border-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm"
       style={{
         backgroundColor: tag.color || "#6366f1",
         color: textOnColor,
@@ -3121,7 +3121,7 @@ function DealDetailDialog({
                   {tags.map((tag) => (
                     <span
                       key={tag.id}
-                      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      className="inline-flex items-center rounded-full border-2 border-primary px-2.5 py-0.5 text-xs font-medium"
                       style={{
                         backgroundColor: tag.color + "20",
                         color: tag.color,
@@ -3519,10 +3519,10 @@ function AdvancedFiltersPopover({
                       key={tag.id}
                       type="button"
                       onClick={() => toggleTag(tag.id)}
-                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      className={`inline-flex items-center rounded-full border-2 border-primary px-2.5 py-1 text-[11px] font-medium transition-colors ${
                         checked
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-muted text-foreground hover:bg-muted/70"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-transparent text-primary hover:bg-primary/10"
                       }`}
                     >
                       {tag.name}
