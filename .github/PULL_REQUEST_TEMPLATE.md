@@ -38,6 +38,17 @@
 - [ ] Touch target ≥ 44px em mobile
 - [ ] Form validation inline (sem 500 mudo) — campos com `aria-invalid` + helper text
 
+## Documentação /crm (módulo coração do sistema)
+
+> Tocou em `apps/crm/src/app/(dashboard)/crm/`, em alguma server action de
+> `apps/crm/src/actions/{leads,deals,pipelines,tags,activities,segments}.ts`,
+> em queries/mutations de `packages/shared/src/crm/`, em alguma integração
+> listada no README (`/api/crm`, AI Agent tools, WhatsApp incoming-pipeline,
+> Admin mirror, realtime)? Então atualize o README **na mesma PR**.
+
+- [ ] N/A — esta PR não toca em `/crm` nem nas integrações listadas no README
+- [ ] Atualizei [apps/crm/src/app/(dashboard)/crm/README.md](../apps/crm/src/app/(dashboard)/crm/README.md) refletindo as mudanças (modelo de dados / server actions / integrações / pendências / histórico)
+
 ## Rollout
 - [ ] Build CRM verde (`pnpm --filter @persia/crm build`)
 - [ ] Build admin verde se mexeu em `packages/*` (`pnpm --filter @persia/admin build`)
