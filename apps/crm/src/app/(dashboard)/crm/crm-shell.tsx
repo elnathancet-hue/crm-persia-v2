@@ -38,6 +38,11 @@ import {
   CreateKanbanDialog,
   KanbanProvider,
 } from "@persia/crm-ui";
+// PR-K-CENTRIC fix: LeadsProvider envolve o KanbanBoard pra
+// CreateLeadFromKanbanDialog (LeadForm) ter acesso a useLeadsActions
+// (findDuplicate, getOrgTags, etc.) ao clicar "+" da coluna.
+import { LeadsProvider } from "@persia/leads-ui";
+import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import type {
   LeadKanbanCard,
   LeadWithTags,
@@ -187,6 +192,7 @@ export function CrmShell(props: CrmShellProps) {
   });
 
   return (
+    <LeadsProvider actions={crmLeadsActions}>
     <KanbanProvider actions={crmKanbanActions}>
       <div className="space-y-6">
         {/* Header da pagina — botao "Criar novo funil" no canto direito */}
@@ -281,6 +287,7 @@ export function CrmShell(props: CrmShellProps) {
         )}
       </div>
     </KanbanProvider>
+    </LeadsProvider>
   );
 }
 

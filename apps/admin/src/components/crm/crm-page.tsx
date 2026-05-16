@@ -10,6 +10,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { KanbanBoard, KanbanProvider } from "@persia/crm-ui";
+// PR-K-CENTRIC fix: LeadsProvider envolve o KanbanBoard pra
+// CreateLeadFromKanbanDialog (LeadForm) ter acesso a useLeadsActions
+// (findDuplicate, getOrgTags, etc.) ao clicar "+" da coluna.
+import { LeadsProvider } from "@persia/leads-ui";
+import { adminLeadsActions } from "@/features/leads/admin-leads-actions";
 import {
   useCurrentUser,
   useDealPresence,
@@ -143,6 +148,7 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
           Nao foi possivel inicializar o funil. Tente recarregar.
         </p>
       ) : (
+        <LeadsProvider actions={adminLeadsActions}>
         <KanbanProvider actions={adminKanbanActions}>
           <KanbanBoard
             pipelines={pipelines}
@@ -167,6 +173,7 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
             // (ambos true aqui).
           />
         </KanbanProvider>
+        </LeadsProvider>
       )}
     </div>
   );
