@@ -11,14 +11,25 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        // Regra global DS (mai/2026): nao existe botao "branco" nem "cinza".
+        // outline = contorno azul + texto azul + fundo transparente, hover azul/10
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-primary text-primary bg-transparent hover:bg-primary/10 hover:text-primary aria-expanded:bg-primary/10 aria-expanded:text-primary",
+        // secondary continua existindo como variante "tom suave" da brand
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "bg-primary/10 text-primary hover:bg-primary/15 aria-expanded:bg-primary/15",
+        // ghost = sem contorno, texto azul, hover azul/10
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "text-primary hover:bg-primary/10 hover:text-primary aria-expanded:bg-primary/10 aria-expanded:text-primary",
+        // Regra global DS (mai/2026): destructive solido (era /10 fraco).
+        // Usado em "Marcar como perdido", "Excluir", "Descartar" — precisa
+        // contraste alto pra denotar gravidade.
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:border-destructive/50 focus-visible:ring-destructive/30 dark:focus-visible:ring-destructive/40",
+        // Success solido — usado em "Negocio fechado / Marcar como ganho".
+        // Pareado com destructive (mesmo peso visual, intencao oposta).
+        success:
+          "bg-success text-success-foreground hover:bg-success/90 focus-visible:border-success/50 focus-visible:ring-success/30",
         link: "text-primary underline-offset-4 hover:underline",
       },
       // PR-DS-POLISH (mai/2026): bumpa Button default de h-8 pra h-9 +

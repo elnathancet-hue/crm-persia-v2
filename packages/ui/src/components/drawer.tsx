@@ -99,7 +99,8 @@ function DrawerTitle({
     <DrawerPrimitive.Title
       data-slot="drawer-title"
       className={cn(
-        "font-heading text-base font-medium text-foreground",
+        // Regra global DS (mai/2026): titulos com hierarquia clara.
+        "font-heading text-lg font-semibold leading-tight tracking-tight text-foreground",
         className
       )}
       {...props}

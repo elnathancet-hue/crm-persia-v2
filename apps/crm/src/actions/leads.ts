@@ -4,8 +4,6 @@ import { requireRole } from "@/lib/auth";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 import type { ActionResult } from "@persia/ui";
 import type {
-  LeadActivity,
-  LeadDetail,
   LeadFilters,
   LeadWithTags,
   UpdateLeadInput,
@@ -28,8 +26,10 @@ import {
 } from "@persia/shared/crm";
 import { phoneBROptional, emailOptional } from "@persia/shared/validation";
 
-// Re-exporta tipos canônicos. Fonte da verdade: @persia/shared/crm.
-export type { LeadActivity, LeadDetail, LeadFilters, LeadWithTags };
+// Re-export de tipos REMOVIDO (mai/2026): Turbopack em arquivos
+// "use server" trata todo export como server action — types geram
+// "Export X doesn't exist" no actions.js compilado. Tipos canônicos
+// estão em @persia/shared/crm; consumir direto de lá.
 
 // Helper: callback fire-and-forget que sincroniza o lead com UAZAPI
 // apos qualquer mudanca. Carregado dinamicamente pra nao puxar o
@@ -245,7 +245,9 @@ export async function getOrgActivities(
  * PR-S5: implementacao movida pra packages/shared/src/crm/queries/
  * lead-stats.ts. Aqui so wrappa requireRole + ctx.
  */
-export type { LeadStats, LeadDealItem };
+// (export type { LeadStats, LeadDealItem } removido — Turbopack em
+// "use server" tenta exportar types como server action e quebra.
+// Consumidores devem importar de @persia/shared/crm direto.)
 export async function getLeadStats(leadId: string): Promise<LeadStats> {
   const { supabase, orgId } = await requireRole("agent");
   return fetchLeadStats({ db: supabase, orgId }, leadId);

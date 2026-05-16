@@ -218,9 +218,9 @@ export function MarkAsLostDialog({
             Cancelar
           </Button>
           <Button
+            variant="destructive"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {pending ? "Marcando..." : "Confirmar perda"}
           </Button>

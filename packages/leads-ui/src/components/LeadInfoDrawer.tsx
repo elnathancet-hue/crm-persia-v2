@@ -1665,14 +1665,17 @@ function LeadNegociosTab({
 // Card de negocio dentro da tab. Cor da etapa como bullet visual.
 // Click = navega pro Kanban no pipeline correspondente.
 function DealCard({ deal }: { deal: LeadDealItem }) {
+  // Regra global DS (mai/2026): badges de status com contraste forte.
+  // Antes "won"/"lost" usavam *-soft (muito claros) e "open" usava
+  // primary/10 — user reclamou de baixo contraste. Solido + foreground.
   const statusBadge = (() => {
     switch (deal.status) {
       case "open":
-        return { label: "Aberto", className: "bg-primary/10 text-primary" };
+        return { label: "Aberto", className: "bg-primary text-primary-foreground" };
       case "won":
-        return { label: "Ganho", className: "bg-success-soft text-success-soft-foreground" };
+        return { label: "Ganho", className: "bg-success text-success-foreground" };
       case "lost":
-        return { label: "Perdido", className: "bg-failure-soft text-failure-soft-foreground" };
+        return { label: "Perdido", className: "bg-destructive text-destructive-foreground" };
       default:
         return { label: deal.status, className: "bg-muted text-muted-foreground" };
     }
