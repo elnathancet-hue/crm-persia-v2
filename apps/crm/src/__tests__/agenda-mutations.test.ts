@@ -236,6 +236,69 @@ describe("createAppointment", () => {
       }),
     ).rejects.toBeInstanceOf(AppointmentValidationError);
   });
+
+  // PR-AGENDA-SEC (mai/2026): defesa cross-org no binding com lead.
+  // Antes do fix, createAppointment aceitava qualquer lead_id sem
+  // checar se pertence a org do caller.
+  it("aceita lead_id quando lead pertence a mesma org", async () => {
+    const supabase = createSupabaseMock();
+    // 1. ensureLeadBelongsToOrg -> SELECT id FROM leads
+    supabase.queue("leads", { data: { id: "lead-own" }, error: null });
+    // 2. listConflictCandidates -> appointments []
+    supabase.queue("appointments", { data: [], error: null });
+    // 3. insert appointments
+    const created = makeAppt({ id: "with-lead", lead_id: "lead-own" });
+    supabase.queue("appointments", { data: created, error: null });
+    // 4. history
+    supabase.queue("appointment_history", { data: null, error: null });
+
+    const result = await createAppointment(ctx(supabase), {
+      kind: "appointment",
+      title: "Com lead",
+      description: null,
+      lead_id: "lead-own",
+      user_id: USER_A,
+      service_id: null,
+      booking_page_id: null,
+      start_at: "2026-05-05T14:00:00Z",
+      end_at: "2026-05-05T15:00:00Z",
+      duration_minutes: 60,
+      timezone: "America/Sao_Paulo",
+      status: "awaiting_confirmation",
+      channel: null,
+      location: null,
+      meeting_url: null,
+    });
+    expect(result.lead_id).toBe("lead-own");
+  });
+
+  it("REJEITA lead_id de outra org (cross-org write)", async () => {
+    const supabase = createSupabaseMock();
+    // ensureLeadBelongsToOrg -> data=null (lead nao existe na org)
+    supabase.queue("leads", { data: null, error: null });
+
+    await expect(
+      createAppointment(ctx(supabase), {
+        kind: "appointment",
+        title: "Tentativa cross-org",
+        description: null,
+        lead_id: "lead-foreign",
+        user_id: USER_A,
+        service_id: null,
+        booking_page_id: null,
+        start_at: "2026-05-05T14:00:00Z",
+        end_at: "2026-05-05T15:00:00Z",
+        duration_minutes: 60,
+        timezone: "America/Sao_Paulo",
+        status: "awaiting_confirmation",
+        channel: null,
+        location: null,
+        meeting_url: null,
+      }),
+    ).rejects.toBeInstanceOf(AppointmentValidationError);
+    // Confirma que NAO chegou no insert
+    expect(supabase.inserts.appointments).toBeUndefined();
+  });
 });
 
 // ============================================================================
@@ -423,6 +486,35 @@ describe("updateAppointment", () => {
     await updateAppointment(ctx(supabase), "a1", { description: null });
     expect(supabase.updates.appointments?.[0]).toMatchObject({
       description: null,
+    });
+  });
+
+  // PR-AGENDA-SEC (mai/2026): defesa cross-org no binding com lead.
+  it("REJEITA troca de lead_id pra lead de outra org", async () => {
+    const supabase = createSupabaseMock();
+    // ensureLeadBelongsToOrg -> null
+    supabase.queue("leads", { data: null, error: null });
+
+    await expect(
+      updateAppointment(ctx(supabase), "a1", { lead_id: "lead-foreign" }),
+    ).rejects.toBeInstanceOf(AppointmentValidationError);
+    // Confirma que NAO chegou no update da tabela appointments
+    expect(supabase.updates.appointments).toBeUndefined();
+  });
+
+  it("aceita lead_id=null pra limpar binding (sem precisar validar org)", async () => {
+    const supabase = createSupabaseMock();
+    // Como lead_id e null, ensureLeadBelongsToOrg NAO e chamado.
+    // Direto pro update.
+    supabase.queue("appointments", {
+      data: makeAppt({ lead_id: null }),
+      error: null,
+    });
+    supabase.queue("appointment_history", { data: null, error: null });
+
+    await updateAppointment(ctx(supabase), "a1", { lead_id: null });
+    expect(supabase.updates.appointments?.[0]).toMatchObject({
+      lead_id: null,
     });
   });
 });

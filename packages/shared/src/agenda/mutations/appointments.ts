@@ -71,6 +71,37 @@ function validateTimeWindow(start_at: string, end_at: string) {
   }
 }
 
+/**
+ * Defesa multi-tenant — confirma que `lead_id` pertence a mesma org
+ * do ctx antes de aceitar binding. FK do DB previne write cross-org,
+ * mas sem este check o erro vaza como mensagem opaca do Postgres.
+ *
+ * PR-AGENDA-SEC (mai/2026): bug audit identificou que createAppointment
+ * + updateAppointment aceitavam qualquer lead_id sem validar. Agora
+ * recusam explicitamente com mensagem amigavel.
+ */
+async function ensureLeadBelongsToOrg(
+  ctx: AgendaMutationContext,
+  leadId: string,
+): Promise<void> {
+  const { db, orgId } = ctx;
+  const { data, error } = await db
+    .from("leads")
+    .select("id")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`ensureLeadBelongsToOrg: ${error.message}`);
+  }
+  if (!data) {
+    throw new AppointmentValidationError(
+      "Lead nao encontrado nesta organizacao",
+      "lead_id",
+    );
+  }
+}
+
 async function ensureNoConflict(
   ctx: AgendaMutationContext,
   args: {
@@ -125,6 +156,11 @@ export async function createAppointment(
 
   validateTimeWindow(rest.start_at, rest.end_at);
 
+  // PR-AGENDA-SEC: defesa multi-tenant antes de aceitar lead_id.
+  if (rest.lead_id) {
+    await ensureLeadBelongsToOrg(ctx, rest.lead_id);
+  }
+
   if (rest.kind === "appointment" && enforce_conflict_check) {
     await ensureNoConflict(ctx, {
       user_id: rest.user_id,
@@ -175,6 +211,13 @@ export async function updateAppointment(
   input: UpdateAppointmentInput,
 ): Promise<Appointment> {
   const { db, orgId } = ctx;
+
+  // PR-AGENDA-SEC: defesa multi-tenant antes de trocar binding pra
+  // outro lead. null = limpar binding (permitido); valor = precisa
+  // pertencer a mesma org.
+  if (input.lead_id) {
+    await ensureLeadBelongsToOrg(ctx, input.lead_id);
+  }
 
   const patch: Record<string, unknown> = {};
   if (input.title !== undefined) patch.title = input.title;
