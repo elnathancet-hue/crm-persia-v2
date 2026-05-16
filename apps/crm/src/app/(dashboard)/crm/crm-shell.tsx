@@ -195,23 +195,27 @@ export function CrmShell(props: CrmShellProps) {
     <LeadsProvider actions={crmLeadsActions}>
     <KanbanProvider actions={crmKanbanActions}>
       <div className="space-y-6">
-        {/* Header da pagina — botao "Criar novo funil" no canto direito */}
-        <CrmPageHeader
-          canCreateFunil={canCreateFunil}
-          onCreateFunilClick={() => setCreateFunilOpen(true)}
-        />
+        {/* Header sticky (mai/2026): header + tabs fixos no topo enquanto
+            o conteudo rola. Compensam o p-6 do <main> com margem negativa
+            pra grudar na borda. bg-background + backdrop-blur garantem
+            que conteudo nao "vaze" por tras. */}
+        <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
+          <CrmPageHeader
+            canCreateFunil={canCreateFunil}
+            onCreateFunilClick={() => setCreateFunilOpen(true)}
+          />
 
-        {/* Tabs */}
-        <CrmTabs
-          tabs={visibleTabs}
-          active={activeTab}
-          onChange={setTab}
-          leadCount={props.leadCount}
-          dealCount={props.dealCount}
-          activityCount={props.activityCount}
-          segmentCount={props.segmentCount}
-          tagCount={props.tagCount}
-        />
+          <CrmTabs
+            tabs={visibleTabs}
+            active={activeTab}
+            onChange={setTab}
+            leadCount={props.leadCount}
+            dealCount={props.dealCount}
+            activityCount={props.activityCount}
+            segmentCount={props.segmentCount}
+            tagCount={props.tagCount}
+          />
+        </div>
 
         {/* Conteudo da tab ativa.
             PR-PIPETOOLS: removida a "biblioteca de funis" do meio da
