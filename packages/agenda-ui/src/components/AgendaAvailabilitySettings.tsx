@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CalendarOff, Loader2, Plus } from "lucide-react";
+import { Button } from "@persia/ui/button";
 import {
   type AvailabilityDay,
   type AvailabilityRule,
@@ -78,17 +79,18 @@ export const AgendaAvailabilitySettings: React.FC = () => {
 
   const selected = selectedId ? rules.find((r) => r.id === selectedId) : null;
 
+  // PR-AGENDA-DS Fase 2 (mai/2026): rounded-3xl/ring-1 → rounded-xl/border.
   if (loading && rules.length === 0) {
     return (
-      <div className="flex items-center justify-center rounded-3xl border border-dashed border-border bg-muted p-12 text-muted-foreground/70">
-        <Loader2 size={20} className="mr-2 animate-spin" /> Carregando...
+      <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/40 p-12 text-muted-foreground/70">
+        <Loader2 className="mr-2 size-5 animate-spin" /> Carregando...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-3xl bg-destructive/10 p-5 text-sm text-destructive ring-1 ring-destructive/30">
+      <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">
         {error}
       </div>
     );
@@ -135,21 +137,23 @@ export const AgendaAvailabilitySettings: React.FC = () => {
   // Sem regras e sem currentUserId → mostra placeholder
   if (rules.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-border bg-muted p-12 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
-          <CalendarOff size={20} />
+      <div className="rounded-xl border border-dashed border-border bg-muted/40 p-12 text-center">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-card text-muted-foreground/70 shadow-xs">
+          <CalendarOff className="size-5" />
         </div>
-        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        <p className="mt-4 text-sm font-semibold text-foreground">
           Nenhuma regra de disponibilidade
         </p>
-        <button
+        <Button
           type="button"
+          variant="default"
+          size="sm"
           onClick={handleCreateNew}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
+          className="mt-4"
         >
-          <Plus size={12} />
+          <Plus className="size-3.5" data-icon="inline-start" />
           Criar regra padrão
-        </button>
+        </Button>
       </div>
     );
   }
@@ -158,38 +162,38 @@ export const AgendaAvailabilitySettings: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {rules.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => {
-                setSelectedId(r.id);
-                setCreating(false);
-              }}
-              className={[
-                "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-black uppercase tracking-widest transition",
-                r.id === selectedId
-                  ? "bg-primary text-white"
-                  : "bg-muted text-foreground hover:bg-muted/80",
-              ].join(" ")}
-            >
-              {r.name}
-              {r.is_default && (
-                <span className="rounded-full bg-success-soft px-1.5 py-0.5 text-[8px] text-success-soft-foreground">
-                  PADRÃO
-                </span>
-              )}
-            </button>
-          ))}
+          {rules.map((r) => {
+            const isActive = r.id === selectedId;
+            return (
+              <Button
+                key={r.id}
+                type="button"
+                variant={isActive ? "default" : "secondary"}
+                size="sm"
+                onClick={() => {
+                  setSelectedId(r.id);
+                  setCreating(false);
+                }}
+              >
+                {r.name}
+                {r.is_default && (
+                  <span className="ml-1 rounded-full bg-success px-1.5 py-0.5 text-[9px] font-bold text-success-foreground">
+                    PADRÃO
+                  </span>
+                )}
+              </Button>
+            );
+          })}
         </div>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={handleCreateNew}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-card px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-primary ring-1 ring-primary/30 transition hover:bg-primary/10"
         >
-          <Plus size={12} />
+          <Plus className="size-3.5" data-icon="inline-start" />
           Nova regra
-        </button>
+        </Button>
       </div>
 
       {selected && (

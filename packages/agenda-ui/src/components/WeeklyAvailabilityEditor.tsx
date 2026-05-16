@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Check, Loader2 } from "lucide-react";
+import { Button } from "@persia/ui/button";
 import type {
   AvailabilityDay,
   AvailabilityRule,
@@ -161,10 +162,10 @@ export const WeeklyAvailabilityEditor: React.FC<
       </label>
 
       <section>
-        <h3 className="mb-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+        <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
           Janela semanal
         </h3>
-        <div className="rounded-2xl bg-card p-4 ring-1 ring-border">
+        <div className="rounded-xl border border-border bg-card p-4">
           {days.map((d, idx) => (
             <AvailabilityDayRow
               key={d.day_of_week}
@@ -176,7 +177,7 @@ export const WeeklyAvailabilityEditor: React.FC<
       </section>
 
       {error && (
-        <p className="rounded-xl bg-destructive/10 p-3 text-xs font-semibold text-destructive ring-1 ring-destructive/30">
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs font-medium text-destructive">
           {error}
         </p>
       )}
@@ -187,19 +188,19 @@ export const WeeklyAvailabilityEditor: React.FC<
             Salvo
           </span>
         )}
-        <button
+        <Button
           type="button"
+          variant="default"
           onClick={handleSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? (
-            <Loader2 size={14} className="animate-spin" />
+            <Loader2 className="size-3.5 animate-spin" data-icon="inline-start" />
           ) : (
-            <Check size={14} />
+            <Check className="size-3.5" data-icon="inline-start" />
           )}
           {saving ? "Salvando..." : "Salvar disponibilidade"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -210,7 +211,7 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({
   children,
 }) => (
   <div>
-    <label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-muted-foreground">
       {label}
     </label>
     {children}
