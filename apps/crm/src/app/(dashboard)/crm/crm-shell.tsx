@@ -39,7 +39,7 @@ import {
   KanbanProvider,
 } from "@persia/crm-ui";
 import type {
-  DealWithLead,
+  LeadKanbanCard,
   LeadWithTags,
   OrgActivityRow,
   Pipeline,
@@ -78,7 +78,7 @@ const TABS: {
 interface CrmShellProps {
   pipelines: Pipeline[];
   stages: Stage[];
-  deals: DealWithLead[];
+  kanbanLeads: LeadKanbanCard[];
   pipelineLeads: { id: string; name: string; phone: string | null; email: string | null }[];
   tags: TagRef[];
   assignees: { id: string; name: string }[];
@@ -223,7 +223,7 @@ export function CrmShell(props: CrmShellProps) {
             <CrmClient
               pipelines={props.pipelines}
               stages={props.stages}
-              deals={props.deals}
+              kanbanLeads={props.kanbanLeads}
               leads={props.pipelineLeads}
               tags={props.tags}
               assignees={props.assignees}

@@ -31,9 +31,29 @@ import {
   assignLead,
   removeTagFromLead,
 } from "@/actions/leads";
+import {
+  bulkMarkLeadsAsLost,
+  bulkMarkLeadsAsWon,
+  bulkMoveLeads,
+  createLeadInPipeline,
+  moveLeadStage,
+  moveLeadToPipeline,
+} from "@/actions/leads-kanban";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
 
 export const crmKanbanActions: KanbanActions = {
+  // ============ LEAD-CENTRIC (PR-K-CENTRIC mai/2026) ============
+  createLeadInPipeline: (input) => createLeadInPipeline(input),
+  moveLeadStage: (leadId, stageId, sortOrder) =>
+    moveLeadStage(leadId, stageId, sortOrder),
+  moveLeadToPipeline: (leadId, pipelineId, stageId) =>
+    moveLeadToPipeline(leadId, pipelineId, stageId),
+  bulkMoveLeads: (leadIds, stageId) => bulkMoveLeads(leadIds, stageId),
+  bulkMarkLeadsAsWon: (leadIds) => bulkMarkLeadsAsWon(leadIds),
+  bulkMarkLeadsAsLost: (leadIds, input) =>
+    bulkMarkLeadsAsLost(leadIds, input),
+  // bulkDeleteLeadsFromKanban + bulkApplyTagsToLeads: TODO (precisam shared)
+
   // ============ PIPELINES ============
   createPipeline: async (name) => {
     const fd = new FormData();

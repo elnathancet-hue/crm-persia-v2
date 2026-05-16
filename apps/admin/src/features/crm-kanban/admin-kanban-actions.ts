@@ -6,13 +6,18 @@
 
 import type { KanbanActions } from "@persia/crm-ui";
 import {
+  bulkMarkLeadsAsLost,
+  bulkMarkLeadsAsWon,
+  bulkMoveLeads,
   createDeal,
+  createLeadInPipeline,
   createPipeline,
   createStage,
   deleteDeal,
   deletePipeline,
   deleteStage,
   moveDealStage,
+  moveLeadStage,
   updateDeal,
   updatePipelineName,
   updateStage,
@@ -21,6 +26,14 @@ import {
 import type { Pipeline, Stage } from "@persia/shared/crm";
 
 export const adminKanbanActions: KanbanActions = {
+  // ============ LEAD-CENTRIC (PR-K-CENTRIC mai/2026) ============
+  createLeadInPipeline: (input) => createLeadInPipeline(input),
+  moveLeadStage: (leadId, stageId, sortOrder) =>
+    moveLeadStage(leadId, stageId, sortOrder),
+  bulkMoveLeads: (leadIds, stageId) => bulkMoveLeads(leadIds, stageId),
+  bulkMarkLeadsAsWon: (leadIds) => bulkMarkLeadsAsWon(leadIds),
+  bulkMarkLeadsAsLost: (leadIds, input) => bulkMarkLeadsAsLost(leadIds, input),
+
   // ============ PIPELINES ============
   createPipeline: async (name) => {
     const result = await createPipeline(name);

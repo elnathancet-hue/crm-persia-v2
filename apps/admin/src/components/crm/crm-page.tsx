@@ -17,7 +17,7 @@ import {
   useDebouncedCallback,
 } from "@persia/leads-ui";
 import type {
-  DealWithLead,
+  LeadKanbanCard,
   Pipeline,
   Stage,
 } from "@persia/shared/crm";
@@ -26,7 +26,7 @@ import { NoContextFallback } from "@/components/no-context-fallback";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
   ensureDefaultPipeline,
-  getDeals,
+  getKanbanLeads,
   getLeads,
   getPipelines,
   getStagesForOrg,
@@ -51,7 +51,7 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
   const { activeOrgId, isManagingClient } = useActiveOrg();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
-  const [deals, setDeals] = useState<DealWithLead[]>([]);
+  const [kanbanLeads, setKanbanLeads] = useState<LeadKanbanCard[]>([]);
   const [leads, setLeads] = useState<KanbanLead[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -93,9 +93,9 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
         basePipelines = (await getPipelines()) as Pipeline[];
       }
     }
-    const [stagesData, dealsData, leadsData] = await Promise.all([
+    const [stagesData, kanbanLeadsData, leadsData] = await Promise.all([
       getStagesForOrg(),
-      getDeals(),
+      getKanbanLeads(),
       getLeads(),
     ]);
     setPipelines(basePipelines);
@@ -104,7 +104,7 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
     // O cast via `unknown` mantem o componente fortemente tipado a partir do
     // shape canonico (@persia/shared/crm) e e o mesmo padrao usado no CRM.
     setStages(stagesData as unknown as Stage[]);
-    setDeals(dealsData as unknown as DealWithLead[]);
+    setKanbanLeads(kanbanLeadsData as unknown as LeadKanbanCard[]);
     setLeads(leadsData as KanbanLead[]);
   }
 
@@ -147,7 +147,7 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
           <KanbanBoard
             pipelines={pipelines}
             stages={stages}
-            deals={deals}
+            kanbanLeads={kanbanLeads}
             leads={leads}
             canEdit
             canManagePipelines

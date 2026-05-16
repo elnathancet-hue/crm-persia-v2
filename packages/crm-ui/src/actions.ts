@@ -59,6 +59,22 @@ export interface ReorderStageInput {
   position: number;
 }
 
+// PR-K-CENTRIC (mai/2026): inputs lead-centric.
+
+export interface CreateLeadInPipelineInput {
+  lead: {
+    name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    source?: string;
+    status?: string;
+    channel?: string;
+    expected_value?: number | null;
+  };
+  pipelineId: string;
+  stageId: string;
+}
+
 export interface KanbanActions {
   // Pipelines
   createPipeline: (name: string) => Promise<Pipeline>;
@@ -101,17 +117,65 @@ export interface KanbanActions {
     stages: ReorderStageInput[],
   ) => Promise<ActionResult<void>>;
 
-  // Deals
-  createDeal: (input: CreateDealInput) => Promise<Deal>;
+  // ============================================================
+  // LEAD-CENTRIC (PR-K-CENTRIC mai/2026)
+  // ============================================================
+  // Kanban opera em LEAD agora. Lead aparece 1x. Deals viram
+  // subentidade gerenciada no drawer.
+
   /**
-   * PR-CRMOPS2: cria lead + deal vinculado de uma vez. Usado pelo "+"
-   * das colunas do Kanban — briefing: o usuario nao adiciona "negocio"
-   * direto, ele adiciona um LEAD que aparece como card no Pipeline.
-   *
-   * Opcional pra preservar compat com adapters antigos (admin nao
-   * implementa por enquanto — la o "+" continua abrindo "Novo
-   * negocio"). Quando setado, a UI usa esse fluxo.
+   * Cria lead diretamente em pipeline/stage. Sem deal automatico
+   * (deal vira opt-in via drawer do lead).
    */
+  createLeadInPipeline: (input: CreateLeadInPipelineInput) => Promise<{ lead: { id: string } }>;
+
+  /**
+   * Move o lead pra outra stage do MESMO pipeline + atualiza sort_order.
+   * Trigger DB sincroniza lead.status com outcome do stage.
+   */
+  moveLeadStage: (leadId: string, stageId: string, sortOrder: number) => Promise<void>;
+
+  /**
+   * Troca o lead pra outro pipeline (resets sort_order pra 0).
+   * Usado via drawer "Mudar funil".
+   */
+  moveLeadToPipeline?: (leadId: string, pipelineId: string, stageId: string) => Promise<void>;
+
+  // ============================================================
+  // Bulk lead operations (cap 200/chamada no shared)
+  // ============================================================
+
+  bulkMoveLeads?: (
+    leadIds: string[],
+    stageId: string,
+  ) => Promise<ActionResult<{ updated_count: number }>>;
+
+  bulkMarkLeadsAsWon?: (
+    leadIds: string[],
+  ) => Promise<ActionResult<{ updated_count: number }>>;
+
+  bulkMarkLeadsAsLost?: (
+    leadIds: string[],
+    input: MarkAsLostInput,
+  ) => Promise<ActionResult<{ updated_count: number }>>;
+
+  bulkDeleteLeadsFromKanban?: (
+    leadIds: string[],
+  ) => Promise<ActionResult<{ deleted_count: number }>>;
+
+  bulkApplyTagsToLeads?: (
+    leadIds: string[],
+    tagIds: string[],
+  ) => Promise<ActionResult<{ links_count: number }>>;
+
+  // ============================================================
+  // DEAL-CENTRIC (DEPRECATED — mantido pra compat com legacy
+  // callers; remover na Fase 5 do refactor lead-centric)
+  // ============================================================
+
+  /** @deprecated use createLeadInPipeline */
+  createDeal: (input: CreateDealInput) => Promise<Deal>;
+  /** @deprecated use createLeadInPipeline */
   createLeadWithDeal?: (input: {
     lead: {
       name?: string | null;
@@ -126,13 +190,11 @@ export interface KanbanActions {
     dealTitle?: string;
     dealValue?: number;
   }) => Promise<{ lead: { id: string }; deal: Deal }>;
+  /** @deprecated CRUD do deal (subentidade) sera movido pro drawer do lead na Fase 3 */
   updateDeal: (dealId: string, data: UpdateDealInput) => Promise<void>;
-  /**
-   * Move a deal pra outra stage. CRM dispara activity log + onStageChanged
-   * + sync UAZAPI (rich move); admin faz so o update de stage_id (light).
-   * Cada app implementa conforme sua semantica.
-   */
+  /** @deprecated use moveLeadStage */
   moveDealStage: (dealId: string, stageId: string) => Promise<void>;
+  /** @deprecated CRUD do deal sera movido pro drawer */
   deleteDeal: (dealId: string) => Promise<void>;
 
   /**

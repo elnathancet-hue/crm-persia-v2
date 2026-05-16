@@ -243,7 +243,47 @@ export interface DealLossReason {
   updated_at: string;
 }
 
-/** Deal com lead embed — usado na página principal do CRM. */
+// PR-K-CENTRIC (mai/2026): Lead-centric Kanban card.
+//
+// Tipo do card renderizado em cada coluna do board apos refactor.
+// 1 lead = 1 card. expected_value e o valor R$ esperado (informativo,
+// nao agregado de deals). deals embed e opcional pra UI mostrar
+// "lead tem 3 negocios abertos" como badge.
+export interface LeadKanbanCard {
+  id: string;
+  organization_id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  source: string;
+  status: string;
+  score: number;
+  channel: string;
+  pipeline_id: string | null;
+  stage_id: string | null;
+  sort_order: number;
+  expected_value: number | null;
+  assigned_to: string | null;
+  last_interaction_at: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Tags via lead_tags(tags(...)) embed. */
+  lead_tags?: LeadTagJoin[];
+  /** Profile do responsavel via join profiles!leads_assigned_to_fkey. */
+  assignee?: {
+    id: string;
+    full_name: string | null;
+  } | null;
+  /** Deals embed (pra contagem + soma de valores no card). */
+  deals?: Array<{
+    id: string;
+    status: "open" | "won" | "lost";
+    value: number | null;
+  }>;
+}
+
+/** Deal com lead embed — usado na página principal do CRM (legado, será removido na Fase 5). */
 export interface DealWithLead extends Deal {
   leads: {
     name: string;
