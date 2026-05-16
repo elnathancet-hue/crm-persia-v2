@@ -143,13 +143,15 @@ export async function updateDealStatus(
 }
 
 /**
- * Move o deal pra outra stage E atualiza sort_order — usado pelo
- * drag-drop do Kanban. Valida que a stage de destino esta no MESMO
- * pipeline do deal (evita mover entre pipelines silenciosamente).
+ * @deprecated PR-K-CENTRIC (mai/2026) — Kanban agora opera em LEAD.
+ * Use `moveLeadToStage` em `mutations/leads-kanban.ts`. Esta funcao
+ * permanece pra cobertura de codigo legado que ainda referencia deal
+ * direto (ex.: AI Agent fallback, /api/crm move_deal). Sera removida
+ * apos Fase 4.
  *
- * PR-AUDX: agora loga em lead_activities (antes nao logava — drag-drop
- * passava em silencio na timeline do lead). Pra movimentacao "rica" com
- * flows + sync, ver `moveDealToStage` em apps/crm/src/lib/crm/move-deal.ts.
+ * Move o deal pra outra stage E atualiza sort_order — usado pelo
+ * drag-drop do Kanban legado. Valida que a stage de destino esta no
+ * MESMO pipeline do deal (evita mover entre pipelines silenciosamente).
  */
 export async function moveDealKanban(
   ctx: CrmMutationContext,
@@ -383,6 +385,9 @@ export async function markDealAsLost(
  * - Usa `.select("id")` pra retornar count REAL (nao otimista). Antes
  *   retornava `dealIds.length` mesmo quando RLS/delete cortava o set.
  * - Loga 1 entry em lead_activities por deal afetado (fire-and-forget).
+ *
+ * @deprecated PR-K-CENTRIC (mai/2026) — use `bulkMarkLeadsAsLost` em
+ * `mutations/leads-kanban.ts`. Mantida pra compat com legacy callers.
  */
 export async function bulkMarkDealsAsLost(
   ctx: CrmMutationContext,
@@ -457,6 +462,9 @@ export async function bulkMarkDealsAsLost(
  * latencia previsivel.
  *
  * PR-AUDX: count real via .select("id") + audit log em lead_activities.
+ *
+ * @deprecated PR-K-CENTRIC (mai/2026) — use `bulkMoveLeads` em
+ * `mutations/leads-kanban.ts`. Kanban opera em lead agora.
  */
 export async function bulkMoveDealsToStage(
   ctx: CrmMutationContext,
@@ -543,6 +551,10 @@ export async function bulkMoveDealsToStage(
  * limpa closed_at.
  *
  * PR-AUDX: count real + audit log.
+ *
+ * @deprecated PR-K-CENTRIC (mai/2026) — use `bulkMarkLeadsAsWon` ou
+ * `bulkMarkLeadsAsLost` em `mutations/leads-kanban.ts`. Status do
+ * lead agora e a fonte unica de verdade.
  */
 export async function bulkUpdateDealStatus(
   ctx: CrmMutationContext,

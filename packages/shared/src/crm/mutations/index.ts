@@ -71,3 +71,16 @@ export {
 // conversa" no menu de 3 pontos do LeadsList).
 export type { FindOrCreateConversationResult } from "./conversations";
 export { findOrCreateConversationByLead } from "./conversations";
+
+// PR-K-CENTRIC (mai/2026): mutations lead-centric do Kanban.
+// Substituem moveDealKanban/bulkMoveDealsToStage/bulkMarkDealsAsLost
+// quando o caller indexar por lead. Deals continuam disponiveis pra
+// gestao da subentidade dentro do drawer.
+export type { MarkLeadAsLostInput } from "./leads-kanban";
+export {
+  moveLeadToStage,
+  moveLeadToPipeline,
+  bulkMoveLeads,
+  bulkMarkLeadsAsLost,
+  bulkMarkLeadsAsWon,
+} from "./leads-kanban";
