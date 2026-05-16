@@ -1155,7 +1155,7 @@ export function KanbanBoard({
             {stageCount > 0 && (
               <span
                 className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold ${
-                  isActive ? "bg-white/20" : "bg-current/10"
+                  isActive ? "bg-primary-foreground/20" : "bg-current/10"
                 }`}
               >
                 {stageCount}

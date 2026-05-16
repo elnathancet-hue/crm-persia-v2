@@ -1809,12 +1809,14 @@ function PipelinePicker({
 
   return (
     <div className="rounded">
-      <button
+      <Button
         type="button"
         onClick={toggle}
         disabled={disabled}
-        className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-primary/10 transition-colors ${
-          isCurrent ? "bg-primary/5 font-medium text-primary" : ""
+        variant="ghost"
+        size="sm"
+        className={`w-full justify-between rounded px-2 py-1.5 text-xs font-normal ${
+          isCurrent ? "bg-primary/10 font-medium text-primary" : ""
         }`}
       >
         <span className="truncate">{pipeline.name}</span>
@@ -1825,7 +1827,7 @@ function PipelinePicker({
             className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`}
           />
         )}
-      </button>
+      </Button>
       {expanded && !isCurrent && (
         <div className="pl-2 py-1">
           {loading ? (
@@ -1838,19 +1840,21 @@ function PipelinePicker({
             </p>
           ) : (
             stages.map((s) => (
-              <button
+              <Button
                 key={s.id}
                 type="button"
                 onClick={() => onSelect(s.id)}
                 disabled={disabled}
-                className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-left hover:bg-primary/10 transition-colors"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start rounded px-2 py-1 text-[11px] font-normal"
               >
                 <span
-                  className="size-1.5 rounded-full"
+                  className="size-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: s.color }}
                 />
                 <span className="truncate">{s.name}</span>
-              </button>
+              </Button>
             ))
           )}
         </div>

@@ -10,7 +10,6 @@ import {
   deletePipeline as deletePipelineShared,
   deleteStage as deleteStageShared,
   ensureDefaultPipeline as ensureDefaultPipelineShared,
-  listDeals as listDealsShared,
   listLeadsKanban as listLeadsKanbanShared,
   moveLeadToStage as moveLeadToStageShared,
   bulkMoveLeads as bulkMoveLeadsShared,
@@ -315,14 +314,7 @@ export async function getStagesForPipeline(pipelineId: string) {
   }
 }
 
-export async function getDeals(pipelineId?: string) {
-  try {
-    const { admin, orgId } = await requireSuperadminForOrg();
-    return await listDealsShared({ db: admin, orgId }, { pipelineId });
-  } catch {
-    return [];
-  }
-}
+// PR-K-CENTRIC (mai/2026): getDeals removida — substituída por getKanbanLeads.
 
 // PR-K-CENTRIC (mai/2026): query principal do Kanban admin retorna LEADS.
 export async function getKanbanLeads(pipelineId?: string) {
