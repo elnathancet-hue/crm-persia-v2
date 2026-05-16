@@ -36,6 +36,12 @@ export {
 
 export { listDeals, findLeadOpenDealWithStages } from "./deals";
 
+// PR-K-CENTRIC (mai/2026): queries lead-centric do Kanban.
+// listDeals/findLeadOpenDealWithStages permanecem pra historico/compat
+// mas o board agora usa listLeadsKanban.
+export type { ListLeadsKanbanOptions, LeadStageContext } from "./leads-kanban";
+export { listLeadsKanban, findLeadStageContext } from "./leads-kanban";
+
 export { listLossReasons } from "./loss-reasons";
 
 // PR-S5: queries do drawer "Informacoes do lead" extraidas dos apps.
