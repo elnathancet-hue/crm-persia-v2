@@ -112,10 +112,12 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
     }
   };
 
+  // PR-AGENDA-DS Fase 2 (mai/2026): tokens DS + Button primitivo.
+  // Antes: HTML buttons com font-black uppercase tracking-widest + rounded-2xl/3xl + text-white hardcoded.
   return (
     <div className="space-y-6">
       <header>
-        <h2 className="text-lg font-black text-foreground">
+        <h2 className="font-heading text-lg font-semibold tracking-tight text-foreground">
           Lembretes WhatsApp
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -125,88 +127,90 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
       </header>
 
       {loading ? (
-        <div className="flex items-center justify-center rounded-2xl border border-dashed border-border bg-muted p-10 text-muted-foreground/70">
-          <Loader2 size={18} className="mr-2 animate-spin" /> Carregando...
+        <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-muted/40 p-10 text-muted-foreground/70">
+          <Loader2 className="mr-2 size-4 animate-spin" /> Carregando...
         </div>
       ) : error ? (
-        <div className="rounded-2xl bg-destructive/10 p-4 text-sm text-destructive ring-1 ring-destructive/30">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           {error}
         </div>
       ) : items.length === 0 ? (
-        <div className="space-y-4 rounded-3xl border border-dashed border-border bg-muted p-10 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
-            <Bell size={20} />
+        <div className="space-y-4 rounded-xl border border-dashed border-border bg-muted/40 p-10 text-center">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-card text-muted-foreground/70 shadow-xs">
+            <Bell className="size-5" />
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-foreground">
+            <p className="text-sm font-semibold text-foreground">
               Nenhum lembrete configurado
             </p>
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-              Aplique os defaults (24h + 1h antes + confirmação imediata) ou crie do zero
+            <p className="mt-1 text-xs text-muted-foreground">
+              Aplique os defaults (24h + 1h antes + confirmação imediata) ou crie do zero.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
+            <Button
               type="button"
+              variant="default"
+              size="sm"
               onClick={handleSeed}
               disabled={seeding}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90 disabled:opacity-50"
             >
               {seeding ? (
-                <Loader2 size={12} className="animate-spin" />
+                <Loader2 className="size-3.5 animate-spin" data-icon="inline-start" />
               ) : (
-                <Sparkles size={12} />
+                <Sparkles className="size-3.5" data-icon="inline-start" />
               )}
               Aplicar defaults
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={handleCreate}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-card px-4 py-2 text-[10px] font-black uppercase tracking-widest text-foreground ring-1 ring-border transition hover:bg-muted"
             >
-              <Plus size={12} />
+              <Plus className="size-3.5" data-icon="inline-start" />
               Criar do zero
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-end">
-            <button
+            <Button
               type="button"
+              variant="default"
+              size="sm"
               onClick={handleCreate}
-              className="inline-flex items-center gap-1.5 rounded-2xl bg-primary px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-primary/20 transition hover:bg-primary/90"
             >
-              <Plus size={14} />
+              <Plus className="size-4" data-icon="inline-start" />
               Novo lembrete
-            </button>
+            </Button>
           </div>
 
           <ul className="space-y-3">
             {items.map((cfg) => (
               <li
                 key={cfg.id}
-                className="rounded-2xl bg-card p-4 ring-1 ring-border shadow-sm"
+                className="rounded-xl border border-border bg-card p-4 shadow-xs"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <Bell
-                        size={14}
-                        className={
+                        className={`size-3.5 ${
                           cfg.is_active ? "text-primary" : "text-muted-foreground/40"
-                        }
+                        }`}
                       />
-                      <h3 className="truncate text-sm font-bold text-foreground">
+                      <h3 className="truncate text-sm font-semibold text-foreground">
                         {cfg.name}
                       </h3>
                       {!cfg.is_active && (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                           Inativo
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                    <p className="mt-1 text-xs font-medium text-muted-foreground">
                       {cfg.trigger_when === "on_create"
                         ? "Imediato (ao agendar)"
                         : offsetLabel(cfg.trigger_offset_minutes)}
@@ -218,22 +222,25 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => handleEdit(cfg)}
-                      className="rounded-lg p-2 text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
                       aria-label="Editar"
                     >
-                      <Pencil size={14} />
-                    </button>
-                    <button
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="icon-sm"
                       onClick={() => setDeleteTarget(cfg)}
-                      className="rounded-lg p-2 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                       aria-label="Excluir"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <Trash2 size={14} />
-                    </button>
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </div>
                 </div>
               </li>
@@ -265,7 +272,7 @@ export const AgendaSettingsTab: React.FC<AgendaSettingsTabProps> = ({
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Excluir
             </AlertDialogAction>

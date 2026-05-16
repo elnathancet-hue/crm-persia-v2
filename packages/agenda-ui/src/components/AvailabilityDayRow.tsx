@@ -67,11 +67,11 @@ export const AvailabilityDayRow: React.FC<AvailabilityDayRowProps> = ({
 
       <div className="flex flex-1 flex-wrap items-center gap-2">
         {!day.enabled ? (
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/70">
+          <span className="text-xs font-medium text-muted-foreground">
             Indisponível
           </span>
         ) : day.intervals.length === 0 ? (
-          <span className="text-xs font-semibold text-muted-foreground/70">
+          <span className="text-xs font-medium text-muted-foreground/70">
             Sem janela configurada
           </span>
         ) : (
@@ -90,9 +90,9 @@ export const AvailabilityDayRow: React.FC<AvailabilityDayRowProps> = ({
           <button
             type="button"
             onClick={handleAddInterval}
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
           >
-            <Plus size={12} />
+            <Plus className="size-3" />
             Janela
           </button>
         )}

@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
+import { Button } from "@persia/ui/button";
 import type { BookingPage } from "@persia/shared/agenda";
 import { BookingPageStatusBadge } from "./BookingPageStatusBadge";
 
@@ -53,15 +54,16 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
     }
   };
 
+  // PR-AGENDA-DS Fase 2 (mai/2026): rounded-xl + Button DS + tipografia consistente.
   return (
-    <div className="rounded-3xl bg-card p-5 ring-1 ring-border shadow-sm transition hover:shadow-md">
+    <div className="rounded-xl border border-border bg-card p-5 shadow-xs transition-colors hover:border-primary/40">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h4 className="truncate text-sm font-bold text-foreground">
+          <h4 className="truncate text-sm font-semibold text-foreground">
             {page.title}
           </h4>
           {page.description && (
-            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
               {page.description}
             </p>
           )}
@@ -69,9 +71,9 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
         <BookingPageStatusBadge status={page.status} />
       </div>
 
-      <div className="mt-4 space-y-1.5 text-[11px] text-muted-foreground">
+      <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
         <p>
-          <span className="font-bold">Duração:</span> {page.duration_minutes} min
+          <span className="font-semibold">Duração:</span> {page.duration_minutes} min
           {page.buffer_minutes > 0 && (
             <span className="text-muted-foreground/70">
               {" "}
@@ -80,47 +82,49 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
           )}
         </p>
         <p>
-          <span className="font-bold">Janela:</span> próximos{" "}
+          <span className="font-semibold">Janela:</span> próximos{" "}
           {page.lookahead_days} dia{page.lookahead_days === 1 ? "" : "s"}
         </p>
         <p>
-          <span className="font-bold">Reservas:</span>{" "}
+          <span className="font-semibold">Reservas:</span>{" "}
           <span className="tabular-nums">{page.total_bookings}</span>
         </p>
       </div>
 
       {/* URL preview + copy */}
-      <div className="mt-4 rounded-xl bg-muted p-3 ring-1 ring-border">
-        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+      <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
           URL pública
         </p>
         <div className="mt-1.5 flex items-center justify-between gap-2">
-          <code className="truncate text-[11px] font-mono text-foreground">
+          <code className="truncate text-xs font-mono text-foreground">
             {url}
           </code>
           <div className="flex shrink-0 items-center gap-1">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={handleCopy}
               aria-label="Copiar URL"
-              className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-card hover:text-primary"
             >
               {copied ? (
-                <CheckCircle2 size={12} className="text-success" />
+                <CheckCircle2 className="size-3 text-success" />
               ) : (
-                <Copy size={12} />
+                <Copy className="size-3" />
               )}
-            </button>
+            </Button>
             {page.status === "active" && (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Button
+                variant="ghost"
+                size="icon-xs"
                 aria-label="Abrir página"
-                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-card hover:text-primary"
+                render={
+                  <a href={url} target="_blank" rel="noopener noreferrer" />
+                }
               >
-                <ExternalLink size={12} />
-              </a>
+                <ExternalLink className="size-3" />
+              </Button>
             )}
           </div>
         </div>
@@ -128,34 +132,38 @@ export const BookingPageCard: React.FC<BookingPageCardProps> = ({
 
       <div className="mt-4 flex items-center justify-end gap-2">
         {onDuplicate && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onDuplicate(page)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground transition hover:bg-muted"
           >
-            <Copy size={11} />
+            <Copy className="size-3" data-icon="inline-start" />
             Duplicar
-          </button>
+          </Button>
         )}
         {onEdit && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onEdit(page)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10"
           >
-            <Pencil size={11} />
+            <Pencil className="size-3" data-icon="inline-start" />
             Editar
-          </button>
+          </Button>
         )}
         {onDelete && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => onDelete(page)}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-destructive transition hover:bg-destructive/10"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
-            <Trash2 size={11} />
+            <Trash2 className="size-3" data-icon="inline-start" />
             Excluir
-          </button>
+          </Button>
         )}
       </div>
     </div>

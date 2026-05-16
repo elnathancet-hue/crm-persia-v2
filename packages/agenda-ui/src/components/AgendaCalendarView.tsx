@@ -265,12 +265,13 @@ export const AgendaCalendarView: React.FC<AgendaCalendarViewProps> = ({
 
   if (loading) {
     return (
-      <div className="h-[600px] animate-pulse rounded-3xl bg-muted ring-1 ring-border" />
+      <div className="h-[600px] animate-pulse rounded-xl border border-border bg-muted" />
     );
   }
 
   return (
-    <div className="agenda-rbc-wrap rounded-3xl bg-card p-2 ring-1 ring-border shadow-sm">
+    // PR-AGENDA-DS Fase 2 (mai/2026): rounded-3xl/ring-1 → rounded-xl/border.
+    <div className="agenda-rbc-wrap rounded-xl border border-border bg-card p-2 shadow-xs">
       <Calendar<CalEvent>
         localizer={localizer}
         culture="pt-BR"

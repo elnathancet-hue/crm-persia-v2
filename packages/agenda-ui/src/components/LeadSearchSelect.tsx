@@ -132,7 +132,7 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
             onClick={handleClear}
             disabled={disabled}
             aria-label="Remover lead"
-            className="rounded-lg p-1 text-muted-foreground/70 transition hover:bg-muted hover:text-foreground disabled:opacity-50"
+            className="rounded-md p-1 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
           >
             <X size={14} />
           </button>
@@ -182,17 +182,17 @@ export const LeadSearchSelect: React.FC<LeadSearchSelectProps> = ({
                     role="option"
                     aria-selected={false}
                     onClick={() => handleSelect(lead)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-muted"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-primary/10 hover:text-primary"
                   >
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                       <UserIcon size={12} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-foreground">
+                      <p className="truncate text-sm font-semibold text-foreground">
                         {lead.name}
                       </p>
                       {lead.phone && (
-                        <p className="truncate text-[10px] font-semibold text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {lead.phone}
                         </p>
                       )}

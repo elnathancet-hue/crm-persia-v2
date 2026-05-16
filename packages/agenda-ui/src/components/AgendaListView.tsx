@@ -54,13 +54,16 @@ export const AgendaListView: React.FC<AgendaListViewProps> = ({
   onSelect,
   timezone = "America/Sao_Paulo",
 }) => {
+  // PR-AGENDA-DS Fase 2 (mai/2026): tokens DS consistentes.
+  // rounded-3xl/2xl → rounded-xl; font-black → font-semibold/bold;
+  // ring-1 ring-border → border-border; hora pill com bg-primary/10.
   if (loading) {
     return (
       <div className="space-y-3">
         {[0, 1, 2].map((i) => (
           <div
             key={i}
-            className="h-24 animate-pulse rounded-3xl bg-muted ring-1 ring-border"
+            className="h-24 animate-pulse rounded-xl border border-border bg-muted"
           />
         ))}
       </div>
@@ -71,15 +74,15 @@ export const AgendaListView: React.FC<AgendaListViewProps> = ({
 
   if (groups.length === 0) {
     return (
-      <div className="rounded-3xl border border-dashed border-border bg-muted p-12 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-muted-foreground/70 shadow-sm">
-          <CalendarOff size={20} />
+      <div className="rounded-xl border border-dashed border-border bg-muted/40 p-12 text-center">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-card text-muted-foreground/70 shadow-xs">
+          <CalendarOff className="size-5" />
         </div>
-        <p className="mt-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        <p className="mt-4 text-sm font-semibold text-foreground">
           Sem agendamentos
         </p>
-        <p className="mt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-          Crie um novo no botão acima ou ajuste os filtros
+        <p className="mt-1 text-xs text-muted-foreground">
+          Crie um novo no botão acima ou ajuste os filtros.
         </p>
       </div>
     );
@@ -92,13 +95,13 @@ export const AgendaListView: React.FC<AgendaListViewProps> = ({
         return (
           <section key={group.dateKey}>
             <header className="mb-3 flex items-baseline gap-3 border-b border-border pb-2">
-              <h3 className="text-sm font-black uppercase tracking-widest text-foreground">
+              <h3 className="font-heading text-sm font-semibold tracking-tight text-foreground">
                 {formatDate(refDate.toISOString(), timezone)}
               </h3>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              <span className="text-xs font-medium text-muted-foreground/80">
                 {formatWeekday(refDate.toISOString(), timezone)}
               </span>
-              <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
+              <span className="ml-auto text-xs text-muted-foreground">
                 {group.appointments.length}{" "}
                 {group.appointments.length === 1 ? "compromisso" : "compromissos"}
               </span>
@@ -110,10 +113,10 @@ export const AgendaListView: React.FC<AgendaListViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onSelect?.(appt)}
-                    className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-card p-4 text-left ring-1 ring-border shadow-sm transition hover:ring-primary/40 hover:shadow-md"
+                    className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-primary/[0.02]"
                   >
                     <div className="flex min-w-0 items-center gap-4">
-                      <span className="rounded-xl bg-muted px-3 py-2 text-xs font-black tabular-nums text-foreground">
+                      <span className="rounded-md bg-primary/10 px-3 py-2 text-xs font-semibold tabular-nums text-primary">
                         {formatTimeRange(
                           appt.start_at,
                           appt.end_at,
@@ -121,11 +124,11 @@ export const AgendaListView: React.FC<AgendaListViewProps> = ({
                         )}
                       </span>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-foreground">
+                        <p className="truncate text-sm font-semibold text-foreground">
                           {appt.title}
                         </p>
                         {appt.location && (
-                          <p className="mt-0.5 truncate text-[11px] font-semibold text-muted-foreground">
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             {appt.location}
                           </p>
                         )}
