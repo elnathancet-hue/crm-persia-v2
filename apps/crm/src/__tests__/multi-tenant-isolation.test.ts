@@ -58,10 +58,8 @@ vi.mock("@/lib/whatsapp/sync", () => ({
 
 import { requireRole } from "@/lib/auth";
 import { toggleMemberActive } from "@/actions/team";
-import { moveDealToStage } from "@/lib/crm/move-deal";
 
 const ORG_A = "org-a-111";
-const ORG_B = "org-b-222";
 
 function stubAuth(supabase: MockSupabase, orgId = ORG_A, role: "admin" | "agent" = "admin") {
   vi.mocked(requireRole).mockResolvedValue({
@@ -139,143 +137,9 @@ describe("team.toggleMemberActive — UPDATE is scoped by organization_id", () =
   });
 });
 
-describe("moveDealToStage — cross-org attempts are rejected", () => {
-  it("rejects a deal that belongs to a different org than the caller", async () => {
-    const supabase = createSupabaseMock();
-    // Deal is in ORG_B but caller passes ORG_A
-    supabase.queue("deals", {
-      data: {
-        id: "deal-foreign",
-        stage_id: "stage-old",
-        lead_id: "lead-1",
-        organization_id: ORG_B,
-        pipeline_id: "pipe-1",
-      },
-      error: null,
-    });
-
-    const res = await moveDealToStage({
-      dealId: "deal-foreign",
-      stageId: "stage-new",
-      orgId: ORG_A,
-      source: "manual",
-      supabase: supabase as never,
-    });
-
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/n[aã]o pertence/i);
-    // No update must have been issued
-    expect(supabase.updates.deals).toBeUndefined();
-  });
-
-  it("rejects when the target stage belongs to a different org", async () => {
-    const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: {
-        id: "deal-own",
-        stage_id: "stage-old",
-        lead_id: "lead-1",
-        organization_id: ORG_A,
-        pipeline_id: "pipe-1",
-      },
-      error: null,
-    });
-    // Target stage belongs to ORG_B — cross-org leak attempt
-    supabase.queue("pipeline_stages", {
-      data: {
-        id: "stage-foreign",
-        name: "Won",
-        pipeline_id: "pipe-1",
-        organization_id: ORG_B,
-      },
-      error: null,
-    });
-
-    const res = await moveDealToStage({
-      dealId: "deal-own",
-      stageId: "stage-foreign",
-      orgId: ORG_A,
-      source: "manual",
-      supabase: supabase as never,
-    });
-
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/n[aã]o pertence/i);
-    expect(supabase.updates.deals).toBeUndefined();
-  });
-
-  it("accepts a same-org move and updates the deal", async () => {
-    const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: {
-        id: "deal-own",
-        stage_id: "stage-old",
-        lead_id: "lead-1",
-        organization_id: ORG_A,
-        pipeline_id: "pipe-1",
-      },
-      error: null,
-    });
-    supabase.queue("pipeline_stages", {
-      data: {
-        id: "stage-new",
-        name: "Won",
-        pipeline_id: "pipe-1",
-        organization_id: ORG_A,
-      },
-      error: null,
-    });
-    // from-stage name lookup
-    supabase.queue("pipeline_stages", { data: { name: "Lost" }, error: null });
-    // update returns no error
-    supabase.queue("deals", { data: null, error: null });
-
-    const res = await moveDealToStage({
-      dealId: "deal-own",
-      stageId: "stage-new",
-      orgId: ORG_A,
-      source: "manual",
-      supabase: supabase as never,
-    });
-
-    expect(res.ok).toBe(true);
-    expect(res.noop).toBeUndefined();
-    expect(supabase.updates.deals).toBeDefined();
-    expect(supabase.updates.deals?.[0]).toMatchObject({ stage_id: "stage-new" });
-  });
-
-  it("activity log insert carries the caller org, not the deal row org", async () => {
-    // This guards against subtle mistakes where lead_activities could get
-    // a drifted organization_id through refactor.
-    const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: {
-        id: "deal-own",
-        stage_id: "stage-old",
-        lead_id: "lead-xyz",
-        organization_id: ORG_A,
-        pipeline_id: "pipe-1",
-      },
-      error: null,
-    });
-    supabase.queue("pipeline_stages", {
-      data: { id: "stage-new", name: "Won", pipeline_id: "pipe-1", organization_id: ORG_A },
-      error: null,
-    });
-    supabase.queue("pipeline_stages", { data: { name: "Lost" }, error: null });
-    supabase.queue("deals", { data: null, error: null });
-
-    await moveDealToStage({
-      dealId: "deal-own",
-      stageId: "stage-new",
-      orgId: ORG_A,
-      source: "automation",
-      supabase: supabase as never,
-    });
-
-    const activityInsert = supabase.inserts.lead_activities?.[0] as Record<string, unknown>;
-    expect(activityInsert).toBeDefined();
-    expect(activityInsert.organization_id).toBe(ORG_A);
-    expect(activityInsert.lead_id).toBe("lead-xyz");
-  });
-});
+// PR-K-CENTRIC cleanup (mai/2026): describe `moveDealToStage` removido.
+// Movimentacao agora vai por moveLeadToStage (lead-centric) — cobertura
+// multi-tenant equivalente em multi-tenant.test.ts via `moveLeadKanban`
+// e `bulkMoveLeads`, que ja filtram por organization_id em todas as
+// queries (assertions identicas as removidas aqui: rejeita cross-org
+// no SELECT, nao atualiza no UPDATE, activity log carrega caller org).

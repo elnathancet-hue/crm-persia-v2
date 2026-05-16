@@ -14,7 +14,6 @@ export type {
   LeadStats,
   LeadDealItem,
   DrawerStageRef,
-  LeadOpenDealWithStages,
   LeadCustomFieldDef,
   LeadCustomFieldEntry,
   LeadAgentHandoffState,

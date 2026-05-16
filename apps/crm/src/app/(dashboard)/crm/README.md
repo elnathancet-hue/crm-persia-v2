@@ -161,7 +161,7 @@ apps/crm/src/
 ### Outras actions usadas no /crm
 
 - **`actions/leads.ts`** — `getLeads`, `getLead`, `createLead`, `updateLead`, `deleteLead`, `getOrgTags`, `assignLead`, `getOrgActivities`, `getLeadStats`, `getLeadDealsList`, `getLeadsListStats`, `findLeadByPhoneOrEmail`, `bulkAssignLeads`, `bulkDeleteLeads`, exports/import
-- **`actions/crm.ts`** — pipelines/stages CRUD (admin) + funções deal-centric **legacy** (mantidas pra compat; ver seção 10)
+- **`actions/crm.ts`** — pipelines/stages CRUD (admin) + funções deal-centric **legacy** (mantidas pra compat — ver §10)
 - **`actions/tags.ts`** — `getTagsWithCount`, `createTag`, `updateTag`, `deleteTag`, `addTagToLead`, `removeTagFromLead`
 - **`actions/segments.ts`** — `getSegments`, `createSegment`, `updateSegment`, `deleteSegment`
 - **`actions/lead-comments.ts`** — `getLeadComments`, `createLeadComment`, `updateLeadComment`, `deleteLeadComment`
@@ -330,20 +330,19 @@ pnpm --filter @persia/crm dev                  # dev local
 
 ### Funções deal-centric mantidas pra compat
 
-Têm callers em adapters (`crm-kanban-actions.ts`, `admin-kanban-actions.ts`). Cleanup completo exige migrar todos adapters pra wire só lead-centric.
+PR #214 (mai/2026) removeu **3 server actions legacy** (`updateDealStage` em CRM e admin, `getLeadOpenDealWithStages` em CRM e admin, `moveDealStage` da KanbanActions) + a função `moveDealToStage` em `apps/crm/src/lib/crm/move-deal.ts`. Drawer agora opera 100% lead-centric.
+
+Restante (Fase B do cleanup) — têm callers em adapters (`crm-kanban-actions.ts`, `admin-kanban-actions.ts`):
 
 | Arquivo | Funções @deprecated |
 |---|---|
 | `packages/shared/src/crm/mutations/deals.ts` | `moveDealKanban`, `bulkMoveDealsToStage`, `bulkUpdateDealStatus`, `bulkMarkDealsAsLost` |
-| `packages/leads-ui/src/actions.ts` | `getLeadOpenDealWithStages`, `updateDealStage` |
-| `packages/crm-ui/src/actions.ts` | 11 métodos KanbanActions (`createDeal`, `createLeadWithDeal`, `updateDeal`, `moveDealStage`, `deleteDeal`, `bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) |
-| `apps/crm/src/lib/crm/move-deal.ts` | `moveDealToStage` (caller: `crm.ts:273` updateDealStage server action legacy) |
+| `packages/crm-ui/src/actions.ts` | 10 métodos KanbanActions (`createDeal`, `createLeadWithDeal`, `updateDeal`, `deleteDeal`, `bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) |
 
 ### Outras pendências
 
 - Filtros Kanban/Audit Admin/ConditionBuilder ainda aplicam onChange ao vivo (deveriam ter botão "Aplicar filtros" + "Limpar filtros" — só `LeadsAdvancedFilters` foi migrado).
 - `DealCard` na tab Negócios do drawer não tem botões editar/excluir inline (actions já prontas: `updateDealMeta` + `deleteDeal`).
-- Admin drawer (LeadInfoDrawer) ainda usa legacy `getLeadOpenDealWithStages` + `updateDealStage` (funciona via fallback no drawer).
 
 ---
 
@@ -360,6 +359,8 @@ Têm callers em adapters (`crm-kanban-actions.ts`, `admin-kanban-actions.ts`). C
 | [#207](https://github.com/elnathancet-hue/crm-persia-v2/pull/207) | UX copy leigos-friendly | — |
 | [#208](https://github.com/elnathancet-hue/crm-persia-v2/pull/208) | fix: `<LeadsProvider>` envolvendo Kanban (CreateLeadFromKanbanDialog quebrava ao clicar "+") | — |
 | [#209](https://github.com/elnathancet-hue/crm-persia-v2/pull/209) | UX 7 fixes (header sticky, scrollbar sem setas, tags contorno azul, etc) | — |
+| [#213](https://github.com/elnathancet-hue/crm-persia-v2/pull/213) | fix: realtime Kanban escutando `leads` (pós refactor lead-centric) — `useKanbanLeadsRealtime` em paralelo ao `useDealsRealtime` | — |
+| [#214](https://github.com/elnathancet-hue/crm-persia-v2/pull/214) | Cleanup lead-centric Fase A — admin agora opera 100% lead-centric. Remove `updateDealStage` / `getLeadOpenDealWithStages` / `moveDealStage` / `moveDealToStage` | [project_kanban_lead_centric.md](../../../../../../../../../../Users/ELNATHAN/.claude/projects/D--tmp-crm-persia-monorepo/memory/project_kanban_lead_centric.md) |
 
 ### Decisões fundamentais
 

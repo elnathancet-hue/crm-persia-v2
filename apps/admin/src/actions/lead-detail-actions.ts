@@ -16,7 +16,6 @@ import {
   fetchLeadCustomFields,
   fetchLeadDealsList,
   fetchLeadStats,
-  findLeadOpenDealWithStages,
   findOrCreateConversationByLead as findOrCreateConvShared,
   upsertLeadCustomFieldValue,
 } from "@persia/shared/crm";
@@ -24,7 +23,6 @@ import type {
   LeadAgentHandoffState,
   LeadCustomFieldEntry,
   LeadDealItem,
-  LeadOpenDealWithStages,
   LeadStats,
 } from "@persia/leads-ui";
 
@@ -38,56 +36,6 @@ export async function getLeadDealsList(
 ): Promise<LeadDealItem[]> {
   const { admin, orgId } = await requireSuperadminForOrg();
   return fetchLeadDealsList({ db: admin, orgId }, leadId);
-}
-
-export async function getLeadOpenDealWithStages(
-  leadId: string,
-): Promise<LeadOpenDealWithStages | null> {
-  const { admin, orgId } = await requireSuperadminForOrg();
-  return findLeadOpenDealWithStages({ db: admin, orgId }, leadId);
-}
-
-// Sprint 3d: migra pra ActionResult — antes lancava em erro.
-export async function updateDealStage(
-  dealId: string,
-  stageId: string,
-): Promise<import("@persia/ui").ActionResult<void>> {
-  try {
-    const { admin, orgId } = await requireSuperadminForOrg();
-    const supabase = admin as unknown as SupabaseClient;
-
-    // Defesa: confirma deal pertence ao org
-    const { data: deal } = await supabase
-      .from("deals")
-      .select("id, pipeline_id")
-      .eq("id", dealId)
-      .eq("organization_id", orgId)
-      .maybeSingle();
-    if (!deal) return { error: "Negócio não encontrado nesta organização." };
-
-    // Defesa: confirma stage pertence ao mesmo pipeline
-    const { data: stage } = await supabase
-      .from("pipeline_stages")
-      .select("id")
-      .eq("id", stageId)
-      .eq("pipeline_id", deal.pipeline_id)
-      .maybeSingle();
-    if (!stage) return { error: "Etapa não encontrada neste funil." };
-
-    const { error } = await supabase
-      .from("deals")
-      .update({ stage_id: stageId })
-      .eq("id", dealId);
-    if (error) return { error: error.message };
-    return;
-  } catch (err) {
-    return {
-      error:
-        err instanceof Error && err.message
-          ? err.message
-          : "Não foi possível mover o negócio.",
-    };
-  }
 }
 
 export async function getLeadCustomFields(

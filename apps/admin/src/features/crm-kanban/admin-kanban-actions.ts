@@ -16,7 +16,6 @@ import {
   deleteDeal,
   deletePipeline,
   deleteStage,
-  moveDealStage,
   moveLeadStage,
   updateDeal,
   updatePipelineName,
@@ -89,9 +88,6 @@ export const adminKanbanActions: KanbanActions = {
   },
   updateDeal: (dealId, data) =>
     updateDeal(dealId, { title: data.title, value: data.value }),
-  // Admin usa light move (sem onStageChanged/sync UAZAPI). Comportamento
-  // historico — superadmin nao deve disparar flows do tenant.
-  moveDealStage: (dealId, stageId) => moveDealStage(dealId, stageId),
   deleteDeal: async (dealId) => {
     const result = await deleteDeal(dealId);
     if (result?.error) throw new Error(result.error);

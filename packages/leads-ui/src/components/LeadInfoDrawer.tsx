@@ -383,32 +383,22 @@ export function LeadInfoDrawer({
   }, [open, lead]);
 
   // PR-K-CENTRIC (mai/2026): busca pipeline/stage atual do LEAD + stages
-  // do pipeline. Fallback pro legacy getLeadOpenDealWithStages se action
-  // nova nao estiver wireada no adapter.
+  // do pipeline. Fallback legacy removido em PR-K-CENTRIC cleanup —
+  // admin agora wireia getLeadStageContext (paridade com CRM).
   React.useEffect(() => {
     if (!open) return;
     const fetchStage = actions.getLeadStageContext;
-    const fetchLegacy = actions.getLeadOpenDealWithStages;
-    if (!fetchStage && !fetchLegacy) return;
+    if (!fetchStage) return;
     let cancelled = false;
-    const promise = fetchStage
-      ? fetchStage(lead.id).then((res) => {
-          if (!res || !res.lead.pipeline_id || !res.lead.stage_id) return null;
-          return {
-            deal: {
-              id: res.lead.id, // PR-K-CENTRIC: id carrega lead.id
-              pipeline_id: res.lead.pipeline_id,
-              stage_id: res.lead.stage_id,
-            },
-            stages: res.stages,
-          };
-        })
-      : fetchLegacy!(lead.id);
-    promise
+    fetchStage(lead.id)
       .then((res) => {
         if (cancelled) return;
-        if (res) {
-          setCurrentDeal(res.deal);
+        if (res && res.lead.pipeline_id && res.lead.stage_id) {
+          setCurrentDeal({
+            id: res.lead.id, // PR-K-CENTRIC: id carrega lead.id
+            pipeline_id: res.lead.pipeline_id,
+            stage_id: res.lead.stage_id,
+          });
           setDrawerStages(res.stages as DrawerStage[]);
         } else {
           setCurrentDeal(null);
@@ -448,25 +438,22 @@ export function LeadInfoDrawer({
     };
   }, [open, lead.id, actions]);
 
-  // Sprint 3d: updateDealStage retorna ActionResult — checamos result.error
-  // e revertemos UI otimista em caso de erro. Mantemos manual em vez de
+  // moveLeadStage retorna ActionResult — checamos result.error e
+  // revertemos UI otimista em caso de erro. Mantemos manual em vez de
   // useDialogMutation porque ha rollback otimista local especifico.
-  // PR-K-CENTRIC (mai/2026): muda stage do LEAD (era do deal).
-  // Fallback pro legacy updateDealStage se moveLeadStage nao wireado.
+  // PR-K-CENTRIC cleanup (mai/2026): fallback legacy updateDealStage
+  // removido — admin agora wireia moveLeadStage (paridade com CRM).
   async function handleChangeStage(newStageId: string) {
     if (!currentDeal || newStageId === currentDeal.stage_id) return;
     const moveLead = actions.moveLeadStage;
-    const moveDeal = actions.updateDealStage;
-    if (!moveLead && !moveDeal) {
+    if (!moveLead) {
       toast.error("Ação indisponível neste app");
       return;
     }
     const previousStageId = currentDeal.stage_id;
     setCurrentDeal({ ...currentDeal, stage_id: newStageId });
     setStageChangePending(true);
-    const result = moveLead
-      ? await moveLead(currentDeal.id, newStageId, 0)
-      : await moveDeal!(currentDeal.id, newStageId);
+    const result = await moveLead(currentDeal.id, newStageId, 0);
     setStageChangePending(false);
     if (result && "error" in result && result.error) {
       // Revert

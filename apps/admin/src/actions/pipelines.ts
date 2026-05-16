@@ -282,20 +282,6 @@ export async function updateDeal(
   }
 }
 
-/** Move "leve" — atualiza stage_id sem disparar flows/sync (admin
- * superadmin nao precisa de side-effects por padrao). Caller pode
- * preferir esse behavior em vez do `moveDeal` (que e drag-drop com
- * sort_order). */
-export async function moveDealStage(dealId: string, stageId: string) {
-  try {
-    const { admin, orgId } = await requireSuperadminForOrg();
-    await moveDealKanban({ db: admin, orgId }, dealId, stageId, 0);
-    revalidatePath("/crm");
-  } catch {
-    // noop
-  }
-}
-
 export async function getStagesForOrg() {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();

@@ -2,7 +2,6 @@
 
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 import type { ActionResult } from "@persia/ui";
 
 function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamente."): string {
@@ -25,7 +24,6 @@ import {
   deletePipeline as deletePipelineShared,
   deleteStage as deleteStageShared,
   ensureDefaultPipeline as ensureDefaultPipelineShared,
-  findLeadOpenDealWithStages,
   listDeals,
   listLeadsForDealAssignment,
   listLossReasons as listLossReasonsShared,
@@ -187,17 +185,6 @@ export async function getDeals(pipelineId?: string) {
   return listDeals({ db: supabase, orgId }, { pipelineId });
 }
 
-/**
- * Retorna o deal aberto mais recente do lead + as stages do pipeline
- * desse deal (pra UI do drawer "Informações do lead" — subheader
- * clicável que troca a etapa atual sem sair da pagina). Se o lead
- * nao tem nenhum deal aberto, retorna null.
- */
-export async function getLeadOpenDealWithStages(leadId: string) {
-  const { supabase, orgId } = await requireRole("agent");
-  return findLeadOpenDealWithStages({ db: supabase, orgId }, leadId);
-}
-
 export async function createDeal(formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
   const leadIdRaw = formData.get("lead_id") as string;
@@ -257,46 +244,6 @@ export async function createLeadWithDeal(input: CreateLeadWithDealInput) {
 
   revalidatePath("/crm");
   return { lead, deal };
-}
-
-// Sprint 3d: migra pra ActionResult — antes lancava em erro.
-export async function updateDealStage(
-  dealId: string,
-  stageId: string,
-): Promise<import("@persia/ui").ActionResult<void>> {
-  try {
-    const { supabase, orgId } = await requireRole("agent");
-
-    // Movimentacao "rica" — passa por moveDealToStage que tambem dispara
-    // activity log + onStageChanged flows + sync UAZAPI. NAO usa
-    // moveDealKanban (que e versao leve so pra drag-drop).
-    const { moveDealToStage } = await import("@/lib/crm/move-deal");
-    const result = await moveDealToStage({
-      dealId,
-      stageId,
-      orgId,
-      source: "manual",
-      supabase,
-    });
-
-    if (!result.ok) {
-      return { error: result.error || "Não foi possível mover o negócio." };
-    }
-
-    // PR-K LEAD-SYNC: deal mudou de etapa -> tab Leads pode mudar
-    // (status do lead pode ter sido atualizado, ou colunas Negocios/
-    // Etapa atual no drawer/lista refletem). Antes deste PR, so /crm
-    // revalidava — Tab Leads ficava desync.
-    await revalidateLeadCaches();
-    return;
-  } catch (err) {
-    return {
-      error:
-        err instanceof Error && err.message
-          ? err.message
-          : "Não foi possível mover o negócio.",
-    };
-  }
 }
 
 export async function updateDeal(
