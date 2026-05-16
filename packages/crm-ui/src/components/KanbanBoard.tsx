@@ -3466,7 +3466,13 @@ function AdvancedFiltersPopover({
   tags: TagRef[];
   assignees: { id: string; name: string }[];
 }) {
-  const activeCount = countActiveFilters(value);
+  // PR-FILTERS (mai/2026): padrao Aplicar/Limpar (regra global DS,
+  // mesmo pattern do LeadsAdvancedFilters). Edicoes ficam locais em
+  // `pendingValue` ate o user clicar "Aplicar filtros". Resync com
+  // value externo quando popover abre.
+  const [open, setOpen] = React.useState(false);
+  const [pendingValue, setPendingValue] =
+    React.useState<AdvancedFilters>(value);
   const [valueMinStr, setValueMinStr] = React.useState(
     value.valueMin === null ? "" : String(value.valueMin),
   );
@@ -3474,43 +3480,70 @@ function AdvancedFiltersPopover({
     value.valueMax === null ? "" : String(value.valueMax),
   );
 
-  // Sync local input strings se o filtro for resetado de fora
   React.useEffect(() => {
-    setValueMinStr(value.valueMin === null ? "" : String(value.valueMin));
-    setValueMaxStr(value.valueMax === null ? "" : String(value.valueMax));
-  }, [value.valueMin, value.valueMax]);
+    if (open) {
+      setPendingValue(value);
+      setValueMinStr(value.valueMin === null ? "" : String(value.valueMin));
+      setValueMaxStr(value.valueMax === null ? "" : String(value.valueMax));
+    }
+  }, [open, value]);
 
-  const toggleTag = (id: string) => {
-    onChange({
-      ...value,
-      tagIds: value.tagIds.includes(id)
-        ? value.tagIds.filter((t) => t !== id)
-        : [...value.tagIds, id],
-    });
-  };
+  const activeCount = countActiveFilters(value);
+  const pendingCount = countActiveFilters({
+    ...pendingValue,
+    valueMin: valueMinStr.trim() === "" ? null : pendingValue.valueMin,
+    valueMax: valueMaxStr.trim() === "" ? null : pendingValue.valueMax,
+  });
 
-  const clearAll = () => {
-    onChange(EMPTY_FILTERS);
-    setValueMinStr("");
-    setValueMaxStr("");
-  };
-
-  const applyValueRange = () => {
+  const parseRange = (): {
+    valueMin: number | null;
+    valueMax: number | null;
+  } => {
     const parsedMin =
       valueMinStr.trim() === "" ? null : Number(valueMinStr.replace(",", "."));
     const parsedMax =
       valueMaxStr.trim() === "" ? null : Number(valueMaxStr.replace(",", "."));
-    onChange({
-      ...value,
+    return {
       valueMin:
         parsedMin !== null && Number.isFinite(parsedMin) ? parsedMin : null,
       valueMax:
         parsedMax !== null && Number.isFinite(parsedMax) ? parsedMax : null,
+    };
+  };
+
+  const resolvedPending: AdvancedFilters = {
+    ...pendingValue,
+    ...parseRange(),
+  };
+
+  const isDirty = React.useMemo(
+    () => JSON.stringify(resolvedPending) !== JSON.stringify(value),
+    [resolvedPending, value],
+  );
+
+  const toggleTag = (id: string) => {
+    setPendingValue({
+      ...pendingValue,
+      tagIds: pendingValue.tagIds.includes(id)
+        ? pendingValue.tagIds.filter((t) => t !== id)
+        : [...pendingValue.tagIds, id],
     });
   };
 
+  const applyAndClose = () => {
+    onChange(resolvedPending);
+    setOpen(false);
+  };
+
+  const clearAndApply = () => {
+    setPendingValue(EMPTY_FILTERS);
+    setValueMinStr("");
+    setValueMaxStr("");
+    onChange(EMPTY_FILTERS);
+  };
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
           <Button
@@ -3534,16 +3567,14 @@ function AdvancedFiltersPopover({
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-0" sideOffset={6}>
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-sm font-semibold">Filtros avançados</span>
-          {activeCount > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="text-[11px] font-medium text-primary hover:underline"
-            >
-              Limpar
-            </button>
-          )}
+          <span className="text-sm font-semibold">
+            Filtros avançados
+            {pendingCount > 0 && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                ({pendingCount} {pendingCount === 1 ? "filtro" : "filtros"})
+              </span>
+            )}
+          </span>
         </div>
 
         <div className="max-h-[480px] space-y-4 overflow-y-auto p-3">
@@ -3555,16 +3586,19 @@ function AdvancedFiltersPopover({
                   Tags
                 </Label>
                 <Select
-                  value={value.tagLogic}
+                  value={pendingValue.tagLogic}
                   onValueChange={(v) =>
-                    onChange({ ...value, tagLogic: (v as TagLogic) ?? "any" })
+                    setPendingValue({
+                      ...pendingValue,
+                      tagLogic: (v as TagLogic) ?? "any",
+                    })
                   }
                 >
                   <SelectTrigger className="h-7 w-[110px] text-[11px]">
                     <SelectValue>
-                      {value.tagLogic === "any"
+                      {pendingValue.tagLogic === "any"
                         ? "Qualquer"
-                        : value.tagLogic === "all"
+                        : pendingValue.tagLogic === "all"
                           ? "Todas"
                           : "Nenhuma"}
                     </SelectValue>
@@ -3578,7 +3612,7 @@ function AdvancedFiltersPopover({
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {tags.map((tag) => {
-                  const checked = value.tagIds.includes(tag.id);
+                  const checked = pendingValue.tagIds.includes(tag.id);
                   return (
                     <button
                       key={tag.id}
@@ -3596,9 +3630,9 @@ function AdvancedFiltersPopover({
                 })}
               </div>
               <p className="text-[10px] text-muted-foreground">
-                {value.tagLogic === "any"
+                {pendingValue.tagLogic === "any"
                   ? "Mostra negócios com pelo menos uma das tags."
-                  : value.tagLogic === "all"
+                  : pendingValue.tagLogic === "all"
                     ? "Mostra negócios com TODAS as tags marcadas."
                     : "Esconde negócios que tenham qualquer tag marcada."}
               </p>
@@ -3617,10 +3651,6 @@ function AdvancedFiltersPopover({
                 placeholder="Mín"
                 value={valueMinStr}
                 onChange={(e) => setValueMinStr(e.target.value)}
-                onBlur={applyValueRange}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") applyValueRange();
-                }}
                 className="h-9"
               />
               <Input
@@ -3629,10 +3659,6 @@ function AdvancedFiltersPopover({
                 placeholder="Máx"
                 value={valueMaxStr}
                 onChange={(e) => setValueMaxStr(e.target.value)}
-                onBlur={applyValueRange}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") applyValueRange();
-                }}
                 className="h-9"
               />
             </div>
@@ -3646,9 +3672,11 @@ function AdvancedFiltersPopover({
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
-                onClick={() => onChange({ ...value, staleDays: null })}
+                onClick={() =>
+                  setPendingValue({ ...pendingValue, staleDays: null })
+                }
                 className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  value.staleDays === null
+                  pendingValue.staleDays === null
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-border bg-muted text-foreground hover:bg-muted/70"
                 }`}
@@ -3656,12 +3684,17 @@ function AdvancedFiltersPopover({
                 Sem filtro
               </button>
               {STALE_OPTIONS.map((opt) => {
-                const active = value.staleDays === opt.value;
+                const active = pendingValue.staleDays === opt.value;
                 return (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => onChange({ ...value, staleDays: opt.value })}
+                    onClick={() =>
+                      setPendingValue({
+                        ...pendingValue,
+                        staleDays: opt.value,
+                      })
+                    }
                     className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                       active
                         ? "border-primary bg-primary text-primary-foreground"
@@ -3683,19 +3716,19 @@ function AdvancedFiltersPopover({
                 Responsável
               </Label>
               <Select
-                value={value.assigneeId ?? ALL_ASSIGNEES}
+                value={pendingValue.assigneeId ?? ALL_ASSIGNEES}
                 onValueChange={(v) =>
-                  onChange({
-                    ...value,
+                  setPendingValue({
+                    ...pendingValue,
                     assigneeId: !v || v === ALL_ASSIGNEES ? null : v,
                   })
                 }
               >
                 <SelectTrigger className="h-9">
                   <SelectValue>
-                    {value.assigneeId === null
+                    {pendingValue.assigneeId === null
                       ? "Todos os responsáveis"
-                      : (assignees.find((a) => a.id === value.assigneeId)
+                      : (assignees.find((a) => a.id === pendingValue.assigneeId)
                           ?.name ?? "Responsável")}
                   </SelectValue>
                 </SelectTrigger>
@@ -3712,6 +3745,36 @@ function AdvancedFiltersPopover({
               </Select>
             </div>
           )}
+        </div>
+
+        {/* Footer com Aplicar (azul, primary) + Limpar.
+            Regra global DS (mai/2026): filtros nao aplicam mais ao
+            vivo — usuario edita pendingValue e confirma. */}
+        <div className="border-t border-border px-3 py-2.5 flex items-center justify-between gap-2 bg-card/50">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={clearAndApply}
+            disabled={activeCount === 0 && pendingCount === 0}
+          >
+            <X className="size-3.5" data-icon="inline-start" />
+            Limpar filtros
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={applyAndClose}
+            disabled={!isDirty}
+          >
+            Aplicar filtros
+            {pendingCount > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-primary-foreground/20 px-1.5 text-[10px] font-bold min-w-[1.25rem] h-4">
+                {pendingCount}
+              </span>
+            )}
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
