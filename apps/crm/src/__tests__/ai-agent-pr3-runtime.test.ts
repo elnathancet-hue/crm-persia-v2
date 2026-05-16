@@ -448,9 +448,16 @@ describe("ai-agent PR3 runtime", () => {
     expect(result.error).toBe("invalid tool input");
   });
 
-  it("movePipelineStageHandler fails when lead has no open deal", async () => {
+  // PR-K-CENTRIC (mai/2026): testes refletem modelo lead-centric.
+  // Handler consulta `leads.pipeline_id/stage_id` direto em vez de
+  // buscar deal aberto. Erros e payload usam `lead_id`.
+
+  it("movePipelineStageHandler fails when lead has no pipeline assigned", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("deals", { data: [], error: null });
+    supabase.queue("leads", {
+      data: { id: "lead-a", pipeline_id: null, stage_id: null },
+      error: null,
+    });
 
     const result = await movePipelineStageHandler(
       {
@@ -468,13 +475,16 @@ describe("ai-agent PR3 runtime", () => {
     expect(result.error).toMatch(/nenhum funil/);
   });
 
-  it("movePipelineStageHandler fails when lead is in multiple pipelines and pipeline_id is missing", async () => {
+  it("movePipelineStageHandler rejects pipeline_id arg when lead is in another pipeline", async () => {
+    const PIPE_CURRENT = "55555555-5555-4555-8555-555555555555";
+    const PIPE_OTHER = "66666666-6666-4666-8666-666666666666";
     const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: [
-        { id: "deal-1", pipeline_id: "pipeline-1", stage_id: "stage-x", status: "open" },
-        { id: "deal-2", pipeline_id: "pipeline-2", stage_id: "stage-y", status: "open" },
-      ],
+    supabase.queue("leads", {
+      data: {
+        id: "lead-a",
+        pipeline_id: PIPE_CURRENT,
+        stage_id: "stage-x",
+      },
       error: null,
     });
 
@@ -488,21 +498,26 @@ describe("ai-agent PR3 runtime", () => {
         dry_run: true,
         db: supabase as never,
       } as never,
-      { stage_id: "44444444-4444-4444-8444-444444444444" },
+      {
+        stage_id: "44444444-4444-4444-8444-444444444444",
+        pipeline_id: PIPE_OTHER,
+      },
     );
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/mais de um funil/);
+    expect(result.error).toMatch(/outro funil/);
     expect(result.output).toMatchObject({
-      pipeline_ids: ["pipeline-1", "pipeline-2"],
+      current_pipeline_id: PIPE_CURRENT,
     });
   });
 
   it("movePipelineStageHandler rejects target stage from another pipeline", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: [
-        { id: "deal-1", pipeline_id: "pipeline-1", stage_id: "stage-x", status: "open" },
-      ],
+    supabase.queue("leads", {
+      data: {
+        id: "lead-a",
+        pipeline_id: "pipeline-1",
+        stage_id: "stage-x",
+      },
       error: null,
     });
     supabase.queue("pipeline_stages", {
@@ -533,10 +548,12 @@ describe("ai-agent PR3 runtime", () => {
 
   it("movePipelineStageHandler rejects stage from another organization", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: [
-        { id: "deal-1", pipeline_id: "pipeline-1", stage_id: "stage-x", status: "open" },
-      ],
+    supabase.queue("leads", {
+      data: {
+        id: "lead-a",
+        pipeline_id: "pipeline-1",
+        stage_id: "stage-x",
+      },
       error: null,
     });
     supabase.queue("pipeline_stages", {
@@ -567,10 +584,12 @@ describe("ai-agent PR3 runtime", () => {
 
   it("movePipelineStageHandler dry-run returns 'would move' side_effect without writing", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("deals", {
-      data: [
-        { id: "deal-1", pipeline_id: "pipeline-1", stage_id: "stage-x", status: "open" },
-      ],
+    supabase.queue("leads", {
+      data: {
+        id: "lead-a",
+        pipeline_id: "pipeline-1",
+        stage_id: "stage-x",
+      },
       error: null,
     });
     supabase.queue("pipeline_stages", {
@@ -605,7 +624,7 @@ describe("ai-agent PR3 runtime", () => {
       'would move lead from "Novo" to "Qualificado" in CRM Kanban',
     ]);
     expect(result.output).toMatchObject({
-      deal_id: "deal-1",
+      lead_id: "lead-a",
       from_stage_id: "stage-x",
       from_stage_name: "Novo",
       to_stage_id: "44444444-4444-4444-8444-444444444444",
@@ -613,22 +632,19 @@ describe("ai-agent PR3 runtime", () => {
       pipeline_id: "pipeline-1",
       reason: "lead qualificou",
     });
-    expect(supabase.updates.deals).toBeUndefined();
+    expect(supabase.updates.leads).toBeUndefined();
     expect(supabase.inserts.lead_activities).toBeUndefined();
   });
 
   it("movePipelineStageHandler returns noop when lead is already at the target stage", async () => {
     const supabase = createSupabaseMock();
-    // Deal ja esta na stage de destino
-    supabase.queue("deals", {
-      data: [
-        {
-          id: "deal-1",
-          pipeline_id: "pipeline-1",
-          stage_id: "44444444-4444-4444-8444-444444444444",
-          status: "open",
-        },
-      ],
+    // Lead ja esta na stage de destino
+    supabase.queue("leads", {
+      data: {
+        id: "lead-a",
+        pipeline_id: "pipeline-1",
+        stage_id: "44444444-4444-4444-8444-444444444444",
+      },
       error: null,
     });
     supabase.queue("pipeline_stages", {
@@ -657,27 +673,29 @@ describe("ai-agent PR3 runtime", () => {
     expect(result.success).toBe(true);
     expect(result.output).toMatchObject({
       noop: true,
+      lead_id: "lead-a",
       stage_id: "44444444-4444-4444-8444-444444444444",
       stage_name: "Qualificado",
     });
-    expect(supabase.updates.deals).toBeUndefined();
+    expect(supabase.updates.leads).toBeUndefined();
   });
 
-  it("movePipelineStageHandler honors pipeline_id filter to disambiguate multi-pipeline lead", async () => {
-    const PIPE_2 = "55555555-5555-4555-8555-555555555555";
+  it("movePipelineStageHandler accepts pipeline_id arg when it matches lead's current pipeline (dry-run)", async () => {
+    const PIPE_1 = "55555555-5555-4555-8555-555555555555";
     const supabase = createSupabaseMock();
-    // Mock retorna so o deal do pipeline-2 (filtrado pelo .eq("pipeline_id", ...))
-    supabase.queue("deals", {
-      data: [
-        { id: "deal-2", pipeline_id: PIPE_2, stage_id: "stage-y", status: "open" },
-      ],
+    supabase.queue("leads", {
+      data: {
+        id: "lead-a",
+        pipeline_id: PIPE_1,
+        stage_id: "stage-y",
+      },
       error: null,
     });
     supabase.queue("pipeline_stages", {
       data: {
         id: "44444444-4444-4444-8444-444444444444",
         name: "Fechado",
-        pipeline_id: PIPE_2,
+        pipeline_id: PIPE_1,
         organization_id: ORG_A,
       },
       error: null,
@@ -699,17 +717,14 @@ describe("ai-agent PR3 runtime", () => {
       } as never,
       {
         stage_id: "44444444-4444-4444-8444-444444444444",
-        pipeline_id: PIPE_2,
+        pipeline_id: PIPE_1,
       },
     );
 
     expect(result.success).toBe(true);
     expect(result.output).toMatchObject({
-      deal_id: "deal-2",
-      pipeline_id: PIPE_2,
+      lead_id: "lead-a",
+      pipeline_id: PIPE_1,
     });
-    // Verifica que o filtro foi aplicado
-    const dealFilters = supabase.filters.deals?.eq ?? [];
-    expect(dealFilters.some(([col, val]) => col === "pipeline_id" && val === PIPE_2)).toBe(true);
   });
 });
