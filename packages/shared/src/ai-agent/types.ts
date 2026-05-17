@@ -42,6 +42,10 @@ export const NATIVE_HANDLERS = [
   "list_lead_appointments",
   "cancel_appointment",
   "reschedule_appointment",
+  // PR-AI-AGENT-HUMAN-D (mai/2026): agente envia midia (imagem, PDF,
+  // video, audio) da biblioteca automation_tools. Migration 043 estende
+  // o CHECK constraint.
+  "send_media",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];

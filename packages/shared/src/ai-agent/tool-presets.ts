@@ -258,6 +258,34 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     },
   },
   {
+    handler: "send_media",
+    name: "send_media",
+    display_name: "Enviar mídia",
+    description:
+      "Send an image, video, PDF, audio or document file from the organization media library (automation_tools table). Use when the lead asks for the catalog, price list, brochure, etc. Lookup files by slug — the runtime resolves slug → file_url server-side. Caption is optional. The system prompt lists the available media with their slugs and descriptions.",
+    ui_description:
+      "Permite o agente enviar imagens, PDFs e vídeos da Biblioteca de mídia.",
+    icon_name: "Image",
+    category: "audio", // pertence ao mesmo grupo de saida de conteudo
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      required: ["slug"],
+      properties: {
+        slug: {
+          type: "string",
+          description:
+            "Slug da mídia na biblioteca da organização (ex: 'catalogo-2026'). Lookup case-insensitive — consulta a lista visível no system prompt antes de chamar.",
+        },
+        caption: {
+          type: "string",
+          description:
+            "Legenda opcional enviada junto. Máximo 500 caracteres. Use quando precisar dar contexto pro arquivo.",
+        },
+      },
+    },
+  },
+  {
     handler: "trigger_notification",
     name: "trigger_notification",
     display_name: "Disparar notificação",

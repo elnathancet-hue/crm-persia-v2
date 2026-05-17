@@ -11,6 +11,7 @@ import { createAppointmentHandler } from "./create-appointment";
 import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
 import { rescheduleAppointmentHandler } from "./reschedule-appointment";
+import { sendMediaHandler } from "./send-media";
 import { stopAgentHandler } from "./stop-agent";
 import { transferToAgentHandler } from "./transfer-to-agent";
 import { transferToStageHandler } from "./transfer-to-stage";
@@ -30,6 +31,8 @@ export const nativeHandlers: NativeHandlerRegistry = {
   list_lead_appointments: listLeadAppointmentsHandler,
   cancel_appointment: cancelAppointmentHandler,
   reschedule_appointment: rescheduleAppointmentHandler,
+  // PR-AI-AGENT-HUMAN-D (mai/2026): envio de midia da biblioteca
+  send_media: sendMediaHandler,
 };
 
 export function isImplementedNativeHandler(
