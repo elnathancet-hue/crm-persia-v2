@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { ensureCanActOnUser } from "@/lib/agenda/security";
 import {
+  notifyLeadAppointmentCancelled,
+  notifyLeadAppointmentRescheduled,
+} from "@/lib/agenda/notifications/dispatch";
+import {
   cancelAppointment as cancelShared,
   createAppointment as createShared,
   getAppointment as getShared,
@@ -128,6 +132,22 @@ export async function cancelAppointment(
     input,
   );
   revalidatePath("/agenda");
+
+  // PR-AGENDA-NOTIFY (mai/2026): avisa lead via WhatsApp.
+  // Fire-and-forget — se WhatsApp estiver fora/lead sem phone, log e
+  // segue. Cancelamento no DB nao falha por isso.
+  void notifyLeadAppointmentCancelled(updated, input.reason ?? null)
+    .then((outcome) => {
+      if (!outcome.sent) {
+        console.info(
+          `[cancelAppointment] notify skipped: ${outcome.reason} (appt=${id})`,
+        );
+      }
+    })
+    .catch((err) => {
+      console.error("[cancelAppointment] notify failed:", err);
+    });
+
   return updated;
 }
 
@@ -145,6 +165,20 @@ export async function rescheduleAppointment(
     input,
   );
   revalidatePath("/agenda");
+
+  // PR-AGENDA-NOTIFY: avisa lead do novo horario (fire-and-forget).
+  void notifyLeadAppointmentRescheduled(result.original, result.replacement)
+    .then((outcome) => {
+      if (!outcome.sent) {
+        console.info(
+          `[rescheduleAppointment] notify skipped: ${outcome.reason} (appt=${id})`,
+        );
+      }
+    })
+    .catch((err) => {
+      console.error("[rescheduleAppointment] notify failed:", err);
+    });
+
   return result;
 }
 
