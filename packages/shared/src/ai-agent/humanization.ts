@@ -40,6 +40,52 @@ export const SPLIT_DELAY_SECONDS_DEFAULT = 2;
 export const SPLIT_DELAY_SECONDS_MIN = 0;
 export const SPLIT_DELAY_SECONDS_MAX = 30;
 
+// PR C (mai/2026): horario comercial. Cliente brasileiro tipico atende
+// seg-sex 9-18, sab-dom fechado. Default reflete isso. Fora do horario,
+// agente envia after_hours_message (1x a cada AFTER_HOURS_COOLDOWN_HOURS
+// pra nao spammar — controlado via agent_conversations.after_hours_notified_at).
+//
+// Timezone hardcoded na UI por enquanto (America/Sao_Paulo). Cliente
+// em outra tz precisa SQL Editor pra mudar o JSONB diretamente. Se
+// houver demanda, vira Select dropdown.
+
+export const BUSINESS_HOURS_ENABLED_DEFAULT = false;
+export const BUSINESS_HOURS_TIMEZONE_DEFAULT = "America/Sao_Paulo";
+export const AFTER_HOURS_MESSAGE_DEFAULT =
+  "Olá! Recebi sua mensagem. Estou fora do horário de atendimento agora — vou retornar assim que possível.";
+export const AFTER_HOURS_MESSAGE_MAX_LENGTH = 500;
+export const AFTER_HOURS_NOTIFICATION_COOLDOWN_HOURS = 6;
+
+export const DAY_NAMES = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+export type DayName = (typeof DAY_NAMES)[number];
+
+export interface DayHours {
+  start: string; // "HH:MM"
+  end: string; // "HH:MM"
+}
+
+export type BusinessHours = Record<DayName, DayHours | null>;
+
+const WEEKDAY_DEFAULT: DayHours = { start: "09:00", end: "18:00" };
+
+export const BUSINESS_HOURS_DEFAULT: BusinessHours = {
+  monday: WEEKDAY_DEFAULT,
+  tuesday: WEEKDAY_DEFAULT,
+  wednesday: WEEKDAY_DEFAULT,
+  thursday: WEEKDAY_DEFAULT,
+  friday: WEEKDAY_DEFAULT,
+  saturday: null,
+  sunday: null,
+};
+
 export interface HumanizationConfig {
   /**
    * Palavras-chave (case-insensitive, match exato apos uppercase + trim)
@@ -84,6 +130,35 @@ export interface HumanizationConfig {
    * imediata). Range [SPLIT_DELAY_SECONDS_MIN, SPLIT_DELAY_SECONDS_MAX].
    */
   split_delay_seconds: number;
+
+  /**
+   * Quando true, agente nativo so responde dentro do horario configurado.
+   * Fora do horario, manda after_hours_message (1x a cada
+   * AFTER_HOURS_NOTIFICATION_COOLDOWN_HOURS — controle via
+   * agent_conversations.after_hours_notified_at).
+   */
+  business_hours_enabled: boolean;
+
+  /**
+   * IANA timezone (ex: "America/Sao_Paulo"). Define o "horario local"
+   * usado pra checar se a msg do lead caiu dentro/fora da janela.
+   * Default e Brasil/Sao Paulo — UI nao expoe Select pra outras tz
+   * (admin edita via SQL se precisar).
+   */
+  business_hours_timezone: string;
+
+  /**
+   * Janelas por dia da semana. null = fechado (nao atende). Cada dia
+   * tem uma unica faixa contigua start-end no formato "HH:MM". Pra
+   * casos "8-12 e 14-18", cliente usa 8-18 (modelo single-window).
+   */
+  business_hours: BusinessHours;
+
+  /**
+   * Mensagem enviada quando lead manda msg fora do horario. Max
+   * AFTER_HOURS_MESSAGE_MAX_LENGTH (500) chars.
+   */
+  after_hours_message: string;
 }
 
 export function clampAutoPauseMinutes(value: unknown): number {
@@ -111,6 +186,167 @@ export function clampSplitDelaySeconds(value: unknown): number {
   if (value < SPLIT_DELAY_SECONDS_MIN) return SPLIT_DELAY_SECONDS_MIN;
   if (value > SPLIT_DELAY_SECONDS_MAX) return SPLIT_DELAY_SECONDS_MAX;
   return Math.floor(value);
+}
+
+// ----------------------------------------------------------------------
+// Business hours helpers
+// ----------------------------------------------------------------------
+
+/**
+ * Parse "HH:MM" pra { h, m }. Retorna null se invalido ou fora do range.
+ * Aceita "9:00", "09:00", "23:59" — rejeita "24:00", "9:60", "abc".
+ */
+function parseHHMM(text: unknown): { h: number; m: number } | null {
+  if (typeof text !== "string") return null;
+  const match = /^([0-2]?\d):([0-5]\d)$/.exec(text.trim());
+  if (!match) return null;
+  const h = Number.parseInt(match[1]!, 10);
+  const m = Number.parseInt(match[2]!, 10);
+  if (h < 0 || h > 23) return null;
+  if (m < 0 || m > 59) return null;
+  return { h, m };
+}
+
+function formatHHMM(h: number, m: number): string {
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Valida + normaliza um DayHours. Garante start < end (mesma janela
+ * no mesmo dia — sem suporte a janelas que cruzam meia-noite). Re-format
+ * pra "HH:MM" pad-zero consistente. Retorna null se invalido.
+ */
+export function sanitizeDayHours(raw: unknown): DayHours | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "object") return null;
+  const v = raw as Record<string, unknown>;
+  const start = parseHHMM(v.start);
+  const end = parseHHMM(v.end);
+  if (!start || !end) return null;
+  const startMin = start.h * 60 + start.m;
+  const endMin = end.h * 60 + end.m;
+  if (startMin >= endMin) return null;
+  return {
+    start: formatHHMM(start.h, start.m),
+    end: formatHHMM(end.h, end.m),
+  };
+}
+
+/**
+ * Le o BusinessHours do JSONB com defaults dia-por-dia. Quando key do
+ * dia esta ausente (undefined), usa default. Quando esta `null` ou
+ * invalido, normaliza pra null (= fechado). Quando esta valido,
+ * sanitiza.
+ */
+export function sanitizeBusinessHours(raw: unknown): BusinessHours {
+  const obj =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const result = {} as BusinessHours;
+  for (const day of DAY_NAMES) {
+    if (!(day in obj)) {
+      result[day] = BUSINESS_HOURS_DEFAULT[day];
+    } else {
+      // sanitize retorna null pra valor invalido OU para null intencional
+      result[day] = sanitizeDayHours(obj[day]);
+    }
+  }
+  return result;
+}
+
+function sanitizeTimezone(raw: unknown): string {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return BUSINESS_HOURS_TIMEZONE_DEFAULT;
+  }
+  // Defensive: tenta criar um DateTimeFormat com a tz. Se falhar
+  // (ex: "America/InvalidCity"), cai pro default.
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: raw.trim() });
+    return raw.trim();
+  } catch {
+    return BUSINESS_HOURS_TIMEZONE_DEFAULT;
+  }
+}
+
+function sanitizeAfterHoursMessage(raw: unknown): string {
+  if (typeof raw !== "string") return AFTER_HOURS_MESSAGE_DEFAULT;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return AFTER_HOURS_MESSAGE_DEFAULT;
+  if (trimmed.length > AFTER_HOURS_MESSAGE_MAX_LENGTH) {
+    return trimmed.slice(0, AFTER_HOURS_MESSAGE_MAX_LENGTH);
+  }
+  return trimmed;
+}
+
+/**
+ * True se `now` esta dentro da janela do dia correspondente em
+ * `hours[dia]`. Usa Intl.DateTimeFormat com timezone pra extrair
+ * weekday + HH:MM no fuso desejado (sem mexer em Date direto, que
+ * lida em UTC).
+ *
+ * Comportamento defensivo: se parsing falhar (tz invalida, etc),
+ * retorna `true` (= dentro do horario) pra nao bloquear o agente
+ * silenciosamente.
+ */
+export function isWithinBusinessHours(
+  now: Date,
+  hours: BusinessHours,
+  timezone: string = BUSINESS_HOURS_TIMEZONE_DEFAULT,
+): boolean {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(now);
+    const weekdayRaw = parts.find((p) => p.type === "weekday")?.value;
+    const hourRaw = parts.find((p) => p.type === "hour")?.value;
+    const minuteRaw = parts.find((p) => p.type === "minute")?.value;
+    if (!weekdayRaw || !hourRaw || !minuteRaw) return true;
+
+    const weekday = weekdayRaw.toLowerCase() as DayName;
+    if (!DAY_NAMES.includes(weekday)) return true;
+
+    const day = hours[weekday];
+    if (!day) return false; // dia fechado
+
+    const start = parseHHMM(day.start);
+    const end = parseHHMM(day.end);
+    if (!start || !end) return true;
+
+    // Intl com hour12: false retorna "24" pra meia-noite em alguns
+    // engines — clampa pra 0 pra evitar bug raro.
+    let h = Number.parseInt(hourRaw, 10);
+    if (h === 24) h = 0;
+    const m = Number.parseInt(minuteRaw, 10);
+    const nowMinutes = h * 60 + m;
+    const startMinutes = start.h * 60 + start.m;
+    const endMinutes = end.h * 60 + end.m;
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * True se ja passou tempo suficiente desde a ultima notificacao "fora
+ * do horario" (controle de cooldown pra nao spammar). Quando
+ * `lastNotifiedAtIso` e null, sempre retorna true (nunca notificado).
+ */
+export function shouldSendAfterHoursMessage(
+  lastNotifiedAtIso: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!lastNotifiedAtIso) return true;
+  const last = new Date(lastNotifiedAtIso);
+  if (Number.isNaN(last.getTime())) return true;
+  const elapsedMs = now.getTime() - last.getTime();
+  const cooldownMs = AFTER_HOURS_NOTIFICATION_COOLDOWN_HOURS * 60 * 60 * 1000;
+  return elapsedMs >= cooldownMs;
 }
 
 /**
@@ -177,6 +413,13 @@ export function normalizeHumanizationConfig(
         : SPLIT_ENABLED_DEFAULT,
     split_threshold_chars: clampSplitThresholdChars(obj.split_threshold_chars),
     split_delay_seconds: clampSplitDelaySeconds(obj.split_delay_seconds),
+    business_hours_enabled:
+      typeof obj.business_hours_enabled === "boolean"
+        ? obj.business_hours_enabled
+        : BUSINESS_HOURS_ENABLED_DEFAULT,
+    business_hours_timezone: sanitizeTimezone(obj.business_hours_timezone),
+    business_hours: sanitizeBusinessHours(obj.business_hours),
+    after_hours_message: sanitizeAfterHoursMessage(obj.after_hours_message),
   };
 }
 

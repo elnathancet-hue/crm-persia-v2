@@ -12,9 +12,11 @@ import {
   clampRagTopK,
   isAutoPauseExpired,
   isKnownModel,
+  isWithinBusinessHours,
   matchesPauseKeyword,
   matchesResumeKeyword,
   normalizeHumanizationConfig,
+  shouldSendAfterHoursMessage,
   shouldTriggerSummarization,
   toOpenAITool,
   type DebounceFlushBatch,
@@ -229,6 +231,78 @@ export async function tryEnqueueForNativeAgent(
           conversationId: resolved.crm.crmConversationId,
         },
       };
+    }
+
+    // PR-AI-AGENT-HUMAN-C: horario comercial. Roda DEPOIS de pause/resume
+    // (cliente pode pausar mesmo fora do horario) e ANTES de enqueue
+    // (debounce nao deve disparar IA fora-do-horario).
+    //
+    // Se fora-do-horario:
+    //   - Envia after_hours_message (1x por cooldown de 6h)
+    //   - Atualiza after_hours_notified_at = now()
+    //   - Retorna sem enqueue
+    // Se dentro-do-horario:
+    //   - Limpa after_hours_notified_at se setado (reseta dedup pra
+    //     proxima saida do horario gerar nova msg)
+    //   - Segue fluxo normal
+    if (humanization.business_hours_enabled) {
+      const now = new Date();
+      const withinHours = isWithinBusinessHours(
+        now,
+        humanization.business_hours,
+        humanization.business_hours_timezone,
+      );
+      const lastNotifiedAt =
+        (resolved.agentConversation as AgentConversation & {
+          after_hours_notified_at?: string | null;
+        }).after_hours_notified_at ?? null;
+
+      if (!withinHours) {
+        if (shouldSendAfterHoursMessage(lastNotifiedAt, now)) {
+          if (params.provider) {
+            try {
+              await sendAssistantReply({
+                provider: params.provider,
+                phone: params.msg.phone,
+                text: humanization.after_hours_message,
+                humanization,
+                orgId: params.orgId,
+                conversationId: resolved.crm.crmConversationId,
+              });
+            } catch (err: unknown) {
+              logError("after_hours_message_send_failed", {
+                organization_id: params.orgId,
+                request_id: params.requestId ?? null,
+                conversation_id: resolved.crm.crmConversationId,
+                error: errorMessage(err),
+              });
+            }
+          }
+          await db
+            .from("agent_conversations")
+            .update({ after_hours_notified_at: now.toISOString() })
+            .eq("id", resolved.agentConversation.id);
+        }
+        return {
+          handled: true,
+          response: {
+            ok: true,
+            skipped: "after_hours",
+            handledBy: "ai_native",
+            leadId: resolved.crm.leadId,
+            conversationId: resolved.crm.crmConversationId,
+          },
+        };
+      }
+
+      // Dentro do horario — reseta o flag de dedup pra que a proxima
+      // saida do horario gere nova mensagem (e nao seja absorvida).
+      if (lastNotifiedAt) {
+        await db
+          .from("agent_conversations")
+          .update({ after_hours_notified_at: null })
+          .eq("id", resolved.agentConversation.id);
+      }
     }
 
     await enqueueDebounced({
