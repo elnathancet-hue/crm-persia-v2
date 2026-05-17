@@ -13,6 +13,7 @@ export type {
   DuplicateMatch,
   LeadStats,
   LeadDealItem,
+  LeadAppointmentItem,
   DrawerStageRef,
   LeadCustomFieldDef,
   LeadCustomFieldEntry,

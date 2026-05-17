@@ -30,6 +30,10 @@ import {
   Tag as TagIcon,
   Plus,
   X,
+  // PR-AGENDA-DRAWER (mai/2026): tab Agenda
+  Calendar,
+  Clock,
+  Video,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { TagBadge } from "@persia/tags-ui";
@@ -82,6 +86,7 @@ import {
 // PR-U2: actions vem via useLeadsActions() (DI). Hooks de realtime
 // foram extraidos pro mesmo pacote.
 import type {
+  LeadAppointmentItem,
   LeadCustomFieldDef,
   LeadCustomFieldEntry,
   LeadDealItem,
@@ -785,10 +790,10 @@ export function LeadInfoDrawer({
         <LeadStatsCards stats={stats} loading={statsLoading} />
 
         <Tabs defaultValue="dados" className="flex-1 flex flex-col min-h-0">
-          {/* PR-L2: 4 tabs (era 3). Tab "Negócios" lista deals do lead
-              — modelo conceitual "1 lead -> N negocios" (briefing user).
-              Mobile: 2 cols (2 linhas); Desktop: 4 cols (1 linha). */}
-          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-4">
+          {/* PR-AGENDA-DRAWER (mai/2026): 5 tabs (era 4). Tab "Agenda"
+              lista appointments do lead — fecha loop CRM<->Agenda.
+              Mobile: 2 cols (3 linhas); Desktop: 5 cols (1 linha). */}
+          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="dados">
               <Contact className="size-4" />
               Dados
@@ -797,6 +802,11 @@ export function LeadInfoDrawer({
             <TabsTrigger value="negocios">
               <Briefcase className="size-4" />
               Negócios
+            </TabsTrigger>
+            {/* PR-AGENDA-DRAWER (mai/2026): tab Agenda */}
+            <TabsTrigger value="agenda">
+              <Calendar className="size-4" />
+              Agenda
             </TabsTrigger>
             {/* PR-E: tab "Produtos" virou "Campos" — renderizacao
                 dinamica dos custom_fields da org. Quando user
@@ -1106,6 +1116,10 @@ export function LeadInfoDrawer({
 
             <TabsContent value="negocios" className="mt-0">
               <LeadNegociosTab leadId={lead.id} open={open} />
+            </TabsContent>
+
+            <TabsContent value="agenda" className="mt-0">
+              <LeadAgendaTab leadId={lead.id} open={open} />
             </TabsContent>
 
             <TabsContent value="campos" className="mt-0">
@@ -2206,4 +2220,254 @@ function presenceInitials(fullName: string): string {
   const parts = trimmed.split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// ============================================================================
+// PR-AGENDA-DRAWER (mai/2026): LeadAgendaTab — appointments do lead
+// ----------------------------------------------------------------------------
+// Fecha o loop visual CRM<->Agenda. Antes, agente precisava sair do
+// drawer e ir pra /agenda pra ver historico de agendamentos do lead.
+// Agora veem inline com cards proximos vs passados separados.
+//
+// UX:
+//   - Header: count + CTA "Ver todos na agenda" (deep-link futuro)
+//   - Lista: cards agrupados Próximos (futuros + awaiting_confirmation)
+//     vs Histórico (passados + cancelled/completed/no_show/rescheduled)
+//   - Cada card: status badge + título + data/hora + canal (location/meeting)
+//   - Empty state: hint que pode criar via "Agenda > Novo"
+//
+// NAO inclui criar/editar appointment aqui — esses fluxos vivem em
+// /agenda. Drawer e read-only-ish (futuro: botao "Reagendar" inline).
+// ============================================================================
+
+function LeadAgendaTab({
+  leadId,
+  open,
+}: {
+  leadId: string;
+  open: boolean;
+}) {
+  const actions = useLeadsActions();
+  const [items, setItems] = React.useState<LeadAppointmentItem[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    if (!actions.getLeadAppointments) return;
+    let cancelled = false;
+    setLoading(true);
+    actions
+      .getLeadAppointments(leadId)
+      .then((res) => {
+        if (!cancelled) setItems(res);
+      })
+      .catch((err) => {
+        console.error("[LeadAgendaTab] failed:", err);
+        if (!cancelled) setItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, leadId, actions]);
+
+  if (!actions.getLeadAppointments) {
+    return (
+      <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+        Agenda indisponível neste app.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-2 py-2">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-20 w-full bg-muted rounded-lg animate-pulse"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+        <Calendar className="size-6 mx-auto mb-2 text-muted-foreground/60" />
+        <p className="font-medium text-foreground">
+          Nenhum agendamento ainda
+        </p>
+        <p className="mt-1 text-xs">
+          Crie um agendamento via menu Agenda &gt; Novo. Aparece aqui
+          automaticamente quando vincular ao lead.
+        </p>
+      </div>
+    );
+  }
+
+  // Agrupa próximos (futuros + awaiting_confirmation) vs histórico.
+  // Server ja retorna desc por start_at; reordenamos próximos pra asc
+  // (mais proximo primeiro) e historico fica desc (mais recente primeiro).
+  const now = Date.now();
+  const upcoming = items
+    .filter(
+      (a) =>
+        (a.status === "confirmed" || a.status === "awaiting_confirmation") &&
+        new Date(a.start_at).getTime() >= now,
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
+    );
+  const past = items.filter((a) => !upcoming.includes(a));
+
+  return (
+    <div className="space-y-4">
+      {/* Header com contador */}
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/40">
+        <div className="text-xs text-muted-foreground">
+          <strong className="text-foreground tabular-nums">
+            {upcoming.length}
+          </strong>{" "}
+          próximo{upcoming.length === 1 ? "" : "s"}
+          {past.length > 0 && (
+            <>
+              {" · "}
+              <span className="tabular-nums">
+                {past.length} no histórico
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {upcoming.length > 0 && (
+        <section className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Próximos
+          </h4>
+          <div className="space-y-2">
+            {upcoming.map((appt) => (
+              <AppointmentCardRow key={appt.id} appointment={appt} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {past.length > 0 && (
+        <section className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Histórico
+          </h4>
+          <div className="space-y-2">
+            {past.map((appt) => (
+              <AppointmentCardRow key={appt.id} appointment={appt} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// AppointmentCardRow — card compacto de 1 appointment
+// ============================================================================
+
+const STATUS_LABEL: Record<string, string> = {
+  awaiting_confirmation: "Aguardando",
+  confirmed: "Confirmado",
+  completed: "Realizado",
+  cancelled: "Cancelado",
+  no_show: "Faltou",
+  rescheduled: "Reagendado",
+};
+
+const STATUS_TONE: Record<string, string> = {
+  awaiting_confirmation: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  confirmed: "bg-primary/10 text-primary",
+  completed: "bg-success/10 text-success",
+  cancelled: "bg-muted text-muted-foreground line-through",
+  no_show: "bg-destructive/10 text-destructive",
+  rescheduled: "bg-muted text-muted-foreground",
+};
+
+function AppointmentCardRow({
+  appointment,
+}: {
+  appointment: LeadAppointmentItem;
+}) {
+  const startDate = new Date(appointment.start_at);
+  const endDate = new Date(appointment.end_at);
+
+  // Format pt-BR — Intl direto pra evitar import shared agenda (drawer
+  // nao pode depender de @persia/agenda-ui senao vira ciclo).
+  const dateLabel = startDate.toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    timeZone: appointment.timezone,
+  });
+  const timeLabel = `${startDate.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: appointment.timezone,
+  })} – ${endDate.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: appointment.timezone,
+  })}`;
+
+  const statusLabel =
+    STATUS_LABEL[appointment.status] ?? appointment.status;
+  const statusTone =
+    STATUS_TONE[appointment.status] ??
+    "bg-muted text-muted-foreground";
+
+  const isOnline = Boolean(appointment.meeting_url) || appointment.channel === "online";
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 hover:border-primary/40 transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusTone}`}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-foreground truncate">
+            {appointment.title}
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="size-3" />
+              <span className="capitalize">{dateLabel}</span>
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Clock className="size-3" />
+              {timeLabel}
+            </span>
+            {isOnline && (
+              <span className="inline-flex items-center gap-1 text-primary">
+                <Video className="size-3" />
+                Online
+              </span>
+            )}
+            {appointment.location && !isOnline && (
+              <span className="inline-flex items-center gap-1 max-w-[60%]">
+                <MapPin className="size-3" />
+                <span className="truncate">{appointment.location}</span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
