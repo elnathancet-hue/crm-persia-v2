@@ -163,7 +163,7 @@ export function ToolsTab({
           <AlertDialogHeader>
             <AlertDialogTitle>Remover ferramenta?</AlertDialogTitle>
             <AlertDialogDescription>
-              O agente perde acesso a essa decisão em todas as etapas. As permissões por etapa também sao removidas.
+              O agente perde acesso a essa decisão em todas as etapas. As permissões por etapa também são removidas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

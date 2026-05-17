@@ -110,7 +110,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm">Agente nativo desativado</p>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Você pode configurar os agentes agora, mas eles so respondem mensagens quando o recurso e ativado para a organização.
+                Você pode configurar os agentes agora, mas eles só respondem mensagens quando o recurso é ativado pra organização.
               </p>
             </div>
             <Button
@@ -128,7 +128,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           <CardContent className="p-3 flex items-center gap-3">
             <div className="size-2 rounded-full bg-success" aria-hidden />
             <p className="text-sm flex-1">
-              Agente nativo ativo. Conversas novas seguirao a configuração do agente com status <strong>Ativo</strong>.
+              Agente nativo ativo. Conversas novas seguem a configuração do agente com status <strong>Ativo</strong>.
             </p>
             <Button size="sm" variant="ghost" onClick={handleToggleFlag} disabled={isPending}>
               {isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Desativar"}
@@ -170,7 +170,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover agente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação remove o agente, suas etapas, ferramentas e histórico. Conversas ja processadas não sao excluidas.
+              Esta ação remove o agente, suas etapas, ferramentas e histórico. Conversas já processadas não são excluídas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

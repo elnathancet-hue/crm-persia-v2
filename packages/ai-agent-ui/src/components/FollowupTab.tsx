@@ -452,7 +452,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
               {deleteTarget ? (
                 <>
                   O follow-up <strong>{deleteTarget.name}</strong> não será mais
-                  disparado. Conversas que ja receberam o lembrete não são
+                  disparado. Conversas que já receberam o lembrete não são
                   afetadas. Esta ação não pode ser desfeita.
                 </>
               ) : null}

@@ -149,10 +149,10 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <Label htmlFor="rag_enabled" className="cursor-pointer">
-                    Consultar base de conhecimento
+                    Consultar documentos
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Injeta FAQ e documentos relevantes antes de cada resposta nesta etapa. Configure o conteudo nas abas FAQ e Documentos.
+                    O agente lê seus documentos e FAQs relevantes antes de responder nesta etapa. Configure o conteúdo nas abas FAQ e Documentos.
                   </p>
                 </div>
                 <Switch
@@ -164,7 +164,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
               {ragEnabled ? (
                 <div className="space-y-1.5 pl-0">
                   <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="rag_top_k">Trechos recuperados</Label>
+                    <Label htmlFor="rag_top_k">Quantidade de trechos</Label>
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {ragTopK}
                     </span>
@@ -181,11 +181,11 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
                   />
                   <div className="flex justify-between text-[10px] text-muted-foreground/70 tabular-nums">
                     <span>{RAG_TOP_K_MIN}</span>
-                    <span>Padrao {RAG_TOP_K_DEFAULT}</span>
+                    <span>Padrão {RAG_TOP_K_DEFAULT}</span>
                     <span>{RAG_TOP_K_MAX}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Quantos trechos mais relevantes injetar no prompt. Valores altos adicionam contexto, mas custam mais tokens.
+                    Quantos trechos da base o agente vê a cada resposta. Mais trechos = mais contexto.
                   </p>
                 </div>
               ) : null}
