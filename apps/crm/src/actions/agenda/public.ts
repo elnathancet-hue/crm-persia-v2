@@ -21,6 +21,7 @@ import {
 } from "@/lib/agenda/public-rate-limit";
 import { phoneBR, emailOptional } from "@persia/shared/validation";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
+import { onNewLead } from "@/lib/flows/triggers";
 
 // Helper: admin client com tipagem solta pra acessar tabelas que ainda
 // nao estao no @/types/database (regeneracao desde migration 031 pendente).
@@ -267,6 +268,7 @@ export async function submitPublicBooking(
     .maybeSingle();
 
   let leadId: string;
+  let isNewLead = false;
   if (existingLead) {
     leadId = existingLead.id as string;
     const patch: Record<string, unknown> = {};
@@ -302,6 +304,7 @@ export async function submitPublicBooking(
     if (leadErr || !newLead)
       throw new Error(`Erro criando lead: ${leadErr?.message}`);
     leadId = newLead.id as string;
+    isNewLead = true;
   }
 
   // Cria appointment via shared mutation (ja faz conflict check + history)
@@ -353,6 +356,19 @@ export async function submitPublicBooking(
   // entrava no DB mas user nao via ate F5 manual. Helper tolerante
   // a falha — booking publico nunca falha por erro de revalidate.
   await revalidateLeadCaches(leadId);
+
+  // PR-AGENDA-INT (mai/2026): lead criado via booking publico dispara
+  // flows de `new_lead` (paridade com incoming-pipeline UAZAPI). Antes
+  // do fix, leads que entravam via booking nao acionavam automacao
+  // nenhuma — agente nao era notificado, AI Agent nao processava
+  // boas-vindas, regras de stage automaticas nao rodavam. So dispara
+  // pra leads recem-criados (existingLead ja foi processado uma vez).
+  // Fire-and-forget: booking nao falha por erro no flow.
+  if (isNewLead) {
+    void onNewLead(page.organization_id, leadId).catch((err) => {
+      console.error("[public.submit] onNewLead failed:", err);
+    });
+  }
 
   return {
     appointment_id: created.id,
