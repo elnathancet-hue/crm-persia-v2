@@ -2,34 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  Loader2,
-  Plus,
-  Sparkles,
-  Trash2,
-} from "lucide-react";
+import { AlertTriangle, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { AgentConfig, AgentTemplateSlug } from "@persia/shared/ai-agent";
-import {
-  AGENT_TEMPLATES,
-  DEFAULT_MODEL,
-  getAgentTemplate,
-  isAgentTemplateSlug,
-} from "@persia/shared/ai-agent";
+import type { AgentConfig } from "@persia/shared/ai-agent";
+import { getAgentTemplate } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
-import { Input } from "@persia/ui/input";
-import { Label } from "@persia/ui/label";
-import { Textarea } from "@persia/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@persia/ui/dialog";
-import { DialogHero } from "@persia/ui/dialog-hero";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,30 +18,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@persia/ui/select";
 import { AgentStatusBadge } from "./AgentStatusBadge";
+import {
+  AgentCreationWizard,
+  type AgentCreationWizardSubmit,
+} from "./AgentCreationWizard";
 import { useAgentActions } from "../context";
 
-const MODEL_LABEL: Record<string, string> = {
-  "gpt-5-mini": "Padrão (recomendado)",
-  "gpt-4o-mini": "Econômico",
-  "gpt-4o": "Avançado",
-  "gpt-5": "Premium",
-};
-
-const STARTER_PROMPT = `Você é um atendente virtual profissional e cordial.
-- Apresente-se de forma breve.
-- Entenda o que o cliente precisa antes de responder.
-- Use linguagem objetiva, com no máximo 3 frases por mensagem.
-- IMPORTANTE: NUNCA invente informações sobre preços, recursos, prazos, descontos ou políticas que não estejam explicitamente nas instruções da etapa atual ou na base de conhecimento. Se o cliente perguntar algo que você não sabe, responda "Vou transferir você para um especialista que pode confirmar essa informação" e peça a transferência.
-- IMPORTANTE: NUNCA assuma o ramo de negócio (ex: não diga "internet, TV, celular", "consultoria", "infoproduto" etc) sem que isso esteja explicitamente nas instruções da etapa ou tenha sido informado pelo cliente. Se não souber a vertical, pergunte de forma genérica: "Em que posso ajudar hoje?".
-- Peça transferência para um humano se não souber responder.`;
+// STARTER_PROMPT inline foi movido pro shared (`agent-templates.ts`) —
+// quando templateSlug = "blank", o backend usa o system_prompt do
+// template "blank" que ja contem as regras anti-alucinacao.
 
 interface Props {
   initialAgents: AgentConfig[];
@@ -77,16 +41,6 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
   const [deleteTarget, setDeleteTarget] = React.useState<AgentConfig | null>(null);
   const [enabled, setEnabled] = React.useState(nativeEnabled);
   const [isPending, startTransition] = React.useTransition();
-  const [templateSlug, setTemplateSlug] = React.useState<AgentTemplateSlug>("blank");
-
-  // Reset template selection when modal closes pra começar limpo na próxima
-  // criação. Evita confusão se usuário abrir, mudar template, fechar e
-  // reabrir esperando o default.
-  React.useEffect(() => {
-    if (!createOpen) setTemplateSlug("blank");
-  }, [createOpen]);
-
-  const selectedTemplate = getAgentTemplate(templateSlug);
 
   const handleToggleFlag = () => {
     startTransition(async () => {
@@ -102,30 +56,20 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
     });
   };
 
-  const handleCreate = async (formData: FormData) => {
-    const name = String(formData.get("name") || "").trim();
-    const description = String(formData.get("description") || "").trim();
-    const model = String(formData.get("model") || DEFAULT_MODEL);
-    const rawTemplate = String(formData.get("template") || "blank");
-    const template: AgentTemplateSlug = isAgentTemplateSlug(rawTemplate)
-      ? rawTemplate
-      : "blank";
-    if (!name) {
-      toast.error("Nome e obrigatório");
-      return;
-    }
-    const tpl = getAgentTemplate(template);
+  const handleCreate = (input: AgentCreationWizardSubmit) => {
+    const tpl = getAgentTemplate(input.templateSlug);
     startTransition(async () => {
       try {
         const created = await createAgent({
-          name,
-          description: description || tpl.short_description,
+          name: input.name,
+          description: input.description || tpl.short_description,
           scope_type: "global",
-          model,
-          // Usa o prompt do template selecionado (blank cai no STARTER_PROMPT
-          // generico). Server materializa stages se template != blank.
-          system_prompt: tpl.system_prompt || STARTER_PROMPT,
-          template_slug: template,
+          model: input.model,
+          // system_prompt vem do template — "blank" tem prompt base
+          // generico com regras anti-alucinacao; outros templates tem
+          // contexto adicional.
+          system_prompt: tpl.system_prompt,
+          template_slug: input.templateSlug,
         });
         setAgents((prev) => [created, ...prev]);
         setCreateOpen(false);
@@ -135,7 +79,9 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
             : "Agente criado",
         );
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Falha ao criar agente");
+        toast.error(
+          err instanceof Error ? err.message : "Falha ao criar agente",
+        );
       }
     });
   };
@@ -212,127 +158,12 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
         </div>
       )}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-          <DialogHeader className="border-b border-border bg-card p-5">
-            <DialogTitle className="sr-only">Novo agente</DialogTitle>
-            <DialogHero
-              icon={<Sparkles className="size-5" />}
-              title="Novo agente"
-              tagline="Você poderá refinar prompt e etapas depois"
-            />
-          </DialogHeader>
-          <form
-            action={handleCreate}
-            className="flex-1 space-y-4 overflow-y-auto p-5"
-            id="create-agent-form"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="template">Começar a partir de</Label>
-              {/* Hidden input pra carregar valor no FormData (Select do Radix
-                  não preenche FormData nativo). */}
-              <input type="hidden" name="template" value={templateSlug} />
-              <Select
-                value={templateSlug}
-                onValueChange={(v) =>
-                  isAgentTemplateSlug(v) && setTemplateSlug(v)
-                }
-              >
-                <SelectTrigger id="template" className="w-full">
-                  <SelectValue>{selectedTemplate.label}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {AGENT_TEMPLATES.map((tpl) => (
-                    <SelectItem key={tpl.slug} value={tpl.slug}>
-                      {tpl.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1.5">
-                <p className="text-muted-foreground">
-                  {selectedTemplate.long_description}
-                </p>
-                {selectedTemplate.stages.length > 0 ? (
-                  <p className="font-medium text-foreground/90">
-                    {selectedTemplate.stages.length === 1
-                      ? "1 etapa pré-configurada:"
-                      : `${selectedTemplate.stages.length} etapas pré-configuradas:`}
-                  </p>
-                ) : null}
-                {selectedTemplate.stages.length > 0 ? (
-                  <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground">
-                    {selectedTemplate.stages.map((stage, i) => (
-                      <li key={i}>{stage.situation}</li>
-                    ))}
-                  </ol>
-                ) : null}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome</Label>
-              <Input
-                id="name"
-                name="name"
-                placeholder="Ex: Recepção"
-                required
-                minLength={2}
-                maxLength={80}
-              />
-              <p className="text-xs text-muted-foreground">
-                Como você identifica esse agente. Mínimo 2 caracteres.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Descrição (opcional)</Label>
-              <Textarea
-                id="description"
-                name="description"
-                placeholder="Qual o papel desse agente?"
-                rows={3}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="model">Modelo de IA</Label>
-              <Select name="model" defaultValue={DEFAULT_MODEL}>
-                <SelectTrigger id="model" className="w-full">
-                  <SelectValue>{MODEL_LABEL[DEFAULT_MODEL] ?? DEFAULT_MODEL}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gpt-5-mini">Padrão (recomendado)</SelectItem>
-                  <SelectItem value="gpt-4o-mini">Econômico (mais rápido e barato)</SelectItem>
-                  <SelectItem value="gpt-4o">Avançado</SelectItem>
-                  <SelectItem value="gpt-5">Premium (melhor raciocínio, mais caro)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Recomendado pra começar. Você pode trocar depois nas Regras do agente.
-              </p>
-            </div>
-          </form>
-          {/* PR-CRMUI: footer com mais respiro (px-6 py-4 + gap-3 +
-              min-w nos botoes). Padrao consistente com SegmentsList. */}
-          <DialogFooter className="mx-0 mb-0 border-t border-border bg-card px-6 py-4 flex-row justify-end gap-3">
-            <Button
-              variant="ghost"
-              onClick={() => setCreateOpen(false)}
-              disabled={isPending}
-              className="min-w-24"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              form="create-agent-form"
-              disabled={isPending}
-              className="min-w-24"
-            >
-              {isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              Criar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AgentCreationWizard
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        isPending={isPending}
+        onSubmit={handleCreate}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
