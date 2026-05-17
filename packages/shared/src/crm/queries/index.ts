@@ -55,3 +55,11 @@ export {
   fetchLeadCustomFields,
   upsertLeadCustomFieldValue,
 } from "./custom-fields";
+
+// PR-AGENDA-LAST-MSG (mai/2026): query da ultima mensagem do lead.
+// Usado pelo AppointmentDrawer pra mostrar contexto inline.
+export type {
+  LeadLastMessagePreview,
+  LeadMessageDirection,
+} from "./messages";
+export { findLastMessageForLead, deriveDirection } from "./messages";

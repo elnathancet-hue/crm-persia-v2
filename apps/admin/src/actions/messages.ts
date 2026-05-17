@@ -3,6 +3,10 @@
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
 import {
+  findLastMessageForLead as findLastMessageForLeadShared,
+  type LeadLastMessagePreview,
+} from "@persia/shared/crm";
+import {
   CHAT_MEDIA_BUCKET,
   createChatMediaPath,
   ensureChatMediaBucket,
@@ -427,4 +431,16 @@ export async function sendMediaViaWhatsApp(
   await auditLog({ userId, orgId, action: "send_media", entityType: "conversation", entityId: conversationId, metadata: { type: file.type } });
   const signedMediaUrl = await resolveChatMediaUrl(admin, file.mediaUrl);
   return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent" } };
+}
+
+/**
+ * PR-AGENDA-LAST-MSG (mai/2026): ultima mensagem do lead pro
+ * AppointmentDrawer (admin). Espelho da action CRM com
+ * requireSuperadminForOrg() — service-role bypassa RLS.
+ */
+export async function getLeadLastMessage(
+  leadId: string,
+): Promise<LeadLastMessagePreview | null> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  return findLastMessageForLeadShared({ db: admin, orgId }, leadId);
 }

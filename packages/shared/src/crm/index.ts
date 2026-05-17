@@ -65,6 +65,9 @@ export type {
   // PR-K-CENTRIC (mai/2026)
   ListLeadsKanbanOptions,
   LeadStageContext,
+  // PR-AGENDA-LAST-MSG (mai/2026)
+  LeadLastMessagePreview,
+  LeadMessageDirection,
 } from "./queries";
 
 export {
@@ -90,6 +93,9 @@ export {
   fetchLeadDealsList,
   fetchLeadCustomFields,
   upsertLeadCustomFieldValue,
+  // PR-AGENDA-LAST-MSG (mai/2026)
+  findLastMessageForLead,
+  deriveDirection,
 } from "./queries";
 
 // PR-CRMOPS3: helper que resolve regras de segmento em IDs de leads.
