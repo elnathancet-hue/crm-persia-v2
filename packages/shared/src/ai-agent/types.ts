@@ -11,6 +11,7 @@
 //   - apps/crm/src/features/ai-agent/*     (components — Claude)
 
 import type { HandoffNotificationTargetType } from "./handoff";
+import type { HumanizationConfig } from "./humanization";
 
 // ============================================================================
 // Native handler registry (enum) — MUST match DB check constraint in
@@ -120,6 +121,12 @@ export interface AgentConfig {
   // de "calendario nao configurado". UI permite escolher entre
   // conexoes da org no editor do agente.
   calendar_connection_id?: string | null;
+  // PR-AI-AGENT-HUMAN-A: humanizacao da IA pra parecer SDR. Migration
+  // 041 adiciona JSONB com defaults. Optional aqui pra tolerar rows
+  // antigos durante rollout — runtime sempre passa pelo
+  // normalizeHumanizationConfig (humanization.ts) que aplica defaults.
+  // JSONB cresce com PRs B/C/D (split, business hours, etc).
+  humanization_config?: HumanizationConfig;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -345,6 +352,10 @@ export interface CreateAgentInput {
   // PR7.3: opcional. Server valida que connection_id pertence a mesma
   // org e esta active.
   calendar_connection_id?: string | null;
+  // PR-AI-AGENT-HUMAN-A: opcional. Runtime aplica defaults via
+  // normalizeHumanizationConfig (humanization.ts). Server faz merge
+  // shallow com o config existente.
+  humanization_config?: Partial<HumanizationConfig>;
   // PR onboarding: opcional. Quando informado e nao-blank, server cria
   // stages pre-definidas (ver agent-templates.ts) junto com o config.
   // O system_prompt continua vindo do client (cliente preenche com o

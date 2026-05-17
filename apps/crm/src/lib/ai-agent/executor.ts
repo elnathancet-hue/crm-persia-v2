@@ -10,7 +10,11 @@ import {
   RAG_DISTANCE_CEILING,
   calculateCostUsdCents,
   clampRagTopK,
+  isAutoPauseExpired,
   isKnownModel,
+  matchesPauseKeyword,
+  matchesResumeKeyword,
+  normalizeHumanizationConfig,
   shouldTriggerSummarization,
   toOpenAITool,
   type DebounceFlushBatch,
@@ -169,12 +173,56 @@ export async function tryEnqueueForNativeAgent(
       config,
     });
 
-    if ((resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }).human_handoff_at) {
+    // PR-AI-AGENT-HUMAN-A: pause/resume keyword + auto-pause expiration.
+    // Ordem importa:
+    //   1. Se conversa esta pausada, checar resume keyword OU expiracao
+    //      antes de qualquer coisa. Se reativa, segue fluxo normal (cai
+    //      pra checagem de pause keyword embaixo — improvavel mas defensivo).
+    //   2. Senao, checar se essa msg e ela mesma uma pause keyword:
+    //      seta human_handoff_at e returna handled (nao enqueue).
+    const humanization = normalizeHumanizationConfig(
+      (resolved.config as AgentConfig & { humanization_config?: unknown }).humanization_config,
+    );
+    const handoffAt = (
+      resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }
+    ).human_handoff_at ?? null;
+    const inboundText = params.msg.text ?? "";
+
+    if (handoffAt) {
+      const expired = isAutoPauseExpired(handoffAt, humanization);
+      const isResumeWord = matchesResumeKeyword(inboundText, humanization);
+      if (expired || isResumeWord) {
+        // Limpa pausa e continua processamento normal.
+        await db
+          .from("agent_conversations")
+          .update({ human_handoff_at: null })
+          .eq("id", resolved.agentConversation.id);
+        (resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }).human_handoff_at = null;
+      } else {
+        // Pausa ativa — nao responde. Resposta minimal sem enqueue.
+        return {
+          handled: true,
+          response: {
+            ok: true,
+            skipped: isResumeWord ? "native_agent_handoff" : "paused_active",
+            handledBy: "ai_native",
+            leadId: resolved.crm.leadId,
+            conversationId: resolved.crm.crmConversationId,
+          },
+        };
+      }
+    }
+
+    if (matchesPauseKeyword(inboundText, humanization)) {
+      await db
+        .from("agent_conversations")
+        .update({ human_handoff_at: new Date().toISOString() })
+        .eq("id", resolved.agentConversation.id);
       return {
         handled: true,
         response: {
           ok: true,
-          skipped: "native_agent_handoff",
+          skipped: "paused_by_keyword",
           handledBy: "ai_native",
           leadId: resolved.crm.leadId,
           conversationId: resolved.crm.crmConversationId,
@@ -231,10 +279,42 @@ export async function tryNativeAgent(params: TryNativeAgentParams): Promise<Nati
       config,
     });
 
-    if ((resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }).human_handoff_at) {
+    // PR-AI-AGENT-HUMAN-A: paridade com tryEnqueueForNativeAgent — mesma
+    // logica de pause/resume keyword + auto-pause expiration. Pouco usado
+    // em prod (so testes), mas mantemos sincronizado pra evitar drift.
+    const humanization = normalizeHumanizationConfig(
+      (resolved.config as AgentConfig & { humanization_config?: unknown }).humanization_config,
+    );
+    const handoffAt = (
+      resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }
+    ).human_handoff_at ?? null;
+    const inboundText = params.msg.text ?? "";
+
+    if (handoffAt) {
+      const expired = isAutoPauseExpired(handoffAt, humanization);
+      const isResumeWord = matchesResumeKeyword(inboundText, humanization);
+      if (expired || isResumeWord) {
+        await db
+          .from("agent_conversations")
+          .update({ human_handoff_at: null })
+          .eq("id", resolved.agentConversation.id);
+        (resolved.agentConversation as AgentConversation & { human_handoff_at?: string | null }).human_handoff_at = null;
+      } else {
+        return {
+          handled: true,
+          response: { ok: true, skipped: "native_agent_handoff" },
+        };
+      }
+    }
+
+    if (matchesPauseKeyword(inboundText, humanization)) {
+      await db
+        .from("agent_conversations")
+        .update({ human_handoff_at: new Date().toISOString() })
+        .eq("id", resolved.agentConversation.id);
       return {
         handled: true,
-        response: { ok: true, skipped: "native_agent_handoff" },
+        response: { ok: true, skipped: "paused_by_keyword" },
       };
     }
 
