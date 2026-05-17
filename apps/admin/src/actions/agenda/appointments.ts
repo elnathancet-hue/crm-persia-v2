@@ -5,6 +5,7 @@ import { requireSuperadminForOrg } from "@/lib/auth";
 import {
   cancelAppointment as cancelShared,
   createAppointment as createShared,
+  findUpcomingAppointmentsByLeads as findUpcomingShared,
   getAppointment as getShared,
   listAppointments as listShared,
   rescheduleAppointment as rescheduleShared,
@@ -18,6 +19,7 @@ import {
   type AppointmentStatus,
   type CancelAppointmentInput,
   type CreateAppointmentInput,
+  type LeadUpcomingAppointment,
   type ListAppointmentsFilters,
   type RescheduleAppointmentInput,
   type UpdateAppointmentInput,
@@ -54,6 +56,19 @@ export async function getAppointmentById(
 ): Promise<Appointment | null> {
   const { admin, orgId } = await requireSuperadminForOrg();
   return getShared(qctx(admin, orgId), id);
+}
+
+/**
+ * PR-KANBAN-UPCOMING (mai/2026): espelho da action CRM —
+ * destacar leads no Kanban com appointment proximo.
+ */
+export async function getUpcomingAppointmentsForLeads(
+  leadIds: readonly string[],
+  windowHours: number = 48,
+): Promise<LeadUpcomingAppointment[]> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const hours = Math.max(1, Math.min(168, windowHours));
+  return findUpcomingShared(qctx(admin, orgId), leadIds, hours);
 }
 
 /**

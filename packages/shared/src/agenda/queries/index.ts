@@ -32,3 +32,9 @@ export {
   getBookingPage,
   getBookingPagePublicBySlug,
 } from "./booking-pages";
+
+// PR-KANBAN-UPCOMING (mai/2026): destaque visual no Kanban pra leads
+// com appointment proximo. Query separada da do Kanban pra nao
+// adicionar JOIN custoso na query principal.
+export type { LeadUpcomingAppointment } from "./upcoming-by-lead";
+export { findUpcomingAppointmentsByLeads } from "./upcoming-by-lead";

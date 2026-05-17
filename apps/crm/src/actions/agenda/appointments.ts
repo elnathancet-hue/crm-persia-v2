@@ -10,6 +10,7 @@ import {
 import {
   cancelAppointment as cancelShared,
   createAppointment as createShared,
+  findUpcomingAppointmentsByLeads as findUpcomingShared,
   getAppointment as getShared,
   listAppointments as listShared,
   rescheduleAppointment as rescheduleShared,
@@ -23,6 +24,7 @@ import {
   type AppointmentStatus,
   type CancelAppointmentInput,
   type CreateAppointmentInput,
+  type LeadUpcomingAppointment,
   type ListAppointmentsFilters,
   type RescheduleAppointmentInput,
   type UpdateAppointmentInput,
@@ -67,6 +69,23 @@ export async function getAppointments(
 export async function getAppointmentById(id: string): Promise<Appointment | null> {
   const { supabase, orgId } = await requireRole("agent");
   return getShared(buildQueryCtx(supabase, orgId), id);
+}
+
+/**
+ * PR-KANBAN-UPCOMING (mai/2026): batch query — pro Kanban destacar
+ * leads que tem appointment proximo. Janela default 48h; caller pode
+ * overrride. Cap defensivo de 1h e 168h (1 semana).
+ *
+ * Retorna array de `{ lead_id, appointment_id, start_at, title, status }`,
+ * 1 entry por lead (o mais proximo). UI agrupa por lead_id em Map.
+ */
+export async function getUpcomingAppointmentsForLeads(
+  leadIds: readonly string[],
+  windowHours: number = 48,
+): Promise<LeadUpcomingAppointment[]> {
+  const { supabase, orgId } = await requireRole("agent");
+  const hours = Math.max(1, Math.min(168, windowHours));
+  return findUpcomingShared(buildQueryCtx(supabase, orgId), leadIds, hours);
 }
 
 /**

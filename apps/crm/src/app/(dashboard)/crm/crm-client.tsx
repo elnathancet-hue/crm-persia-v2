@@ -16,6 +16,7 @@
 // PR-J: imports de Importar/Export removidos (Button, Upload,
 // ImportLeadsWizard, ImportTag, importLeads, getOrgTags). Acao de
 // importar moved-only pra tab Leads (LeadsList headerActions).
+import * as React from "react";
 import { useRouter } from "next/navigation";
 import { KanbanBoard } from "@persia/crm-ui";
 import type {
@@ -24,6 +25,7 @@ import type {
   Stage,
   TagRef,
 } from "@persia/shared/crm";
+import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
 import { useRole } from "@/lib/hooks/use-role";
 import {
   useCurrentUser,
@@ -49,6 +51,12 @@ interface Props {
   /** PR-PIPETOOLS: callback pra trocar de funil via dropdown da
    * toolbar. CrmShell sincroniza com URL (?pipeline={id}). */
   onPipelineChange?: (newPipelineId: string) => void;
+  /**
+   * PR-KANBAN-UPCOMING (mai/2026): array de proximos agendamentos
+   * (~48h) dos leads visiveis. Convertido em Map<leadId, ...> aqui
+   * e passado pro KanbanBoard renderizar chip.
+   */
+  upcomingAppointments?: LeadUpcomingAppointment[];
 }
 
 export function CrmClient({
@@ -60,6 +68,7 @@ export function CrmClient({
   assignees = [],
   pipelineId,
   onPipelineChange,
+  upcomingAppointments,
 }: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
@@ -98,6 +107,18 @@ export function CrmClient({
   // O ImportLeadsWizard continua acessivel via tab Leads (headerActions
   // do LeadsList em apps/crm/src/components/leads/lead-list.tsx).
 
+  // PR-KANBAN-UPCOMING (mai/2026): converte array vindo do server em
+  // Map<leadId, LeadUpcomingAppointment> pra lookup O(1) no Kanban.
+  // useMemo evita reconstruir o Map a cada render quando a referencia
+  // do array nao muda.
+  const upcomingMap = React.useMemo(() => {
+    const m = new Map<string, LeadUpcomingAppointment>();
+    for (const item of upcomingAppointments ?? []) {
+      m.set(item.lead_id, item);
+    }
+    return m;
+  }, [upcomingAppointments]);
+
   return (
     <KanbanBoard
       pipelines={pipelines}
@@ -123,6 +144,8 @@ export function CrmClient({
       onOpenLead={(leadId) => {
         router.push(`/crm?tab=leads&lead=${leadId}`);
       }}
+      // PR-KANBAN-UPCOMING (mai/2026): chip "Em Xh"/"Amanhã HH:MM" no card
+      upcomingAppointments={upcomingMap}
     />
   );
 }

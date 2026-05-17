@@ -11,6 +11,12 @@ import {
 import { getTagsWithCount } from "@/actions/tags";
 import { getSegments } from "@/actions/segments";
 import { listPipelines, listLeadsKanban } from "@persia/shared/crm";
+// PR-KANBAN-UPCOMING (mai/2026): map de proximos appointments pra
+// destacar cards no Kanban. Janela 48h.
+import {
+  findUpcomingAppointmentsByLeads,
+  type LeadUpcomingAppointment,
+} from "@persia/shared/agenda";
 import { PageTitle } from "@persia/ui/typography";
 import { CrmShell } from "./crm-shell";
 
@@ -189,6 +195,25 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
     })(),
   ]);
 
+  // PR-KANBAN-UPCOMING (mai/2026): batch query proximos appointments
+  // pros leads visiveis no Kanban (janela 48h). Defensive — falha
+  // nao quebra o Kanban inteiro.
+  let upcomingAppointments: LeadUpcomingAppointment[] = [];
+  try {
+    const leadIdsForKanban = (kanbanLeads as Array<{ id: string }>).map(
+      (l) => l.id,
+    );
+    if (leadIdsForKanban.length > 0) {
+      upcomingAppointments = await findUpcomingAppointmentsByLeads(
+        { db: supabase, orgId },
+        leadIdsForKanban,
+        48,
+      );
+    }
+  } catch (err) {
+    console.error("[/crm page] findUpcomingAppointmentsByLeads falhou:", err);
+  }
+
   // PR-L3: stats em batch pra Tab Leads enriquecida (Responsavel +
   // Negocios + Etapa + Atividades). Usa leadIds da lista paginada
   // ja carregada (max 20 ids -> 3 queries paralelas, sem N+1).
@@ -272,6 +297,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       activityCount={activitiesResult.total}
       segmentCount={(segmentsResult as unknown[]).length}
       tagCount={(tagsWithCountResult as unknown[]).length}
+      upcomingAppointments={upcomingAppointments}
     />
   );
 }
