@@ -49,6 +49,19 @@
 - [ ] N/A — esta PR não toca em `/crm` nem nas integrações listadas no README
 - [ ] Atualizei [apps/crm/src/app/(dashboard)/crm/README.md](../apps/crm/src/app/(dashboard)/crm/README.md) refletindo as mudanças (modelo de dados / server actions / integrações / pendências / histórico)
 
+## Documentação /agenda (módulo integrado ao CRM)
+
+> Tocou em `apps/crm/src/app/(dashboard)/agenda/`, em `apps/crm/src/app/agendar/`
+> (booking público), em alguma server action de `apps/crm/src/actions/agenda/`,
+> em `apps/crm/src/lib/agenda/`, em `packages/agenda-ui/`, em
+> `packages/shared/src/agenda/`, nas tools de AI Agent de agenda
+> (`apps/crm/src/lib/ai-agent/tools/{create,list,cancel,reschedule}-appointment.ts`)
+> ou em migrations 031+ que tocam `appointments`/`agenda_*`? Atualize o README
+> da Agenda **na mesma PR**.
+
+- [ ] N/A — esta PR não toca em `/agenda` nem nas integrações listadas no README
+- [ ] Atualizei [apps/crm/src/app/(dashboard)/agenda/README.md](../apps/crm/src/app/(dashboard)/agenda/README.md) refletindo as mudanças
+
 ## Rollout
 - [ ] Build CRM verde (`pnpm --filter @persia/crm build`)
 - [ ] Build admin verde se mexeu em `packages/*` (`pnpm --filter @persia/admin build`)
