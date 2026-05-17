@@ -8,12 +8,20 @@ import type {
   AgentConfig,
   AgentGuardrails,
   HandoffNotificationTargetType,
+  HumanizationConfig,
   UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import {
+  AUTO_PAUSE_MINUTES_DEFAULT,
+  AUTO_PAUSE_MINUTES_MAX,
   HANDOFF_PHONE_MAX_DIGITS,
   HANDOFF_PHONE_MIN_DIGITS,
   HANDOFF_TEMPLATE_MAX_LENGTH,
+  PAUSE_KEYWORDS_DEFAULT,
+  RESUME_KEYWORDS_DEFAULT,
+  clampAutoPauseMinutes,
+  normalizeHumanizationConfig,
+  sanitizeKeywordList,
 } from "@persia/shared/ai-agent";
 import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
 import { HandoffNotificationCard } from "./HandoffNotificationCard";
@@ -23,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
+import { Input } from "@persia/ui/input";
 import {
   Select,
   SelectContent,
@@ -61,6 +70,28 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     AgentCalendarConnectionPublic[] | null
   >(null);
 
+  // PR-AI-AGENT-HUMAN-A: humanization (pausa/ativa). UI usa textareas
+  // pra editar keywords como texto livre (1 por linha) — mais intuitivo
+  // que multi-input. Persistencia normaliza via sanitizeKeywordList.
+  const initialHumanization = React.useMemo(
+    () => normalizeHumanizationConfig(agent.humanization_config),
+    [agent.humanization_config],
+  );
+  const [humanizationEnabled, setHumanizationEnabled] = React.useState<boolean>(
+    initialHumanization.auto_pause_minutes > 0,
+  );
+  const [autoPauseMinutes, setAutoPauseMinutes] = React.useState<number>(
+    initialHumanization.auto_pause_minutes > 0
+      ? initialHumanization.auto_pause_minutes
+      : AUTO_PAUSE_MINUTES_DEFAULT,
+  );
+  const [pauseKeywordsText, setPauseKeywordsText] = React.useState<string>(
+    initialHumanization.pause_keywords.join("\n"),
+  );
+  const [resumeKeywordsText, setResumeKeywordsText] = React.useState<string>(
+    initialHumanization.resume_keywords.join("\n"),
+  );
+
   const { listCalendarConnections } = useAgentActions();
 
   // Load connections once. Re-runs only if agent.id changes (não quando
@@ -94,6 +125,13 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     setHandoffTargetAddress(agent.handoff_notification_target_address ?? "");
     setHandoffTemplate(agent.handoff_notification_template ?? "");
     setCalendarConnectionId(agent.calendar_connection_id ?? null);
+    const next = normalizeHumanizationConfig(agent.humanization_config);
+    setHumanizationEnabled(next.auto_pause_minutes > 0);
+    setAutoPauseMinutes(
+      next.auto_pause_minutes > 0 ? next.auto_pause_minutes : AUTO_PAUSE_MINUTES_DEFAULT,
+    );
+    setPauseKeywordsText(next.pause_keywords.join("\n"));
+    setResumeKeywordsText(next.resume_keywords.join("\n"));
   }, [
     agent.id,
     agent.system_prompt,
@@ -133,6 +171,26 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const calendarConnectionDirty =
     calendarConnectionId !== (agent.calendar_connection_id ?? null);
 
+  // PR-AI-AGENT-HUMAN-A: humanization dirty + sanitized comparados com
+  // a versao normalizada do servidor (que tambem passa pelo helper).
+  const nextPauseKeywords = sanitizeKeywordList(
+    pauseKeywordsText.split("\n"),
+    PAUSE_KEYWORDS_DEFAULT,
+  );
+  const nextResumeKeywords = sanitizeKeywordList(
+    resumeKeywordsText.split("\n"),
+    RESUME_KEYWORDS_DEFAULT,
+  );
+  const nextAutoPauseMinutes = humanizationEnabled
+    ? clampAutoPauseMinutes(autoPauseMinutes)
+    : 0;
+  const humanizationDirty =
+    nextAutoPauseMinutes !== initialHumanization.auto_pause_minutes ||
+    JSON.stringify(nextPauseKeywords) !==
+      JSON.stringify(initialHumanization.pause_keywords) ||
+    JSON.stringify(nextResumeKeywords) !==
+      JSON.stringify(initialHumanization.resume_keywords);
+
   // Client-side validation that mirrors the server (lets the Save button
   // disable proactively on bad data — server still re-validates).
   const handoffPhoneDigits = handoffTargetAddress.replace(/\D/g, "");
@@ -156,7 +214,8 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     modelDirty ||
     guardrailsDirty ||
     handoffDirty ||
-    calendarConnectionDirty;
+    calendarConnectionDirty ||
+    humanizationDirty;
 
   const handleSave = () => {
     const patch: UpdateAgentInput = {};
@@ -174,6 +233,13 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     }
     if (calendarConnectionDirty) {
       patch.calendar_connection_id = calendarConnectionId;
+    }
+    if (humanizationDirty) {
+      patch.humanization_config = {
+        pause_keywords: nextPauseKeywords,
+        resume_keywords: nextResumeKeywords,
+        auto_pause_minutes: nextAutoPauseMinutes,
+      };
     }
     onChange(patch, "Regras salvas");
   };
@@ -260,6 +326,100 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
                   setGuardrails((g) => ({ ...g, allow_human_handoff: Boolean(v) }))
                 }
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* PR-AI-AGENT-HUMAN-A: card de humanizacao (pausa/ativa). Toggle
+            do auto_pause_minutes serve de master switch: off = pausa
+            permanente quando humano responde ou keyword (so resume manual
+            reativa). on = pausa por X min e auto-reativa proxima msg do
+            lead. */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Pausa e ativação</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              O lead pode digitar palavras pra pausar ou reativar o agente. Se
+              um atendente humano responder pelo chat, o agente também pausa
+              automaticamente.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <Label htmlFor="auto_pause_enabled" className="cursor-pointer">
+                  Auto-pausa quando humano responde
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Quando um atendente responde, o agente fica em silêncio por
+                  um tempo. Próxima mensagem do lead reativa automaticamente.
+                </p>
+              </div>
+              <Switch
+                id="auto_pause_enabled"
+                checked={humanizationEnabled}
+                onCheckedChange={(v) => setHumanizationEnabled(Boolean(v))}
+              />
+            </div>
+
+            {humanizationEnabled ? (
+              <div className="space-y-1.5 pl-0">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="auto_pause_minutes">
+                    Tempo de pausa após humano responder
+                  </Label>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {autoPauseMinutes} min
+                  </span>
+                </div>
+                <Input
+                  id="auto_pause_minutes"
+                  type="number"
+                  min={1}
+                  max={AUTO_PAUSE_MINUTES_MAX}
+                  step={5}
+                  value={autoPauseMinutes}
+                  onChange={(e) =>
+                    setAutoPauseMinutes(clampAutoPauseMinutes(Number(e.target.value)))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tempo recomendado: 30 minutos. Máximo 1440 (24h).
+                </p>
+              </div>
+            ) : null}
+
+            <div className="space-y-1.5 pt-2 border-t">
+              <Label htmlFor="pause_keywords">Palavras pra pausar</Label>
+              <Textarea
+                id="pause_keywords"
+                value={pauseKeywordsText}
+                onChange={(e) => setPauseKeywordsText(e.target.value)}
+                placeholder={PAUSE_KEYWORDS_DEFAULT.join("\n")}
+                rows={3}
+                className="font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Uma palavra por linha. Quando o lead digitar uma delas (sem
+                outras palavras), o agente para de responder. Não diferencia
+                maiúscula/minúscula.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="resume_keywords">Palavras pra reativar</Label>
+              <Textarea
+                id="resume_keywords"
+                value={resumeKeywordsText}
+                onChange={(e) => setResumeKeywordsText(e.target.value)}
+                placeholder={RESUME_KEYWORDS_DEFAULT.join("\n")}
+                rows={3}
+                className="font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Uma palavra por linha. Faz o agente voltar a responder se
+                estiver pausado.
+              </p>
             </div>
           </CardContent>
         </Card>

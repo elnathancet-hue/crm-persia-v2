@@ -6,6 +6,7 @@ import {
   findLastMessageForLead as findLastMessageForLeadShared,
   type LeadLastMessagePreview,
 } from "@persia/shared/crm";
+import { normalizeHumanizationConfig } from "@persia/shared/ai-agent";
 import {
   CHAT_MEDIA_BUCKET,
   createChatMediaPath,
@@ -16,6 +17,7 @@ import {
   withSignedChatMediaUrls,
 } from "@/lib/chat-media";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { errorMessage, logError } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
 
 export type Message = {
@@ -34,6 +36,49 @@ export type Message = {
   metadata: unknown;
   created_at: string;
 };
+
+// PR-AI-AGENT-HUMAN-A: auto-pause native AI quando humano (operator)
+// responde manualmente pelo CRM. Lê humanization_config do agent_configs
+// ativo da org e seta human_handoff_at na agent_conversation. Toda
+// chamada e best-effort — falha aqui nao bloqueia envio da msg humana.
+// Idempotente: usa NULL guard no UPDATE pra so pausar conversas ativas
+// (nao reseta timer se ja pausada).
+async function autoPauseNativeAgent(
+  supabase: Awaited<ReturnType<typeof requireRole>>["supabase"],
+  orgId: string,
+  conversationId: string,
+): Promise<void> {
+  try {
+    const { data: agentConfig } = await supabase
+      .from("agent_configs")
+      .select("humanization_config")
+      .eq("organization_id", orgId)
+      .eq("status", "active")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    const humanization = normalizeHumanizationConfig(
+      (agentConfig as { humanization_config?: unknown } | null)?.humanization_config,
+    );
+
+    // auto_pause_minutes = 0 desliga a feature.
+    if (humanization.auto_pause_minutes <= 0) return;
+
+    const now = new Date().toISOString();
+    await supabase
+      .from("agent_conversations")
+      .update({ human_handoff_at: now })
+      .eq("crm_conversation_id", conversationId)
+      .is("human_handoff_at", null);
+  } catch (err: unknown) {
+    logError("auto_pause_native_agent_failed", {
+      organization_id: orgId,
+      conversation_id: conversationId,
+      error: errorMessage(err),
+    });
+  }
+}
 
 export async function getMessages(
   conversationId: string,
@@ -212,6 +257,10 @@ export async function sendMessageViaWhatsApp(
       updated_at: now,
     })
     .eq("id", conversationId);
+
+  // PR-AI-AGENT-HUMAN-A: humano respondeu via /chat → pausa agente
+  // nativo (best-effort). Nao bloqueia envio se falhar.
+  await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
 
   // 4. Send via WhatsApp, propagating errors to the UI
   if (phone && conversation.channel === "whatsapp") {
@@ -395,6 +444,10 @@ export async function sendMediaViaWhatsApp(
     .from("conversations")
     .update({ last_message_at: now, unread_count: 0, updated_at: now })
     .eq("id", conversationId);
+
+  // PR-AI-AGENT-HUMAN-A: humano enviou midia via /chat → pausa agente
+  // nativo (best-effort). Paridade com sendMessageViaWhatsApp.
+  await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
 
   // 4. Send via WhatsApp, propagating errors
   if (phone && conversation.channel === "whatsapp") {

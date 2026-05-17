@@ -2,8 +2,13 @@
 
 import {
   DEFAULT_GUARDRAILS,
+  PAUSE_KEYWORDS_DEFAULT,
+  RESUME_KEYWORDS_DEFAULT,
+  clampAutoPauseMinutes,
   getAgentTemplate,
   isAgentTemplateSlug,
+  normalizeHumanizationConfig,
+  sanitizeKeywordList,
   type AgentConfig,
   type CreateAgentInput,
   type UpdateAgentInput,
@@ -161,6 +166,31 @@ export async function updateAgent(
   }
   if (patch.calendar_connection_id !== undefined) {
     updates.calendar_connection_id = patch.calendar_connection_id;
+  }
+  if (patch.humanization_config !== undefined) {
+    // PR-AI-AGENT-HUMAN-A: merge shallow com config existente normalizado.
+    // Cliente pode mandar so pause_keywords (parcial) e mantemos
+    // resume_keywords + auto_pause_minutes do servidor.
+    const current = normalizeHumanizationConfig(
+      (existing as AgentConfig & { humanization_config?: unknown })
+        .humanization_config,
+    );
+    updates.humanization_config = {
+      ...current,
+      ...patch.humanization_config,
+      // Re-normaliza pra garantir clamp + sanitize mesmo no merge.
+      pause_keywords: sanitizeKeywordList(
+        patch.humanization_config.pause_keywords ?? current.pause_keywords,
+        PAUSE_KEYWORDS_DEFAULT,
+      ),
+      resume_keywords: sanitizeKeywordList(
+        patch.humanization_config.resume_keywords ?? current.resume_keywords,
+        RESUME_KEYWORDS_DEFAULT,
+      ),
+      auto_pause_minutes: clampAutoPauseMinutes(
+        patch.humanization_config.auto_pause_minutes ?? current.auto_pause_minutes,
+      ),
+    };
   }
   if (patch.status !== undefined) updates.status = patch.status;
 
