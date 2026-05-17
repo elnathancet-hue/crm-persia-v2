@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
+import { tryEnqueueForNativeAgent } from "@/lib/ai-agent/executor";
 import { validateMetaChallenge, validateMetaSignature } from "@/lib/whatsapp/webhook-verifier";
 
 function getSupabase() {
@@ -158,6 +159,39 @@ export async function POST(
               error: errorMessage(err),
             });
           }
+        }
+
+        // Native AI Agent router (paridade com UAZAPI webhook). Tenta
+        // enqueue no executor nativo antes do pipeline legacy. Se a flag
+        // ai_agent_native esta off, sem agent ativo, ou der erro,
+        // nativeOutcome.handled = false e cai pro processIncomingMessage
+        // (que continua chamando n8n/OpenAI). Fix do achado #1 da
+        // auditoria 360 (mai/2026): antes desta linha, Meta nunca caia
+        // no native, so UAZAPI tinha.
+        const nativeOutcome = await tryEnqueueForNativeAgent({
+          supabase,
+          orgId,
+          provider,
+          msg,
+          requestId,
+        });
+
+        if (nativeOutcome.handled) {
+          logInfo("meta_webhook_processed_message", {
+            organization_id: orgId,
+            request_id: requestId,
+            provider: provider.name,
+            route: "/api/whatsapp/webhook/meta/[phone_number_id]",
+            phone_number_id,
+            ok: nativeOutcome.response.ok ?? true,
+            skipped: nativeOutcome.response.skipped ?? null,
+            handled_by: nativeOutcome.response.handledBy ?? "ai_native",
+            lead_id: nativeOutcome.response.leadId ?? null,
+            conversation_id: nativeOutcome.response.conversationId ?? null,
+            native_status: nativeOutcome.response.status ?? null,
+            run_id: nativeOutcome.response.runId ?? null,
+          });
+          continue;
         }
 
         const result = await processIncomingMessage({ supabase, orgId, provider, msg, requestId });
