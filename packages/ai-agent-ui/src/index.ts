@@ -16,6 +16,11 @@ export { renderToolIcon } from "./icon-map";
 // Page-level components
 export { AgentsList } from "./components/AgentsList";
 export { AgentEditor } from "./components/AgentEditor";
+export {
+  AgentSidebar,
+  type AgentSidebarGroup,
+  type AgentSidebarItem,
+} from "./components/AgentSidebar";
 
 // Tab components
 export { RulesTab } from "./components/RulesTab";
