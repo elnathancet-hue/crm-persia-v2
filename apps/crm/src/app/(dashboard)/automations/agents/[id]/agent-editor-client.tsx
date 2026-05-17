@@ -2,7 +2,6 @@
 
 import type {
   AgentConfig,
-  AgentCostLimit,
   AgentFollowup,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
@@ -17,7 +16,6 @@ interface Props {
   initialAgent: AgentConfig;
   initialStages: AgentStage[];
   initialTools: AgentTool[];
-  initialLimits: AgentCostLimit[];
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
   initialNotificationTemplates?: AgentNotificationTemplate[];

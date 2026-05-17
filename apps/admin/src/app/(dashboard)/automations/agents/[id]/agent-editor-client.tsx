@@ -5,7 +5,6 @@ import { Loader2, Sparkles } from "lucide-react";
 import { AgentActionsProvider, AgentEditor } from "@persia/ai-agent-ui";
 import type {
   AgentConfig,
-  AgentCostLimit,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentScheduledJob,
@@ -15,7 +14,6 @@ import type {
 import { ClientSelector } from "@/components/client-selector";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { getAgent } from "@/actions/ai-agent/configs";
-import { listCostLimits } from "@/actions/ai-agent/limits";
 import { listStages } from "@/actions/ai-agent/stages";
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
@@ -38,7 +36,6 @@ export function AgentEditorClient({ agentId }: Props) {
   const [agent, setAgent] = React.useState<AgentConfig | null>(null);
   const [stages, setStages] = React.useState<AgentStage[]>([]);
   const [tools, setTools] = React.useState<AgentTool[]>([]);
-  const [limits, setLimits] = React.useState<AgentCostLimit[]>([]);
   const [allowedDomains, setAllowedDomains] = React.useState<string[]>([]);
   const [knowledgeSources, setKnowledgeSources] = React.useState<
     AgentKnowledgeSource[]
@@ -59,7 +56,6 @@ export function AgentEditorClient({ agentId }: Props) {
         setAgent(null);
         setStages([]);
         setTools([]);
-        setLimits([]);
         setAllowedDomains([]);
         setKnowledgeSources([]);
         setNotificationTemplates([]);
@@ -76,7 +72,6 @@ export function AgentEditorClient({ agentId }: Props) {
             setAgent(null);
             setStages([]);
             setTools([]);
-            setLimits([]);
             setAllowedDomains([]);
             setKnowledgeSources([]);
             setNotificationTemplates([]);
@@ -88,7 +83,6 @@ export function AgentEditorClient({ agentId }: Props) {
         const [
           nextStages,
           nextTools,
-          nextLimits,
           nextAllowedDomains,
           nextKnowledgeSources,
           nextNotificationTemplates,
@@ -96,7 +90,6 @@ export function AgentEditorClient({ agentId }: Props) {
         ] = await Promise.all([
           listStages(activeOrgId, agentId),
           listToolsForAgent(activeOrgId, agentId),
-          listCostLimits(activeOrgId),
           listAllowedDomains(activeOrgId),
           listKnowledgeSources(activeOrgId, agentId),
           listNotificationTemplates(activeOrgId, agentId),
@@ -107,7 +100,6 @@ export function AgentEditorClient({ agentId }: Props) {
           setAgent(nextAgent);
           setStages(nextStages);
           setTools(nextTools);
-          setLimits(nextLimits);
           setAllowedDomains(nextAllowedDomains);
           setKnowledgeSources(nextKnowledgeSources);
           setNotificationTemplates(nextNotificationTemplates);
@@ -159,7 +151,6 @@ export function AgentEditorClient({ agentId }: Props) {
             initialAgent={agent}
             initialStages={stages}
             initialTools={tools}
-            initialLimits={limits}
             initialAllowedDomains={allowedDomains}
             initialKnowledgeSources={knowledgeSources}
             initialNotificationTemplates={notificationTemplates}
