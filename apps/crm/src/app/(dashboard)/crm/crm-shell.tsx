@@ -52,6 +52,7 @@ import type {
   TagRef,
   TagWithCount,
 } from "@persia/shared/crm";
+import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
 import type { LeadListItemStats } from "@/actions/leads";
 
 import { CrmClient } from "./crm-client";
@@ -119,6 +120,11 @@ interface CrmShellProps {
   canCreateFunil?: boolean;
   canManageTags?: boolean;
   canManageSegments?: boolean;
+  /**
+   * PR-KANBAN-UPCOMING (mai/2026): proximos agendamentos por lead (~48h).
+   * Server fetcha e passa pra CrmClient -> KanbanBoard renderiza chip.
+   */
+  upcomingAppointments?: LeadUpcomingAppointment[];
 }
 
 export function CrmShell(props: CrmShellProps) {
@@ -243,6 +249,8 @@ export function CrmShell(props: CrmShellProps) {
               // com value=null e disparava Base UI error #31.
               pipelineId={selectedPipelineId ?? undefined}
               onPipelineChange={selectFunil}
+              // PR-KANBAN-UPCOMING (mai/2026): repassa pra renderizar chip
+              upcomingAppointments={props.upcomingAppointments}
             />
           )
         )}

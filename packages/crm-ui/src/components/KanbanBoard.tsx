@@ -85,6 +85,8 @@ import {
   Clock,
   Move,
   CheckCheck,
+  // PR-KANBAN-UPCOMING (mai/2026): chip de appointment proximo no card
+  CalendarClock,
 } from "lucide-react";
 
 // Sprint 3c: formatRelativeShort local removido — agora usa
@@ -102,6 +104,9 @@ import type {
   StageOutcome,
   TagRef,
 } from "@persia/shared/crm";
+// PR-KANBAN-UPCOMING (mai/2026): tipo do entry de proximo appointment
+// usado pelo chip "Em Xh" no card. Caller passa Map<leadId, item> via prop.
+import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
 
 import { useKanbanActions } from "../context";
 import type { MarkAsLostInput } from "../actions";
@@ -350,6 +355,14 @@ export interface KanbanBoardProps {
    * (compat — admin nao usa).
    */
   onOpenLead?: (leadId: string) => void;
+  /**
+   * PR-KANBAN-UPCOMING (mai/2026): mapa de `lead_id` -> próximo
+   * agendamento (janela ~48h). Quando setado, cada card com entry
+   * mostra chip discreto "📅 Em Xh" / "Amanhã HH:MM" / "DD/MM HH:MM".
+   * Opcional pra retro-compat (sem o map, sem chip — admin pode nao
+   * passar e o board continua funcional).
+   */
+  upcomingAppointments?: Map<string, LeadUpcomingAppointment>;
 }
 
 export function KanbanBoard({
@@ -371,6 +384,7 @@ export function KanbanBoard({
   dealWatchers,
   onDealViewChange,
   onOpenLead,
+  upcomingAppointments,
 }: KanbanBoardProps) {
   // PR-K-CENTRIC (mai/2026): adapter Lead → Deal-like.
   //
@@ -1722,6 +1736,14 @@ export function KanbanBoard({
                       onViewChange={onDealViewChange}
                       // Frente B: passa o callback "Ver lead" pra cada card.
                       onOpenLead={onOpenLead}
+                      // PR-KANBAN-UPCOMING (mai/2026): chip de proximo
+                      // appointment do lead. Map.get usa lead_id (que
+                      // === deal.id pos refactor lead-centric).
+                      upcomingAppointment={
+                        deal.lead_id
+                          ? upcomingAppointments?.get(deal.lead_id)
+                          : undefined
+                      }
                     />
                   ))}
                   {/* Empty state — discreto + clicavel pra adicionar deal */}
@@ -1929,6 +1951,7 @@ const DealCard = React.memo(function DealCardImpl({
   watchers,
   onViewChange,
   onOpenLead,
+  upcomingAppointment,
 }: {
   deal: Deal;
   /** PR-KANBAN-UI: cor da etapa (vem do stage pai), usada como
@@ -1974,6 +1997,8 @@ const DealCard = React.memo(function DealCardImpl({
   onViewChange?: (dealId: string | null) => void;
   /** Frente B: callback pro botao "Ver lead" (abre LeadInfoDrawer). */
   onOpenLead?: (leadId: string) => void;
+  /** PR-KANBAN-UPCOMING (mai/2026): proximo appointment do lead (~48h). */
+  upcomingAppointment?: LeadUpcomingAppointment;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
 
@@ -2217,6 +2242,9 @@ const DealCard = React.memo(function DealCardImpl({
               <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {subtitle}
               </p>
+            )}
+            {upcomingAppointment && (
+              <UpcomingAppointmentChip appointment={upcomingAppointment} />
             )}
           </div>
           {/* Frente B: botao "Ver lead" abre o LeadInfoDrawer (Dialog
@@ -3950,4 +3978,74 @@ function BulkApplyTagsDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// ============================================================================
+// UpcomingAppointmentChip — chip discreto "📅 Em 2h" no card do lead
+// ----------------------------------------------------------------------------
+// PR-KANBAN-UPCOMING (mai/2026): mostra que o lead tem appointment
+// proximo (janela ~48h). Tom diferenciado se status='awaiting_confirmation'
+// pra agente saber que precisa confirmar antes que rode pro horario.
+//
+// Formato relativo curto pt-BR — sem dep externa, calcula diff em ms.
+//   - < 60 min: "Em X min"
+//   - < 24h: "Em Xh" + "HH:MM" entre parenteses se hoje
+//   - amanha: "Amanhã HH:MM"
+//   - outros dias: "Ter 14:00" (3 letras do dia + horario)
+// ============================================================================
+
+function UpcomingAppointmentChip({
+  appointment,
+}: {
+  appointment: LeadUpcomingAppointment;
+}) {
+  const label = formatUpcomingLabel(appointment.start_at);
+  const isPending = appointment.status === "awaiting_confirmation";
+  return (
+    <span
+      className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+        isPending
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+          : "border-primary/30 bg-primary/10 text-primary"
+      }`}
+      title={`${appointment.title} — ${new Date(appointment.start_at).toLocaleString("pt-BR")}`}
+    >
+      <CalendarClock className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+function formatUpcomingLabel(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "Próximo";
+  const diff = then - now;
+  if (diff <= 0) return "Agora";
+
+  const min = Math.floor(diff / 60_000);
+  if (min < 60) return `Em ${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 12) return `Em ${hr}h`;
+
+  // Pra >12h, usa data + hora pt-BR. Detecta "amanha" comparando dia
+  // do calendario local.
+  const nowDate = new Date();
+  const apptDate = new Date(then);
+  const sameDay = nowDate.toDateString() === apptDate.toDateString();
+  const tomorrow = new Date(nowDate);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = tomorrow.toDateString() === apptDate.toDateString();
+  const time = apptDate.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (sameDay) return `Hoje ${time}`;
+  if (isTomorrow) return `Amanhã ${time}`;
+  const weekday = apptDate.toLocaleDateString("pt-BR", { weekday: "short" });
+  // weekday vem "ter." — limpa o ponto pra ficar tight
+  const wd = weekday.replace(/\.$/, "");
+  // Capitaliza primeira letra
+  const wdCap = wd.charAt(0).toUpperCase() + wd.slice(1);
+  return `${wdCap} ${time}`;
 }

@@ -27,6 +27,8 @@ import type {
   Pipeline,
   Stage,
 } from "@persia/shared/crm";
+import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
+import { getUpcomingAppointmentsForLeads } from "@/actions/agenda/appointments";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -58,6 +60,9 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [kanbanLeads, setKanbanLeads] = useState<LeadKanbanCard[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<
+    LeadUpcomingAppointment[]
+  >([]);
   const [leads, setLeads] = useState<KanbanLead[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -86,6 +91,15 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
   // tab "Negocios" do drawer.
   useDealsRealtime(supabase, activePipelineId, debouncedReload);
   useKanbanLeadsRealtime(supabase, activePipelineId, debouncedReload);
+
+  // PR-KANBAN-UPCOMING (mai/2026): Map<leadId, item> derivado do
+  // state. useMemo evita recriar a cada render.
+  const upcomingMap = useMemo(() => {
+    const m = new Map<string, LeadUpcomingAppointment>();
+    for (const item of upcomingAppointments) m.set(item.lead_id, item);
+    return m;
+  }, [upcomingAppointments]);
+
   const { watchersByDeal: _watchersByDeal, setViewingDealId: _setViewingDealId } =
     useDealPresence({
       supabase,
@@ -115,8 +129,24 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
     // O cast via `unknown` mantem o componente fortemente tipado a partir do
     // shape canonico (@persia/shared/crm) e e o mesmo padrao usado no CRM.
     setStages(stagesData as unknown as Stage[]);
-    setKanbanLeads(kanbanLeadsData as unknown as LeadKanbanCard[]);
+    const kbLeads = kanbanLeadsData as unknown as LeadKanbanCard[];
+    setKanbanLeads(kbLeads);
     setLeads(leadsData as KanbanLead[]);
+
+    // PR-KANBAN-UPCOMING (mai/2026): fetcha proximos appointments dos
+    // leads visiveis (~48h). Defensive — falha silenciosa.
+    try {
+      const leadIds = kbLeads.map((l) => l.id);
+      if (leadIds.length > 0) {
+        const upcoming = await getUpcomingAppointmentsForLeads(leadIds, 48);
+        setUpcomingAppointments(upcoming);
+      } else {
+        setUpcomingAppointments([]);
+      }
+    } catch (err) {
+      console.error("[admin/crm] getUpcomingAppointmentsForLeads failed:", err);
+      setUpcomingAppointments([]);
+    }
   }
 
   useEffect(() => {
@@ -173,6 +203,9 @@ export function CrmPage({ hideHeader = false }: CrmPageProps = {}) {
               });
             }}
             goalsStorageKey="admin-kanban-goals-v1"
+            // PR-KANBAN-UPCOMING (mai/2026): chip de proximo appointment
+            // no card. Admin tambem ve (paridade com CRM).
+            upcomingAppointments={upcomingMap}
             // PR-CRMOPS: configuracao do Kanban volta pra inline
             // (drawer + dialog dentro do KanbanBoard). Admin herda
             // canCreateKanban + canEditStages do canManagePipelines
