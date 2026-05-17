@@ -1,5 +1,8 @@
-import type { NativeHandler } from "@persia/shared/ai-agent";
-import { HANDOFF_DEFAULT_TEMPLATE } from "@persia/shared/ai-agent";
+import type { AgentConfig, NativeHandler } from "@persia/shared/ai-agent";
+import {
+  HANDOFF_DEFAULT_TEMPLATE,
+  normalizeHumanizationConfig,
+} from "@persia/shared/ai-agent";
 import {
   sendHandoffNotification,
   type SendHandoffNotificationResult,
@@ -85,6 +88,12 @@ export const stopAgentHandler: NativeHandler = async (context, input) => {
   };
 
   if (config && conversation) {
+    // PR-AGENT-INTEGRATION-1: lê preferencia "incluir resumo" do
+    // humanization_config. Default true mantem comportamento legado.
+    const humanization = normalizeHumanizationConfig(
+      (config as AgentConfig & { humanization_config?: unknown })
+        .humanization_config,
+    );
     handoffNotification = await sendHandoffNotification({
       db,
       orgId: context.organization_id,
@@ -96,6 +105,7 @@ export const stopAgentHandler: NativeHandler = async (context, input) => {
       handoffReason: reason,
       provider: getHandlerProvider(context),
       openaiClient: getHandlerOpenAIClient(context),
+      includeSummary: humanization.handoff_include_summary,
     });
   }
 

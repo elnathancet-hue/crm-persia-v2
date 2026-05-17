@@ -35,6 +35,10 @@ export interface SendHandoffNotificationParams {
   handoffReason: string;
   provider: WhatsAppProvider | null;
   openaiClient: OpenAI | null;
+  // PR-AGENT-INTEGRATION-1: quando false, nao chama GPT pra gerar
+  // resumo. Template recebe summary vazio (placeholder removido). Lido
+  // do humanization_config.handoff_include_summary pelo caller.
+  includeSummary?: boolean;
 }
 
 export interface SendHandoffNotificationResult {
@@ -87,7 +91,12 @@ export async function sendHandoffNotification(
       runtimeConfig.targetAddress,
     );
     const lead = await loadLead(params.db, params.orgId, params.leadId);
-    const summary = await buildHandoffSummary(params);
+    // PR-AGENT-INTEGRATION-1: pula GPT call quando cliente desligou
+    // resumo. Default true mantem comportamento legado.
+    const shouldIncludeSummary = params.includeSummary !== false;
+    const summary = shouldIncludeSummary
+      ? await buildHandoffSummary(params)
+      : { text: "", source: "fallback_plain" as const };
     const waLink = buildHandoffLink(params.conversation.crm_conversation_id);
     const vars: HandoffNotificationVariables = {
       lead_name: lead.name ?? "cliente",

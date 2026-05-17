@@ -56,6 +56,11 @@ export const AFTER_HOURS_MESSAGE_DEFAULT =
 export const AFTER_HOURS_MESSAGE_MAX_LENGTH = 500;
 export const AFTER_HOURS_NOTIFICATION_COOLDOWN_HOURS = 6;
 
+// Default true: o template HANDOFF_DEFAULT_TEMPLATE ja inclui {{summary}}
+// historicamente. Cliente pode desligar pra notificacao enxuta sem GPT
+// extra (economia de ~1 call por handoff).
+export const HANDOFF_INCLUDE_SUMMARY_DEFAULT = true;
+
 export const DAY_NAMES = [
   "monday",
   "tuesday",
@@ -159,6 +164,14 @@ export interface HumanizationConfig {
    * AFTER_HOURS_MESSAGE_MAX_LENGTH (500) chars.
    */
   after_hours_message: string;
+
+  /**
+   * Quando true, ao chamar `stop_agent` com handoff_notification_enabled,
+   * gera resumo da conversa via GPT e injeta no template antes de
+   * disparar a notificacao pra equipe. Custo: 1 chamada OpenAI extra
+   * (gpt-4.1-mini). Default false pra nao surpreender com custo.
+   */
+  handoff_include_summary: boolean;
 }
 
 export function clampAutoPauseMinutes(value: unknown): number {
@@ -420,6 +433,10 @@ export function normalizeHumanizationConfig(
     business_hours_timezone: sanitizeTimezone(obj.business_hours_timezone),
     business_hours: sanitizeBusinessHours(obj.business_hours),
     after_hours_message: sanitizeAfterHoursMessage(obj.after_hours_message),
+    handoff_include_summary:
+      typeof obj.handoff_include_summary === "boolean"
+        ? obj.handoff_include_summary
+        : HANDOFF_INCLUDE_SUMMARY_DEFAULT,
   };
 }
 

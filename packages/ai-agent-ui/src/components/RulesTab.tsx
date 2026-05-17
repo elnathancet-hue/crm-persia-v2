@@ -85,6 +85,11 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [calendarConnections, setCalendarConnections] = React.useState<
     AgentCalendarConnectionPublic[] | null
   >(null);
+  // PR-AGENT-INTEGRATION-1: include summary inicializa do humanization_config
+  // (default true). Effect abaixo refresca quando agent muda.
+  const [handoffIncludeSummary, setHandoffIncludeSummary] = React.useState<boolean>(
+    () => normalizeHumanizationConfig(agent.humanization_config).handoff_include_summary,
+  );
 
   // PR-AI-AGENT-HUMAN-A: humanization (pausa/ativa). UI usa textareas
   // pra editar keywords como texto livre (1 por linha) — mais intuitivo
@@ -172,6 +177,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     setBusinessHoursEnabled(next.business_hours_enabled);
     setBusinessHours(next.business_hours);
     setAfterHoursMessage(next.after_hours_message);
+    setHandoffIncludeSummary(next.handoff_include_summary);
   }, [
     agent.id,
     agent.system_prompt,
@@ -245,7 +251,8 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     businessHoursEnabled !== initialHumanization.business_hours_enabled ||
     JSON.stringify(nextBusinessHours) !==
       JSON.stringify(initialHumanization.business_hours) ||
-    nextAfterHoursMessage !== initialHumanization.after_hours_message;
+    nextAfterHoursMessage !== initialHumanization.after_hours_message ||
+    handoffIncludeSummary !== initialHumanization.handoff_include_summary;
 
   // Client-side validation that mirrors the server (lets the Save button
   // disable proactively on bad data — server still re-validates).
@@ -301,6 +308,7 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
         business_hours_enabled: businessHoursEnabled,
         business_hours: nextBusinessHours,
         after_hours_message: nextAfterHoursMessage,
+        handoff_include_summary: handoffIncludeSummary,
       };
     }
     onChange(patch, "Regras salvas");
@@ -361,14 +369,14 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           </CardContent>
         </Card>
 
-        {/* PR-AI-AGENT-TOKENS-OUT (mai/2026): card "Guardrails" virou
-            "Comportamento" — campos tecnicos (max_iterations, timeout,
-            cost_ceiling, debounce, context_summary_*) sairam da UI
-            cliente. Token economy fica no backend com defaults sensatos.
-            Cliente paga plano fixo. */}
+        {/* PR-AGENT-INTEGRATION-1 (mai/2026): card "Comportamento" virou
+            "Transferir pra humano". O switch principal libera a IA usar
+            `stop_agent`; quando on, o HandoffNotificationCard abaixo
+            permite configurar notificacao + resumo da conversa. Antes
+            esses 2 cards estavam separados visualmente. */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Comportamento</CardTitle>
+            <CardTitle className="text-base">Transferir pra humano</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-start justify-between gap-3">
@@ -391,6 +399,24 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
             </div>
           </CardContent>
         </Card>
+
+        {/* HandoffNotificationCard so faz sentido quando o agente pode
+            transferir. Quando allow_human_handoff = off, esconde —
+            evita cliente configurar template que nunca dispara. */}
+        {guardrails.allow_human_handoff ? (
+          <HandoffNotificationCard
+            draftEnabled={handoffEnabled}
+            draftTargetType={handoffTargetType}
+            draftTargetAddress={handoffTargetAddress}
+            draftTemplate={handoffTemplate}
+            draftIncludeSummary={handoffIncludeSummary}
+            onEnabledChange={setHandoffEnabled}
+            onTargetTypeChange={setHandoffTargetType}
+            onTargetAddressChange={setHandoffTargetAddress}
+            onTemplateChange={setHandoffTemplate}
+            onIncludeSummaryChange={setHandoffIncludeSummary}
+          />
+        ) : null}
 
         {/* PR-AI-AGENT-HUMAN-A: card de humanizacao (pausa/ativa). Toggle
             do auto_pause_minutes serve de master switch: off = pausa
@@ -588,82 +614,124 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           onAfterHoursMessageChange={setAfterHoursMessage}
         />
 
-        <HandoffNotificationCard
-          draftEnabled={handoffEnabled}
-          draftTargetType={handoffTargetType}
-          draftTargetAddress={handoffTargetAddress}
-          draftTemplate={handoffTemplate}
-          onEnabledChange={setHandoffEnabled}
-          onTargetTypeChange={setHandoffTargetType}
-          onTargetAddressChange={setHandoffTargetAddress}
-          onTemplateChange={setHandoffTemplate}
-        />
-
+        {/* PR-AGENT-INTEGRATION-1: card de calendario reorganizado.
+            Agenda interna (create_appointment via tools) ja funciona —
+            agente agenda sem precisar de conexao externa. Google Calendar
+            integration esta em desenvolvimento (handler schedule_event
+            no enum mas sem TS handler). */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <CalendarCheck className="size-4 text-primary" />
               Calendário do agente
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Qual conexão Google o agente usa quando chama
-              <code className="font-mono mx-1 text-[11px]">schedule_event</code>.
-              Se vazio, o agente não consegue agendar.
-            </p>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Label htmlFor="calendar-connection">Conexão atribuída</Label>
-            <Select
-              value={calendarConnectionId ?? "_none"}
-              onValueChange={(v) =>
-                setCalendarConnectionId(v && v !== "_none" ? v : null)
-              }
-              disabled={isPending}
-            >
-              <SelectTrigger id="calendar-connection">
-                <SelectValue
-                  placeholder={
-                    calendarConnections === null
-                      ? "Carregando..."
-                      : "Selecione uma conexão"
-                  }
-                >
-                  {calendarConnectionId === null
-                    ? "Nenhum (agente sem calendário)"
-                    : calendarConnections?.find(
-                        (c) => c.id === calendarConnectionId,
-                      )?.display_name ?? "Selecione uma conexão"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">Nenhum (agente sem calendário)</SelectItem>
-                {calendarConnections?.map((conn) => (
-                  <SelectItem
-                    key={conn.id}
-                    value={conn.id}
-                    disabled={conn.status !== "active"}
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-success-ring bg-success-soft/30 p-3">
+              <div className="flex items-start gap-2">
+                <span className="size-2 rounded-full bg-success mt-1.5 shrink-0" aria-hidden />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    Agenda interna — ativa
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Quando o agente agenda via chat, o compromisso entra
+                    direto na sua Agenda do CRM. Sem precisar de Google.
+                    Ative a ferramenta "Agendar reunião" pra liberar.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex items-start gap-2">
+                <span className="size-2 rounded-full bg-muted-foreground/40 mt-1.5 shrink-0" aria-hidden />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Google Calendar
+                    </p>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning-soft text-warning-soft-foreground font-medium">
+                      Em breve
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Sincronização com Google Calendar está em desenvolvimento.
+                    Por enquanto, use a agenda interna acima.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Mantemos a config de conexao Google escondida atras de
+                "Avancado" — agentes legados que ja tinham conexao
+                continuam funcionando, mas escondemos do leigo. */}
+            {calendarConnections && calendarConnections.length > 0 ? (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">
+                  Avançado: escolher conexão Google
+                </summary>
+                <div className="mt-3 space-y-2 pl-2 border-l-2 border-muted">
+                  <Label htmlFor="calendar-connection" className="text-xs">
+                    Conexão atribuída
+                  </Label>
+                  <Select
+                    value={calendarConnectionId ?? "_none"}
+                    onValueChange={(v) =>
+                      setCalendarConnectionId(v && v !== "_none" ? v : null)
+                    }
+                    disabled={isPending}
                   >
-                    {conn.display_name}
-                    {conn.status !== "active" ? (
-                      <span className="text-muted-foreground"> ({conn.status})</span>
-                    ) : null}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {calendarConnections && calendarConnections.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                Nenhuma conexão Google ativa nesta org. Use o card abaixo pra
-                conectar uma conta antes.
-              </p>
+                    <SelectTrigger id="calendar-connection">
+                      <SelectValue>
+                        {calendarConnectionId === null
+                          ? "Nenhum (usa agenda interna)"
+                          : calendarConnections?.find(
+                              (c) => c.id === calendarConnectionId,
+                            )?.display_name ?? "Selecione uma conexão"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">
+                        Nenhum (usa agenda interna)
+                      </SelectItem>
+                      {calendarConnections.map((conn) => (
+                        <SelectItem
+                          key={conn.id}
+                          value={conn.id}
+                          disabled={conn.status !== "active"}
+                        >
+                          {conn.display_name}
+                          {conn.status !== "active" ? (
+                            <span className="text-muted-foreground"> ({conn.status})</span>
+                          ) : null}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </details>
             ) : null}
           </CardContent>
         </Card>
 
-        <CalendarConnectionsCard
-          initialConnections={calendarConnections ?? undefined}
-          returnTo={`/automations/agents/${agent.id}`}
-        />
+        {/* CalendarConnectionsCard escondido atrás de details "Avançado"
+            quando ja existem conexoes. Em breve sera removido daqui
+            inteiramente — Google esta em dev. Por enquanto, mantemos
+            via details pra nao quebrar fluxo de devs/admins. */}
+        {calendarConnections && calendarConnections.length > 0 ? (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none px-1 py-2">
+              Gerenciar conexões Google (avançado, em desenvolvimento)
+            </summary>
+            <div className="mt-2">
+              <CalendarConnectionsCard
+                initialConnections={calendarConnections ?? undefined}
+                returnTo={`/automations/agents/${agent.id}`}
+              />
+            </div>
+          </details>
+        ) : null}
 
         <Button
           onClick={handleSave}

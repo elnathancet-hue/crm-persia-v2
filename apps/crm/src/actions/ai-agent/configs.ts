@@ -228,6 +228,11 @@ export async function updateAgent(
         }
         return raw.trim().slice(0, AFTER_HOURS_MESSAGE_MAX_LENGTH);
       })(),
+      // PR-AGENT-INTEGRATION-1: handoff include summary
+      handoff_include_summary:
+        typeof patch.humanization_config.handoff_include_summary === "boolean"
+          ? patch.humanization_config.handoff_include_summary
+          : current.handoff_include_summary,
     };
   }
   if (patch.status !== undefined) updates.status = patch.status;

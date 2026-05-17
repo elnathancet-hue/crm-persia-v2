@@ -4,9 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Bell,
   Bot,
-  Calendar,
   Clock,
   FlaskConical,
   HelpCircle,
@@ -52,8 +50,6 @@ import { ToolsTab } from "./ToolsTab";
 import { AuditTab } from "./AuditTab";
 import { FAQTab } from "./FAQTab";
 import { DocumentsTab } from "./DocumentsTab";
-import { NotificationsTab } from "./NotificationsTab";
-import { SchedulingTab } from "./SchedulingTab";
 import { FollowupTab } from "./FollowupTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
@@ -72,8 +68,6 @@ type AgentSectionId =
   | "faq"
   | "docs"
   | "tools"
-  | "notifications"
-  | "calendar"
   | "followups"
   | "audit";
 
@@ -106,9 +100,11 @@ function buildSidebarGroups(opts: {
       id: "actions",
       label: "Ações",
       items: [
+        // PR-AGENT-INTEGRATION-1: "Notificações" foi pra dentro de Regras
+        // (HandoffNotificationCard agrupado com switch de transferir
+        // pra humano). "Agendamento" virou tool habilitavel em Regras
+        // (sem aba dedicada). Sobra: Ferramentas + Follow-up.
         { id: "tools", label: "Ferramentas", icon: Wrench },
-        { id: "notifications", label: "Notificações", icon: Bell },
-        { id: "calendar", label: "Agendamento", icon: Calendar },
         { id: "followups", label: "Follow-up", icon: Clock },
       ],
     },
@@ -390,23 +386,6 @@ export function AgentEditor({
               stages={stages}
               allowedDomains={initialAllowedDomains}
               onChange={setTools}
-            />
-          )}
-          {activeSection === "notifications" && (
-            <NotificationsTab
-              configId={agent.id}
-              templates={notificationTemplates}
-              onChange={setNotificationTemplates}
-              onRefresh={refreshNotificationTemplates}
-            />
-          )}
-          {activeSection === "calendar" && (
-            <SchedulingTab
-              configId={agent.id}
-              jobs={scheduledJobs}
-              templates={notificationTemplates}
-              onChange={setScheduledJobs}
-              onRefresh={refreshScheduledJobs}
             />
           )}
           {activeSection === "followups" && (

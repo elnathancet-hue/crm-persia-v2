@@ -6,6 +6,7 @@ import {
   getHandlerConversation,
   getHandlerDb,
   getHandlerProvider,
+  insertLeadActivity,
   successResult,
 } from "./shared";
 
@@ -184,6 +185,23 @@ export const sendMediaHandler: NativeHandler = async (context, input) => {
       created_at: nowIso(),
     });
   }
+
+  // PR-AGENT-INTEGRATION-1: log no historico do lead.
+  await insertLeadActivity({
+    db,
+    organizationId: context.organization_id,
+    leadId: context.lead_id,
+    type: "media_sent",
+    description: `IA enviou ${mediaType} "${
+      (tool as { name?: string }).name ?? slug
+    }"${caption ? " com legenda" : ""}`,
+    metadata: {
+      slug,
+      media_type: mediaType,
+      file_url: fileUrl,
+      caption: caption ?? null,
+    },
+  });
 
   return successResult(
     {
