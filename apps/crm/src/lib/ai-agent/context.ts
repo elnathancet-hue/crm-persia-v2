@@ -34,6 +34,19 @@ export async function loadActiveAgentConfig(
   db: AgentDb,
   orgId: string,
 ): Promise<AgentConfig | null> {
+  // PR-AGENT-INTEGRATION-3 (mai/2026): preferencia agente principal
+  // (is_primary=true). Se nao existir, fallback pro mais antigo ativo
+  // (retrocompat com agents sem is_primary setado).
+  const { data: primary } = await db
+    .from("agent_configs")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("status", "active")
+    .eq("is_primary", true)
+    .limit(1)
+    .maybeSingle();
+  if (primary) return normalizeConfig(primary);
+
   const { data, error } = await db
     .from("agent_configs")
     .select("*")
@@ -63,13 +76,168 @@ export async function loadAgentConfigById(
   return normalizeConfig(data);
 }
 
+// PR-AGENT-INTEGRATION-3 (mai/2026): roteamento multi-agente.
+//
+// Pra cada msg que chega:
+//   1. Procura agent_conversation existente pra esse CRM conversation
+//      (sem filtrar por config_id — stickiness).
+//   2. Se existe → carrega esse config (lead "fica preso" no agente que
+//      pegou ele primeiro).
+//   3. Senao (1a msg): carrega leadState (tags, segments, stage, status),
+//      busca agentes secundarios + suas conditions, avalia OR+priority.
+//      Se algum bate → usa esse secundario. Senao → usa principal.
+//
+// Idempotente em re-execucao. Falhas (DB error) caem pro principal pra
+// nao bloquear o agente nativo.
+export async function pickAgentForConversation(params: {
+  db: AgentDb;
+  orgId: string;
+  crmConversationId: string;
+  leadId: string;
+  messageText: string;
+  primary: AgentConfig;
+}): Promise<AgentConfig> {
+  const { db, orgId, crmConversationId, leadId, messageText, primary } = params;
+
+  // 1. Stickiness: lookup por (org, crm_conversation_id) sem filtrar
+  //    config_id. Se ja foi roteado pra X, mantem X.
+  const { data: existing } = await db
+    .from("agent_conversations")
+    .select("config_id")
+    .eq("organization_id", orgId)
+    .eq("crm_conversation_id", crmConversationId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const stuckConfigId = (existing as { config_id?: string | null }).config_id;
+    if (stuckConfigId) {
+      const stuckConfig = await loadAgentConfigById(db, orgId, stuckConfigId);
+      if (stuckConfig && stuckConfig.status === "active") return stuckConfig;
+      // Se config sumiu/inativo, cai pro routing — re-rotar e melhor que
+      // travar a conversa.
+    }
+  }
+
+  // 2. Lead state pra avaliacao das conditions (tags, segments, stage,
+  //    status). Best-effort: erros caem pro primary.
+  const leadState = {
+    tags: [] as string[],
+    segment_ids: [] as string[],
+    pipeline_stage_id: null as string | null,
+    status: null as string | null,
+  };
+  try {
+    const [leadRes, tagsRes, segmentsRes] = await Promise.all([
+      db
+        .from("leads")
+        .select("status, stage_id")
+        .eq("organization_id", orgId)
+        .eq("id", leadId)
+        .maybeSingle(),
+      db
+        .from("lead_tags")
+        .select("tags(name)")
+        .eq("lead_id", leadId),
+      db
+        .from("lead_segments")
+        .select("segment_id")
+        .eq("lead_id", leadId),
+    ]);
+
+    const lead = leadRes.data as {
+      status?: string | null;
+      stage_id?: string | null;
+    } | null;
+    if (lead) {
+      leadState.status = lead.status ?? null;
+      leadState.pipeline_stage_id = lead.stage_id ?? null;
+    }
+
+    leadState.tags = ((tagsRes.data ?? []) as Array<Record<string, unknown>>)
+      .map((row) => {
+        const tag = row.tags as Record<string, unknown> | null;
+        const name = tag?.name;
+        return typeof name === "string" ? name.trim().toLowerCase() : null;
+      })
+      .filter((s): s is string => Boolean(s));
+
+    leadState.segment_ids = ((segmentsRes.data ?? []) as Array<{
+      segment_id?: string;
+    }>)
+      .map((row) => row.segment_id)
+      .filter((s): s is string => Boolean(s));
+  } catch {
+    // Best-effort: deixa leadState vazio. Conditions de tag/segment
+    // simplesmente nao casam, fallback pro principal.
+  }
+
+  // 3. Carrega agentes secundarios da mesma org com conditions.
+  const { data: secondaries } = await db
+    .from("agent_configs")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("status", "active")
+    .eq("is_primary", false)
+    .neq("id", primary.id);
+
+  const secondaryAgents = ((secondaries ?? []) as Array<Record<string, unknown>>).map(
+    (row) => normalizeConfig(row),
+  );
+
+  if (secondaryAgents.length === 0) return primary;
+
+  const { data: conditionsData } = await db
+    .from("agent_entry_conditions")
+    .select("*")
+    .eq("organization_id", orgId)
+    .in(
+      "agent_config_id",
+      secondaryAgents.map((a) => a.id),
+    );
+
+  const conditions = (conditionsData ?? []) as Array<{
+    agent_config_id: string;
+    condition_type: import("@persia/shared/ai-agent").EntryConditionType;
+    condition_value: import("@persia/shared/ai-agent").EntryConditionValue;
+    priority: number;
+    created_at: string;
+  }>;
+
+  if (conditions.length === 0) return primary;
+
+  // Agrupa conditions por agent_config_id pra montar candidates.
+  type ConditionRow = (typeof conditions)[number];
+  const conditionsByAgent = new Map<string, ConditionRow[]>();
+  for (const cond of conditions) {
+    const bucket = conditionsByAgent.get(cond.agent_config_id) ?? [];
+    bucket.push(cond);
+    conditionsByAgent.set(cond.agent_config_id, bucket);
+  }
+
+  const { pickSecondaryAgent } = await import("@persia/shared/ai-agent");
+  const candidates = secondaryAgents.map((agent) => ({
+    agent,
+    conditions: conditionsByAgent.get(agent.id) ?? [],
+  }));
+
+  const picked = pickSecondaryAgent(candidates, leadState, messageText);
+  return picked ?? primary;
+}
+
 export async function resolveAgentContext(params: {
   db: AgentDb;
   orgId: string;
   msg: IncomingMessage;
   config: AgentConfig;
+  // PR-AGENT-INTEGRATION-3: caller pode pre-criar CRM context pra
+  // evitar dupla chamada quando ja rodou routing (pickAgentForConversation
+  // precisa do crm.leadId + crm.crmConversationId).
+  precrm?: RuntimeCrmContext;
 }): Promise<ResolvedAgentContext> {
-  const crm = await ensureCrmContext(params.db, params.orgId, params.msg);
+  const crm = params.precrm
+    ? params.precrm
+    : await ensureCrmContext(params.db, params.orgId, params.msg);
   const agentConversation = await ensureAgentConversation({
     db: params.db,
     orgId: params.orgId,

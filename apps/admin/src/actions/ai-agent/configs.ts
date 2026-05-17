@@ -194,6 +194,56 @@ export async function updateAgent(
   }
 }
 
+// PR-AGENT-INTEGRATION-3 (mai/2026): paridade com CRM. Zera primary
+// atual da org + marca alvo. Atomico via unique partial index.
+export async function setPrimaryAgent(
+  orgId: string,
+  configId: string,
+): Promise<AgentConfig> {
+  const { db, userId } = await requireAdminAgentOrg(orgId);
+
+  try {
+    await assertConfigBelongsToOrg(db, orgId, configId);
+
+    const { error: clearError } = await fromAny(db, "agent_configs")
+      .update({ is_primary: false, updated_at: new Date().toISOString() })
+      .eq("organization_id", orgId)
+      .eq("is_primary", true)
+      .neq("id", configId);
+    if (clearError) throw new Error(clearError.message);
+
+    const { data, error } = await fromAny(db, "agent_configs")
+      .update({ is_primary: true, updated_at: new Date().toISOString() })
+      .eq("organization_id", orgId)
+      .eq("id", configId)
+      .select("*")
+      .single();
+
+    if (error || !data) throw new Error(error?.message || "Erro");
+
+    await auditAdminAgentAction({
+      userId,
+      orgId,
+      action: "admin_ai_agent_set_primary",
+      entityType: "agent_config",
+      entityId: configId,
+    });
+
+    for (const path of agentPaths(configId)) revalidatePath(path);
+    return data as AgentConfig;
+  } catch (error) {
+    await auditAdminAgentFailure({
+      userId,
+      orgId,
+      action: "admin_ai_agent_set_primary",
+      entityType: "agent_config",
+      entityId: configId,
+      error,
+    });
+    throw error;
+  }
+}
+
 export async function deleteAgent(orgId: string, configId: string): Promise<void> {
   const { db, userId } = await requireAdminAgentOrg(orgId);
 

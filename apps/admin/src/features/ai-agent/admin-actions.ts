@@ -1,7 +1,13 @@
 "use client";
 
 import type { AgentActions } from "@persia/ai-agent-ui";
-import { createAgent, deleteAgent, updateAgent } from "@/actions/ai-agent/configs";
+import { createAgent, deleteAgent, setPrimaryAgent, updateAgent } from "@/actions/ai-agent/configs";
+import {
+  createEntryCondition,
+  deleteEntryCondition,
+  listEntryConditions,
+  updateEntryCondition,
+} from "@/actions/ai-agent/entry-conditions";
 import {
   createStage,
   deleteStage,
@@ -64,6 +70,11 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     createAgent: (input) => createAgent(orgId, input),
     updateAgent: (configId, input) => updateAgent(orgId, configId, input),
     deleteAgent: (configId) => deleteAgent(orgId, configId),
+    setPrimaryAgent: (configId) => setPrimaryAgent(orgId, configId),
+    listEntryConditions: (configId) => listEntryConditions(orgId, configId),
+    createEntryCondition: (input) => createEntryCondition(orgId, input),
+    updateEntryCondition: (id, input) => updateEntryCondition(orgId, id, input),
+    deleteEntryCondition: (id) => deleteEntryCondition(orgId, id),
     createStage: (configId, input) => createStage(orgId, configId, input),
     updateStage: (stageId, input) => updateStage(orgId, stageId, input),
     deleteStage: (stageId) => deleteStage(orgId, stageId),

@@ -41,6 +41,7 @@ import {
   type DayName,
 } from "@persia/shared/ai-agent";
 import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
+import { EntryConditionsCard } from "./EntryConditionsCard";
 import { HandoffNotificationCard } from "./HandoffNotificationCard";
 import { QuickToolsCard } from "./QuickToolsCard";
 import { useAgentActions } from "../context";
@@ -362,6 +363,15 @@ export function RulesTab({
       </Card>
 
       <div className="space-y-4">
+        {/* PR-AGENT-INTEGRATION-3: card "Quando ativado" so aparece em
+            agentes secundarios (nao-principais). Cliente define
+            conditions (tag/segment/mensagem/etapa/status) que ativam
+            esse agente em vez do principal. Sem regras = nunca recebe
+            leads. */}
+        {agent.is_primary === false ? (
+          <EntryConditionsCard configId={agent.id} />
+        ) : null}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Modelo</CardTitle>

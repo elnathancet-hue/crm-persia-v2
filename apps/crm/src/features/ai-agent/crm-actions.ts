@@ -5,7 +5,7 @@
 // O admin faz o equivalente em apps/admin com requireSuperadminForOrg.
 
 import type { AgentActions } from "@persia/ai-agent-ui";
-import { createAgent, deleteAgent, updateAgent } from "@/actions/ai-agent/configs";
+import { createAgent, deleteAgent, setPrimaryAgent, updateAgent } from "@/actions/ai-agent/configs";
 import {
   createStage,
   deleteStage,
@@ -26,6 +26,12 @@ import {
   removeAllowedDomain,
 } from "@/actions/ai-agent/webhook-allowlist";
 import { setNativeAgentEnabled } from "@/actions/ai-agent/feature-flag";
+import {
+  createEntryCondition,
+  deleteEntryCondition,
+  listEntryConditions,
+  updateEntryCondition,
+} from "@/actions/ai-agent/entry-conditions";
 import { testAgent } from "@/actions/ai-agent/tester";
 import { listRuns } from "@/actions/ai-agent/audit";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
@@ -67,6 +73,11 @@ export const crmAgentActions: AgentActions = {
   createAgent,
   updateAgent,
   deleteAgent,
+  setPrimaryAgent,
+  listEntryConditions,
+  createEntryCondition,
+  updateEntryCondition,
+  deleteEntryCondition,
   createStage,
   updateStage,
   deleteStage,

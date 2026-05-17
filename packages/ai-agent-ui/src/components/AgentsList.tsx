@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { AlertTriangle, Crown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AgentConfig } from "@persia/shared/ai-agent";
 import { getAgentTemplate } from "@persia/shared/ai-agent";
@@ -35,7 +35,7 @@ interface Props {
 }
 
 export function AgentsList({ initialAgents, nativeEnabled }: Props) {
-  const { createAgent, deleteAgent, setNativeAgentEnabled } = useAgentActions();
+  const { createAgent, deleteAgent, setNativeAgentEnabled, setPrimaryAgent } = useAgentActions();
   const [agents, setAgents] = React.useState(initialAgents);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<AgentConfig | null>(null);
@@ -82,6 +82,29 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
         toast.error(
           err instanceof Error ? err.message : "Falha ao criar agente",
         );
+      }
+    });
+  };
+
+  // PR-AGENT-INTEGRATION-3: define este agente como principal. Server
+  // atomicamente: zera is_primary=true em outros agentes da org +
+  // marca este. Local state atualizado pra refletir imediatamente.
+  const handleSetPrimary = (configId: string) => {
+    startTransition(async () => {
+      try {
+        const updated = await setPrimaryAgent(configId);
+        setAgents((prev) =>
+          prev.map((a) =>
+            a.id === updated.id
+              ? updated
+              : a.is_primary
+                ? { ...a, is_primary: false }
+                : a,
+          ),
+        );
+        toast.success(`"${updated.name}" agora é o agente principal`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Falha ao definir principal");
       }
     });
   };
@@ -153,6 +176,8 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
               key={agent.id}
               agent={agent}
               onDelete={() => setDeleteTarget(agent)}
+              onSetPrimary={() => handleSetPrimary(agent.id)}
+              isPending={isPending}
             />
           ))}
         </div>
@@ -215,12 +240,21 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 function AgentCard({
   agent,
   onDelete,
+  onSetPrimary,
+  isPending,
 }: {
   agent: AgentConfig;
   onDelete: () => void;
+  onSetPrimary: () => void;
+  isPending: boolean;
 }) {
+  const isPrimary = Boolean(agent.is_primary);
   return (
-    <Card className="transition-all hover:shadow-sm hover:border-primary/40">
+    <Card
+      className={`transition-all hover:shadow-sm ${
+        isPrimary ? "border-primary/60 shadow-sm" : "hover:border-primary/40"
+      }`}
+    >
       <CardContent className="p-6 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -236,6 +270,15 @@ function AgentCard({
                   {agent.name}
                 </Link>
                 <AgentStatusBadge status={agent.status} />
+                {isPrimary ? (
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[10px] font-semibold uppercase tracking-wider"
+                    title="Agente principal — recebe a primeira mensagem do lead"
+                  >
+                    <Crown className="size-3" />
+                    Principal
+                  </span>
+                ) : null}
               </div>
               {agent.description ? (
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
@@ -260,12 +303,25 @@ function AgentCard({
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
           <span className="font-mono">{agent.model}</span>
-          <Link
-            href={`/automations/agents/${agent.id}`}
-            className="text-primary hover:underline font-medium"
-          >
-            Configurar →
-          </Link>
+          <div className="flex items-center gap-3">
+            {!isPrimary ? (
+              <button
+                type="button"
+                onClick={onSetPrimary}
+                disabled={isPending}
+                className="text-muted-foreground hover:text-foreground font-medium transition-colors disabled:opacity-50"
+                title="Definir como agente principal da organização"
+              >
+                Definir como principal
+              </button>
+            ) : null}
+            <Link
+              href={`/automations/agents/${agent.id}`}
+              className="text-primary hover:underline font-medium"
+            >
+              Configurar →
+            </Link>
+          </div>
         </div>
       </CardContent>
     </Card>

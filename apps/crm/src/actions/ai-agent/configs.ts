@@ -250,6 +250,41 @@ export async function updateAgent(
   return data as AgentConfig;
 }
 
+// PR-AGENT-INTEGRATION-3 (mai/2026): seta um agente como principal da
+// org. Idempotente: se ja era primary, no-op. Atomico via unique partial
+// index — se concorrencia tentar setar 2 primary ao mesmo tempo, um dos
+// inserts falha e cliente retenta. Estrategia:
+//   1. UPDATE WHERE is_primary=true SET is_primary=false (zera o atual)
+//   2. UPDATE WHERE id=target SET is_primary=true (escala o novo)
+// Faz em transacao implicita via 2 calls. RLS garante org isolation.
+export async function setPrimaryAgent(configId: string): Promise<AgentConfig> {
+  const { db, orgId } = await requireAgentRole("admin");
+  await assertConfigBelongsToOrg(db, orgId, configId);
+
+  // Step 1: zera primary atual da org (se houver).
+  const { error: clearError } = await db
+    .from("agent_configs")
+    .update({ is_primary: false, updated_at: new Date().toISOString() })
+    .eq("organization_id", orgId)
+    .eq("is_primary", true)
+    .neq("id", configId);
+
+  if (clearError) throw new Error(clearError.message);
+
+  // Step 2: marca o alvo como primary.
+  const { data, error } = await db
+    .from("agent_configs")
+    .update({ is_primary: true, updated_at: new Date().toISOString() })
+    .eq("organization_id", orgId)
+    .eq("id", configId)
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Erro ao definir principal");
+  for (const path of agentPaths(configId)) revalidatePath(path);
+  return data as AgentConfig;
+}
+
 export async function deleteAgent(configId: string): Promise<void> {
   const { db, orgId } = await requireAgentRole("admin");
   await assertConfigBelongsToOrg(db, orgId, configId);

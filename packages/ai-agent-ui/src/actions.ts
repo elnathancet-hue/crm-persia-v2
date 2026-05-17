@@ -28,9 +28,12 @@ import type {
   CreateNotificationTemplateInput,
   CreateScheduledJobInput,
   CreateStageInput,
+  AgentEntryCondition,
+  CreateEntryConditionInput,
   CreateToolFromPresetInput,
   ListRunsInput,
   NativeHandlerName,
+  UpdateEntryConditionInput,
   ReorderStagesInput,
   SetCostLimitInput,
   SetStageToolInput,
@@ -52,6 +55,15 @@ export interface AgentActions {
   createAgent: (input: CreateAgentInput) => Promise<AgentConfig>;
   updateAgent: (configId: string, input: UpdateAgentInput) => Promise<AgentConfig>;
   deleteAgent: (configId: string) => Promise<void>;
+  // PR-AGENT-INTEGRATION-3: roteamento multi-agente.
+  setPrimaryAgent: (configId: string) => Promise<AgentConfig>;
+  listEntryConditions: (configId: string) => Promise<AgentEntryCondition[]>;
+  createEntryCondition: (input: CreateEntryConditionInput) => Promise<AgentEntryCondition>;
+  updateEntryCondition: (
+    conditionId: string,
+    input: UpdateEntryConditionInput,
+  ) => Promise<AgentEntryCondition>;
+  deleteEntryCondition: (conditionId: string) => Promise<void>;
 
   // Stages
   createStage: (configId: string, input: CreateStageInput) => Promise<AgentStage>;

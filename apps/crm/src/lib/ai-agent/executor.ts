@@ -38,12 +38,14 @@ import { asAgentDb, type AgentDb } from "./db";
 import { enqueueDebounced } from "./debounce";
 import {
   createSyntheticAgentConversation,
+  ensureCrmContext,
   incrementConversationSummaryCounters,
   loadActiveAgentConfig,
   loadAgentConfigById,
   loadAllowedTools,
   loadStage,
   persistConversationSummary,
+  pickAgentForConversation,
   resolveAgentContext,
   updateConversationUsage,
 } from "./context";
@@ -166,14 +168,30 @@ export async function tryEnqueueForNativeAgent(
     const enabled = await isNativeAgentEnabled(params.orgId, db);
     if (!enabled) return { handled: false, reason: "feature_flag_off" };
 
-    const config = await loadActiveAgentConfig(db, params.orgId);
-    if (!config) return { handled: false, reason: "no_active_config" };
+    const primary = await loadActiveAgentConfig(db, params.orgId);
+    if (!primary) return { handled: false, reason: "no_active_config" };
+
+    // PR-AGENT-INTEGRATION-3: cria CRM context primeiro (lead + msg)
+    // pra ter leadId/crmConversationId disponiveis pro routing.
+    const crm = await ensureCrmContext(db, params.orgId, params.msg);
+
+    // Routing: stickiness se ja existe agent_conversation, senao avalia
+    // conditions dos secundarios (OR + priority), fallback pro primary.
+    const config = await pickAgentForConversation({
+      db,
+      orgId: params.orgId,
+      crmConversationId: crm.crmConversationId,
+      leadId: crm.leadId,
+      messageText: params.msg.text ?? "",
+      primary,
+    });
 
     const resolved = await resolveAgentContext({
       db,
       orgId: params.orgId,
       msg: params.msg,
       config,
+      precrm: crm,
     });
 
     // PR-AI-AGENT-HUMAN-A: pause/resume keyword + auto-pause expiration.
