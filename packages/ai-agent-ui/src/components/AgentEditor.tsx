@@ -14,6 +14,7 @@ import {
   Library,
   ListOrdered,
   Loader2,
+  Menu,
   Settings2,
   Wrench,
 } from "lucide-react";
@@ -30,7 +31,6 @@ import type {
 } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
-import { PageTitle } from "@persia/ui/typography";
 import {
   Select,
   SelectContent,
@@ -38,6 +38,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@persia/ui/sheet";
+import { AgentSidebar, type AgentSidebarGroup } from "./AgentSidebar";
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import { RulesTab } from "./RulesTab";
 import { StagesTab } from "./StagesTab";
@@ -48,15 +55,18 @@ import { DocumentsTab } from "./DocumentsTab";
 import { NotificationsTab } from "./NotificationsTab";
 import { SchedulingTab } from "./SchedulingTab";
 import { FollowupTab } from "./FollowupTab";
-import { PlaceholderTab } from "./PlaceholderTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
 import { useAgentActions } from "../context";
 
-// PR-AI-AGENT-VISUAL (mai/2026): tabs custom underline (espelho de
-// CrmTabs/AgendaTabs). Lista centralizada pra render iterativo evitar
-// duplicacao + facilitar adicao/remocao no futuro.
-type AgentTabId =
+// PR-AI-AGENT-SIDEBAR (mai/2026): editor migrado de 9 tabs horizontais
+// underline (CrmTabs-style) pra sidebar vertical agrupada. Razao:
+// Hick-Hyman (menos itens visiveis ate decidir) + Miller (4 grupos com
+// 1-4 itens cada respeitam 7±2). Sidebar fixa no desktop, drawer no
+// mobile. Tester sai do header e vira FAB fixo bottom-right — sempre
+// acessivel sem disputar espaco com config (paridade com market patterns:
+// Custom GPT, Claude Projects, Copilot Studio).
+type AgentSectionId =
   | "rules"
   | "stages"
   | "faq"
@@ -67,27 +77,48 @@ type AgentTabId =
   | "followups"
   | "audit";
 
-interface AgentTabDef {
-  id: AgentTabId;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
+function buildSidebarGroups(opts: {
+  stagesCount: number;
+}): AgentSidebarGroup[] {
+  return [
+    {
+      id: "behavior",
+      label: "Comportamento",
+      items: [
+        { id: "rules", label: "Regras", icon: Settings2 },
+        {
+          id: "stages",
+          label: "Etapas",
+          icon: ListOrdered,
+          badge: opts.stagesCount > 0 ? opts.stagesCount : null,
+        },
+      ],
+    },
+    {
+      id: "knowledge",
+      label: "Conhecimento",
+      items: [
+        { id: "faq", label: "FAQ", icon: HelpCircle },
+        { id: "docs", label: "Documentos", icon: Library },
+      ],
+    },
+    {
+      id: "actions",
+      label: "Ações",
+      items: [
+        { id: "tools", label: "Ferramentas", icon: Wrench },
+        { id: "notifications", label: "Notificações", icon: Bell },
+        { id: "calendar", label: "Agendamento", icon: Calendar },
+        { id: "followups", label: "Follow-up", icon: Clock },
+      ],
+    },
+    {
+      id: "history",
+      label: "Histórico",
+      items: [{ id: "audit", label: "Execuções", icon: History }],
+    },
+  ];
 }
-
-const AGENT_TABS: AgentTabDef[] = [
-  { id: "rules", label: "Regras", icon: Settings2 },
-  { id: "stages", label: "Etapas", icon: ListOrdered },
-  { id: "faq", label: "FAQ", icon: HelpCircle },
-  { id: "docs", label: "Documentos", icon: Library },
-  { id: "tools", label: "Ferramentas", icon: Wrench },
-  { id: "notifications", label: "Notificações", icon: Bell },
-  { id: "calendar", label: "Agendamento", icon: Calendar },
-  { id: "followups", label: "Follow-up", icon: Clock },
-  // PR-AI-AGENT-TOKENS-OUT (mai/2026): tab "Limites e Uso" removida da
-  // UI cliente. Cost/token tracking continua no backend (admin pode
-  // configurar via SQL Editor ou UI dedicada futura). Cliente paga plano
-  // mensal fixo — token e problema do CRM Persia, nao dele.
-  { id: "audit", label: "Execuções", icon: History },
-];
 
 interface Props {
   initialAgent: AgentConfig;
@@ -133,10 +164,8 @@ export function AgentEditor({
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
-  // PR-AI-AGENT-VISUAL (mai/2026): tab state controlado pra usar pattern
-  // custom underline (espelho de CrmTabs/AgendaTabs). Antes usava
-  // <Tabs defaultValue> shadcn (uncontrolled, pill style).
-  const [activeTab, setActiveTab] = React.useState<AgentTabId>("rules");
+  const [activeSection, setActiveSection] = React.useState<AgentSectionId>("rules");
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   const refreshKnowledgeSources = React.useCallback(async () => {
     try {
@@ -191,17 +220,6 @@ export function AgentEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-load tools when notification templates change — tool sync acontece
-  // server-side, mas a aba Ferramentas precisa enxergar os tools novos.
-  React.useEffect(() => {
-    // skip on first render (initialTools já vem do SSR)
-    if (notificationTemplates === initialNotificationTemplates) return;
-    // simplificação: nao recarrega tools via fetch — deixamos o usuário
-    // dar refresh na aba Ferramentas se quiser ver. O backend é fonte
-    // da verdade.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notificationTemplates]);
-
   const persistAgent = React.useCallback(
     (patch: Parameters<AgentActions["updateAgent"]>[1], successMsg?: string) => {
       startTransition(async () => {
@@ -231,13 +249,22 @@ export function AgentEditor({
     persistAgent({ status }, `Status: ${statusLabel(status)}`);
   };
 
+  const sidebarGroups = React.useMemo(
+    () => buildSidebarGroups({ stagesCount: stages.length }),
+    [stages.length],
+  );
+
+  const handleSelect = React.useCallback((id: string) => {
+    setActiveSection(id as AgentSectionId);
+    setMobileNavOpen(false);
+  }, []);
+
   return (
     <div className="space-y-6">
-      {/* Header sticky com icone grande + nome + acoes. Paridade visual
-          com /crm (CrmShell) e /agenda (AgendaPageHeader, PR #217).
-          Linha 1: breadcrumb "Voltar". Linha 2: icone + nome + actions.
-          Linha 3: tabs underline custom (mesmo pattern). */}
-      <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
+      {/* Header sticky — sem tabs (movido pra sidebar), sem botao "Testar
+          agente" (vira FAB fixo). Hamburger no mobile abre sidebar via
+          drawer. Mantem breadcrumb + identidade + status. */}
+      <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-4 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
         <Link
           href="/automations/agents"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -248,6 +275,33 @@ export function AgentEditor({
 
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-start gap-3.5 min-w-0 flex-1">
+            {/* Mobile nav trigger (lg-): abre Sheet controlado. Nao uso
+                SheetTrigger pq base-ui nao tem asChild — controlled Sheet
+                + Button onClick e mais simples e da o mesmo resultado. */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="lg:hidden shrink-0"
+              aria-label="Abrir navegação"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu className="size-4" />
+            </Button>
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <SheetContent side="left" className="w-72 p-4">
+                <SheetHeader>
+                  <SheetTitle className="text-sm">Editor</SheetTitle>
+                </SheetHeader>
+                <div className="mt-4">
+                  <AgentSidebar
+                    groups={sidebarGroups}
+                    activeId={activeSection}
+                    onSelect={handleSelect}
+                    variant="drawer"
+                  />
+                </div>
+              </SheetContent>
+            </Sheet>
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
               <Bot className="size-6" />
             </div>
@@ -266,8 +320,8 @@ export function AgentEditor({
                 ) : null}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Configure regras, etapas, ferramentas e teste o agente
-                antes de ativar.
+                Configure regras, etapas e ferramentas. Teste a qualquer
+                momento pelo botão flutuante.
               </p>
             </div>
           </div>
@@ -285,110 +339,101 @@ export function AgentEditor({
                 <SelectItem value="paused">Pausado</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setTesterOpen(true)}>
-              <FlaskConical className="size-4" />
-              Testar agente
-            </Button>
           </div>
-        </div>
-
-        {/* Tabs custom underline — espelho byte-by-byte de CrmTabs /
-            AgendaTabs. Antes usava shadcn <Tabs> pill style — driftava
-            do resto do produto. */}
-        <div className="flex gap-0.5 border-b border-border overflow-x-auto -mb-3">
-          {AGENT_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                aria-pressed={isActive}
-                className={`relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-md px-4 py-3 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                  isActive
-                    ? "text-primary bg-primary/5"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                }`}
-              >
-                <Icon className={`size-4 ${isActive ? "text-primary" : ""}`} />
-                <span>{tab.label}</span>
-                {isActive && (
-                  <span
-                    className="absolute inset-x-2 -bottom-px h-0.5 rounded-t-full bg-primary"
-                    aria-hidden
-                  />
-                )}
-              </button>
-            );
-          })}
         </div>
       </div>
 
-      {/* Conteudo da tab ativa — render condicional (sem TabsContent do
-          shadcn). Mesmo pattern do CrmShell e AgendaPageClient. */}
-      {activeTab === "rules" && (
-        <RulesTab agent={agent} onChange={persistAgent} isPending={isPending} />
-      )}
-      {activeTab === "stages" && (
-        <StagesTab
-          configId={agent.id}
-          stages={stages}
-          tools={tools}
-          onChange={setStages}
-        />
-      )}
-      {activeTab === "faq" && (
-        <FAQTab
-          configId={agent.id}
-          sources={knowledgeSources}
-          onChange={setKnowledgeSources}
-          onRefresh={refreshKnowledgeSources}
-        />
-      )}
-      {activeTab === "docs" && (
-        <DocumentsTab
-          configId={agent.id}
-          sources={knowledgeSources}
-          onChange={setKnowledgeSources}
-          onRefresh={refreshKnowledgeSources}
-        />
-      )}
-      {activeTab === "tools" && (
-        <ToolsTab
-          configId={agent.id}
-          tools={tools}
-          stages={stages}
-          allowedDomains={initialAllowedDomains}
-          onChange={setTools}
-        />
-      )}
-      {activeTab === "notifications" && (
-        <NotificationsTab
-          configId={agent.id}
-          templates={notificationTemplates}
-          onChange={setNotificationTemplates}
-          onRefresh={refreshNotificationTemplates}
-        />
-      )}
-      {activeTab === "calendar" && (
-        <SchedulingTab
-          configId={agent.id}
-          jobs={scheduledJobs}
-          templates={notificationTemplates}
-          onChange={setScheduledJobs}
-          onRefresh={refreshScheduledJobs}
-        />
-      )}
-      {activeTab === "followups" && (
-        <FollowupTab
-          configId={agent.id}
-          followups={followups}
-          templates={notificationTemplates}
-          onChange={setFollowups}
-        />
-      )}
-      {activeTab === "audit" && <AuditTab configId={agent.id} />}
+      {/* Layout: sidebar fixa (lg+) + conteudo. Em <lg, sidebar so via
+          drawer (hamburger). Bottom padding garante que o FAB nao tampe
+          o ultimo content. */}
+      <div className="grid gap-6 lg:grid-cols-[16rem_1fr] pb-24">
+        <aside className="hidden lg:block">
+          <AgentSidebar
+            groups={sidebarGroups}
+            activeId={activeSection}
+            onSelect={handleSelect}
+          />
+        </aside>
+
+        <main className="min-w-0">
+          {activeSection === "rules" && (
+            <RulesTab agent={agent} onChange={persistAgent} isPending={isPending} />
+          )}
+          {activeSection === "stages" && (
+            <StagesTab
+              configId={agent.id}
+              stages={stages}
+              tools={tools}
+              onChange={setStages}
+            />
+          )}
+          {activeSection === "faq" && (
+            <FAQTab
+              configId={agent.id}
+              sources={knowledgeSources}
+              onChange={setKnowledgeSources}
+              onRefresh={refreshKnowledgeSources}
+            />
+          )}
+          {activeSection === "docs" && (
+            <DocumentsTab
+              configId={agent.id}
+              sources={knowledgeSources}
+              onChange={setKnowledgeSources}
+              onRefresh={refreshKnowledgeSources}
+            />
+          )}
+          {activeSection === "tools" && (
+            <ToolsTab
+              configId={agent.id}
+              tools={tools}
+              stages={stages}
+              allowedDomains={initialAllowedDomains}
+              onChange={setTools}
+            />
+          )}
+          {activeSection === "notifications" && (
+            <NotificationsTab
+              configId={agent.id}
+              templates={notificationTemplates}
+              onChange={setNotificationTemplates}
+              onRefresh={refreshNotificationTemplates}
+            />
+          )}
+          {activeSection === "calendar" && (
+            <SchedulingTab
+              configId={agent.id}
+              jobs={scheduledJobs}
+              templates={notificationTemplates}
+              onChange={setScheduledJobs}
+              onRefresh={refreshScheduledJobs}
+            />
+          )}
+          {activeSection === "followups" && (
+            <FollowupTab
+              configId={agent.id}
+              followups={followups}
+              templates={notificationTemplates}
+              onChange={setFollowups}
+            />
+          )}
+          {activeSection === "audit" && <AuditTab configId={agent.id} />}
+        </main>
+      </div>
+
+      {/* Tester FAB — fixo bottom-right, z-40 (acima de conteudo, abaixo
+          do header sticky z-30 + de sheets/dialogs z-50). Pill com label
+          em todas as resolucoes pra discoverability. */}
+      <Button
+        type="button"
+        onClick={() => setTesterOpen(true)}
+        size="lg"
+        className="fixed bottom-6 right-6 z-40 rounded-full px-5 shadow-lg shadow-primary/30"
+        aria-label="Testar agente"
+      >
+        <FlaskConical className="size-4" />
+        Testar agente
+      </Button>
 
       <TesterSheet
         configId={agent.id}
