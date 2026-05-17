@@ -37,6 +37,7 @@ export default async function AgendaPage() {
       initialRange={range}
       services={services}
       currentUserId={ctx.userId}
+      orgId={ctx.orgId}
       orgSlug={org.slug}
     />
   );

@@ -18,10 +18,12 @@ import {
   CreateAppointmentDrawer,
   RescheduleAppointmentDrawer,
   useAgendaFilters,
+  useAppointmentsRealtime,
   type AgendaCallbacks,
   type AgendaSettingsActions,
   type AgendaTab,
 } from "@persia/agenda-ui";
+import { useDebouncedCallback } from "@persia/leads-ui";
 import type {
   AgendaService,
   Appointment,
@@ -38,12 +40,14 @@ import {
   updateReminderConfig,
 } from "@/actions/agenda/reminders";
 import { getDefaultAvailabilityRule } from "@/actions/agenda/availability";
+import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   initialAppointments: Appointment[];
   initialRange: { from: string; to: string };
   services: AgendaService[];
   currentUserId: string;
+  orgId: string | null;
   orgSlug: string;
 }
 
@@ -56,6 +60,7 @@ export function AgendaPageClient({
   initialRange,
   services,
   currentUserId,
+  orgId,
   orgSlug,
 }: Props) {
   const router = useRouter();
@@ -106,6 +111,19 @@ export function AgendaPageClient({
       });
     router.refresh();
   }, [router, initialRange.from, initialRange.to]);
+
+  // PR-AGENDA-REALTIME (mai/2026): antes a agenda era pull-only — 2
+  // agentes da mesma org abertos podiam causar double-booking porque
+  // o segundo so via INSERT/UPDATE/DELETE de appointment apos F5 ou
+  // navegacao. Agora useAppointmentsRealtime escuta `postgres_changes`
+  // em `appointments` filtrado por `organization_id` e dispara refetch
+  // debounced (200ms trailing — burst de bulk move/create nao gera N
+  // refetchs paralelos). Mesmo pattern do useKanbanLeadsRealtime
+  // (PR #213). RLS de appointments (migration 031) ja filtra por org
+  // no DB; filter no canal e camada extra.
+  const supabase = useMemo(() => createClient(), []);
+  const debouncedRefetch = useDebouncedCallback(refetch);
+  useAppointmentsRealtime(supabase, orgId, debouncedRefetch);
 
   const callbacks = useMemo<AgendaCallbacks>(
     () => ({

@@ -24,6 +24,8 @@ export {
 // Hooks
 export {
   useAppointments,
+  useAppointmentsRealtime,
+  type AppointmentRealtimeEvent,
   useAgendaServices,
   useAvailability,
   useBookingPages,
