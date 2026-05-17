@@ -28,6 +28,10 @@ import type {
   UpdateAvailabilityRuleInput,
   UpdateBookingPageInput,
 } from "@persia/shared/agenda";
+// PR-AGENDA-LAST-MSG (mai/2026): tipo da ultima mensagem do lead exposto
+// pelo AppointmentDrawer. Vem do CRM shared (messages e entidade do CRM,
+// nao da Agenda — Agenda so consome).
+import type { LeadLastMessagePreview } from "@persia/shared/crm";
 
 export interface AgendaActions {
   // Appointments
@@ -94,6 +98,11 @@ export interface AgendaActions {
   ) => Promise<BookingPage>;
   duplicateBookingPage: (id: string, new_slug: string) => Promise<BookingPage>;
   deleteBookingPage: (id: string) => Promise<void>;
+
+  // PR-AGENDA-LAST-MSG (mai/2026): ultima mensagem do lead pra mostrar
+  // contexto inline no AppointmentDrawer. Opcional — admin pode nao
+  // implementar e a secao some.
+  getLeadLastMessage?: (leadId: string) => Promise<LeadLastMessagePreview | null>;
 }
 
 // Tipos auxiliares pro callbacks que componentes vao expor pra UI parent

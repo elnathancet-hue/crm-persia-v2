@@ -22,6 +22,7 @@ import {
   formatTimeRange,
   formatWeekday,
 } from "@persia/shared/agenda";
+import type { LeadLastMessagePreview } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import {
   Dialog,
@@ -260,6 +261,19 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
                 </section>
               )}
 
+              {/* PR-AGENDA-LAST-MSG (mai/2026): preview da ultima
+                  mensagem trocada com o lead. Antes, agente abria
+                  appointment, precisava clicar "Chat" pra ver contexto.
+                  Agora aparece inline — abrir chat continua opcao via
+                  botao acima. So renderiza quando appointment.lead_id
+                  existe e action wired (admin pode nao implementar). */}
+              {appointment.lead_id && (
+                <LastMessageSection
+                  leadId={appointment.lead_id}
+                  drawerOpen={open}
+                />
+              )}
+
               {appointment.status === "cancelled" && (
                 <section className="space-y-2">
                   <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -347,3 +361,174 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
     </Dialog>
   );
 };
+
+// ============================================================================
+// LastMessageSection — preview inline da ultima mensagem do lead
+// ----------------------------------------------------------------------------
+// PR-AGENDA-LAST-MSG (mai/2026): fecha o loop CRM<->Agenda no plano
+// "contexto sem trocar de tela". Antes, agente abria appointment,
+// precisava clicar Chat pra ver o que o lead falou. Agora ve o snippet
+// inline e decide se abre o chat completo.
+//
+// Carrega lazy quando drawer abre + tem lead_id + actions.getLeadLastMessage
+// existe (admin pode nao implementar — secao some).
+// ============================================================================
+
+function LastMessageSection({
+  leadId,
+  drawerOpen,
+}: {
+  leadId: string;
+  drawerOpen: boolean;
+}) {
+  const actions = useAgendaActions();
+  const [message, setMessage] = React.useState<LeadLastMessagePreview | null>(
+    null,
+  );
+  const [loading, setLoading] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!drawerOpen) return;
+    if (!actions.getLeadLastMessage) return;
+    let cancelled = false;
+    setLoading(true);
+    actions
+      .getLeadLastMessage(leadId)
+      .then((res) => {
+        if (!cancelled) {
+          setMessage(res);
+          setLoaded(true);
+        }
+      })
+      .catch((err) => {
+        console.error("[LastMessageSection] failed:", err);
+        if (!cancelled) {
+          setMessage(null);
+          setLoaded(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [drawerOpen, leadId, actions]);
+
+  // Action nao wired (admin sem implementacao) — esconde secao silencioso.
+  if (!actions.getLeadLastMessage) return null;
+
+  // Loading: skeleton minimo (1 linha alta).
+  if (loading && !loaded) {
+    return (
+      <section className="space-y-2">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Última mensagem
+        </h3>
+        <div className="h-14 w-full bg-muted rounded-md animate-pulse" />
+      </section>
+    );
+  }
+
+  // Sem mensagens (lead frio) — mostra hint discreto.
+  if (!message) {
+    return (
+      <section className="space-y-2">
+        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Última mensagem
+        </h3>
+        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground italic">
+          Sem mensagens trocadas com este lead ainda.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Última mensagem
+      </h3>
+      <LastMessagePreview message={message} />
+    </section>
+  );
+}
+
+function LastMessagePreview({
+  message,
+}: {
+  message: LeadLastMessagePreview;
+}) {
+  const isInbound = message.direction === "inbound";
+  // Type label pra mensagens nao-text (imagem, audio, etc). Cobre os
+  // tipos comuns; default "Mensagem" pra unknown.
+  const typeLabel: Record<string, string> = {
+    image: "📷 Imagem",
+    audio: "🎙️ Áudio",
+    video: "🎥 Vídeo",
+    document: "📄 Documento",
+    sticker: "🧩 Figurinha",
+    location: "📍 Localização",
+    contact: "👤 Contato",
+  };
+  const isText = !message.type || message.type === "text";
+  const fallback = message.type ? typeLabel[message.type] ?? "Mensagem" : "Mensagem";
+  const content = isText
+    ? message.content?.trim() || "(sem texto)"
+    : fallback;
+
+  // Formato relativo simples (Intl ja resolve pt-BR). Pra ficar enxuto
+  // sem add dep, calculo difference em horas e formato como minutos/h/dias.
+  const relativeTime = formatRelativeShortPtBR(message.created_at);
+
+  return (
+    <div
+      className={`rounded-md border bg-card px-3 py-2.5 text-sm ${
+        isInbound ? "border-primary/30" : "border-border"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span
+          className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide ${
+            isInbound ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          {isInbound ? "Lead" : "Você"}
+        </span>
+        <span className="text-[10px] text-muted-foreground tabular-nums">
+          {relativeTime}
+        </span>
+      </div>
+      <p className="text-sm text-foreground line-clamp-2 break-words">
+        {content}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Format relativo curto em pt-BR sem dependencia externa. Cobre os
+ * casos comuns ("agora", "5 min", "2 h", "3 d", senao data abreviada).
+ *
+ * Inline aqui em vez de import de outro pacote pra evitar ciclo
+ * agenda-ui <-> ui (formatRelativeShortPtBR ja existe em @persia/ui
+ * mas adiciona dep pesada pro caso simples desta secao).
+ */
+function formatRelativeShortPtBR(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diff = Math.max(0, now - then);
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "agora";
+  if (min < 60) return `${min} min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} h`;
+  const d = Math.floor(hr / 24);
+  if (d < 7) return `${d} d`;
+  return new Date(then).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+}

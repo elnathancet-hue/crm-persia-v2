@@ -40,6 +40,9 @@ import {
   getBookingPages,
   updateBookingPage,
 } from "@/actions/agenda/booking-pages";
+// PR-AGENDA-LAST-MSG (mai/2026): ultima mensagem do lead pro
+// AppointmentDrawer. Vem de actions/messages (entidade CRM, nao da Agenda).
+import { getLeadLastMessage } from "@/actions/messages";
 
 export const crmAgendaActions: AgendaActions = {
   // Appointments
@@ -72,4 +75,6 @@ export const crmAgendaActions: AgendaActions = {
   updateBookingPage,
   duplicateBookingPage,
   deleteBookingPage,
+  // PR-AGENDA-LAST-MSG (mai/2026)
+  getLeadLastMessage,
 };
