@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bell,
+  Bot,
   Calendar,
   Clock,
   FlaskConical,
@@ -31,7 +32,7 @@ import type {
 } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@persia/ui/tabs";
+import { PageTitle } from "@persia/ui/typography";
 import {
   Select,
   SelectContent,
@@ -54,6 +55,40 @@ import { PlaceholderTab } from "./PlaceholderTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
 import { useAgentActions } from "../context";
+
+// PR-AI-AGENT-VISUAL (mai/2026): tabs custom underline (espelho de
+// CrmTabs/AgendaTabs). Lista centralizada pra render iterativo evitar
+// duplicacao + facilitar adicao/remocao no futuro.
+type AgentTabId =
+  | "rules"
+  | "stages"
+  | "faq"
+  | "docs"
+  | "tools"
+  | "notifications"
+  | "calendar"
+  | "followups"
+  | "limits"
+  | "audit";
+
+interface AgentTabDef {
+  id: AgentTabId;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const AGENT_TABS: AgentTabDef[] = [
+  { id: "rules", label: "Regras", icon: Settings2 },
+  { id: "stages", label: "Etapas", icon: ListOrdered },
+  { id: "faq", label: "FAQ", icon: HelpCircle },
+  { id: "docs", label: "Documentos", icon: Library },
+  { id: "tools", label: "Ferramentas", icon: Wrench },
+  { id: "notifications", label: "Notificações", icon: Bell },
+  { id: "calendar", label: "Agendamento", icon: Calendar },
+  { id: "followups", label: "Follow-up", icon: Clock },
+  { id: "limits", label: "Limites e Uso", icon: Gauge },
+  { id: "audit", label: "Execuções", icon: History },
+];
 
 interface Props {
   initialAgent: AgentConfig;
@@ -101,6 +136,10 @@ export function AgentEditor({
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
+  // PR-AI-AGENT-VISUAL (mai/2026): tab state controlado pra usar pattern
+  // custom underline (espelho de CrmTabs/AgendaTabs). Antes usava
+  // <Tabs defaultValue> shadcn (uncontrolled, pill style).
+  const [activeTab, setActiveTab] = React.useState<AgentTabId>("rules");
 
   const refreshKnowledgeSources = React.useCallback(async () => {
     try {
@@ -197,162 +236,165 @@ export function AgentEditor({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <Link
-            href="/automations/agents"
-            aria-label="Voltar"
-            className="inline-flex items-center justify-center size-8 rounded-md hover:bg-accent text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-          </Link>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <Input
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onBlur={handleNameBlur}
-              className="text-xl font-semibold tracking-tight border-transparent hover:border-input focus:border-input bg-transparent shadow-none px-2 max-w-sm"
-              aria-label="Nome do agente"
-            />
-            <AgentStatusBadge status={agent.status} />
-            {isPending ? (
-              <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-            ) : null}
+      {/* Header sticky com icone grande + nome + acoes. Paridade visual
+          com /crm (CrmShell) e /agenda (AgendaPageHeader, PR #217).
+          Linha 1: breadcrumb "Voltar". Linha 2: icone + nome + actions.
+          Linha 3: tabs underline custom (mesmo pattern). */}
+      <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
+        <Link
+          href="/automations/agents"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="size-3.5" />
+          Voltar pra lista de agentes
+        </Link>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5 min-w-0 flex-1">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">
+              <Bot className="size-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <Input
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onBlur={handleNameBlur}
+                  className="text-xl font-semibold tracking-tight border-transparent hover:border-input focus:border-input bg-transparent shadow-none px-2 max-w-sm h-auto py-0.5"
+                  aria-label="Nome do agente"
+                />
+                <AgentStatusBadge status={agent.status} />
+                {isPending ? (
+                  <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+                ) : null}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Configure regras, etapas, ferramentas e teste o agente
+                antes de ativar.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Select
+              value={agent.status}
+              onValueChange={(v) => v && handleStatusChange(v as AgentStatus)}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue>{statusLabel(agent.status)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Rascunho</SelectItem>
+                <SelectItem value="active">Ativo</SelectItem>
+                <SelectItem value="paused">Pausado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => setTesterOpen(true)}>
+              <FlaskConical className="size-4" />
+              Testar agente
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={agent.status}
-            onValueChange={(v) => v && handleStatusChange(v as AgentStatus)}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue>{statusLabel(agent.status)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="draft">Rascunho</SelectItem>
-              <SelectItem value="active">Ativo</SelectItem>
-              <SelectItem value="paused">Pausado</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button onClick={() => setTesterOpen(true)}>
-            <FlaskConical className="size-4" />
-            Testar agente
-          </Button>
+
+        {/* Tabs custom underline — espelho byte-by-byte de CrmTabs /
+            AgendaTabs. Antes usava shadcn <Tabs> pill style — driftava
+            do resto do produto. */}
+        <div className="flex gap-0.5 border-b border-border overflow-x-auto -mb-3">
+          {AGENT_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                aria-pressed={isActive}
+                className={`relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-md px-4 py-3 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                  isActive
+                    ? "text-primary bg-primary/5"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                }`}
+              >
+                <Icon className={`size-4 ${isActive ? "text-primary" : ""}`} />
+                <span>{tab.label}</span>
+                {isActive && (
+                  <span
+                    className="absolute inset-x-2 -bottom-px h-0.5 rounded-t-full bg-primary"
+                    aria-hidden
+                  />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <Tabs defaultValue="rules" className="gap-4">
-        <TabsList className="h-auto flex-wrap justify-start">
-          <TabsTrigger value="rules" className="gap-2">
-            <Settings2 className="size-4" />
-            Regras
-          </TabsTrigger>
-          <TabsTrigger value="stages" className="gap-2">
-            <ListOrdered className="size-4" />
-            Etapas
-          </TabsTrigger>
-          <TabsTrigger value="faq" className="gap-2">
-            <HelpCircle className="size-4" />
-            FAQ
-          </TabsTrigger>
-          <TabsTrigger value="docs" className="gap-2">
-            <Library className="size-4" />
-            Documentos
-          </TabsTrigger>
-          <TabsTrigger value="tools" className="gap-2">
-            <Wrench className="size-4" />
-            Ferramentas
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="size-4" />
-            Notificações
-          </TabsTrigger>
-          <TabsTrigger value="calendar" className="gap-2">
-            <Calendar className="size-4" />
-            Agendamento
-          </TabsTrigger>
-          <TabsTrigger value="followups" className="gap-2">
-            <Clock className="size-4" />
-            Follow-up
-          </TabsTrigger>
-          <TabsTrigger value="limits" className="gap-2">
-            <Gauge className="size-4" />
-            Limites e Uso
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="gap-2">
-            <History className="size-4" />
-            Execuções
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="rules">
-          <RulesTab agent={agent} onChange={persistAgent} isPending={isPending} />
-        </TabsContent>
-        <TabsContent value="stages">
-          <StagesTab
-            configId={agent.id}
-            stages={stages}
-            tools={tools}
-            onChange={setStages}
-          />
-        </TabsContent>
-        <TabsContent value="faq">
-          <FAQTab
-            configId={agent.id}
-            sources={knowledgeSources}
-            onChange={setKnowledgeSources}
-            onRefresh={refreshKnowledgeSources}
-          />
-        </TabsContent>
-        <TabsContent value="docs">
-          <DocumentsTab
-            configId={agent.id}
-            sources={knowledgeSources}
-            onChange={setKnowledgeSources}
-            onRefresh={refreshKnowledgeSources}
-          />
-        </TabsContent>
-        <TabsContent value="tools">
-          <ToolsTab
-            configId={agent.id}
-            tools={tools}
-            stages={stages}
-            allowedDomains={initialAllowedDomains}
-            onChange={setTools}
-          />
-        </TabsContent>
-        <TabsContent value="notifications">
-          <NotificationsTab
-            configId={agent.id}
-            templates={notificationTemplates}
-            onChange={setNotificationTemplates}
-            onRefresh={refreshNotificationTemplates}
-          />
-        </TabsContent>
-        <TabsContent value="calendar">
-          <SchedulingTab
-            configId={agent.id}
-            jobs={scheduledJobs}
-            templates={notificationTemplates}
-            onChange={setScheduledJobs}
-            onRefresh={refreshScheduledJobs}
-          />
-        </TabsContent>
-        <TabsContent value="followups">
-          <FollowupTab
-            configId={agent.id}
-            followups={followups}
-            templates={notificationTemplates}
-            onChange={setFollowups}
-          />
-        </TabsContent>
-        <TabsContent value="limits">
-          <LimitsUsageTab configId={agent.id} initialLimits={initialLimits} />
-        </TabsContent>
-        <TabsContent value="audit">
-          <AuditTab configId={agent.id} />
-        </TabsContent>
-      </Tabs>
+      {/* Conteudo da tab ativa — render condicional (sem TabsContent do
+          shadcn). Mesmo pattern do CrmShell e AgendaPageClient. */}
+      {activeTab === "rules" && (
+        <RulesTab agent={agent} onChange={persistAgent} isPending={isPending} />
+      )}
+      {activeTab === "stages" && (
+        <StagesTab
+          configId={agent.id}
+          stages={stages}
+          tools={tools}
+          onChange={setStages}
+        />
+      )}
+      {activeTab === "faq" && (
+        <FAQTab
+          configId={agent.id}
+          sources={knowledgeSources}
+          onChange={setKnowledgeSources}
+          onRefresh={refreshKnowledgeSources}
+        />
+      )}
+      {activeTab === "docs" && (
+        <DocumentsTab
+          configId={agent.id}
+          sources={knowledgeSources}
+          onChange={setKnowledgeSources}
+          onRefresh={refreshKnowledgeSources}
+        />
+      )}
+      {activeTab === "tools" && (
+        <ToolsTab
+          configId={agent.id}
+          tools={tools}
+          stages={stages}
+          allowedDomains={initialAllowedDomains}
+          onChange={setTools}
+        />
+      )}
+      {activeTab === "notifications" && (
+        <NotificationsTab
+          configId={agent.id}
+          templates={notificationTemplates}
+          onChange={setNotificationTemplates}
+          onRefresh={refreshNotificationTemplates}
+        />
+      )}
+      {activeTab === "calendar" && (
+        <SchedulingTab
+          configId={agent.id}
+          jobs={scheduledJobs}
+          templates={notificationTemplates}
+          onChange={setScheduledJobs}
+          onRefresh={refreshScheduledJobs}
+        />
+      )}
+      {activeTab === "followups" && (
+        <FollowupTab
+          configId={agent.id}
+          followups={followups}
+          templates={notificationTemplates}
+          onChange={setFollowups}
+        />
+      )}
+      {activeTab === "limits" && (
+        <LimitsUsageTab configId={agent.id} initialLimits={initialLimits} />
+      )}
+      {activeTab === "audit" && <AuditTab configId={agent.id} />}
 
       <TesterSheet
         configId={agent.id}

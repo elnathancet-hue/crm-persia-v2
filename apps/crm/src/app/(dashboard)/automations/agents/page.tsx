@@ -4,21 +4,14 @@ import { AgentsListClient } from "./agents-list-client";
 
 export const metadata = { title: "Agente IA Nativo" };
 
+// PR-AI-AGENT-VISUAL (mai/2026): header + tabs movidos pro client
+// (paridade com /crm — icone grande no header + sticky). Page server
+// apenas hidrata dados iniciais. Mesmo pattern do /agenda PR #217.
 export default async function AgentsPage() {
   const [agents, enabled] = await Promise.all([
     listAgents(),
     isNativeAgentEnabled(),
   ]);
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Agente IA Nativo</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Configure etapas, regras e ferramentas para o agente responder suas conversas sem webhooks externos
-        </p>
-      </div>
-      <AgentsListClient initialAgents={agents} nativeEnabled={enabled} />
-    </div>
-  );
+  return <AgentsListClient initialAgents={agents} nativeEnabled={enabled} />;
 }
