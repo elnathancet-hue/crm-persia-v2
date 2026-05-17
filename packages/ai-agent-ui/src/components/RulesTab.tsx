@@ -19,7 +19,15 @@ import {
   HANDOFF_TEMPLATE_MAX_LENGTH,
   PAUSE_KEYWORDS_DEFAULT,
   RESUME_KEYWORDS_DEFAULT,
+  SPLIT_DELAY_SECONDS_DEFAULT,
+  SPLIT_DELAY_SECONDS_MAX,
+  SPLIT_DELAY_SECONDS_MIN,
+  SPLIT_THRESHOLD_CHARS_DEFAULT,
+  SPLIT_THRESHOLD_CHARS_MAX,
+  SPLIT_THRESHOLD_CHARS_MIN,
   clampAutoPauseMinutes,
+  clampSplitDelaySeconds,
+  clampSplitThresholdChars,
   normalizeHumanizationConfig,
   sanitizeKeywordList,
 } from "@persia/shared/ai-agent";
@@ -91,6 +99,15 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [resumeKeywordsText, setResumeKeywordsText] = React.useState<string>(
     initialHumanization.resume_keywords.join("\n"),
   );
+  const [splitEnabled, setSplitEnabled] = React.useState<boolean>(
+    initialHumanization.split_enabled,
+  );
+  const [splitThresholdChars, setSplitThresholdChars] = React.useState<number>(
+    initialHumanization.split_threshold_chars,
+  );
+  const [splitDelaySeconds, setSplitDelaySeconds] = React.useState<number>(
+    initialHumanization.split_delay_seconds,
+  );
 
   const { listCalendarConnections } = useAgentActions();
 
@@ -132,6 +149,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     );
     setPauseKeywordsText(next.pause_keywords.join("\n"));
     setResumeKeywordsText(next.resume_keywords.join("\n"));
+    setSplitEnabled(next.split_enabled);
+    setSplitThresholdChars(next.split_threshold_chars);
+    setSplitDelaySeconds(next.split_delay_seconds);
   }, [
     agent.id,
     agent.system_prompt,
@@ -184,12 +204,17 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const nextAutoPauseMinutes = humanizationEnabled
     ? clampAutoPauseMinutes(autoPauseMinutes)
     : 0;
+  const nextSplitThresholdChars = clampSplitThresholdChars(splitThresholdChars);
+  const nextSplitDelaySeconds = clampSplitDelaySeconds(splitDelaySeconds);
   const humanizationDirty =
     nextAutoPauseMinutes !== initialHumanization.auto_pause_minutes ||
     JSON.stringify(nextPauseKeywords) !==
       JSON.stringify(initialHumanization.pause_keywords) ||
     JSON.stringify(nextResumeKeywords) !==
-      JSON.stringify(initialHumanization.resume_keywords);
+      JSON.stringify(initialHumanization.resume_keywords) ||
+    splitEnabled !== initialHumanization.split_enabled ||
+    nextSplitThresholdChars !== initialHumanization.split_threshold_chars ||
+    nextSplitDelaySeconds !== initialHumanization.split_delay_seconds;
 
   // Client-side validation that mirrors the server (lets the Save button
   // disable proactively on bad data — server still re-validates).
@@ -239,6 +264,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
         pause_keywords: nextPauseKeywords,
         resume_keywords: nextResumeKeywords,
         auto_pause_minutes: nextAutoPauseMinutes,
+        split_enabled: splitEnabled,
+        split_threshold_chars: nextSplitThresholdChars,
+        split_delay_seconds: nextSplitDelaySeconds,
       };
     }
     onChange(patch, "Regras salvas");
@@ -421,6 +449,99 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
                 estiver pausado.
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* PR-AI-AGENT-HUMAN-B: card de split de mensagens. Conservador
+            por default (off) pra evitar custo extra de GPT call e
+            mudancas de UX inesperadas. Toggle on libera 2 inputs. */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Dividir respostas longas</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Quando o agente escrever uma resposta grande, divide
+              automaticamente em várias mensagens curtas no WhatsApp — parece
+              mais humano.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <Label htmlFor="split_enabled" className="cursor-pointer">
+                  Ligar divisão de mensagens
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Respostas longas viram 2-3 mensagens curtas com pausa
+                  entre elas. Respostas curtas continuam indo inteiras.
+                </p>
+              </div>
+              <Switch
+                id="split_enabled"
+                checked={splitEnabled}
+                onCheckedChange={(v) => setSplitEnabled(Boolean(v))}
+              />
+            </div>
+
+            {splitEnabled ? (
+              <>
+                <div className="space-y-1.5 pt-2 border-t">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="split_threshold_chars">
+                      Dividir quando a resposta passar de
+                    </Label>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {splitThresholdChars} caracteres
+                    </span>
+                  </div>
+                  <Input
+                    id="split_threshold_chars"
+                    type="number"
+                    min={SPLIT_THRESHOLD_CHARS_MIN}
+                    max={SPLIT_THRESHOLD_CHARS_MAX}
+                    step={10}
+                    value={splitThresholdChars}
+                    onChange={(e) =>
+                      setSplitThresholdChars(
+                        clampSplitThresholdChars(Number(e.target.value)),
+                      )
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Padrão: {SPLIT_THRESHOLD_CHARS_DEFAULT} caracteres
+                    (~3 linhas). Valores entre {SPLIT_THRESHOLD_CHARS_MIN}{" "}
+                    e {SPLIT_THRESHOLD_CHARS_MAX}.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="split_delay_seconds">
+                      Pausa entre mensagens
+                    </Label>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {splitDelaySeconds}s
+                    </span>
+                  </div>
+                  <Input
+                    id="split_delay_seconds"
+                    type="number"
+                    min={SPLIT_DELAY_SECONDS_MIN}
+                    max={SPLIT_DELAY_SECONDS_MAX}
+                    step={1}
+                    value={splitDelaySeconds}
+                    onChange={(e) =>
+                      setSplitDelaySeconds(
+                        clampSplitDelaySeconds(Number(e.target.value)),
+                      )
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Tempo de digitação simulado entre cada mensagem.
+                    Padrão: {SPLIT_DELAY_SECONDS_DEFAULT}s.
+                  </p>
+                </div>
+              </>
+            ) : null}
           </CardContent>
         </Card>
 

@@ -5,6 +5,8 @@ import {
   PAUSE_KEYWORDS_DEFAULT,
   RESUME_KEYWORDS_DEFAULT,
   clampAutoPauseMinutes,
+  clampSplitDelaySeconds,
+  clampSplitThresholdChars,
   getAgentTemplate,
   isAgentTemplateSlug,
   normalizeHumanizationConfig,
@@ -189,6 +191,20 @@ export async function updateAgent(
       ),
       auto_pause_minutes: clampAutoPauseMinutes(
         patch.humanization_config.auto_pause_minutes ?? current.auto_pause_minutes,
+      ),
+      // PR B: split_* campos. Boolean cai num cast direto; numericos
+      // passam pelo clamp pra rejeitar valores fora do range.
+      split_enabled:
+        typeof patch.humanization_config.split_enabled === "boolean"
+          ? patch.humanization_config.split_enabled
+          : current.split_enabled,
+      split_threshold_chars: clampSplitThresholdChars(
+        patch.humanization_config.split_threshold_chars ??
+          current.split_threshold_chars,
+      ),
+      split_delay_seconds: clampSplitDelaySeconds(
+        patch.humanization_config.split_delay_seconds ??
+          current.split_delay_seconds,
       ),
     };
   }
