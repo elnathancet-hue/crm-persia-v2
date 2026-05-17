@@ -172,57 +172,68 @@ export async function pickAgentForConversation(params: {
     // simplesmente nao casam, fallback pro principal.
   }
 
-  // 3. Carrega agentes secundarios da mesma org com conditions.
-  const { data: secondaries } = await db
-    .from("agent_configs")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("status", "active")
-    .eq("is_primary", false)
-    .neq("id", primary.id);
+  // 3. Carrega agentes secundarios + conditions. Best-effort: qualquer
+  // erro (table 045 nao migrada, query bug, mock incompleto em test) cai
+  // pro primary. O design e: rotear SO funciona quando esta tudo certo;
+  // do contrario, comportamento legado (1 agente principal sempre).
+  try {
+    const { data: secondaries, error: secondariesError } = await db
+      .from("agent_configs")
+      .select("*")
+      .eq("organization_id", orgId)
+      .eq("status", "active")
+      .eq("is_primary", false)
+      .neq("id", primary.id);
 
-  const secondaryAgents = ((secondaries ?? []) as Array<Record<string, unknown>>).map(
-    (row) => normalizeConfig(row),
-  );
+    if (secondariesError) return primary;
 
-  if (secondaryAgents.length === 0) return primary;
-
-  const { data: conditionsData } = await db
-    .from("agent_entry_conditions")
-    .select("*")
-    .eq("organization_id", orgId)
-    .in(
-      "agent_config_id",
-      secondaryAgents.map((a) => a.id),
+    const secondaryAgents = ((secondaries ?? []) as Array<Record<string, unknown>>).map(
+      (row) => normalizeConfig(row),
     );
 
-  const conditions = (conditionsData ?? []) as Array<{
-    agent_config_id: string;
-    condition_type: import("@persia/shared/ai-agent").EntryConditionType;
-    condition_value: import("@persia/shared/ai-agent").EntryConditionValue;
-    priority: number;
-    created_at: string;
-  }>;
+    if (secondaryAgents.length === 0) return primary;
 
-  if (conditions.length === 0) return primary;
+    const { data: conditionsData, error: conditionsError } = await db
+      .from("agent_entry_conditions")
+      .select("*")
+      .eq("organization_id", orgId)
+      .in(
+        "agent_config_id",
+        secondaryAgents.map((a) => a.id),
+      );
 
-  // Agrupa conditions por agent_config_id pra montar candidates.
-  type ConditionRow = (typeof conditions)[number];
-  const conditionsByAgent = new Map<string, ConditionRow[]>();
-  for (const cond of conditions) {
-    const bucket = conditionsByAgent.get(cond.agent_config_id) ?? [];
-    bucket.push(cond);
-    conditionsByAgent.set(cond.agent_config_id, bucket);
+    if (conditionsError) return primary;
+
+    const conditions = (conditionsData ?? []) as Array<{
+      agent_config_id: string;
+      condition_type: import("@persia/shared/ai-agent").EntryConditionType;
+      condition_value: import("@persia/shared/ai-agent").EntryConditionValue;
+      priority: number;
+      created_at: string;
+    }>;
+
+    if (conditions.length === 0) return primary;
+
+    // Agrupa conditions por agent_config_id pra montar candidates.
+    type ConditionRow = (typeof conditions)[number];
+    const conditionsByAgent = new Map<string, ConditionRow[]>();
+    for (const cond of conditions) {
+      const bucket = conditionsByAgent.get(cond.agent_config_id) ?? [];
+      bucket.push(cond);
+      conditionsByAgent.set(cond.agent_config_id, bucket);
+    }
+
+    const { pickSecondaryAgent } = await import("@persia/shared/ai-agent");
+    const candidates = secondaryAgents.map((agent) => ({
+      agent,
+      conditions: conditionsByAgent.get(agent.id) ?? [],
+    }));
+
+    const picked = pickSecondaryAgent(candidates, leadState, messageText);
+    return picked ?? primary;
+  } catch {
+    return primary;
   }
-
-  const { pickSecondaryAgent } = await import("@persia/shared/ai-agent");
-  const candidates = secondaryAgents.map((agent) => ({
-    agent,
-    conditions: conditionsByAgent.get(agent.id) ?? [],
-  }));
-
-  const picked = pickSecondaryAgent(candidates, leadState, messageText);
-  return picked ?? primary;
 }
 
 export async function resolveAgentContext(params: {
