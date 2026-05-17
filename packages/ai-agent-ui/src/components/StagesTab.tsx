@@ -337,8 +337,11 @@ function StageRow({
             <div className="flex items-center gap-2 flex-wrap min-w-0">
               <p className="font-semibold tracking-tight truncate">{stage.situation}</p>
               {stage.rag_enabled ? (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-progress-soft text-progress-soft-foreground font-medium uppercase tracking-wider">
-                  RAG
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-progress-soft text-progress-soft-foreground font-medium"
+                  title="Esta etapa consulta seus documentos antes de responder."
+                >
+                  Consulta documentos
                 </span>
               ) : null}
               {isLast ? (
