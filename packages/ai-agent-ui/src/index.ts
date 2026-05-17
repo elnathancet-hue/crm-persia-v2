@@ -17,6 +17,10 @@ export { renderToolIcon } from "./icon-map";
 export { AgentsList } from "./components/AgentsList";
 export { AgentEditor } from "./components/AgentEditor";
 export {
+  AgentCreationWizard,
+  type AgentCreationWizardSubmit,
+} from "./components/AgentCreationWizard";
+export {
   AgentSidebar,
   type AgentSidebarGroup,
   type AgentSidebarItem,
