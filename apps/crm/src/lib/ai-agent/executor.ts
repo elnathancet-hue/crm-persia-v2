@@ -522,10 +522,22 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     if (retrieval) {
       orderIndex += retrieval.insertedStep ? 1 : 0;
     }
+    // PR-AI-AGENT-HUMAN-D: se send_media esta habilitado nesta stage,
+    // carrega catalogo da biblioteca pra injetar no system prompt. LLM
+    // precisa saber slugs + descricoes pra chamar a tool corretamente.
+    // Carrega no maximo 50 mídias ativas — mais que isso vira ruido.
+    const sendMediaEnabled = params.tools.some(
+      (t) => t.is_enabled && t.native_handler === "send_media",
+    );
+    const mediaCatalog = sendMediaEnabled
+      ? await loadMediaCatalog(params.db, params.orgId)
+      : null;
+
     const system = buildSystemPromptWithRag(
       params.config,
       params.stage,
       retrieval?.hits?.length ? buildRagContextBlock(retrieval.hits) : null,
+      mediaCatalog,
     );
 
     await updateRunStatus(params.db, run.id, params.orgId, "running");
@@ -1191,6 +1203,7 @@ function buildSystemPromptWithRag(
   config: AgentConfig,
   stage: AgentStage,
   ragContext: string | null,
+  mediaCatalog: string | null,
 ): string {
   return [
     ragContext,
@@ -1199,11 +1212,51 @@ function buildSystemPromptWithRag(
     `Etapa atual: ${stage.situation}`,
     stage.instruction,
     stage.transition_hint ? `Dica de transicao: ${stage.transition_hint}` : "",
+    mediaCatalog,
     "Responda ao cliente em portugues brasileiro, de forma objetiva e util.",
     "Use ferramentas apenas quando a acao for necessaria e permitida.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+// PR-AI-AGENT-HUMAN-D: catalogo de midias da biblioteca pra injetar no
+// system prompt. Sem isso, LLM nao sabe os slugs disponiveis e falha
+// ao chamar send_media. Retorna null se a org nao tem midia.
+const MEDIA_CATALOG_LIMIT = 50;
+async function loadMediaCatalog(
+  db: AgentDb,
+  orgId: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("automation_tools")
+    .select("slug, name, description, category, file_type")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(MEDIA_CATALOG_LIMIT);
+  if (error || !data || data.length === 0) return null;
+  const rows = data as ReadonlyArray<{
+    slug?: string | null;
+    name?: string | null;
+    description?: string | null;
+    category?: string | null;
+  }>;
+  const lines: string[] = [];
+  for (const r of rows) {
+    if (!r.slug || !r.name) continue;
+    const desc = r.description?.trim();
+    lines.push(
+      `- slug: "${r.slug}" — ${r.name}${r.category ? ` (${r.category})` : ""}${
+        desc ? ` — ${desc}` : ""
+      }`,
+    );
+  }
+  if (lines.length === 0) return null;
+  return [
+    "Mídias disponíveis na biblioteca (use send_media com o slug exato):",
+    ...lines,
+  ].join("\n");
 }
 
 async function maybeRetrieveKnowledge(params: {
