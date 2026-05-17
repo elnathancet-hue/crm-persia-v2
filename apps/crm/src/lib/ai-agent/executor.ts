@@ -68,6 +68,7 @@ import {
   invokeCustomWebhook,
 } from "./webhook-caller";
 import { isImplementedNativeHandler, nativeHandlers } from "./tools/registry";
+import { sendAssistantReply } from "./send-reply";
 
 type OpenAIToolCallWire = {
   id: string;
@@ -385,6 +386,12 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
   const startedAt = Date.now();
   const guardrails = normalizeGuardrails(params.config.guardrails);
   const executionModel = resolveModel(params.config.model);
+  // PR-AI-AGENT-HUMAN-B: humanization config normalizado pra envio
+  // (split + delay). Carregado 1x aqui pra reusar nos sites de sendText.
+  const humanization = normalizeHumanizationConfig(
+    (params.config as typeof params.config & { humanization_config?: unknown })
+      .humanization_config,
+  );
   const run = await createRun(params, executionModel);
   let tokensInput = 0;
   let tokensOutput = 0;
@@ -508,7 +515,14 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       if (choice?.finish_reason !== "tool_calls" || toolCalls.length === 0) {
         assistantReply = extractText(choice?.message) || HANDOFF_REPLY;
         if (!params.dryRun && params.provider) {
-          await params.provider.sendText({ phone: params.msg.phone, message: assistantReply });
+          await sendAssistantReply({
+            provider: params.provider,
+            phone: params.msg.phone,
+            text: assistantReply,
+            humanization,
+            orgId: params.orgId,
+            conversationId: params.crmConversationId,
+          });
         }
         if (params.allowSummarization !== false && params.agentConversation.crm_conversation_id) {
           const updatedConversation = await incrementConversationSummaryCounters({
@@ -570,7 +584,17 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
   } catch (error) {
     if (error instanceof GuardrailError) {
       if (!params.dryRun && params.provider) {
-        await params.provider.sendText({ phone: params.msg.phone, message: HANDOFF_REPLY });
+        // HANDOFF_REPLY e curto (<200 chars); split nao vai ativar de
+        // verdade, mas usamos sendAssistantReply pra manter consistencia
+        // com setTyping e o caminho default.
+        await sendAssistantReply({
+          provider: params.provider,
+          phone: params.msg.phone,
+          text: HANDOFF_REPLY,
+          humanization,
+          orgId: params.orgId,
+          conversationId: params.crmConversationId,
+        });
       }
       await insertStep(params.db, {
         orgId: params.orgId,
