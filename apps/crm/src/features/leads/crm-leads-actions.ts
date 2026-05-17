@@ -33,6 +33,7 @@ import {
   setLeadCustomFieldValue,
 } from "@/actions/custom-fields";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
+import { getLeadAppointments as getLeadAppointmentsCrm } from "@/actions/agenda/appointments";
 import {
   getLeadAgentHandoffState,
   reactivateAgent,
@@ -80,6 +81,8 @@ export const crmLeadsActions: LeadsActions = {
   deleteLead: (leadId) => deleteLead(leadId),
   getLeadStats,
   getLeadDealsList,
+  // PR-AGENDA-DRAWER (mai/2026): tab Agenda no drawer
+  getLeadAppointments: (leadId) => getLeadAppointmentsCrm(leadId),
   // PR-K-CENTRIC (mai/2026): lead-centric stage/pipeline ops
   getLeadStageContext,
   listPipelines: listPipelinesForLead,

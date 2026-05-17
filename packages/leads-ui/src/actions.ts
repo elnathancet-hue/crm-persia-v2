@@ -83,6 +83,27 @@ export interface LeadDealItem {
 }
 
 /**
+ * PR-AGENDA-DRAWER (mai/2026): item de agendamento listado na tab
+ * Agenda do drawer. Shape enxuto — so o necessario pra render do
+ * card. Inclui passado + futuro; UI agrupa visualmente.
+ *
+ * Status segue o enum Appointment do shared:
+ * 'awaiting_confirmation' | 'confirmed' | 'completed' | 'cancelled'
+ * | 'no_show' | 'rescheduled'.
+ */
+export interface LeadAppointmentItem {
+  id: string;
+  title: string;
+  start_at: string;
+  end_at: string;
+  timezone: string;
+  status: string;
+  channel: string | null;
+  location: string | null;
+  meeting_url: string | null;
+}
+
+/**
  * PR-U1: stages da pipeline pro popover de "trocar etapa" no header
  * do drawer. Embed simplificado pra evitar puxar mais types.
  */
@@ -210,6 +231,14 @@ export interface LeadsActions {
 
   /** Lista de deals do lead (tab Negocios). */
   getLeadDealsList?: (leadId: string) => Promise<LeadDealItem[]>;
+
+  /**
+   * PR-AGENDA-DRAWER (mai/2026): lista de agendamentos do lead pra
+   * tab Agenda do drawer. Ordenacao: futuros primeiro (start_at asc),
+   * passados depois (start_at desc). Inclui cancelados/concluidos.
+   * Opcional — admin pode nao implementar e a tab some.
+   */
+  getLeadAppointments?: (leadId: string) => Promise<LeadAppointmentItem[]>;
 
   /**
    * PR-K-CENTRIC (mai/2026): pipeline + stage atual do lead + lista

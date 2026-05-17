@@ -69,6 +69,47 @@ export async function getAppointmentById(id: string): Promise<Appointment | null
   return getShared(buildQueryCtx(supabase, orgId), id);
 }
 
+/**
+ * PR-AGENDA-DRAWER (mai/2026): lista agendamentos do lead pra tab
+ * Agenda do drawer. Inclui passado + futuro, ordenado start_at desc
+ * (mais recente primeiro). UI agrupa visualmente "Futuros" / "Passados".
+ *
+ * Retorna shape enxuto LeadAppointmentItem (sem campos de audit/
+ * external_calendar que a UI nao usa).
+ */
+export async function getLeadAppointments(leadId: string): Promise<
+  Array<{
+    id: string;
+    title: string;
+    start_at: string;
+    end_at: string;
+    timezone: string;
+    status: string;
+    channel: string | null;
+    location: string | null;
+    meeting_url: string | null;
+  }>
+> {
+  const { supabase, orgId } = await requireRole("agent");
+  const rows = await listShared(buildQueryCtx(supabase, orgId), {
+    lead_id: leadId,
+    kinds: ["appointment"],
+    order: "start_at_desc",
+    limit: 100,
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    start_at: row.start_at,
+    end_at: row.end_at,
+    timezone: row.timezone,
+    status: row.status,
+    channel: row.channel ?? null,
+    location: row.location ?? null,
+    meeting_url: row.meeting_url ?? null,
+  }));
+}
+
 // ============================================================================
 // Write
 // ============================================================================

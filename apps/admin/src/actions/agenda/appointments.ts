@@ -56,6 +56,43 @@ export async function getAppointmentById(
   return getShared(qctx(admin, orgId), id);
 }
 
+/**
+ * PR-AGENDA-DRAWER (mai/2026): lista agendamentos do lead pra tab
+ * Agenda do drawer. Espelho do CRM action (mesma assinatura/shape).
+ */
+export async function getLeadAppointments(leadId: string): Promise<
+  Array<{
+    id: string;
+    title: string;
+    start_at: string;
+    end_at: string;
+    timezone: string;
+    status: string;
+    channel: string | null;
+    location: string | null;
+    meeting_url: string | null;
+  }>
+> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const rows = await listShared(qctx(admin, orgId), {
+    lead_id: leadId,
+    kinds: ["appointment"],
+    order: "start_at_desc",
+    limit: 100,
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    start_at: row.start_at,
+    end_at: row.end_at,
+    timezone: row.timezone,
+    status: row.status,
+    channel: row.channel ?? null,
+    location: row.location ?? null,
+    meeting_url: row.meeting_url ?? null,
+  }));
+}
+
 export async function createAppointment(
   input: Omit<CreateAppointmentInput, "user_id"> & { user_id?: string },
 ): Promise<Appointment> {

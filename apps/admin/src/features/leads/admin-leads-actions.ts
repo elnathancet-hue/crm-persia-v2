@@ -39,6 +39,7 @@ import {
   moveLeadStage,
   moveLeadToPipeline,
 } from "@/actions/leads-kanban";
+import { getLeadAppointments as getLeadAppointmentsAdmin } from "@/actions/agenda/appointments";
 
 export const adminLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -84,6 +85,8 @@ export const adminLeadsActions: LeadsActions = {
   deleteLead: deleteLeadForDrawer,
   getLeadStats,
   getLeadDealsList,
+  // PR-AGENDA-DRAWER (mai/2026): tab Agenda no drawer
+  getLeadAppointments: (leadId) => getLeadAppointmentsAdmin(leadId),
   // PR-K-CENTRIC cleanup (mai/2026): lead-centric stage/pipeline ops.
   getLeadStageContext,
   listPipelines: listPipelinesForLead,
