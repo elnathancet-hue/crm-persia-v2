@@ -41,6 +41,8 @@ import {
   getBookingPages,
   updateBookingPage,
 } from "@/actions/agenda/booking-pages";
+// PR-AGENDA-LAST-MSG (mai/2026)
+import { getLeadLastMessage } from "@/actions/messages";
 
 export const adminAgendaActions: AgendaActions = {
   // Appointments
@@ -73,4 +75,6 @@ export const adminAgendaActions: AgendaActions = {
   updateBookingPage,
   duplicateBookingPage,
   deleteBookingPage,
+  // PR-AGENDA-LAST-MSG (mai/2026)
+  getLeadLastMessage,
 };

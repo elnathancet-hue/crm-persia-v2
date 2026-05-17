@@ -3,6 +3,10 @@
 import { requireRole } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
 import {
+  findLastMessageForLead as findLastMessageForLeadShared,
+  type LeadLastMessagePreview,
+} from "@persia/shared/crm";
+import {
   CHAT_MEDIA_BUCKET,
   createChatMediaPath,
   ensureChatMediaBucket,
@@ -572,4 +576,18 @@ export async function resendMessage(
     });
     return { data: signed[0], error: reason };
   }
+}
+
+/**
+ * PR-AGENDA-LAST-MSG (mai/2026): ultima mensagem do lead pro
+ * AppointmentDrawer. requireRole("agent") + delega pro shared query.
+ *
+ * Multi-tenant garantido pelo shared (.eq organization_id, orgId) +
+ * RLS de messages.
+ */
+export async function getLeadLastMessage(
+  leadId: string,
+): Promise<LeadLastMessagePreview | null> {
+  const { supabase, orgId } = await requireRole("agent");
+  return findLastMessageForLeadShared({ db: supabase, orgId }, leadId);
 }
