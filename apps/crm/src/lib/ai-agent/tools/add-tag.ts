@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
-import { failureResult, getHandlerDb, successResult } from "./shared";
+import {
+  failureResult,
+  getHandlerDb,
+  insertLeadActivity,
+  successResult,
+} from "./shared";
 
 const addTagSchema = z.object({
   tag_name: z.string().trim().min(1).max(80),
@@ -80,6 +85,17 @@ export const addTagHandler: NativeHandler = async (context, input) => {
     });
 
   if (leadTagError) return failureResult(leadTagError.message);
+
+  // PR-AGENT-INTEGRATION-1: log no historico do lead pra que operador
+  // veja no LeadDrawer o que a IA fez (Trilha "Acoes da IA").
+  await insertLeadActivity({
+    db,
+    organizationId: context.organization_id,
+    leadId: context.lead_id,
+    type: "tag_added",
+    description: `IA adicionou tag "${tagName}"`,
+    metadata: { tag_id: tagId, tag_name: tagName, created_tag: created },
+  });
 
   return successResult(
     {

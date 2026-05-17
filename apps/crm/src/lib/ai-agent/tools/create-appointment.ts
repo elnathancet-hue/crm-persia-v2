@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { createAppointment as createAppointmentShared } from "@persia/shared/agenda";
-import { failureResult, getHandlerDb, successResult } from "./shared";
+import {
+  failureResult,
+  getHandlerDb,
+  insertLeadActivity,
+  successResult,
+} from "./shared";
 
 // PR-AGENDA-TOOLS (mai/2026): AI Agent cria appointment do lead da
 // conversa diretamente pelo chat WhatsApp. Sem isso, o LLM tinha que
@@ -125,6 +130,22 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
         meeting_url: parsed.data.meeting_url ?? null,
       },
     );
+
+    // PR-AGENT-INTEGRATION-1: log no historico do lead.
+    await insertLeadActivity({
+      db,
+      organizationId: context.organization_id,
+      leadId: lead.id,
+      type: "appointment_created",
+      description: `IA agendou "${created.title}" para ${created.start_at}`,
+      metadata: {
+        appointment_id: created.id,
+        start_at: created.start_at,
+        end_at: created.end_at,
+        timezone: created.timezone,
+        status: created.status,
+      },
+    });
 
     return successResult(
       {

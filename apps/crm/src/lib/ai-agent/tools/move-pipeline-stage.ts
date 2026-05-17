@@ -3,7 +3,13 @@ import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { moveLeadToStage as moveLeadToStageShared } from "@persia/shared/crm";
 import { onStageChanged } from "@/lib/flows/triggers";
-import { failureResult, getHandlerDb, successResult, trimReason } from "./shared";
+import {
+  failureResult,
+  getHandlerDb,
+  insertLeadActivity,
+  successResult,
+  trimReason,
+} from "./shared";
 
 // PR-K-CENTRIC (mai/2026): move o LEAD (nao o deal) para outra etapa do
 // funil em que ele esta. Lead aparece 1x no Kanban; deals viram historico
@@ -165,6 +171,23 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
     .catch((err) => {
       console.error("[move-pipeline-stage] syncLeadToUazapi failed:", err);
     });
+
+  // PR-AGENT-INTEGRATION-1: log no historico do lead.
+  await insertLeadActivity({
+    db,
+    organizationId: context.organization_id,
+    leadId: lead.id,
+    type: "stage_changed",
+    description: `IA moveu o lead de "${fromStageName}" para "${stage.name}"`,
+    metadata: {
+      from_stage_id: lead.stage_id,
+      from_stage_name: fromStageName,
+      to_stage_id: stage.id,
+      to_stage_name: stage.name,
+      pipeline_id: lead.pipeline_id,
+      reason: reason ?? null,
+    },
+  });
 
   return successResult(
     {

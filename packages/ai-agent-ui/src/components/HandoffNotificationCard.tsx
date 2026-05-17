@@ -36,10 +36,15 @@ interface Props {
   draftTargetType: HandoffNotificationTargetType | null;
   draftTargetAddress: string;
   draftTemplate: string;
+  // PR-AGENT-INTEGRATION-1: opcional. Quando informado, mostra checkbox
+  // "Incluir resumo da conversa" abaixo do template. Default UX:
+  // controlado pelo RulesTab via humanization_config.
+  draftIncludeSummary?: boolean;
   onEnabledChange: (v: boolean) => void;
   onTargetTypeChange: (v: HandoffNotificationTargetType) => void;
   onTargetAddressChange: (v: string) => void;
   onTemplateChange: (v: string) => void;
+  onIncludeSummaryChange?: (v: boolean) => void;
 }
 
 export function HandoffNotificationCard({
@@ -47,10 +52,12 @@ export function HandoffNotificationCard({
   draftTargetType,
   draftTargetAddress,
   draftTemplate,
+  draftIncludeSummary,
   onEnabledChange,
   onTargetTypeChange,
   onTargetAddressChange,
   onTemplateChange,
+  onIncludeSummaryChange,
 }: Props) {
   const effectiveTemplate = draftTemplate.trim() || HANDOFF_DEFAULT_TEMPLATE;
   const phoneDigits = draftTargetAddress.replace(/\D/g, "");
@@ -208,6 +215,29 @@ export function HandoffNotificationCard({
                 {draftTemplate.length}/{HANDOFF_TEMPLATE_MAX_LENGTH} caracteres
               </p>
             </div>
+
+            {/* PR-AGENT-INTEGRATION-1: checkbox "Incluir resumo da
+                conversa". Quando off, o placeholder {{summary}} no
+                template recebe string vazia (sem chamada GPT extra). */}
+            {onIncludeSummaryChange ? (
+              <div className="flex items-start justify-between gap-3 pt-3 border-t">
+                <div className="flex-1 min-w-0">
+                  <Label htmlFor="handoff_include_summary" className="cursor-pointer">
+                    Incluir resumo da conversa
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Gera um resumo curto da conversa (via IA) e inclui na
+                    notificação. Desligue se quiser notificação mais enxuta
+                    ou economizar chamadas de IA.
+                  </p>
+                </div>
+                <Switch
+                  id="handoff_include_summary"
+                  checked={draftIncludeSummary !== false}
+                  onCheckedChange={(v) => onIncludeSummaryChange(Boolean(v))}
+                />
+              </div>
+            ) : null}
 
             <div className="space-y-2 pt-3 border-t">
               <div className="flex items-center gap-2">
