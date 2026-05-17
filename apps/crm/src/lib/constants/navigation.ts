@@ -61,12 +61,16 @@ export const navigation: NavItem[] = [
     href: "/automations",
     icon: Zap,
     minRole: "admin",
+    // PR-AUTOMATIONS-CLEANUP (mai/2026): menu reduzido de 5 itens flat
+    // pra 2. Assistentes IA, Webhook IA e Picotador eram do sistema
+    // legacy (pre Agente Nativo) e ficam escondidos do menu — codigo
+    // permanece em /automations/{assistant,webhook,splitter} pra
+    // compatibilidade do pipeline (modes n8n + OpenAI fallback ainda
+    // leem essas configs). Quando legacy for ripado de vez, deletar
+    // as rotas tambem.
     children: [
-      { label: "Agente IA Nativo", href: "/automations/agents" },
-      { label: "Assistentes IA", href: "/automations/assistant" },
-      { label: "Webhook IA", href: "/automations/webhook" },
-      { label: "Tools", href: "/automations/tools" },
-      { label: "Picotador", href: "/automations/splitter" },
+      { label: "Agente IA", href: "/automations/agents" },
+      { label: "Biblioteca de mídia", href: "/automations/tools" },
     ],
   },
   {
