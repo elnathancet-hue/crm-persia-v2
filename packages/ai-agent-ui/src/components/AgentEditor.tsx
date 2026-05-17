@@ -9,7 +9,6 @@ import {
   Calendar,
   Clock,
   FlaskConical,
-  Gauge,
   HelpCircle,
   History,
   Library,
@@ -21,7 +20,6 @@ import {
 import { toast } from "sonner";
 import type {
   AgentConfig,
-  AgentCostLimit,
   AgentFollowup,
   AgentKnowledgeSource,
   AgentNotificationTemplate,
@@ -45,7 +43,6 @@ import { RulesTab } from "./RulesTab";
 import { StagesTab } from "./StagesTab";
 import { ToolsTab } from "./ToolsTab";
 import { AuditTab } from "./AuditTab";
-import { LimitsUsageTab } from "./LimitsUsageTab";
 import { FAQTab } from "./FAQTab";
 import { DocumentsTab } from "./DocumentsTab";
 import { NotificationsTab } from "./NotificationsTab";
@@ -68,7 +65,6 @@ type AgentTabId =
   | "notifications"
   | "calendar"
   | "followups"
-  | "limits"
   | "audit";
 
 interface AgentTabDef {
@@ -86,7 +82,10 @@ const AGENT_TABS: AgentTabDef[] = [
   { id: "notifications", label: "Notificações", icon: Bell },
   { id: "calendar", label: "Agendamento", icon: Calendar },
   { id: "followups", label: "Follow-up", icon: Clock },
-  { id: "limits", label: "Limites e Uso", icon: Gauge },
+  // PR-AI-AGENT-TOKENS-OUT (mai/2026): tab "Limites e Uso" removida da
+  // UI cliente. Cost/token tracking continua no backend (admin pode
+  // configurar via SQL Editor ou UI dedicada futura). Cliente paga plano
+  // mensal fixo — token e problema do CRM Persia, nao dele.
   { id: "audit", label: "Execuções", icon: History },
 ];
 
@@ -94,7 +93,6 @@ interface Props {
   initialAgent: AgentConfig;
   initialStages: AgentStage[];
   initialTools: AgentTool[];
-  initialLimits: AgentCostLimit[];
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
   initialNotificationTemplates?: AgentNotificationTemplate[];
@@ -106,7 +104,6 @@ export function AgentEditor({
   initialAgent,
   initialStages,
   initialTools,
-  initialLimits,
   initialAllowedDomains,
   initialKnowledgeSources = [],
   initialNotificationTemplates = [],
@@ -390,9 +387,6 @@ export function AgentEditor({
           templates={notificationTemplates}
           onChange={setFollowups}
         />
-      )}
-      {activeTab === "limits" && (
-        <LimitsUsageTab configId={agent.id} initialLimits={initialLimits} />
       )}
       {activeTab === "audit" && <AuditTab configId={agent.id} />}
 

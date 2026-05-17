@@ -8,7 +8,6 @@ import {
   CircleCheck,
   CircleDashed,
   CircleDot,
-  Coins,
   Loader2,
   RefreshCcw,
   TriangleAlert,
@@ -119,8 +118,8 @@ function EmptyAudit() {
         <div className="space-y-1 max-w-md">
           <h3 className="font-semibold tracking-tight">Histórico vazio por enquanto</h3>
           <p className="text-sm text-muted-foreground">
-            Cada resposta do agente vira uma linha aqui — com o passo a passo, tokens consumidos
-            e ferramentas chamadas. Use o testador para gerar a primeira execução sem afetar o WhatsApp.
+            Cada resposta do agente vira uma linha aqui — com o passo a passo e ferramentas
+            chamadas. Use o testador para gerar a primeira execução sem afetar o WhatsApp.
           </p>
         </div>
       </CardContent>
@@ -180,10 +179,6 @@ function RunRow({
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0 tabular-nums">
-            <span className="flex items-center gap-1">
-              <Coins className="size-3" />
-              {run.tokens_input + run.tokens_output}
-            </span>
             <span>{run.duration_ms}ms</span>
           </div>
         </button>
@@ -194,8 +189,7 @@ function RunRow({
             ) : (
               run.steps.map((step) => <StepRow key={step.id} step={step} />)
             )}
-            <div className="text-[11px] text-muted-foreground pt-2 border-t mt-2 flex items-center justify-between">
-              <span>Custo: {formatCost(run.cost_usd_cents)}</span>
+            <div className="text-[11px] text-muted-foreground pt-2 border-t mt-2 flex items-center justify-end">
               <span className="font-mono">run_id: {run.id.slice(0, 8)}…</span>
             </div>
           </div>
@@ -289,11 +283,6 @@ function RunStatusBadge({ status }: { status: AgentRunStatus }) {
       {label}
     </Badge>
   );
-}
-
-function formatCost(cents: number): string {
-  if (cents === 0) return "< US$ 0,01";
-  return `US$ ${(cents / 100).toFixed(3)}`;
 }
 
 function truncate(s: string, max: number): string {

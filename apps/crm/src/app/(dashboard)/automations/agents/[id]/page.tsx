@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { getAgent } from "@/actions/ai-agent/configs";
 import { listStages } from "@/actions/ai-agent/stages";
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
-import { listCostLimits } from "@/actions/ai-agent/limits";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
 import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
 import { listNotificationTemplates } from "@/actions/ai-agent/notifications";
@@ -14,6 +13,10 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+// PR-AI-AGENT-TOKENS-OUT (mai/2026): listCostLimits removido do hydrate.
+// Cliente nao ve mais aba "Limites e Uso" — token/cost e responsabilidade
+// do CRM Persia (plano fixo). Backend continua respeitando limits via
+// guardrails se configurados por admin.
 export default async function AgentDetailPage({ params }: PageProps) {
   const { id } = await params;
   const agent = await getAgent(id);
@@ -22,7 +25,6 @@ export default async function AgentDetailPage({ params }: PageProps) {
   const [
     stages,
     tools,
-    limits,
     allowedDomains,
     knowledgeSources,
     notificationTemplates,
@@ -31,7 +33,6 @@ export default async function AgentDetailPage({ params }: PageProps) {
   ] = await Promise.all([
     listStages(id),
     listToolsForAgent(id),
-    listCostLimits(),
     listAllowedDomains(),
     listKnowledgeSources(id),
     listNotificationTemplates(id),
@@ -44,7 +45,6 @@ export default async function AgentDetailPage({ params }: PageProps) {
       initialAgent={agent}
       initialStages={stages}
       initialTools={tools}
-      initialLimits={limits}
       initialAllowedDomains={allowedDomains}
       initialKnowledgeSources={knowledgeSources}
       initialNotificationTemplates={notificationTemplates}

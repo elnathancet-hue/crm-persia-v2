@@ -40,7 +40,6 @@ interface ChatTurn {
   role: "user" | "agent";
   text: string;
   steps?: TesterStepSummary[];
-  tokens?: number;
   error?: string;
   // Etapa em que o run COMECOU (snapshot do selectedStageId no momento
   // do envio). Usado pra detectar transicao quando comparado com
@@ -97,7 +96,6 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
             role: "agent",
             text: res.assistant_reply || "(sem resposta)",
             steps: res.steps,
-            tokens: res.tokens_used,
             error: res.error,
             started_stage_id: stageAtSend,
             next_stage_id: res.next_stage_id,
@@ -283,18 +281,12 @@ function ChatBubble({ turn, stages }: { turn: ChatTurn; stages: AgentStage[] }) 
         <details className="text-xs text-muted-foreground ml-1">
           <summary className="cursor-pointer hover:text-foreground select-none">
             {turn.steps.length === 1 ? "1 passo" : `${turn.steps.length} passos`}
-            {turn.tokens ? ` · ~${formatBRL(estimateCostBRL(turn.tokens))}` : ""}
             <span className="ml-1 opacity-60">(detalhes técnicos)</span>
           </summary>
           <div className="mt-1.5 space-y-1 pl-2 border-l-2 border-muted">
             {turn.steps.map((step, idx) => (
               <StepDetail key={idx} step={step} />
             ))}
-            {turn.tokens ? (
-              <div className="text-[10px] text-muted-foreground/70 pt-1">
-                {turn.tokens.toLocaleString("pt-BR")} tokens
-              </div>
-            ) : null}
           </div>
         </details>
       ) : null}
@@ -313,23 +305,6 @@ function findStageDescriptor(
   const idx = sorted.findIndex((s) => s.id === stageId);
   if (idx < 0) return null;
   return { order: idx + 1, situation: sorted[idx]!.situation };
-}
-
-// Estimativa grosseira: GPT-4o-mini ~ US$ 0.0006 por 1k tokens.
-// USD/BRL ~ 5.30. Dá ~R$ 0.0032 por 1k tokens. Suficiente pra o leigo
-// ter noção de "centavos" em vez de números abstratos de tokens.
-function estimateCostBRL(tokens: number): number {
-  return (tokens / 1000) * 0.0032;
-}
-
-function formatBRL(value: number): string {
-  if (value < 0.01) return "menos de R$ 0,01";
-  return value.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  });
 }
 
 function StepDetail({ step }: { step: TesterStepSummary }) {

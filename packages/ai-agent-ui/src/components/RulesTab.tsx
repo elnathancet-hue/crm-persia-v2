@@ -11,32 +11,15 @@ import type {
   UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import {
-  CONTEXT_SUMMARY_RECENT_MESSAGES_DEFAULT,
-  CONTEXT_SUMMARY_RECENT_MESSAGES_MAX,
-  CONTEXT_SUMMARY_RECENT_MESSAGES_MIN,
-  CONTEXT_SUMMARY_TOKEN_THRESHOLD_DEFAULT,
-  CONTEXT_SUMMARY_TOKEN_THRESHOLD_MAX,
-  CONTEXT_SUMMARY_TOKEN_THRESHOLD_MIN,
-  CONTEXT_SUMMARY_TURN_THRESHOLD_DEFAULT,
-  CONTEXT_SUMMARY_TURN_THRESHOLD_MAX,
-  CONTEXT_SUMMARY_TURN_THRESHOLD_MIN,
-  DEBOUNCE_WINDOW_MS_DEFAULT,
-  DEBOUNCE_WINDOW_MS_MAX,
-  DEBOUNCE_WINDOW_MS_MIN,
   HANDOFF_PHONE_MAX_DIGITS,
   HANDOFF_PHONE_MIN_DIGITS,
   HANDOFF_TEMPLATE_MAX_LENGTH,
-  clampDebounceWindowMs,
-  clampRecentMessagesCount,
-  clampTokenThreshold,
-  clampTurnThreshold,
 } from "@persia/shared/ai-agent";
 import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
 import { HandoffNotificationCard } from "./HandoffNotificationCard";
 import { useAgentActions } from "../context";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
-import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
@@ -59,18 +42,6 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [description, setDescription] = React.useState(agent.description ?? "");
   const [model, setModel] = React.useState(agent.model);
   const [guardrails, setGuardrails] = React.useState<AgentGuardrails>(agent.guardrails);
-  const [debounceMs, setDebounceMs] = React.useState<number>(
-    clampDebounceWindowMs(agent.debounce_window_ms),
-  );
-  const [turnThreshold, setTurnThreshold] = React.useState<number>(
-    clampTurnThreshold(agent.context_summary_turn_threshold),
-  );
-  const [tokenThreshold, setTokenThreshold] = React.useState<number>(
-    clampTokenThreshold(agent.context_summary_token_threshold),
-  );
-  const [recentMessages, setRecentMessages] = React.useState<number>(
-    clampRecentMessagesCount(agent.context_summary_recent_messages),
-  );
   const [handoffEnabled, setHandoffEnabled] = React.useState<boolean>(
     Boolean(agent.handoff_notification_enabled),
   );
@@ -118,10 +89,6 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     setDescription(agent.description ?? "");
     setModel(agent.model);
     setGuardrails(agent.guardrails);
-    setDebounceMs(clampDebounceWindowMs(agent.debounce_window_ms));
-    setTurnThreshold(clampTurnThreshold(agent.context_summary_turn_threshold));
-    setTokenThreshold(clampTokenThreshold(agent.context_summary_token_threshold));
-    setRecentMessages(clampRecentMessagesCount(agent.context_summary_recent_messages));
     setHandoffEnabled(Boolean(agent.handoff_notification_enabled));
     setHandoffTargetType(agent.handoff_notification_target_type ?? null);
     setHandoffTargetAddress(agent.handoff_notification_target_address ?? "");
@@ -133,10 +100,6 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     agent.description,
     agent.model,
     agent.guardrails,
-    agent.debounce_window_ms,
-    agent.context_summary_turn_threshold,
-    agent.context_summary_token_threshold,
-    agent.context_summary_recent_messages,
     agent.handoff_notification_enabled,
     agent.handoff_notification_target_type,
     agent.handoff_notification_target_address,
@@ -147,19 +110,13 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const promptDirty = prompt !== agent.system_prompt;
   const descriptionDirty = description !== (agent.description ?? "");
   const modelDirty = model !== agent.model;
+  // PR-AI-AGENT-TOKENS-OUT (mai/2026): max_iterations, timeout_seconds,
+  // cost_ceiling_tokens nao tem UI cliente — tracked apenas pra detectar
+  // dirty no allow_human_handoff. Mesma logica vale pros campos
+  // context_summary_* e debounce_window_ms: backend mantem defaults via
+  // clamp helpers; cliente nao ajusta token economy.
   const guardrailsDirty =
-    guardrails.max_iterations !== agent.guardrails.max_iterations ||
-    guardrails.timeout_seconds !== agent.guardrails.timeout_seconds ||
-    guardrails.cost_ceiling_tokens !== agent.guardrails.cost_ceiling_tokens ||
     guardrails.allow_human_handoff !== agent.guardrails.allow_human_handoff;
-  const debounceDirty =
-    debounceMs !== clampDebounceWindowMs(agent.debounce_window_ms);
-  const turnThresholdDirty =
-    turnThreshold !== clampTurnThreshold(agent.context_summary_turn_threshold);
-  const tokenThresholdDirty =
-    tokenThreshold !== clampTokenThreshold(agent.context_summary_token_threshold);
-  const recentMessagesDirty =
-    recentMessages !== clampRecentMessagesCount(agent.context_summary_recent_messages);
   const handoffEnabledDirty =
     handoffEnabled !== Boolean(agent.handoff_notification_enabled);
   const handoffTargetTypeDirty =
@@ -198,10 +155,6 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     descriptionDirty ||
     modelDirty ||
     guardrailsDirty ||
-    debounceDirty ||
-    turnThresholdDirty ||
-    tokenThresholdDirty ||
-    recentMessagesDirty ||
     handoffDirty ||
     calendarConnectionDirty;
 
@@ -211,10 +164,6 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     if (descriptionDirty) patch.description = description;
     if (modelDirty) patch.model = model;
     if (guardrailsDirty) patch.guardrails = guardrails;
-    if (debounceDirty) patch.debounce_window_ms = debounceMs;
-    if (turnThresholdDirty) patch.context_summary_turn_threshold = turnThreshold;
-    if (tokenThresholdDirty) patch.context_summary_token_threshold = tokenThreshold;
-    if (recentMessagesDirty) patch.context_summary_recent_messages = recentMessages;
     if (handoffEnabledDirty) patch.handoff_notification_enabled = handoffEnabled;
     if (handoffTargetTypeDirty) patch.handoff_notification_target_type = handoffTargetType;
     if (handoffAddressDirty) {
@@ -284,102 +233,24 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           </CardContent>
         </Card>
 
+        {/* PR-AI-AGENT-TOKENS-OUT (mai/2026): card "Guardrails" virou
+            "Comportamento" — campos tecnicos (max_iterations, timeout,
+            cost_ceiling, debounce, context_summary_*) sairam da UI
+            cliente. Token economy fica no backend com defaults sensatos.
+            Cliente paga plano fixo. */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Guardrails</CardTitle>
+            <CardTitle className="text-base">Comportamento</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <GuardrailField
-              id="max_iterations"
-              label="Máximo de iterações"
-              help="Quantas vezes o agente pode chamar ferramentas em uma única mensagem."
-              value={guardrails.max_iterations}
-              min={1}
-              max={20}
-              onChange={(v) => setGuardrails((g) => ({ ...g, max_iterations: v }))}
-            />
-            <GuardrailField
-              id="timeout_seconds"
-              label="Timeout (seg)"
-              help="Tempo máximo total de resposta por mensagem."
-              value={guardrails.timeout_seconds}
-              min={5}
-              max={120}
-              onChange={(v) => setGuardrails((g) => ({ ...g, timeout_seconds: v }))}
-            />
-            <GuardrailField
-              id="cost_ceiling_tokens"
-              label="Teto de tokens"
-              help="Tokens (input + output) por conversa antes de parar e passar pra humano."
-              value={guardrails.cost_ceiling_tokens}
-              min={1000}
-              max={200000}
-              step={1000}
-              onChange={(v) => setGuardrails((g) => ({ ...g, cost_ceiling_tokens: v }))}
-            />
-            <RangeSlider
-              id="debounce_window_ms"
-              label="Agregar mensagens por"
-              valueLabel={debounceMs === 0 ? "Imediato" : `${(debounceMs / 1000).toFixed(0)}s`}
-              min={DEBOUNCE_WINDOW_MS_MIN}
-              max={DEBOUNCE_WINDOW_MS_MAX}
-              step={1000}
-              value={debounceMs}
-              onChange={(v) => setDebounceMs(clampDebounceWindowMs(v))}
-              minLabel="0s"
-              midLabel={`Padrão ${DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s`}
-              maxLabel={`${DEBOUNCE_WINDOW_MS_MAX / 1000}s`}
-              help="Espera esse tempo por novas mensagens do mesmo lead antes de responder. Evita respostas fragmentadas quando o lead digita em pedaços curtos. 0 = responde a cada mensagem (use só pra fluxos transacionais como cobrança ou OTP)."
-            />
-            <RangeSlider
-              id="context_summary_turn_threshold"
-              label="Consolidar contexto a cada"
-              valueLabel={`${turnThreshold} turnos`}
-              min={CONTEXT_SUMMARY_TURN_THRESHOLD_MIN}
-              max={CONTEXT_SUMMARY_TURN_THRESHOLD_MAX}
-              step={1}
-              value={turnThreshold}
-              onChange={(v) => setTurnThreshold(clampTurnThreshold(v))}
-              minLabel={`${CONTEXT_SUMMARY_TURN_THRESHOLD_MIN}`}
-              midLabel={`Padrão ${CONTEXT_SUMMARY_TURN_THRESHOLD_DEFAULT}`}
-              maxLabel={`${CONTEXT_SUMMARY_TURN_THRESHOLD_MAX}`}
-              help="Número de respostas do agente ate consolidar o histórico em um resumo. O que vier primeiro (turnos ou tokens) dispara."
-            />
-            <RangeSlider
-              id="context_summary_token_threshold"
-              label="Ou teto de tokens acumulados"
-              valueLabel={`${(tokenThreshold / 1000).toFixed(0)}k`}
-              min={CONTEXT_SUMMARY_TOKEN_THRESHOLD_MIN}
-              max={CONTEXT_SUMMARY_TOKEN_THRESHOLD_MAX}
-              step={1000}
-              value={tokenThreshold}
-              onChange={(v) => setTokenThreshold(clampTokenThreshold(v))}
-              minLabel={`${CONTEXT_SUMMARY_TOKEN_THRESHOLD_MIN / 1000}k`}
-              midLabel={`Padrão ${CONTEXT_SUMMARY_TOKEN_THRESHOLD_DEFAULT / 1000}k`}
-              maxLabel={`${CONTEXT_SUMMARY_TOKEN_THRESHOLD_MAX / 1000}k`}
-              help="Soma de tokens (input+output) desde o último resumo. Conversa com mensagens longas dispara mesmo sem atingir os turnos."
-            />
-            <RangeSlider
-              id="context_summary_recent_messages"
-              label="Mensagens recentes no contexto"
-              valueLabel={`${recentMessages}`}
-              min={CONTEXT_SUMMARY_RECENT_MESSAGES_MIN}
-              max={CONTEXT_SUMMARY_RECENT_MESSAGES_MAX}
-              step={1}
-              value={recentMessages}
-              onChange={(v) => setRecentMessages(clampRecentMessagesCount(v))}
-              minLabel={`${CONTEXT_SUMMARY_RECENT_MESSAGES_MIN}`}
-              midLabel={`Padrão ${CONTEXT_SUMMARY_RECENT_MESSAGES_DEFAULT}`}
-              maxLabel={`${CONTEXT_SUMMARY_RECENT_MESSAGES_MAX}`}
-              help="Depois do resumo, o agente ve apenas as últimas N mensagens cruas. Valores altos mantem mais detalhe; valores baixos economizam tokens."
-            />
-            <div className="flex items-start justify-between gap-3 pt-2 border-t">
+          <CardContent>
+            <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <Label htmlFor="allow_human_handoff" className="cursor-pointer">
                   Permitir transferir pra humano
                 </Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Deixa o agente usar <code>stop_agent</code> quando decidir.
+                  Deixa o agente passar a conversa pra um atendente quando
+                  detectar que está fora do escopo dele.
                 </p>
               </div>
               <Switch
@@ -483,92 +354,3 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   );
 }
 
-interface GuardrailFieldProps {
-  id: string;
-  label: string;
-  help: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  onChange: (v: number) => void;
-}
-
-function GuardrailField({ id, label, help, value, min, max, step = 1, onChange }: GuardrailFieldProps) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <Input
-        id={id}
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n)) onChange(n);
-        }}
-      />
-      <p className="text-xs text-muted-foreground">{help}</p>
-    </div>
-  );
-}
-
-interface RangeSliderProps {
-  id: string;
-  label: string;
-  valueLabel: string;
-  min: number;
-  max: number;
-  step?: number;
-  value: number;
-  onChange: (v: number) => void;
-  minLabel: string;
-  midLabel: string;
-  maxLabel: string;
-  help: string;
-}
-
-function RangeSlider({
-  id,
-  label,
-  valueLabel,
-  min,
-  max,
-  step = 1,
-  value,
-  onChange,
-  minLabel,
-  midLabel,
-  maxLabel,
-  help,
-}: RangeSliderProps) {
-  return (
-    <div className="space-y-1.5 pt-2 border-t">
-      <div className="flex items-center justify-between gap-2">
-        <Label htmlFor={id}>{label}</Label>
-        <span className="text-xs text-muted-foreground tabular-nums">{valueLabel}</span>
-      </div>
-      <input
-        id={id}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-primary"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-      />
-      <div className="flex justify-between text-[10px] text-muted-foreground/70 tabular-nums">
-        <span>{minLabel}</span>
-        <span>{midLabel}</span>
-        <span>{maxLabel}</span>
-      </div>
-      <p className="text-xs text-muted-foreground">{help}</p>
-    </div>
-  );
-}
