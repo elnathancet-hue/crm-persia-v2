@@ -8,6 +8,7 @@ import {
   type CreateCustomWebhookToolInput,
   type CreateToolFromPresetInput,
   type CreateToolInput,
+  type NativeHandlerName,
   type SetStageToolInput,
   type UpdateToolInput,
 } from "@persia/shared/ai-agent";
@@ -30,7 +31,8 @@ import {
   upsertStageToolRow,
 } from "./utils";
 
-const ENABLED_PRESET_PRS = new Set(["PR1", "PR3"]);
+// PR-AGENT-INTEGRATION-2 (mai/2026): paridade com CRM tools.ts.
+const ENABLED_PRESET_PRS = new Set(["PR1", "PR3", "PR5", "PR7", "PR8"]);
 
 type ValidatedToolPayload =
   | {
@@ -252,6 +254,98 @@ export async function updateTool(
       entityType: "agent_tool",
       entityId: toolId,
       metadata: { fields: Object.keys(input) },
+      error,
+    });
+    throw error;
+  }
+}
+
+// PR-AGENT-INTEGRATION-2 (mai/2026): toggle por handler. Cria se nao
+// existe, atualiza is_enabled se existe. Preserva config (description,
+// schema) quando cliente desliga e religa.
+export async function setNativeToolEnabled(
+  orgId: string,
+  input: { config_id: string; handler: NativeHandlerName; enabled: boolean },
+): Promise<AgentTool> {
+  const { db, userId } = await requireAdminAgentOrg(orgId);
+
+  try {
+    await assertConfigBelongsToOrg(db, orgId, input.config_id);
+
+    const preset = getPreset(input.handler);
+    if (!preset) throw new Error("Preset de ferramenta não encontrado");
+    if (!ENABLED_PRESET_PRS.has(preset.shipped_in_pr)) {
+      throw new Error(`Ferramenta disponível apenas em ${preset.shipped_in_pr}`);
+    }
+
+    const { data: existing, error: existingError } = await fromAny(db, "agent_tools")
+      .select("*")
+      .eq("organization_id", orgId)
+      .eq("config_id", input.config_id)
+      .eq("native_handler", input.handler)
+      .maybeSingle();
+
+    if (existingError) throw new Error(existingError.message);
+
+    let result: AgentTool;
+    if (existing) {
+      const { data, error } = await fromAny(db, "agent_tools")
+        .update({
+          is_enabled: input.enabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", orgId)
+        .eq("id", (existing as AgentTool).id)
+        .select("*")
+        .single();
+      if (error || !data) throw new Error(error?.message || "Erro ao atualizar");
+      result = data as AgentTool;
+    } else {
+      const { data, error } = await fromAny(db, "agent_tools")
+        .insert({
+          organization_id: orgId,
+          config_id: input.config_id,
+          name: preset.name,
+          description: preset.description,
+          input_schema: preset.input_schema,
+          execution_mode: "native",
+          native_handler: preset.handler,
+          webhook_url: null,
+          webhook_secret: null,
+          is_enabled: input.enabled,
+        })
+        .select("*")
+        .single();
+      if (error || !data) throw new Error(error?.message || "Erro ao criar");
+      result = data as AgentTool;
+    }
+
+    await auditAdminAgentAction({
+      userId,
+      orgId,
+      action: "admin_ai_agent_tool_toggle_native",
+      entityType: "agent_tool",
+      entityId: result.id,
+      metadata: {
+        config_id: input.config_id,
+        handler: input.handler,
+        enabled: input.enabled,
+      },
+    });
+
+    for (const path of agentPaths(input.config_id)) revalidatePath(path);
+    return result;
+  } catch (error) {
+    await auditAdminAgentFailure({
+      userId,
+      orgId,
+      action: "admin_ai_agent_tool_toggle_native",
+      entityType: "agent_tool",
+      metadata: {
+        config_id: input.config_id,
+        handler: input.handler,
+        enabled: input.enabled,
+      },
       error,
     });
     throw error;

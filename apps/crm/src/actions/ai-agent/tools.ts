@@ -7,6 +7,7 @@ import type {
   CreateCustomWebhookToolInput,
   CreateToolFromPresetInput,
   CreateToolInput,
+  NativeHandlerName,
   SetStageToolInput,
   UpdateToolInput,
 } from "@persia/shared/ai-agent";
@@ -27,7 +28,11 @@ import {
   upsertStageToolRow,
 } from "./utils";
 
-const ENABLED_PRESET_PRS = new Set(["PR1", "PR3"]);
+// PR-AGENT-INTEGRATION-2 (mai/2026): PR5/PR7/PR8 liberados ate aqui.
+// stop_agent (PR1), add_tag/transfer_* (PR3), trigger_notification/
+// schedule_event (PR7), send_audio (PR5), send_media/move_pipeline_stage/
+// create_appointment/list-cancel-reschedule (PR8).
+const ENABLED_PRESET_PRS = new Set(["PR1", "PR3", "PR5", "PR7", "PR8"]);
 
 type ValidatedToolPayload =
   | {
@@ -177,6 +182,73 @@ export async function updateTool(toolId: string, input: UpdateToolInput): Promis
 
   if (error || !data) throw new Error(error?.message || "Erro ao atualizar ferramenta");
   for (const path of agentPaths(existing.config_id)) revalidatePath(path);
+  return data as AgentTool;
+}
+
+// PR-AGENT-INTEGRATION-2 (mai/2026): toggle por handler nativo. Cria
+// a tool se nao existe (via materializePresetTool, com is_enabled=true),
+// ou atualiza is_enabled se ja existe. Idempotente: chamadas repetidas
+// nao duplicam. Desligar so seta is_enabled=false — nao deleta pra
+// preservar config (descricao, schema) caso cliente reative.
+export async function setNativeToolEnabled(input: {
+  config_id: string;
+  handler: NativeHandlerName;
+  enabled: boolean;
+}): Promise<AgentTool> {
+  const { db, orgId } = await requireAgentRole("admin");
+  await assertConfigBelongsToOrg(db, orgId, input.config_id);
+
+  const preset = getPreset(input.handler);
+  if (!preset) throw new Error("Preset de ferramenta nao encontrado");
+  if (!ENABLED_PRESET_PRS.has(preset.shipped_in_pr)) {
+    throw new Error(`Ferramenta disponivel apenas em ${preset.shipped_in_pr}`);
+  }
+
+  const { data: existing, error: existingError } = await db
+    .from("agent_tools")
+    .select("*")
+    .eq("organization_id", orgId)
+    .eq("config_id", input.config_id)
+    .eq("native_handler", input.handler)
+    .maybeSingle();
+
+  if (existingError) throw new Error(existingError.message);
+
+  if (existing) {
+    // Update existente — so muda is_enabled (preserva customizacoes).
+    const { data, error } = await db
+      .from("agent_tools")
+      .update({
+        is_enabled: input.enabled,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("organization_id", orgId)
+      .eq("id", (existing as AgentTool).id)
+      .select("*")
+      .single();
+
+    if (error || !data) throw new Error(error?.message || "Erro ao atualizar");
+    for (const path of agentPaths(input.config_id)) revalidatePath(path);
+    return data as AgentTool;
+  }
+
+  // Cria nova com is_enabled vindo do toggle. Se cliente liga e depois
+  // desliga, evita criar e ja deixar enabled=false (raro mas defensivo).
+  const { data, error } = await db
+    .from("agent_tools")
+    .insert({
+      ...materializePresetTool({
+        configId: input.config_id,
+        organizationId: orgId,
+        preset,
+      }),
+      is_enabled: input.enabled,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Erro ao criar");
+  for (const path of agentPaths(input.config_id)) revalidatePath(path);
   return data as AgentTool;
 }
 

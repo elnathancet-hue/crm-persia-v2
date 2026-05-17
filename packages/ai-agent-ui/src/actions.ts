@@ -30,6 +30,7 @@ import type {
   CreateStageInput,
   CreateToolFromPresetInput,
   ListRunsInput,
+  NativeHandlerName,
   ReorderStagesInput,
   SetCostLimitInput,
   SetStageToolInput,
@@ -65,6 +66,13 @@ export interface AgentActions {
   deleteTool: (toolId: string) => Promise<void>;
   setStageTool: (input: SetStageToolInput) => Promise<AgentStageTool>;
   listStageTools: (stageId: string) => Promise<AgentStageTool[]>;
+  // PR-AGENT-INTEGRATION-2: toggle nativo por handler (cria ou atualiza
+  // is_enabled). Idempotente, preserva config quando desliga.
+  setNativeToolEnabled: (input: {
+    config_id: string;
+    handler: NativeHandlerName;
+    enabled: boolean;
+  }) => Promise<AgentTool>;
 
   // Webhook allowlist
   addAllowedDomain: (input: AddAllowedDomainInput) => Promise<string[]>;

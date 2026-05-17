@@ -353,7 +353,13 @@ export function AgentEditor({
 
         <main className="min-w-0">
           {activeSection === "rules" && (
-            <RulesTab agent={agent} onChange={persistAgent} isPending={isPending} />
+            <RulesTab
+              agent={agent}
+              onChange={persistAgent}
+              isPending={isPending}
+              tools={tools}
+              onToolsChange={setTools}
+            />
           )}
           {activeSection === "stages" && (
             <StagesTab
