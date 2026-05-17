@@ -10,7 +10,9 @@ import {
   clampTokenThreshold,
   clampTurnThreshold,
 } from "@persia/shared/ai-agent";
+import { phoneBR } from "@persia/shared/validation";
 import type { IncomingMessage } from "@/lib/whatsapp/provider";
+import { errorMessage, logError } from "@/lib/observability";
 import { asRecord, mergeJsonObject, nowIso, type AgentDb } from "./db";
 import { normalizeGuardrails } from "./guardrails";
 
@@ -92,11 +94,26 @@ export async function ensureCrmContext(
   orgId: string,
   msg: IncomingMessage,
 ): Promise<RuntimeCrmContext> {
+  // PR-AI-AGENT-PIPELINE-FIX (mai/2026): normalize phone via Zod E.164
+  // antes do lookup/insert. Paridade com processIncomingMessage (PR-A
+  // LEADFIX). Sem isso, UAZAPI ("+5511...") e Meta ("5511...") criavam
+  // leads duplicados pro mesmo contato quando native agent rodava.
+  let normalizedPhone = msg.phone;
+  try {
+    normalizedPhone = phoneBR.parse(msg.phone);
+  } catch (err) {
+    logError("ensure_crm_context_phone_normalize_failed", {
+      organization_id: orgId,
+      raw_phone: msg.phone,
+      error: errorMessage(err),
+    });
+  }
+
   let { data: lead } = await db
     .from("leads")
     .select("id")
     .eq("organization_id", orgId)
-    .eq("phone", msg.phone)
+    .eq("phone", normalizedPhone)
     .maybeSingle();
 
   if (!lead) {
@@ -104,8 +121,8 @@ export async function ensureCrmContext(
       .from("leads")
       .insert({
         organization_id: orgId,
-        phone: msg.phone,
-        name: msg.pushName || msg.phone,
+        phone: normalizedPhone,
+        name: msg.pushName || normalizedPhone,
         source: "whatsapp",
         status: "new",
         channel: "whatsapp",
