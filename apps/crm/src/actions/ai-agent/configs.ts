@@ -1,6 +1,8 @@
 "use server";
 
 import {
+  AFTER_HOURS_MESSAGE_DEFAULT,
+  AFTER_HOURS_MESSAGE_MAX_LENGTH,
   DEFAULT_GUARDRAILS,
   PAUSE_KEYWORDS_DEFAULT,
   RESUME_KEYWORDS_DEFAULT,
@@ -10,6 +12,7 @@ import {
   getAgentTemplate,
   isAgentTemplateSlug,
   normalizeHumanizationConfig,
+  sanitizeBusinessHours,
   sanitizeKeywordList,
   type AgentConfig,
   type CreateAgentInput,
@@ -206,6 +209,25 @@ export async function updateAgent(
         patch.humanization_config.split_delay_seconds ??
           current.split_delay_seconds,
       ),
+      // PR C: business_hours_* + after_hours_message. business_hours_timezone
+      // nao e editavel pela UI cliente (hardcoded America/Sao_Paulo no
+      // normalize), mas merge preserva caso admin tenha customizado.
+      business_hours_enabled:
+        typeof patch.humanization_config.business_hours_enabled === "boolean"
+          ? patch.humanization_config.business_hours_enabled
+          : current.business_hours_enabled,
+      business_hours: sanitizeBusinessHours(
+        patch.humanization_config.business_hours ?? current.business_hours,
+      ),
+      after_hours_message: (() => {
+        const raw =
+          patch.humanization_config.after_hours_message ??
+          current.after_hours_message;
+        if (typeof raw !== "string" || raw.trim().length === 0) {
+          return AFTER_HOURS_MESSAGE_DEFAULT;
+        }
+        return raw.trim().slice(0, AFTER_HOURS_MESSAGE_MAX_LENGTH);
+      })(),
     };
   }
   if (patch.status !== undefined) updates.status = patch.status;

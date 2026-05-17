@@ -12,8 +12,12 @@ import type {
   UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import {
+  AFTER_HOURS_MESSAGE_DEFAULT,
+  AFTER_HOURS_MESSAGE_MAX_LENGTH,
   AUTO_PAUSE_MINUTES_DEFAULT,
   AUTO_PAUSE_MINUTES_MAX,
+  BUSINESS_HOURS_DEFAULT,
+  DAY_NAMES,
   HANDOFF_PHONE_MAX_DIGITS,
   HANDOFF_PHONE_MIN_DIGITS,
   HANDOFF_TEMPLATE_MAX_LENGTH,
@@ -29,7 +33,11 @@ import {
   clampSplitDelaySeconds,
   clampSplitThresholdChars,
   normalizeHumanizationConfig,
+  sanitizeBusinessHours,
   sanitizeKeywordList,
+  type BusinessHours,
+  type DayHours,
+  type DayName,
 } from "@persia/shared/ai-agent";
 import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
 import { HandoffNotificationCard } from "./HandoffNotificationCard";
@@ -108,6 +116,15 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
   const [splitDelaySeconds, setSplitDelaySeconds] = React.useState<number>(
     initialHumanization.split_delay_seconds,
   );
+  const [businessHoursEnabled, setBusinessHoursEnabled] = React.useState<boolean>(
+    initialHumanization.business_hours_enabled,
+  );
+  const [businessHours, setBusinessHours] = React.useState<BusinessHours>(
+    initialHumanization.business_hours,
+  );
+  const [afterHoursMessage, setAfterHoursMessage] = React.useState<string>(
+    initialHumanization.after_hours_message,
+  );
 
   const { listCalendarConnections } = useAgentActions();
 
@@ -152,6 +169,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     setSplitEnabled(next.split_enabled);
     setSplitThresholdChars(next.split_threshold_chars);
     setSplitDelaySeconds(next.split_delay_seconds);
+    setBusinessHoursEnabled(next.business_hours_enabled);
+    setBusinessHours(next.business_hours);
+    setAfterHoursMessage(next.after_hours_message);
   }, [
     agent.id,
     agent.system_prompt,
@@ -206,6 +226,13 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
     : 0;
   const nextSplitThresholdChars = clampSplitThresholdChars(splitThresholdChars);
   const nextSplitDelaySeconds = clampSplitDelaySeconds(splitDelaySeconds);
+  // PR C: business hours dirty check. business_hours sanitiza dia-por-dia
+  // (rejeita invalido). after_hours_message clipa em max length.
+  const nextBusinessHours = sanitizeBusinessHours(businessHours);
+  const nextAfterHoursMessage = afterHoursMessage.trim().slice(
+    0,
+    AFTER_HOURS_MESSAGE_MAX_LENGTH,
+  ) || AFTER_HOURS_MESSAGE_DEFAULT;
   const humanizationDirty =
     nextAutoPauseMinutes !== initialHumanization.auto_pause_minutes ||
     JSON.stringify(nextPauseKeywords) !==
@@ -214,7 +241,11 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
       JSON.stringify(initialHumanization.resume_keywords) ||
     splitEnabled !== initialHumanization.split_enabled ||
     nextSplitThresholdChars !== initialHumanization.split_threshold_chars ||
-    nextSplitDelaySeconds !== initialHumanization.split_delay_seconds;
+    nextSplitDelaySeconds !== initialHumanization.split_delay_seconds ||
+    businessHoursEnabled !== initialHumanization.business_hours_enabled ||
+    JSON.stringify(nextBusinessHours) !==
+      JSON.stringify(initialHumanization.business_hours) ||
+    nextAfterHoursMessage !== initialHumanization.after_hours_message;
 
   // Client-side validation that mirrors the server (lets the Save button
   // disable proactively on bad data — server still re-validates).
@@ -267,6 +298,9 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
         split_enabled: splitEnabled,
         split_threshold_chars: nextSplitThresholdChars,
         split_delay_seconds: nextSplitDelaySeconds,
+        business_hours_enabled: businessHoursEnabled,
+        business_hours: nextBusinessHours,
+        after_hours_message: nextAfterHoursMessage,
       };
     }
     onChange(patch, "Regras salvas");
@@ -545,6 +579,15 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
           </CardContent>
         </Card>
 
+        <BusinessHoursCard
+          enabled={businessHoursEnabled}
+          hours={businessHours}
+          afterHoursMessage={afterHoursMessage}
+          onEnabledChange={setBusinessHoursEnabled}
+          onHoursChange={setBusinessHours}
+          onAfterHoursMessageChange={setAfterHoursMessage}
+        />
+
         <HandoffNotificationCard
           draftEnabled={handoffEnabled}
           draftTargetType={handoffTargetType}
@@ -632,6 +675,171 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
         </Button>
       </div>
     </div>
+  );
+}
+
+// PR-AI-AGENT-HUMAN-C: card de horario comercial. 7 toggles dia-da-semana
+// + 2 inputs time (start/end) por dia aberto + textarea fora-do-horario.
+// Timezone fica hardcoded "America/Sao_Paulo" pra cliente brasileiro —
+// admin edita JSONB via SQL se precisar mudar.
+const DAY_LABELS: Record<DayName, string> = {
+  monday: "Segunda",
+  tuesday: "Terça",
+  wednesday: "Quarta",
+  thursday: "Quinta",
+  friday: "Sexta",
+  saturday: "Sábado",
+  sunday: "Domingo",
+};
+
+interface BusinessHoursCardProps {
+  enabled: boolean;
+  hours: BusinessHours;
+  afterHoursMessage: string;
+  onEnabledChange: (v: boolean) => void;
+  onHoursChange: (next: BusinessHours) => void;
+  onAfterHoursMessageChange: (next: string) => void;
+}
+
+function BusinessHoursCard({
+  enabled,
+  hours,
+  afterHoursMessage,
+  onEnabledChange,
+  onHoursChange,
+  onAfterHoursMessageChange,
+}: BusinessHoursCardProps) {
+  const setDayOpen = (day: DayName, open: boolean) => {
+    onHoursChange({
+      ...hours,
+      [day]: open
+        ? hours[day] ?? BUSINESS_HOURS_DEFAULT[day] ?? { start: "09:00", end: "18:00" }
+        : null,
+    });
+  };
+  const setDayField = (day: DayName, field: keyof DayHours, value: string) => {
+    const current = hours[day];
+    if (!current) return;
+    onHoursChange({ ...hours, [day]: { ...current, [field]: value } });
+  };
+  const messageTooLong =
+    afterHoursMessage.length > AFTER_HOURS_MESSAGE_MAX_LENGTH;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Horário comercial</CardTitle>
+        <p className="text-xs text-muted-foreground mt-1">
+          Limita os horários que o agente responde. Fora do horário, manda uma
+          mensagem padrão e deixa a conversa pra você responder depois.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <Label htmlFor="business_hours_enabled" className="cursor-pointer">
+              Respeitar horário comercial
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Quando desligado, o agente responde 24/7. Fuso fixo:
+              América/São Paulo.
+            </p>
+          </div>
+          <Switch
+            id="business_hours_enabled"
+            checked={enabled}
+            onCheckedChange={(v) => onEnabledChange(Boolean(v))}
+          />
+        </div>
+
+        {enabled ? (
+          <>
+            <div className="space-y-2 pt-2 border-t">
+              <Label className="text-xs">Dias e horários</Label>
+              <div className="space-y-1.5">
+                {DAY_NAMES.map((day) => {
+                  const dayHours = hours[day];
+                  const isOpen = dayHours !== null;
+                  return (
+                    <div
+                      key={day}
+                      className="flex items-center gap-2 text-xs"
+                    >
+                      <label className="flex items-center gap-2 w-24 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isOpen}
+                          onChange={(e) => setDayOpen(day, e.target.checked)}
+                          className="accent-primary"
+                        />
+                        <span className="font-medium">
+                          {DAY_LABELS[day]}
+                        </span>
+                      </label>
+                      {isOpen && dayHours ? (
+                        <>
+                          <Input
+                            type="time"
+                            value={dayHours.start}
+                            onChange={(e) =>
+                              setDayField(day, "start", e.target.value)
+                            }
+                            className="h-8 w-28 text-xs"
+                            aria-label={`${DAY_LABELS[day]} — início`}
+                          />
+                          <span className="text-muted-foreground">até</span>
+                          <Input
+                            type="time"
+                            value={dayHours.end}
+                            onChange={(e) =>
+                              setDayField(day, "end", e.target.value)
+                            }
+                            className="h-8 w-28 text-xs"
+                            aria-label={`${DAY_LABELS[day]} — fim`}
+                          />
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground italic">
+                          Fechado
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-2 border-t">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="after_hours_message">
+                  Mensagem fora do horário
+                </Label>
+                <span
+                  className={`text-xs tabular-nums ${
+                    messageTooLong ? "text-destructive" : "text-muted-foreground"
+                  }`}
+                >
+                  {afterHoursMessage.length}/{AFTER_HOURS_MESSAGE_MAX_LENGTH}
+                </span>
+              </div>
+              <Textarea
+                id="after_hours_message"
+                value={afterHoursMessage}
+                onChange={(e) => onAfterHoursMessageChange(e.target.value)}
+                placeholder={AFTER_HOURS_MESSAGE_DEFAULT}
+                rows={3}
+                aria-invalid={messageTooLong}
+                className={messageTooLong ? "border-destructive" : undefined}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enviada uma única vez por janela de 6 horas pra evitar spammar
+                leads que mandam várias mensagens fora do horário.
+              </p>
+            </div>
+          </>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
