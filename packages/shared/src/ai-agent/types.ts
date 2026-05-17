@@ -33,6 +33,14 @@ export const NATIVE_HANDLERS = [
   "schedule_event",
   "stop_agent",
   "move_pipeline_stage",
+  // PR-AGENDA-TOOLS (mai/2026): handlers de agenda — destravam
+  // agendamento/listagem/cancelamento/reagendamento via chat WhatsApp.
+  // Migration 040 estende o CHECK constraint do agent_tools.native_handler
+  // pra aceitar esses 4 valores.
+  "create_appointment",
+  "list_lead_appointments",
+  "cancel_appointment",
+  "reschedule_appointment",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];
@@ -462,7 +470,9 @@ export interface JSONSchemaObject {
 }
 
 export type JSONSchemaProperty =
-  | { type: "string"; description?: string; enum?: readonly string[]; format?: "uuid" | "email" | "uri" }
+  // PR-AGENDA-TOOLS (mai/2026): adicionado "date-time" pros handlers de
+  // agenda (create_appointment + reschedule_appointment recebem ISO 8601).
+  | { type: "string"; description?: string; enum?: readonly string[]; format?: "uuid" | "email" | "uri" | "date-time" }
   | { type: "number"; description?: string; minimum?: number; maximum?: number }
   | { type: "integer"; description?: string; minimum?: number; maximum?: number }
   | { type: "boolean"; description?: string }

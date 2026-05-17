@@ -384,6 +384,164 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
       },
     },
   },
+
+  // ============================================================================
+  // PR-AGENDA-TOOLS (mai/2026) — handlers de Agenda
+  // ----------------------------------------------------------------------------
+  // Destravam agendamento conversacional via WhatsApp: AI consegue criar,
+  // listar, cancelar e reagendar appointments do lead da conversa sem
+  // transferir pro humano. Side effects (notify lead, conflict check) ja
+  // existem no shared agenda; handlers so wrappam.
+  // ============================================================================
+  {
+    handler: "create_appointment",
+    name: "create_appointment",
+    display_name: "Criar agendamento",
+    description:
+      "Schedule a new appointment for the current lead. Returns the appointment id, start and end times. Server-side conflict check rejects overlapping slots; lead receives WhatsApp confirmation reminder via the org's reminder configs.",
+    ui_description:
+      "Cria um agendamento para o lead da conversa, validando disponibilidade.",
+    icon_name: "CalendarPlus",
+    category: "scheduling",
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      required: ["start_at", "duration_minutes", "title"],
+      properties: {
+        start_at: {
+          type: "string",
+          format: "date-time",
+          description:
+            "Start time in ISO 8601 with timezone (e.g. 2026-05-20T14:00:00-03:00). Must be in the future.",
+        },
+        duration_minutes: {
+          type: "integer",
+          minimum: 15,
+          maximum: 480,
+          description:
+            "Appointment duration in minutes (15 to 480). Most consultations are 30-60 min.",
+        },
+        title: {
+          type: "string",
+          description: "Short title for the appointment (e.g. 'Consulta inicial').",
+        },
+        description: {
+          type: "string",
+          description: "Optional details/context for the appointment.",
+        },
+        channel: {
+          type: "string",
+          enum: ["whatsapp", "phone", "online", "in_person"],
+          description: "Channel where the appointment will happen.",
+        },
+        location: {
+          type: "string",
+          description:
+            "Physical address when channel='in_person'. Empty for online/phone.",
+        },
+        meeting_url: {
+          type: "string",
+          description:
+            "Meeting URL (Zoom/Meet/etc) when channel='online'. Empty for in_person/phone.",
+        },
+      },
+    },
+  },
+  {
+    handler: "list_lead_appointments",
+    name: "list_lead_appointments",
+    display_name: "Listar agendamentos do lead",
+    description:
+      "Return the lead's appointments (upcoming and/or past). Use this to confirm to the lead what they already have scheduled before creating a new one, avoiding duplicates.",
+    ui_description:
+      "Lista os agendamentos do lead da conversa (futuros ou historico).",
+    icon_name: "CalendarSearch",
+    category: "scheduling",
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      properties: {
+        only_upcoming: {
+          type: "boolean",
+          description:
+            "If true (default), return only future appointments. If false, includes past appointments too.",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: 50,
+          description:
+            "Maximum number of appointments to return. Default 10.",
+        },
+      },
+    },
+  },
+  {
+    handler: "cancel_appointment",
+    name: "cancel_appointment",
+    display_name: "Cancelar agendamento",
+    description:
+      "Cancel an existing appointment. Lead receives WhatsApp notification automatically. Use only when the lead explicitly asks to cancel — never cancel silently.",
+    ui_description:
+      "Cancela um agendamento existente e avisa o lead pelo WhatsApp.",
+    icon_name: "CalendarX",
+    category: "scheduling",
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      required: ["appointment_id"],
+      properties: {
+        appointment_id: {
+          type: "string",
+          format: "uuid",
+          description:
+            "UUID of the appointment to cancel. Use list_lead_appointments first to find it.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "Short reason for the cancellation (e.g. 'Lead nao pode comparecer'). Shown to the lead in the WhatsApp notification.",
+        },
+      },
+    },
+  },
+  {
+    handler: "reschedule_appointment",
+    name: "reschedule_appointment",
+    display_name: "Reagendar agendamento",
+    description:
+      "Reschedule an appointment to a new date/time. Creates a new appointment with status awaiting_confirmation and marks the original as rescheduled. Lead receives WhatsApp notification with old and new times.",
+    ui_description:
+      "Reagenda um agendamento existente para outra data/hora e avisa o lead.",
+    icon_name: "CalendarClock",
+    category: "scheduling",
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      required: ["appointment_id", "new_start_at"],
+      properties: {
+        appointment_id: {
+          type: "string",
+          format: "uuid",
+          description:
+            "UUID of the existing appointment to reschedule. Use list_lead_appointments first.",
+        },
+        new_start_at: {
+          type: "string",
+          format: "date-time",
+          description:
+            "New start time in ISO 8601 (e.g. 2026-05-22T16:00:00-03:00). Must be in the future and not conflict with another appointment.",
+        },
+        new_duration_minutes: {
+          type: "integer",
+          minimum: 15,
+          maximum: 480,
+          description:
+            "Optional new duration. If omitted, keeps the original duration.",
+        },
+      },
+    },
+  },
 ];
 
 export function getPreset(handler: NativeHandlerName): NativeToolPreset | undefined {

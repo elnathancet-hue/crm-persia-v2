@@ -6,7 +6,11 @@ import type {
 } from "@persia/shared/ai-agent";
 import { getPreset } from "@persia/shared/ai-agent";
 import { addTagHandler } from "./add-tag";
+import { cancelAppointmentHandler } from "./cancel-appointment";
+import { createAppointmentHandler } from "./create-appointment";
+import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
+import { rescheduleAppointmentHandler } from "./reschedule-appointment";
 import { stopAgentHandler } from "./stop-agent";
 import { transferToAgentHandler } from "./transfer-to-agent";
 import { transferToStageHandler } from "./transfer-to-stage";
@@ -21,6 +25,11 @@ export const nativeHandlers: NativeHandlerRegistry = {
   add_tag: addTagHandler,
   trigger_notification: triggerNotificationHandler,
   move_pipeline_stage: movePipelineStageHandler,
+  // PR-AGENDA-TOOLS (mai/2026): agendamento conversacional via WhatsApp
+  create_appointment: createAppointmentHandler,
+  list_lead_appointments: listLeadAppointmentsHandler,
+  cancel_appointment: cancelAppointmentHandler,
+  reschedule_appointment: rescheduleAppointmentHandler,
 };
 
 export function isImplementedNativeHandler(
