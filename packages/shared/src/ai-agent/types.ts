@@ -131,6 +131,11 @@ export interface AgentConfig {
   // normalizeHumanizationConfig (humanization.ts) que aplica defaults.
   // JSONB cresce com PRs B/C/D (split, business hours, etc).
   humanization_config?: HumanizationConfig;
+  // PR-AGENT-INTEGRATION-3 (mai/2026): agente principal. Unico TRUE por
+  // org (unique partial index). Recebe primeira msg + roteia pra
+  // secundarios baseado em agent_entry_conditions. Default false na
+  // migration 044.
+  is_primary?: boolean;
   status: AgentStatus;
   created_at: string;
   updated_at: string;

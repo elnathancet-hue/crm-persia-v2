@@ -18,6 +18,11 @@ const featureFlagMock = vi.hoisted(() => ({
 const contextMock = vi.hoisted(() => ({
   loadActiveAgentConfig: vi.fn(),
   resolveAgentContext: vi.fn(),
+  // PR-AGENT-INTEGRATION-3: ensureCrmContext e pickAgentForConversation
+  // sao usados em tryEnqueueForNativeAgent pra routing. Test mocka pra
+  // retornar dados sinteticos (primary sempre vence — sem secundarios).
+  ensureCrmContext: vi.fn(),
+  pickAgentForConversation: vi.fn(),
 }));
 
 const debounceMock = vi.hoisted(() => ({
@@ -103,6 +108,14 @@ describe("ai-agent PR5.5 runtime", () => {
         inboundMessageId: "inbound-a",
       },
     });
+    contextMock.ensureCrmContext.mockResolvedValue({
+      leadId: "lead-a",
+      crmConversationId: "crm-conv-a",
+      inboundMessageId: "inbound-a",
+    });
+    contextMock.pickAgentForConversation.mockImplementation(
+      async ({ primary }: { primary: { id: string } }) => primary,
+    );
     debounceMock.enqueueDebounced.mockResolvedValue(undefined);
   });
 
