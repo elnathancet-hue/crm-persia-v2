@@ -45,6 +45,7 @@ export { CalendarConnectionsCard } from "./components/CalendarConnectionsCard";
 export { CustomWebhookToolSheet } from "./components/CustomWebhookToolSheet";
 export { DecisionIntelligenceModal } from "./components/DecisionIntelligenceModal";
 export { HandoffNotificationCard } from "./components/HandoffNotificationCard";
+export { QuickToolsCard } from "./components/QuickToolsCard";
 export { IndexingStatusBadge } from "./components/IndexingStatusBadge";
 export { LimitsEditor } from "./components/LimitsEditor";
 export { ReactivateAgentButton } from "./components/ReactivateAgentButton";

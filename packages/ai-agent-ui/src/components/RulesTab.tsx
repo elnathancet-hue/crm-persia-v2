@@ -7,6 +7,7 @@ import type {
   AgentCalendarConnectionPublic,
   AgentConfig,
   AgentGuardrails,
+  AgentTool,
   HandoffNotificationTargetType,
   HumanizationConfig,
   UpdateAgentInput,
@@ -41,6 +42,7 @@ import {
 } from "@persia/shared/ai-agent";
 import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
 import { HandoffNotificationCard } from "./HandoffNotificationCard";
+import { QuickToolsCard } from "./QuickToolsCard";
 import { useAgentActions } from "../context";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
@@ -60,9 +62,19 @@ interface Props {
   agent: AgentConfig;
   onChange: (patch: UpdateAgentInput, successMsg?: string) => void;
   isPending: boolean;
+  // PR-AGENT-INTEGRATION-2: tools passados pra renderizar QuickToolsCard
+  // com toggles. onToolsChange propaga update apos cada toggle.
+  tools: AgentTool[];
+  onToolsChange: (next: AgentTool[]) => void;
 }
 
-export function RulesTab({ agent, onChange, isPending }: Props) {
+export function RulesTab({
+  agent,
+  onChange,
+  isPending,
+  tools,
+  onToolsChange,
+}: Props) {
   const [prompt, setPrompt] = React.useState(agent.system_prompt);
   const [description, setDescription] = React.useState(agent.description ?? "");
   const [model, setModel] = React.useState(agent.model);
@@ -417,6 +429,14 @@ export function RulesTab({ agent, onChange, isPending }: Props) {
             onIncludeSummaryChange={setHandoffIncludeSummary}
           />
         ) : null}
+
+        {/* PR-AGENT-INTEGRATION-2: ferramentas rapidas. Toggle por handler
+            que cria/atualiza agent_tools (preserva config ao desligar). */}
+        <QuickToolsCard
+          configId={agent.id}
+          tools={tools}
+          onChange={onToolsChange}
+        />
 
         {/* PR-AI-AGENT-HUMAN-A: card de humanizacao (pausa/ativa). Toggle
             do auto_pause_minutes serve de master switch: off = pausa

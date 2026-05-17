@@ -13,6 +13,7 @@ import {
   createToolFromPreset,
   deleteTool,
   listStageTools,
+  setNativeToolEnabled,
   setStageTool,
   updateTool,
 } from "@/actions/ai-agent/tools";
@@ -73,6 +74,7 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     deleteTool: (toolId) => deleteTool(orgId, toolId),
     setStageTool: (input) => setStageTool(orgId, input),
     listStageTools: (stageId) => listStageTools(orgId, stageId),
+    setNativeToolEnabled: (input) => setNativeToolEnabled(orgId, input),
     addAllowedDomain: (input) => addAllowedDomain(orgId, input),
     removeAllowedDomain: (domain) => removeAllowedDomain(orgId, domain),
     setNativeAgentEnabled: (enabled) => setNativeAgentEnabled(orgId, enabled),

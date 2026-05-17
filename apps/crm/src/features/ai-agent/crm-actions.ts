@@ -17,6 +17,7 @@ import {
   createToolFromPreset,
   deleteTool,
   listStageTools,
+  setNativeToolEnabled,
   setStageTool,
   updateTool,
 } from "@/actions/ai-agent/tools";
@@ -76,6 +77,7 @@ export const crmAgentActions: AgentActions = {
   deleteTool,
   setStageTool,
   listStageTools,
+  setNativeToolEnabled,
   addAllowedDomain,
   removeAllowedDomain,
   setNativeAgentEnabled,
