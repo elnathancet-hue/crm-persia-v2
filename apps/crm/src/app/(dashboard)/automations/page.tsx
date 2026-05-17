@@ -1,40 +1,27 @@
 export const metadata = { title: "Automações" };
-import { Bot, Scissors, Webhook, FolderOpen, Sparkles } from "lucide-react";
+import { FolderOpen, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@persia/ui/card";
-import { Badge } from "@persia/ui/badge";
 import Link from "next/link";
 
+// PR-AUTOMATIONS-CLEANUP (mai/2026): hub reduzido de 5 cards pra 2.
+// Assistentes IA, Webhook IA e Picotador (sistema legacy pre Agente
+// Nativo) escondidos do hub — rotas continuam acessiveis por URL
+// direta pra compatibilidade do pipeline (modes n8n + OpenAI fallback
+// ainda leem essas configs).
 const automationLinks = [
   {
-    title: "Agente IA Nativo",
-    description: "Configure etapas, regras e ferramentas nativas para automatizar conversas sem webhooks externos",
+    title: "Agente IA",
+    description:
+      "Configure um agente que responde no WhatsApp seguindo etapas, ferramentas e sua base de conhecimento.",
     href: "/automations/agents",
     icon: Sparkles,
-    badge: "Novo",
   },
   {
-    title: "Assistentes IA",
-    description: "Crie assistentes especializados para apoiar agentes no atendimento",
-    href: "/automations/assistant",
-    icon: Bot,
-  },
-  {
-    title: "Webhook IA",
-    description: "Conecte sua IA externa via webhook (n8n, Make, custom)",
-    href: "/automations/webhook",
-    icon: Webhook,
-  },
-  {
-    title: "Tools",
-    description: "Banco de imagens, PDFs e documentos para enviar nas automações",
+    title: "Biblioteca de mídia",
+    description:
+      "Banco de imagens, PDFs, vídeos e documentos pra reaproveitar nas automações.",
     href: "/automations/tools",
     icon: FolderOpen,
-  },
-  {
-    title: "Picotador de Mensagens",
-    description: "Divida respostas longas em mensagens curtas e naturais no WhatsApp",
-    href: "/automations/splitter",
-    icon: Scissors,
   },
 ];
 
@@ -59,14 +46,7 @@ export default function AutomationsPage() {
                     <Icon className="size-5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{link.title}</p>
-                      {link.badge ? (
-                        <Badge variant="secondary" className="text-xs">
-                          {link.badge}
-                        </Badge>
-                      ) : null}
-                    </div>
+                    <p className="font-medium">{link.title}</p>
                     <p className="text-sm text-muted-foreground mt-0.5">{link.description}</p>
                   </div>
                 </CardContent>

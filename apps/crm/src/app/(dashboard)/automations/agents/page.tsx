@@ -2,7 +2,7 @@ import { listAgents } from "@/actions/ai-agent/configs";
 import { isNativeAgentEnabled } from "@/actions/ai-agent/feature-flag";
 import { AgentsListClient } from "./agents-list-client";
 
-export const metadata = { title: "Agente IA Nativo" };
+export const metadata = { title: "Agente IA" };
 
 // PR-AI-AGENT-VISUAL (mai/2026): header + tabs movidos pro client
 // (paridade com /crm — icone grande no header + sticky). Page server

@@ -32,10 +32,10 @@ export function AgentsListClient(props: Props) {
                 <Bot className="size-6" />
               </div>
               <div className="min-w-0">
-                <PageTitle className="leading-none">Agente IA Nativo</PageTitle>
+                <PageTitle className="leading-none">Agente IA</PageTitle>
                 <p className="mt-1.5 text-sm text-muted-foreground">
                   Configure etapas, regras e ferramentas para o agente
-                  responder suas conversas sem webhooks externos.
+                  responder suas conversas no WhatsApp automaticamente.
                 </p>
               </div>
             </div>

@@ -7,9 +7,9 @@ export default async function ToolsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Tools</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Biblioteca de mídia</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Banco de arquivos que a IA e o agente podem enviar durante a conversa
+          Banco de imagens, PDFs, vídeos e documentos que o agente pode enviar durante a conversa.
         </p>
       </div>
       <ToolsClient initialTools={tools as never} />
