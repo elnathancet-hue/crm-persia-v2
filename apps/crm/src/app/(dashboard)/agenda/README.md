@@ -1,6 +1,6 @@
 # Módulo `/agenda` — Documentação técnica
 
-**Última atualização:** 2026-05-17
+**Última atualização:** 2026-05-17 (pós-merge #225)
 **Mantenedor:** Squad CRM Persia (skill `squad-crm-persia`)
 **Memória relacionada:** [`project_agenda_module.md`](../../../../../../../../../../Users/ELNATHAN/.claude/projects/D--tmp-crm-persia-monorepo/memory/project_agenda_module.md) (criar quando virar fonte de decisões)
 
@@ -243,7 +243,7 @@ packages/shared/src/agenda/
 | **Cancel/Reschedule (imediato)** | `lib/agenda/notifications/dispatch.ts` | Fire-and-forget sem queue (UX é "rápido ou nada") |
 | **Templates** | `packages/shared/src/agenda/reminders.ts:renderReminderTemplate` | Variáveis: `{{lead_name}}`, `{{appointment_date}}`, `{{appointment_time}}`, etc |
 
-### AI Agent (PR #225 em revisão)
+### AI Agent (PR #225)
 
 4 tools nativas que destravam agendamento conversacional:
 
@@ -280,9 +280,9 @@ Pré-requisitos:
 | `agenda-mutations.test.ts` | CRUD shared (create/update/cancel/reschedule) + multi-tenant guard + bookings |
 | `agenda-security.test.ts` | `ensureCanActOnUser` (cross-agent guard) |
 | `agenda-notify.test.ts` | Templates de notificação imediata (cancel/reschedule WhatsApp) |
-| `ai-agent-agenda-tools.test.ts` | **(PR #225 em revisão)** 14 tests dos 4 handlers AI |
+| `ai-agent-agenda-tools.test.ts` | 14 tests dos 4 handlers AI (PR #225) |
 
-**Total atual em prod (até #224):** parte das 448 tests no `pnpm test`. Após merge do #225, **462 tests** total.
+**Total atual em prod (até #225):** parte das **462 tests** no `pnpm test`.
 
 ### Como rodar
 
@@ -343,7 +343,7 @@ pnpm --filter @persia/agenda-ui typecheck       # ui-only
 | [#222](https://github.com/elnathancet-hue/crm-persia-v2/pull/222) | Realtime de appointments (`useAppointmentsRealtime`, evita double-booking) | — |
 | [#223](https://github.com/elnathancet-hue/crm-persia-v2/pull/223) | Preview da última mensagem do lead no AppointmentDrawer | — |
 | [#224](https://github.com/elnathancet-hue/crm-persia-v2/pull/224) | Chip "📅 Em 2h" no card do Kanban (janela 48h) | — |
-| [#225](https://github.com/elnathancet-hue/crm-persia-v2/pull/225) | **(em revisão)** 4 AI Agent tools — agendamento conversacional WhatsApp | — |
+| [#225](https://github.com/elnathancet-hue/crm-persia-v2/pull/225) | 4 AI Agent tools — agendamento conversacional WhatsApp (migration 040 adiciona `create_appointment`, `list_lead_appointments`, `cancel_appointment`, `reschedule_appointment` ao CHECK do `agent_tools.native_handler`) | — |
 
 ### Decisões fundamentais
 
