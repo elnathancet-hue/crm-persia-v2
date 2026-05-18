@@ -170,6 +170,12 @@ export interface AgentStage {
   // pai esta em behavior_mode='actions'. Ignorado em mode='stages'.
   // Validacao cruzada feita na aplicacao.
   action_type?: AgentActionType | null;
+  // PR-AI-AGENT-STAGE-ACTION-CONFIG (mai/2026): lista de acoes que
+  // disparam AUTOMATICAMENTE ao entrar nesta etapa. Migration 049
+  // adiciona com default '{}' (= sem acoes — comportamento atual).
+  // Runtime SEMPRE normaliza via normalizeStageActionConfig antes de
+  // usar (ver stage-actions.ts).
+  action_config?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
@@ -240,6 +246,12 @@ export interface AgentConversation {
   variables: Record<string, unknown>; // key/value extracted facts (nome, email, etc)
   tokens_used_total: number;      // cumulative, for org-level cost views
   last_interaction_at: string | null;
+  // PR-AI-AGENT-STAGE-ACTION-CONFIG (mai/2026): stage_ids onde as
+  // auto_actions ja foram disparadas. Garante idempotencia se a
+  // conversa volta a entrar na mesma etapa (raro via transfer_to_stage).
+  // Migration 049 adiciona com default '[]'. Runtime normaliza via
+  // normalizeActionsExecuted antes de usar.
+  actions_executed?: string[];
   created_at: string;
   updated_at: string;
 }
