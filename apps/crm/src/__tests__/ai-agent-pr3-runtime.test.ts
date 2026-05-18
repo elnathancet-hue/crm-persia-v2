@@ -194,12 +194,20 @@ describe("ai-agent PR3 runtime", () => {
 
   it("transferToUserHandler dry-run simulates the assignment without writes", async () => {
     const supabase = createSupabaseMock();
+    // PR-AI-AGENT-TOOLS-NAMES: resolveTargetUser agora pega organization_members
+    // (lista) + profiles (lista) e resolve em memoria.
     supabase.queue("organization_members", {
-      data: { user_id: "11111111-1111-4111-8111-111111111111" },
+      data: [{ user_id: "11111111-1111-4111-8111-111111111111" }],
       error: null,
     });
     supabase.queue("profiles", {
-      data: { full_name: "Alice" },
+      data: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          full_name: "Alice",
+          email: "alice@example.com",
+        },
+      ],
       error: null,
     });
 
@@ -225,11 +233,17 @@ describe("ai-agent PR3 runtime", () => {
   it("transferToUserHandler updates the lead and logs an internal activity note", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("organization_members", {
-      data: { user_id: "11111111-1111-4111-8111-111111111111" },
+      data: [{ user_id: "11111111-1111-4111-8111-111111111111" }],
       error: null,
     });
     supabase.queue("profiles", {
-      data: { full_name: "Alice" },
+      data: [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          full_name: "Alice",
+          email: "alice@example.com",
+        },
+      ],
       error: null,
     });
     supabase.queue("leads", { data: null, error: null });
@@ -286,8 +300,11 @@ describe("ai-agent PR3 runtime", () => {
     );
 
     expect(result.success).toBe(true);
+    // PR-AI-AGENT-TOOLS-NAMES: handler agora usa o id retornado pelo
+    // lookup (stage-new do mock), nao o UUID passado no input —
+    // garantia de paridade com a row resolvida.
     expect(supabase.updates.agent_conversations?.[0]).toMatchObject({
-      current_stage_id: "22222222-2222-4222-8222-222222222222",
+      current_stage_id: "stage-new",
     });
   });
 
@@ -326,8 +343,10 @@ describe("ai-agent PR3 runtime", () => {
     );
 
     expect(result.success).toBe(true);
+    // PR-AI-AGENT-TOOLS-NAMES: handler usa cfgRow.id do lookup
+    // ("config-b" do mock), nao o UUID passado.
     expect(supabase.updates.agent_conversations?.[0]).toMatchObject({
-      config_id: "33333333-3333-4333-8333-333333333333",
+      config_id: "config-b",
       current_stage_id: "stage-b1",
     });
   });

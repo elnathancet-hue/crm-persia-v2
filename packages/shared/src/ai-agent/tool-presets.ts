@@ -64,19 +64,18 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "transfer_to_user",
     display_name: "Transferir para usuario",
     description:
-      "Reassign the current lead to a specific team member. The user must already belong to the organization.",
+      "Reassign the current lead to a specific team member. Use the team member's full name or email — the system prompt lists available members. Do NOT use UUIDs.",
     ui_description: "Atribui o lead a um atendente especifico da equipe.",
     icon_name: "UserCheck",
     category: "transfer",
     shipped_in_pr: "PR3",
     input_schema: {
       type: "object",
-      required: ["user_id"],
       properties: {
-        user_id: {
+        user: {
           type: "string",
-          format: "uuid",
-          description: "UUID of the organization member to assign the lead to.",
+          description:
+            "Nome completo OU email do membro da equipe (case-insensitive). Use o valor EXATO da lista de membros injetada no system prompt.",
         },
         reason: {
           type: "string",
@@ -90,20 +89,18 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "transfer_to_stage",
     display_name: "Avancar etapa do agente",
     description:
-      "Advance the agent conversation to a different stage in the same agent configuration.",
+      "Advance the agent conversation to a different stage in the SAME agent. Use the stage's situation (name) — the system prompt lists all stages of this agent. Do NOT use UUIDs.",
     ui_description: "Move a conversa para outra etapa do mesmo agente.",
     icon_name: "ArrowRightCircle",
     category: "transfer",
     shipped_in_pr: "PR3",
     input_schema: {
       type: "object",
-      required: ["stage_id"],
       properties: {
-        stage_id: {
+        target_stage_name: {
           type: "string",
-          format: "uuid",
           description:
-            "UUID of the target stage. Must belong to the same agent config.",
+            "Nome (situation) EXATO da etapa de destino, conforme listado no catalogo de etapas do agente no system prompt.",
         },
         reason: { type: "string" },
       },
@@ -114,20 +111,18 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "transfer_to_agent",
     display_name: "Transferir para outro agente",
     description:
-      "Hand the conversation to a different agent configuration (for example, from Recepcao to Vendas).",
+      "Hand the conversation to a DIFFERENT agent (ex: Recepcao -> Vendas). Use the target agent's name — the system prompt lists available agents. Do NOT use UUIDs.",
     ui_description: "Passa a conversa para outro agente IA (ex: Recepcao -> Vendas).",
     icon_name: "Bot",
     category: "transfer",
     shipped_in_pr: "PR3",
     input_schema: {
       type: "object",
-      required: ["agent_config_id"],
       properties: {
-        agent_config_id: {
+        target_agent_name: {
           type: "string",
-          format: "uuid",
           description:
-            "UUID of the destination agent_config. Must belong to the same organization and be status='active'.",
+            "Nome EXATO do agente alvo, conforme listado no catalogo de outros agentes no system prompt. Deve estar ativo.",
         },
         reason: { type: "string" },
       },
@@ -138,7 +133,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "add_tag",
     display_name: "Adicionar tag",
     description:
-      "Attach a tag to the current lead. If the tag name does not exist in the organization, it is created.",
+      "Attach a tag to the current lead. The system prompt lists available tags — use one of those names EXACTLY (case-insensitive). Do NOT invent new tags.",
     ui_description: "Adiciona uma tag ao lead para segmentar e automatizar depois.",
     icon_name: "Tag",
     category: "tag",
@@ -150,7 +145,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         tag_name: {
           type: "string",
           description:
-            "Human-friendly tag label (e.g. 'qualificado'). Looked up or created scoped to the organization.",
+            "Nome EXATO de uma tag listada no catalogo do system prompt (case-insensitive). Se nenhuma tag listada encaixar, NAO chame essa tool.",
         },
       },
     },
@@ -383,7 +378,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "move_pipeline_stage",
     display_name: "Mover etapa no CRM",
     description:
-      "Move the lead's deal to a different pipeline stage in the CRM Kanban. Use when the conversation reveals the lead has progressed (e.g., 'Novo' -> 'Qualificado' -> 'Negociacao'). The target stage must belong to the same pipeline as the lead's active deal.",
+      "Move the lead's card to a different pipeline stage in the CRM Kanban (ex: 'Novo' -> 'Qualificado' -> 'Negociacao' -> 'Ganhou'). The system prompt lists the available stages of the lead's pipeline with their names. Use the stage NAME, not the UUID.",
     ui_description:
       "Move o lead para outra etapa do funil de vendas no CRM (Kanban).",
     icon_name: "Columns3",
@@ -391,19 +386,11 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
-      required: ["stage_id"],
       properties: {
-        stage_id: {
+        stage_name: {
           type: "string",
-          format: "uuid",
           description:
-            "UUID da pipeline_stage de destino. Precisa pertencer ao mesmo funil do deal ativo do lead.",
-        },
-        pipeline_id: {
-          type: "string",
-          format: "uuid",
-          description:
-            "UUID do funil. Opcional — usa o funil do deal ativo do lead se omitido. Necessario se o lead tem deals ativos em mais de um funil.",
+            "Nome EXATO da etapa de destino, conforme listado no catalogo de etapas do funil no system prompt (case-insensitive).",
         },
         reason: {
           type: "string",
