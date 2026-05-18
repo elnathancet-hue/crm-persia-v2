@@ -22,6 +22,7 @@ import {
 import { phoneBR, emailOptional } from "@persia/shared/validation";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 import { onNewLead } from "@/lib/flows/triggers";
+import { notifyLeadAppointmentCreated } from "@/lib/agenda/notifications/dispatch";
 
 // Helper: admin client com tipagem solta pra acessar tabelas que ainda
 // nao estao no @/types/database (regeneracao desde migration 031 pendente).
@@ -369,6 +370,14 @@ export async function submitPublicBooking(
       console.error("[public.submit] onNewLead failed:", err);
     });
   }
+
+  // PR-AGENT-INTEGRATION-6 (mai/2026): notificacao WhatsApp de
+  // confirmacao do agendamento. Antes a pagina /agendar prometia
+  // "Voce recebera uma confirmacao no WhatsApp" mas nada era enviado.
+  // Fire-and-forget — booking nao falha por erro no envio.
+  void notifyLeadAppointmentCreated(created).catch((err) => {
+    console.error("[public.submit] notifyLeadAppointmentCreated:", err);
+  });
 
   return {
     appointment_id: created.id,

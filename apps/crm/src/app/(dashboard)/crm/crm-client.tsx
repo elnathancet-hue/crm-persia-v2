@@ -26,6 +26,7 @@ import type {
   TagRef,
 } from "@persia/shared/crm";
 import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
+import type { KanbanAgentSummary } from "@persia/shared/ai-agent";
 import { useRole } from "@/lib/hooks/use-role";
 import {
   useCurrentUser,
@@ -57,6 +58,12 @@ interface Props {
    * e passado pro KanbanBoard renderizar chip.
    */
   upcomingAppointments?: LeadUpcomingAppointment[];
+  /**
+   * PR-AGENT-INTEGRATION-6 (mai/2026): summaries do agente IA por lead.
+   * Convertido em Map<leadId, ...> e passado pro KanbanBoard pra
+   * renderizar badge "IA ativa/pausada" no card.
+   */
+  kanbanAgentSummaries?: KanbanAgentSummary[];
 }
 
 export function CrmClient({
@@ -69,6 +76,7 @@ export function CrmClient({
   pipelineId,
   onPipelineChange,
   upcomingAppointments,
+  kanbanAgentSummaries,
 }: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
@@ -119,6 +127,16 @@ export function CrmClient({
     return m;
   }, [upcomingAppointments]);
 
+  // PR-AGENT-INTEGRATION-6: paridade com upcomingMap — Map<leadId,
+  // KanbanAgentSummary> pra lookup O(1) no render do card.
+  const agentSummariesMap = React.useMemo(() => {
+    const m = new Map<string, KanbanAgentSummary>();
+    for (const item of kanbanAgentSummaries ?? []) {
+      m.set(item.lead_id, item);
+    }
+    return m;
+  }, [kanbanAgentSummaries]);
+
   return (
     <KanbanBoard
       pipelines={pipelines}
@@ -146,6 +164,8 @@ export function CrmClient({
       }}
       // PR-KANBAN-UPCOMING (mai/2026): chip "Em Xh"/"Amanhã HH:MM" no card
       upcomingAppointments={upcomingMap}
+      // PR-AGENT-INTEGRATION-6 (mai/2026): badge "IA ativa/pausada"
+      kanbanAgentSummaries={agentSummariesMap}
     />
   );
 }

@@ -2,6 +2,7 @@
 
 import type {
   AgentRunSummary,
+  KanbanAgentSummary,
   LeadAgentActivitySummary,
   LeadAgentStatus,
 } from "@persia/shared/ai-agent";
@@ -168,4 +169,57 @@ export async function listLeadAgentActivities(
     created_at: row.created_at as string,
     metadata: (row.metadata as Record<string, unknown>) ?? {},
   }));
+}
+
+/**
+ * PR-AGENT-INTEGRATION-6: batch fetch dos agentes respondendo um set
+ * de leads. Usado pelo KanbanBoard pra renderizar badge "IA ativa/
+ * pausada" em cada card. Retorna so o que tem agent_conversation —
+ * leads sem agente ficam fora do array.
+ *
+ * Paridade com findUpcomingAppointmentsByLeads — caller monta
+ * Map<leadId, summary> pra lookup O(1) no render.
+ */
+export async function getKanbanAgentSummariesByLeads(
+  leadIds: string[],
+): Promise<KanbanAgentSummary[]> {
+  if (leadIds.length === 0) return [];
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Pega a row mais recente por lead_id. Usa DISTINCT ON pra evitar
+  // duplicatas quando o lead tem multiplas agent_conversations historicas
+  // (cada agente que ja respondeu — antes da stickiness do PR3 plant).
+  // ORDER BY lead_id, last_interaction_at DESC garante mais-recente-primeiro.
+  const { data, error } = await supabase
+    .from("agent_conversations")
+    .select(
+      "lead_id, config_id, human_handoff_at, last_interaction_at, agent_configs(name)",
+    )
+    .eq("organization_id", orgId)
+    .in("lead_id", leadIds)
+    .order("lead_id", { ascending: true })
+    .order("last_interaction_at", { ascending: false, nullsFirst: false });
+
+  if (error) throw new Error(error.message);
+
+  // Dedupe per lead_id (mantém o primeiro = mais recente conforme order).
+  const seen = new Set<string>();
+  const result: KanbanAgentSummary[] = [];
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    const leadId = row.lead_id as string;
+    if (seen.has(leadId)) continue;
+    seen.add(leadId);
+
+    const agentConfigs = Array.isArray(row.agent_configs)
+      ? (row.agent_configs as Array<{ name?: string }>)[0]
+      : (row.agent_configs as { name?: string } | null);
+
+    result.push({
+      lead_id: leadId,
+      config_id: row.config_id as string,
+      config_name: agentConfigs?.name ?? "Agente IA",
+      paused: Boolean(row.human_handoff_at),
+    });
+  }
+  return result;
 }

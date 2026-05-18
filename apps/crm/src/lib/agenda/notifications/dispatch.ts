@@ -16,6 +16,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 import type { Appointment } from "@persia/shared/agenda";
 import {
+  buildBookingConfirmationMessage,
   buildCancellationMessage,
   buildRescheduleMessage,
 } from "./messages";
@@ -107,6 +108,20 @@ async function dispatch(
     return { sent: false, reason: "send_failed" };
   }
   return { sent: true, messageId: result.messageId };
+}
+
+/**
+ * PR-AGENT-INTEGRATION-6 (mai/2026): avisa o lead que o agendamento
+ * foi recebido (criacao via booking publico). Caller (submitPublicBooking)
+ * usa fire-and-forget — nao throwa. Antes esse caminho era silencioso e
+ * a pagina /agendar prometia uma mensagem que nunca chegava.
+ */
+export async function notifyLeadAppointmentCreated(
+  appointment: Appointment,
+): Promise<NotificationOutcome> {
+  return dispatch(appointment, (lead) =>
+    buildBookingConfirmationMessage({ appointment, leadName: lead.name }),
+  );
 }
 
 /**

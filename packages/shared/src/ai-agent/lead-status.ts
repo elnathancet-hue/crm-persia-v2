@@ -49,3 +49,12 @@ export interface LeadAgentActivitySummary {
   created_at: string;
   metadata: Record<string, unknown>;
 }
+
+// PR-AGENT-INTEGRATION-6 (mai/2026): subset compacto pra badge no
+// Kanban card. Sem nada alem do necessario pra render rapido + tooltip.
+export interface KanbanAgentSummary {
+  lead_id: string;
+  config_id: string;
+  config_name: string;
+  paused: boolean;
+}

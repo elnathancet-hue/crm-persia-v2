@@ -17,6 +17,7 @@ import {
   findUpcomingAppointmentsByLeads,
   type LeadUpcomingAppointment,
 } from "@persia/shared/agenda";
+import { getKanbanAgentSummariesByLeads } from "@/actions/ai-agent/lead-status";
 import { PageTitle } from "@persia/ui/typography";
 import { CrmShell } from "./crm-shell";
 
@@ -199,19 +200,34 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
   // pros leads visiveis no Kanban (janela 48h). Defensive — falha
   // nao quebra o Kanban inteiro.
   let upcomingAppointments: LeadUpcomingAppointment[] = [];
+  let kanbanAgentSummaries: import("@persia/shared/ai-agent").KanbanAgentSummary[] = [];
   try {
     const leadIdsForKanban = (kanbanLeads as Array<{ id: string }>).map(
       (l) => l.id,
     );
     if (leadIdsForKanban.length > 0) {
-      upcomingAppointments = await findUpcomingAppointmentsByLeads(
-        { db: supabase, orgId },
-        leadIdsForKanban,
-        48,
-      );
+      // Paralelo: appointments + AI agent summaries. Falha em qualquer
+      // um nao quebra o outro — ambos sao indicadores secundarios.
+      const [appts, summaries] = await Promise.all([
+        findUpcomingAppointmentsByLeads(
+          { db: supabase, orgId },
+          leadIdsForKanban,
+          48,
+        ).catch((err) => {
+          console.error("[/crm page] findUpcomingAppointmentsByLeads:", err);
+          return [] as LeadUpcomingAppointment[];
+        }),
+        // PR-AGENT-INTEGRATION-6: badge IA no card do Kanban.
+        getKanbanAgentSummariesByLeads(leadIdsForKanban).catch((err) => {
+          console.error("[/crm page] getKanbanAgentSummariesByLeads:", err);
+          return [] as import("@persia/shared/ai-agent").KanbanAgentSummary[];
+        }),
+      ]);
+      upcomingAppointments = appts;
+      kanbanAgentSummaries = summaries;
     }
   } catch (err) {
-    console.error("[/crm page] findUpcomingAppointmentsByLeads falhou:", err);
+    console.error("[/crm page] kanban batch enrichment falhou:", err);
   }
 
   // PR-L3: stats em batch pra Tab Leads enriquecida (Responsavel +
@@ -298,6 +314,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       segmentCount={(segmentsResult as unknown[]).length}
       tagCount={(tagsWithCountResult as unknown[]).length}
       upcomingAppointments={upcomingAppointments}
+      kanbanAgentSummaries={kanbanAgentSummaries}
     />
   );
 }
