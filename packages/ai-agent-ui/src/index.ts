@@ -51,6 +51,7 @@ export { IndexingStatusBadge } from "./components/IndexingStatusBadge";
 export { LimitsEditor } from "./components/LimitsEditor";
 export { ReactivateAgentButton } from "./components/ReactivateAgentButton";
 export { StageSheet } from "./components/StageSheet";
+export { StageActionsEditor } from "./components/StageActionsEditor";
 export { TesterSheet } from "./components/TesterSheet";
 export { UsageChart } from "./components/UsageChart";
 export { UsageStatsCards } from "./components/UsageStatsCards";

@@ -106,6 +106,19 @@ export interface AgentActions {
    * Usado pelo botao Resetar no TesterSheet pra recomecar do zero. */
   resetTesterConversation?: () => Promise<{ ok: true }>;
 
+  /** PR-AI-AGENT-STAGE-ACTIONS-UI (mai/2026): catalogos pros pickers
+   * (tag/stage/media/template/etc) usados no editor de "Acoes por etapa".
+   * Diferente de tool-catalogs do executor (que monta strings pro LLM),
+   * aqui retorna objetos estruturados pra UI. Opcional pra retrocompat. */
+  getStageActionCatalogs?: (
+    configId: string,
+  ) => Promise<import("./types").StageActionCatalogs>;
+  /** Persiste action_config de uma etapa. */
+  updateStageActionConfig?: (
+    stageId: string,
+    config: import("@persia/shared/ai-agent").StageActionConfig,
+  ) => Promise<{ ok: true; sanitized: import("@persia/shared/ai-agent").StageActionConfig }>;
+
   // Audit
   listRuns: (input: ListRunsInput) => Promise<AgentRunWithSteps[]>;
 
