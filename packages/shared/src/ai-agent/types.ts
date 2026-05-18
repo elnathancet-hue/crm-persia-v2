@@ -136,6 +136,13 @@ export interface AgentConfig {
   // secundarios baseado em agent_entry_conditions. Default false na
   // migration 044.
   is_primary?: boolean;
+  // PR-AGENT-INTEGRATION-4 (mai/2026): modelo de execucao.
+  //   "stages" (legado): cada agent_stage e sub-prompt que troca o
+  //     contexto do LLM por turno.
+  //   "actions" (novo): system_prompt fixo. Cada agent_stage tem
+  //     action_type que diz qual acao tomar (qualificar/enviar/etc).
+  // Default "stages" na migration 046. Wizard novo nasce com "actions".
+  behavior_mode?: "stages" | "actions";
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -159,9 +166,28 @@ export interface AgentStage {
   // Optional at the TS level during rollout; runtime guards with
   // `clampRagTopK(stage.rag_top_k)` from rag.ts.
   rag_top_k?: number;
+  // PR-AGENT-INTEGRATION-4 (mai/2026): tipo de acao quando o agente
+  // pai esta em behavior_mode='actions'. Ignorado em mode='stages'.
+  // Validacao cruzada feita na aplicacao.
+  action_type?: AgentActionType | null;
   created_at: string;
   updated_at: string;
 }
+
+// PR-AGENT-INTEGRATION-4: tipos de acao tipada. Cada uma mapeia pra um
+// comportamento que o LLM ja sabe executar via tools nativas + injecao
+// no prompt — nao precisa de prompt customizado.
+export const AGENT_ACTION_TYPES = [
+  "qualify",
+  "send_material",
+  "schedule",
+  "add_tag",
+  "move_pipeline",
+  "transfer",
+  "free_message",
+] as const;
+
+export type AgentActionType = (typeof AGENT_ACTION_TYPES)[number];
 
 // ============================================================================
 // Tool (agent_tools row) + stage-tool junction (agent_stage_tools row)
@@ -370,6 +396,9 @@ export interface CreateAgentInput {
   // O system_prompt continua vindo do client (cliente preenche com o
   // prompt do template no form). Template apenas materializa stages.
   template_slug?: import("./agent-templates").AgentTemplateSlug;
+  // PR-AGENT-INTEGRATION-4: modelo de execucao. Default 'stages' pra
+  // retrocompat. Wizard novo passa 'actions'.
+  behavior_mode?: "stages" | "actions";
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
@@ -385,6 +414,9 @@ export interface CreateStageInput {
   rag_top_k?: number;
   order_index?: number;
   slug?: string;
+  // PR-AGENT-INTEGRATION-4: tipo de acao. So usado quando o agente pai
+  // esta em behavior_mode='actions'. Server valida cruzado.
+  action_type?: AgentActionType | null;
 }
 
 export interface UpdateStageInput extends Partial<CreateStageInput> {}

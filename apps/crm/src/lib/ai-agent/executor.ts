@@ -1217,18 +1217,54 @@ async function loadWebhookAllowlist(db: AgentDb, orgId: string): Promise<string[
   return getWebhookAllowlistDomains((data as { settings?: unknown }).settings);
 }
 
+// PR-AGENT-INTEGRATION-4: descricoes amigaveis pro LLM de cada tipo
+// de acao. Quando agent_config.behavior_mode='actions' e a stage tem
+// action_type setado, injetamos esse texto no system prompt no lugar
+// de tratar stage.instruction como sub-prompt. system_prompt do agente
+// e o "manual mestre" — etapas viram orientacoes complementares.
+const ACTION_TYPE_INSTRUCTIONS: Record<
+  Exclude<NonNullable<AgentStage["action_type"]>, never>,
+  string
+> = {
+  qualify:
+    "Esta etapa é de QUALIFICAÇÃO: extraia informações do lead (nome, necessidade, contexto) com no máximo 1 pergunta por turno.",
+  send_material:
+    "Esta etapa é de ENVIO DE MATERIAL: use a ferramenta send_media para enviar o documento/imagem mais adequado ao que o lead pediu.",
+  schedule:
+    "Esta etapa é de AGENDAMENTO: use a ferramenta create_appointment para marcar uma reunião com o lead. Confirme dia/horário antes.",
+  add_tag:
+    "Esta etapa é de ETIQUETAGEM: use a ferramenta add_tag para classificar o lead conforme o contexto da conversa.",
+  move_pipeline:
+    "Esta etapa é de MOVIMENTAÇÃO NO FUNIL: use a ferramenta move_pipeline_stage para mover o lead pra próxima etapa do Kanban quando fizer sentido.",
+  transfer:
+    "Esta etapa é de TRANSFERÊNCIA PRA HUMANO: chame stop_agent assim que perceber que precisa de um atendente humano (cobrança, reclamação séria, escopo fora do agente).",
+  free_message:
+    "Esta etapa é de MENSAGEM LIVRE: siga a instrução abaixo livremente.",
+};
+
 function buildSystemPromptWithRag(
   config: AgentConfig,
   stage: AgentStage,
   ragContext: string | null,
   mediaCatalog: string | null,
 ): string {
+  const isActionsMode = config.behavior_mode === "actions";
+  // Em modo actions, NAO usamos stage.instruction como sub-prompt — o
+  // system_prompt fixo + ACTION_TYPE_INSTRUCTIONS dao o contexto. Em
+  // modo stages (legado), stage.instruction continua sendo o sub-prompt.
+  const actionLine =
+    isActionsMode && stage.action_type
+      ? ACTION_TYPE_INSTRUCTIONS[stage.action_type]
+      : null;
+  const stageInstruction = isActionsMode ? null : stage.instruction;
+
   return [
     ragContext,
     config.system_prompt,
     "",
     `Etapa atual: ${stage.situation}`,
-    stage.instruction,
+    actionLine,
+    stageInstruction,
     stage.transition_hint ? `Dica de transicao: ${stage.transition_hint}` : "",
     mediaCatalog,
     "Responda ao cliente em portugues brasileiro, de forma objetiva e util.",

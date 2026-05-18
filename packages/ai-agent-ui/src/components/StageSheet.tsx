@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2, Save, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import type {
+  AgentActionType,
   AgentStage,
   AgentStageTool,
   AgentTool,
@@ -12,6 +13,7 @@ import type {
   UpdateStageInput,
 } from "@persia/shared/ai-agent";
 import {
+  AGENT_ACTION_TYPES,
   clampRagTopK,
   getPreset,
   RAG_TOP_K_DEFAULT,
@@ -23,6 +25,13 @@ import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -43,14 +52,53 @@ interface Props {
   tools: AgentTool[];
   isPending: boolean;
   onSubmit: (input: CreateStageInput | UpdateStageInput) => void;
+  // PR-AGENT-INTEGRATION-4: define a UX deste sheet. Quando 'actions',
+  // a etapa tem um Select de action_type acima da instrucao (que vira
+  // descricao opcional). Quando 'stages' (legado), so textarea.
+  behaviorMode?: "stages" | "actions";
 }
 
-export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, onSubmit }: Props) {
+// PR-AGENT-INTEGRATION-4: labels amigaveis pros action_type (espelho
+// das descricoes no executor.ts ACTION_TYPE_INSTRUCTIONS).
+const ACTION_LABELS: Record<AgentActionType, { label: string; help: string }> = {
+  qualify: {
+    label: "Qualificar",
+    help: "Extrai informações do lead (nome, necessidade, contexto).",
+  },
+  send_material: {
+    label: "Enviar material",
+    help: "Manda PDFs, imagens ou vídeos da Biblioteca.",
+  },
+  schedule: {
+    label: "Agendar reunião",
+    help: "Marca compromisso na Agenda interna.",
+  },
+  add_tag: {
+    label: "Etiquetar lead",
+    help: "Adiciona tag ao lead pra classificar.",
+  },
+  move_pipeline: {
+    label: "Mover no funil",
+    help: "Avança o lead pra próxima etapa do Kanban.",
+  },
+  transfer: {
+    label: "Transferir pra humano",
+    help: "Pausa o agente e chama um atendente.",
+  },
+  free_message: {
+    label: "Mensagem livre",
+    help: "Segue a instrução escrita abaixo (sem ação específica).",
+  },
+};
+
+export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, onSubmit, behaviorMode }: Props) {
+  const isActionsMode = behaviorMode === "actions";
   const [situation, setSituation] = React.useState("");
   const [instruction, setInstruction] = React.useState("");
   const [transitionHint, setTransitionHint] = React.useState("");
   const [ragEnabled, setRagEnabled] = React.useState(false);
   const [ragTopK, setRagTopK] = React.useState<number>(RAG_TOP_K_DEFAULT);
+  const [actionType, setActionType] = React.useState<AgentActionType>("qualify");
 
   React.useEffect(() => {
     if (open) {
@@ -59,6 +107,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
       setTransitionHint(stage?.transition_hint ?? "");
       setRagEnabled(stage?.rag_enabled ?? false);
       setRagTopK(clampRagTopK(stage?.rag_top_k));
+      setActionType((stage?.action_type as AgentActionType) ?? "qualify");
     }
   }, [open, stage]);
 
@@ -69,9 +118,12 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
     : trimmedSituation.length < 2
       ? "Mínimo 2 caracteres"
       : null;
-  const instructionError = !trimmedInstruction
-    ? "Instrução é obrigatória"
-    : null;
+  // PR-AGENT-INTEGRATION-4: em modo actions, instruction e opcional
+  // (descricao complementar pra context — nao sub-prompt).
+  const instructionError =
+    isActionsMode || trimmedInstruction
+      ? null
+      : "Instrução é obrigatória";
   const formInvalid = !!situationError || !!instructionError;
 
   const handleSave = (e: React.FormEvent) => {
@@ -83,6 +135,7 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
       transition_hint: transitionHint.trim() || undefined,
       rag_enabled: ragEnabled,
       rag_top_k: ragTopK,
+      ...(isActionsMode ? { action_type: actionType } : {}),
     });
   };
 
@@ -117,14 +170,43 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
                 <p className="text-xs text-destructive">{situationError}</p>
               ) : null}
             </div>
+            {isActionsMode ? (
+              <div className="space-y-2">
+                <Label htmlFor="action_type">Tipo de ação</Label>
+                <Select
+                  value={actionType}
+                  onValueChange={(v) => v && setActionType(v as AgentActionType)}
+                >
+                  <SelectTrigger id="action_type">
+                    <SelectValue>{ACTION_LABELS[actionType].label}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGENT_ACTION_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {ACTION_LABELS[t].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {ACTION_LABELS[actionType].help}
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-2">
-              <Label htmlFor="instruction">Instrução do agente</Label>
+              <Label htmlFor="instruction">
+                {isActionsMode ? "Descrição (opcional)" : "Instrução do agente"}
+              </Label>
               <Textarea
                 id="instruction"
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
-                placeholder="O que o agente deve fazer nesta etapa? Ex: Cumprimente o cliente pelo nome, se apresente brevemente, pergunte como pode ajudar."
-                rows={8}
+                placeholder={
+                  isActionsMode
+                    ? "Detalhes específicos pra essa ação (ex: 'qualificar especificamente idade e cidade'). Opcional."
+                    : "O que o agente deve fazer nesta etapa? Ex: Cumprimente o cliente pelo nome, se apresente brevemente, pergunte como pode ajudar."
+                }
+                rows={isActionsMode ? 4 : 8}
                 aria-invalid={!!instructionError && instruction.length > 0}
                 className={instructionError && instruction.length > 0 ? "border-destructive focus-visible:ring-destructive/40" : undefined}
               />

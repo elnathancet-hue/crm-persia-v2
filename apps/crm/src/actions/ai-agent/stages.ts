@@ -57,6 +57,10 @@ export async function createStage(
       transition_hint: normalized.transition_hint ?? null,
       rag_enabled: normalized.rag_enabled ?? false,
       ...(normalized.rag_top_k !== undefined ? { rag_top_k: normalized.rag_top_k } : {}),
+      // PR-AGENT-INTEGRATION-4: action_type so faz sentido quando o
+      // agente pai esta em behavior_mode='actions'. Server nao valida
+      // cruzado (UI controla). null em mode='stages' = ignorado.
+      ...(normalized.action_type !== undefined ? { action_type: normalized.action_type } : {}),
     })
     .select("*")
     .single();
@@ -86,6 +90,7 @@ export async function updateStage(
   if (patch.rag_top_k !== undefined) updates.rag_top_k = patch.rag_top_k;
   if (patch.order_index !== undefined) updates.order_index = patch.order_index;
   if (patch.slug !== undefined) updates.slug = patch.slug;
+  if (patch.action_type !== undefined) updates.action_type = patch.action_type;
 
   const { data, error } = await db
     .from("agent_stages")

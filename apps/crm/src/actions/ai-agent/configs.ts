@@ -81,6 +81,9 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       handoff_notification_target_address: normalized.handoff_notification_target_address ?? null,
       handoff_notification_template: normalized.handoff_notification_template ?? null,
       calendar_connection_id: normalized.calendar_connection_id ?? null,
+      // PR-AGENT-INTEGRATION-4: behavior_mode. Default 'stages' (retrocompat
+      // — quando wizard antigo nao passa nada). Wizard novo passa 'actions'.
+      behavior_mode: normalized.behavior_mode ?? "stages",
       status: "draft",
     })
     .select("*")
