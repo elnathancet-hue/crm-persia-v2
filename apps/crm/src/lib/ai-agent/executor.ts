@@ -144,6 +144,13 @@ export interface ExecuteAgentParams {
   leadId: string;
   crmConversationId: string;
   allowSummarization?: boolean;
+  /**
+   * PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): quando true, marca o run
+   * em agent_runs.is_test=true pra dashboards filtrarem. Sempre vem
+   * acompanhado de dryRun=true (Tester nunca afeta DB de prod).
+   * Migration 047 adiciona a coluna com default false.
+   */
+  isTest?: boolean;
 }
 
 export interface ExecuteAgentResult {
@@ -806,6 +813,20 @@ export async function executeDebouncedBatch(params: {
   orgId: string;
   batch: DebounceFlushBatch;
   requestId?: string;
+  /**
+   * PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): quando true, tools rodam
+   * em modo simulacao (sem efeito real em DB de leads/agendamentos/etc).
+   * Default false (prod). Tester sempre passa true.
+   */
+  dryRun?: boolean;
+  /** PR-AI-AGENT-TESTER-FAITHFUL: marca o run com is_test=true. */
+  isTest?: boolean;
+  /**
+   * PR-AI-AGENT-TESTER-FAITHFUL: provider injetado (em prod, vem do
+   * loadConnectedProvider via UAZAPI/Meta — no Tester, stub captura
+   * eventos em memoria). Default: carrega o provider real da org.
+   */
+  providerOverride?: WhatsAppProvider;
 }): Promise<{ runId: string | null; status: "succeeded" | "failed" | "fallback" | "skipped" }> {
   const conversation = await loadAgentConversation(params.db, params.orgId, params.batch.agent_conversation_id);
   if (!conversation) {
@@ -822,7 +843,8 @@ export async function executeDebouncedBatch(params: {
   }
 
   const lead = await loadLeadForConversation(params.db, params.orgId, conversation.lead_id);
-  const provider = await loadConnectedProvider(params.db, params.orgId);
+  const provider =
+    params.providerOverride ?? (await loadConnectedProvider(params.db, params.orgId));
   const stage = await loadStage(params.db, params.orgId, config.id, conversation.current_stage_id);
   const tools = stage
     ? await loadAllowedTools(params.db, params.orgId, config.id, stage.id)
@@ -856,7 +878,8 @@ export async function executeDebouncedBatch(params: {
       timestamp: Date.now(),
     },
     requestId: params.requestId,
-    dryRun: false,
+    dryRun: params.dryRun === true,
+    isTest: params.isTest === true,
     config,
     stage,
     agentConversation: conversation,
@@ -976,6 +999,9 @@ async function createRun(params: ExecuteAgentParams, model: string) {
       inbound_message_id: params.inboundMessageId,
       status: "pending",
       model,
+      // PR-AI-AGENT-TESTER-FAITHFUL: marca run como teste pra
+      // dashboards filtrarem. Default false (prod).
+      is_test: params.isTest === true,
     })
     .select("*")
     .single();

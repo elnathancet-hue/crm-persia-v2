@@ -95,6 +95,16 @@ export interface AgentActions {
 
   // Tester
   testAgent: (req: TesterRequest) => Promise<TesterResponse>;
+  /** PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): tester que reproduz o
+   * pipeline completo (pause/resume, business hours, debounce, split,
+   * delay, typing). Opcional pra retrocompat — se o app nao injetar,
+   * UI cai pro testAgent legado sem reproducao fiel. */
+  testAgentLive?: (
+    req: import("@persia/shared/ai-agent").TesterLiveRequest,
+  ) => Promise<import("@persia/shared/ai-agent").TesterLiveResponse>;
+  /** Apaga state da conversa Tester (msgs, runs, agent_conversation).
+   * Usado pelo botao Resetar no TesterSheet pra recomecar do zero. */
+  resetTesterConversation?: () => Promise<{ ok: true }>;
 
   // Audit
   listRuns: (input: ListRunsInput) => Promise<AgentRunWithSteps[]>;

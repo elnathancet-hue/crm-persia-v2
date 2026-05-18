@@ -269,6 +269,10 @@ export interface AgentRun {
   duration_ms: number;
   error_msg: string | null;
   created_at: string;
+  // PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): true quando o run veio do
+  // Tester (UI de simulacao). Migration 047 adiciona com default false.
+  // Dashboards de custo/uso filtram com is_test=false pra ver so prod.
+  is_test?: boolean;
 }
 
 // ============================================================================
@@ -330,6 +334,79 @@ export interface TesterStepSummary {
   input?: Record<string, unknown>;
   output?: Record<string, unknown>;
   duration_ms: number;
+}
+
+// ============================================================================
+// Tester FIEL (PR-AI-AGENT-TESTER-FAITHFUL, mai/2026) — executa o pipeline
+// REAL (tryEnqueueForNativeAgent + executeDebouncedBatch) com provider stub
+// que captura eventos em memoria. Reproduz pause/resume, business hours,
+// debounce, split (picotar) e delay entre msgs — exatamente como prod.
+// ============================================================================
+
+export interface TesterLiveRequest {
+  config_id: string;
+  message: string;
+  /** Quando true (default), forca flush imediato apos enqueue (skip
+   * debounce window real). Quando false, espera o debounce_window_ms
+   * configurado do agente — pra reproduzir bug de timing. */
+  expedite_debounce: boolean;
+}
+
+export type TesterEventKind =
+  | "send_text"
+  | "set_typing_on"
+  | "set_typing_off"
+  | "send_media"
+  | "skipped";
+
+export interface TesterEvent {
+  /** Timestamp absoluto em ms (Date.now() no servidor). UI calcula
+   * delays relativos entre eventos. */
+  ts: number;
+  kind: TesterEventKind;
+  /** Conteudo do evento. Para send_text: { message: string }. Para
+   * send_media: { url, kind, caption }. Para skipped: { reason }. */
+  payload: Record<string, unknown>;
+}
+
+export type TesterSkipReason =
+  | "feature_flag_off"
+  | "no_active_config"
+  | "paused_by_keyword"
+  | "paused_active"
+  | "after_hours"
+  | "native_agent_handoff"
+  | "rate_limited"
+  | "cost_ceiling"
+  | "other";
+
+export interface TesterLiveResponse {
+  /** Run criado em agent_runs (com is_test=true), null quando pulou
+   * antes de chegar ao executor (ex: pause keyword). */
+  run_id: string | null;
+  /** Timeline de eventos do provider stub. Ordem cronologica. */
+  events: TesterEvent[];
+  /** Outcome do tryEnqueueForNativeAgent. Quando handled=true e
+   * skipped esta setado, o agente nao processou (ex: pausado). */
+  skipped?: TesterSkipReason;
+  steps: TesterStepSummary[];
+  next_stage_id: string | null;
+  tokens_used: number;
+  cost_usd_cents: number;
+  /** Snapshot do humanization_config aplicado (pra UI exibir
+   * "voce esta usando split=on com threshold=200"). */
+  applied_config: {
+    split_enabled: boolean;
+    split_threshold_chars: number;
+    split_delay_seconds: number;
+    business_hours_enabled: boolean;
+    pause_keywords: string[];
+    resume_keywords: string[];
+  };
+  /** Quando pause keyword bateu OU business hours bloqueou, descreve
+   * o motivo em PT-BR pra UI mostrar banner amigavel. */
+  human_message?: string;
+  error?: string;
 }
 
 // ============================================================================

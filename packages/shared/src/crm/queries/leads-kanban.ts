@@ -68,6 +68,14 @@ export async function listLeadsKanban(
     query = query.not("pipeline_id", "is", null);
   }
 
+  // PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): esconde lead sintetico
+  // criado pelo Tester (metadata.is_test=true). Tester reusa um lead
+  // persistente por org pra exercitar o pipeline real, e ele nao deve
+  // aparecer no Kanban operacional.
+  query = query.or(
+    "metadata->>is_test.is.null,metadata->>is_test.neq.true",
+  );
+
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data ?? [];
