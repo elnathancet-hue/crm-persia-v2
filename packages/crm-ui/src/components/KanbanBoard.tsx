@@ -87,6 +87,7 @@ import {
   CheckCheck,
   // PR-KANBAN-UPCOMING (mai/2026): chip de appointment proximo no card
   CalendarClock,
+  Bot,
 } from "lucide-react";
 
 // Sprint 3c: formatRelativeShort local removido — agora usa
@@ -363,6 +364,13 @@ export interface KanbanBoardProps {
    * passar e o board continua funcional).
    */
   upcomingAppointments?: Map<string, LeadUpcomingAppointment>;
+  /**
+   * PR-AGENT-INTEGRATION-6 (mai/2026): map leadId -> agent summary
+   * pros leads no Kanban. Quando setado, cards com agente vinculado
+   * mostram badge "IA" (ativo) ou cinza (pausado). Opcional —
+   * retro-compat (sem map, sem badge).
+   */
+  kanbanAgentSummaries?: Map<string, import("@persia/shared/ai-agent").KanbanAgentSummary>;
 }
 
 export function KanbanBoard({
@@ -385,6 +393,7 @@ export function KanbanBoard({
   onDealViewChange,
   onOpenLead,
   upcomingAppointments,
+  kanbanAgentSummaries,
 }: KanbanBoardProps) {
   // PR-K-CENTRIC (mai/2026): adapter Lead → Deal-like.
   //
@@ -1744,6 +1753,12 @@ export function KanbanBoard({
                           ? upcomingAppointments?.get(deal.lead_id)
                           : undefined
                       }
+                      // PR-AGENT-INTEGRATION-6: badge "IA" no card.
+                      agentSummary={
+                        deal.lead_id
+                          ? kanbanAgentSummaries?.get(deal.lead_id)
+                          : undefined
+                      }
                     />
                   ))}
                   {/* Empty state — discreto + clicavel pra adicionar deal */}
@@ -1952,6 +1967,7 @@ const DealCard = React.memo(function DealCardImpl({
   onViewChange,
   onOpenLead,
   upcomingAppointment,
+  agentSummary,
 }: {
   deal: Deal;
   /** PR-KANBAN-UI: cor da etapa (vem do stage pai), usada como
@@ -1999,6 +2015,8 @@ const DealCard = React.memo(function DealCardImpl({
   onOpenLead?: (leadId: string) => void;
   /** PR-KANBAN-UPCOMING (mai/2026): proximo appointment do lead (~48h). */
   upcomingAppointment?: LeadUpcomingAppointment;
+  /** PR-AGENT-INTEGRATION-6 (mai/2026): agente IA respondendo este lead. */
+  agentSummary?: import("@persia/shared/ai-agent").KanbanAgentSummary;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
 
@@ -2245,6 +2263,9 @@ const DealCard = React.memo(function DealCardImpl({
             )}
             {upcomingAppointment && (
               <UpcomingAppointmentChip appointment={upcomingAppointment} />
+            )}
+            {agentSummary && (
+              <AgentBadge summary={agentSummary} />
             )}
           </div>
           {/* Frente B: botao "Ver lead" abre o LeadInfoDrawer (Dialog
@@ -3993,6 +4014,43 @@ function BulkApplyTagsDialog({
 //   - amanha: "Amanhã HH:MM"
 //   - outros dias: "Ter 14:00" (3 letras do dia + horario)
 // ============================================================================
+
+// ============================================================================
+// AgentBadge — badge "IA" discreto no card do lead
+// ----------------------------------------------------------------------------
+// PR-AGENT-INTEGRATION-6 (mai/2026): mostra que o lead tem agente IA
+// respondendo. 2 estados visuais:
+//   - Ativo (paused=false): badge primary (azul)
+//   - Pausado (paused=true): badge muted (cinza)
+// Tooltip mostra o nome do agente. Pareado visualmente com
+// UpcomingAppointmentChip — quando ambos existem, ficam lado a lado
+// no rodape do card.
+// ============================================================================
+
+function AgentBadge({
+  summary,
+}: {
+  summary: import("@persia/shared/ai-agent").KanbanAgentSummary;
+}) {
+  const isPaused = summary.paused;
+  return (
+    <span
+      className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+        isPaused
+          ? "border-border bg-muted text-muted-foreground"
+          : "border-primary/30 bg-primary/10 text-primary"
+      }`}
+      title={
+        isPaused
+          ? `${summary.config_name} — pausado`
+          : `${summary.config_name} — respondendo`
+      }
+    >
+      <Bot className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{isPaused ? "IA pausada" : "IA ativa"}</span>
+    </span>
+  );
+}
 
 function UpcomingAppointmentChip({
   appointment,

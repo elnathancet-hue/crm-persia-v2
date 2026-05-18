@@ -53,6 +53,7 @@ import type {
   TagWithCount,
 } from "@persia/shared/crm";
 import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
+import type { KanbanAgentSummary } from "@persia/shared/ai-agent";
 import type { LeadListItemStats } from "@/actions/leads";
 
 import { CrmClient } from "./crm-client";
@@ -125,6 +126,12 @@ interface CrmShellProps {
    * Server fetcha e passa pra CrmClient -> KanbanBoard renderiza chip.
    */
   upcomingAppointments?: LeadUpcomingAppointment[];
+  /**
+   * PR-AGENT-INTEGRATION-6 (mai/2026): summaries do agente IA por
+   * lead pros leads visiveis no Kanban. KanbanBoard renderiza badge
+   * "IA ativa/pausada" no card.
+   */
+  kanbanAgentSummaries?: KanbanAgentSummary[];
 }
 
 export function CrmShell(props: CrmShellProps) {
@@ -251,6 +258,8 @@ export function CrmShell(props: CrmShellProps) {
               onPipelineChange={selectFunil}
               // PR-KANBAN-UPCOMING (mai/2026): repassa pra renderizar chip
               upcomingAppointments={props.upcomingAppointments}
+              // PR-AGENT-INTEGRATION-6 (mai/2026): badge IA no card
+              kanbanAgentSummaries={props.kanbanAgentSummaries}
             />
           )
         )}

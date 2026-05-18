@@ -45,6 +45,33 @@ export function buildCancellationMessage(input: CancellationMessageInput): strin
   );
 }
 
+// PR-AGENT-INTEGRATION-6 (mai/2026): mensagem de confirmacao quando
+// booking publico (pagina /agendar) cria o appointment. Antes a pagina
+// promete "Voce recebera uma confirmacao no WhatsApp" mas nada era
+// enviado. Agora notifica imediatamente apos criar (fire-and-forget).
+export interface BookingConfirmationMessageInput {
+  appointment: Appointment;
+  leadName: string;
+}
+
+export function buildBookingConfirmationMessage(
+  input: BookingConfirmationMessageInput,
+): string {
+  const { appointment, leadName } = input;
+  const greeting = renderGreeting(leadName);
+  const date = formatDate(appointment.start_at, appointment.timezone);
+  const time = formatTime(appointment.start_at, appointment.timezone);
+
+  // appointment.status na criacao publica e "awaiting_confirmation"
+  // (atendente humano confirma no admin). Avisa o lead que recebemos
+  // e que vamos confirmar.
+  return (
+    `${greeting}! Recebemos seu agendamento "${appointment.title}" ` +
+    `para ${date} às ${time}.\n\n` +
+    `Vamos confirmar em breve. Se precisar mudar, é só responder.`
+  );
+}
+
 export interface RescheduleMessageInput {
   original: Appointment;
   replacement: Appointment;
