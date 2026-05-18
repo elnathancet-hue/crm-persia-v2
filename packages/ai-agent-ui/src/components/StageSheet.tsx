@@ -43,6 +43,7 @@ import { DialogHero } from "@persia/ui/dialog-hero";
 import { Layers } from "lucide-react";
 import { useAgentActions } from "../context";
 import { renderToolIcon } from "../icon-map";
+import { StageActionsEditor } from "./StageActionsEditor";
 
 interface Props {
   open: boolean;
@@ -275,9 +276,14 @@ export function StageSheet({ open, onOpenChange, mode, stage, tools, isPending, 
           </form>
 
           {mode === "edit" && stage ? (
-            <div className="pt-4 mt-4 border-t border-border">
-              <StageToolsAllowlist stageId={stage.id} tools={tools} />
-            </div>
+            <>
+              <div className="pt-4 mt-4 border-t border-border">
+                <StageActionsEditor stage={stage} configId={stage.config_id} />
+              </div>
+              <div className="pt-4 mt-4 border-t border-border">
+                <StageToolsAllowlist stageId={stage.id} tools={tools} />
+              </div>
+            </>
           ) : null}
         </div>
         {/* PR-CRMUI: footer respiravel — px-6 py-4 + gap-3 + min-w. */}

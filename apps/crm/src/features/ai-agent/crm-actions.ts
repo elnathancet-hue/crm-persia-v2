@@ -38,6 +38,10 @@ import {
   testAgentLive,
 } from "@/actions/ai-agent/tester";
 import { listRuns } from "@/actions/ai-agent/audit";
+import {
+  getStageActionCatalogs,
+  updateStageActionConfig,
+} from "@/actions/ai-agent/stage-action-config";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
 import { getUsageStats } from "@/actions/ai-agent/usage";
 import {
@@ -99,6 +103,8 @@ export const crmAgentActions: AgentActions = {
   testAgent,
   testAgentLive,
   resetTesterConversation,
+  getStageActionCatalogs,
+  updateStageActionConfig,
   listRuns,
   setCostLimit,
   deleteCostLimit,
