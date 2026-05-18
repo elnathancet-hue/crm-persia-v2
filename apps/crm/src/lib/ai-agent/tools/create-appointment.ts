@@ -12,6 +12,13 @@ import {
 // conversa diretamente pelo chat WhatsApp. Sem isso, o LLM tinha que
 // transferir pro humano agendar — quebrava UX conversacional.
 //
+// PR-AI-AGENT-APPOINTMENT-TYPES (mai/2026): agora aceita `type_slug`
+// (recomendado) que herda title/duration/channel/location/meeting_url
+// do `agenda_services` cadastrado. Cliente cadastra os tipos uma vez
+// (UI em /automations/appointments) e a IA usa nome amigavel em vez de
+// inventar titulo/duracao a cada conversa. Os campos antigos continuam
+// aceitos pra retrocompat e como override pontual.
+//
 // Decisoes:
 //   - user_id = lead.assigned_to (responsavel do lead). Sem responsavel,
 //     falha com mensagem clara. Forca setup correto em vez de criar
@@ -25,8 +32,14 @@ import {
 
 const createSchema = z.object({
   start_at: z.string().datetime({ offset: true }),
-  duration_minutes: z.number().int().min(15).max(480),
-  title: z.string().trim().min(1).max(200),
+  // PR-AI-AGENT-APPOINTMENT-TYPES: novo caminho recomendado — IA passa
+  // slug do tipo, runtime resolve duracao/canal/local/titulo.
+  type_slug: z.string().trim().min(1).max(80).optional(),
+  // Campos antigos — agora opcionais. Quando passados junto com
+  // type_slug, fazem override do default. Quando passados sozinhos
+  // (sem type_slug), mantem comportamento legado.
+  duration_minutes: z.number().int().min(15).max(480).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).optional(),
   channel: z
     .enum(["whatsapp", "phone", "online", "in_person"])
@@ -34,6 +47,15 @@ const createSchema = z.object({
   location: z.string().trim().max(500).optional(),
   meeting_url: z.string().trim().max(500).optional(),
 });
+
+interface AppointmentTypeRow {
+  id: string;
+  name: string;
+  duration_minutes: number;
+  default_channel: "whatsapp" | "phone" | "online" | "in_person" | null;
+  default_location: string | null;
+  default_meeting_url: string | null;
+}
 
 interface LeadRow {
   id: string;
@@ -60,6 +82,54 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
     return failureResult("start_at deve ser no futuro");
   }
 
+  // PR-AI-AGENT-APPOINTMENT-TYPES: resolve o tipo (se passado) e
+  // combina com overrides explicitos. Validacao final: precisa
+  // resolver title + duration_minutes — vindo do tipo, do input, ou
+  // ambos com input ganhando.
+  let appointmentType: AppointmentTypeRow | null = null;
+  if (parsed.data.type_slug) {
+    const { data, error } = await db
+      .from("agenda_services")
+      .select(
+        "id, name, duration_minutes, default_channel, default_location, default_meeting_url",
+      )
+      .eq("organization_id", context.organization_id)
+      .ilike("slug", parsed.data.type_slug)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error) return failureResult(error.message);
+    if (!data) {
+      return failureResult(`tipo de agendamento "${parsed.data.type_slug}" nao encontrado`, {
+        slug: parsed.data.type_slug,
+        hint: "verifique a lista de tipos disponiveis no contexto",
+      });
+    }
+    appointmentType = data as AppointmentTypeRow;
+  }
+
+  // Resolve campos finais: override do input ganha do tipo. Pelo menos
+  // title + duration_minutes devem chegar resolvidos no final.
+  const resolvedTitle = parsed.data.title ?? appointmentType?.name ?? null;
+  const resolvedDuration =
+    parsed.data.duration_minutes ?? appointmentType?.duration_minutes ?? null;
+  const resolvedChannel =
+    parsed.data.channel ?? appointmentType?.default_channel ?? null;
+  const resolvedLocation =
+    parsed.data.location ?? appointmentType?.default_location ?? null;
+  const resolvedMeetingUrl =
+    parsed.data.meeting_url ?? appointmentType?.default_meeting_url ?? null;
+
+  if (!resolvedTitle) {
+    return failureResult(
+      "informe type_slug (recomendado) ou title — sem isso a IA estaria inventando o titulo",
+    );
+  }
+  if (!resolvedDuration) {
+    return failureResult(
+      "informe type_slug (recomendado) ou duration_minutes",
+    );
+  }
+
   // 1. Resolve responsavel do lead. Sem responsavel, falha (forca
   //    operador a atribuir antes — appointment orfao confunde quem
   //    fica olhando a agenda).
@@ -80,7 +150,7 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
     );
   }
 
-  const endMs = startMs + parsed.data.duration_minutes * 60_000;
+  const endMs = startMs + resolvedDuration * 60_000;
   const end_at = new Date(endMs).toISOString();
   const timezone = lead.timezone || "America/Sao_Paulo";
 
@@ -91,13 +161,14 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
         user_id: lead.assigned_to,
         start_at: parsed.data.start_at,
         end_at,
-        duration_minutes: parsed.data.duration_minutes,
-        title: parsed.data.title,
+        duration_minutes: resolvedDuration,
+        title: resolvedTitle,
+        type_slug: parsed.data.type_slug ?? null,
         noop: false,
         dry_run: true,
       },
       [
-        `would create appointment "${parsed.data.title}" at ${parsed.data.start_at} (${parsed.data.duration_minutes} min) for lead ${lead.id}`,
+        `would create appointment "${resolvedTitle}" at ${parsed.data.start_at} (${resolvedDuration} min) for lead ${lead.id}`,
       ],
     );
   }
@@ -114,20 +185,22 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
       },
       {
         kind: "appointment",
-        title: parsed.data.title,
+        title: resolvedTitle,
         description: parsed.data.description ?? null,
         lead_id: lead.id,
         user_id: lead.assigned_to,
-        service_id: null,
+        // Linka ao agenda_services quando veio do tipo — pra
+        // estatisticas/filtros de agenda virem corretos.
+        service_id: appointmentType?.id ?? null,
         booking_page_id: null,
         start_at: parsed.data.start_at,
         end_at,
-        duration_minutes: parsed.data.duration_minutes,
+        duration_minutes: resolvedDuration,
         timezone,
         status: "awaiting_confirmation",
-        channel: parsed.data.channel ?? null,
-        location: parsed.data.location ?? null,
-        meeting_url: parsed.data.meeting_url ?? null,
+        channel: resolvedChannel,
+        location: resolvedLocation,
+        meeting_url: resolvedMeetingUrl,
       },
     );
 
