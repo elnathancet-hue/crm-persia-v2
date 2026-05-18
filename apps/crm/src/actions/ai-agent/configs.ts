@@ -12,12 +12,15 @@ import {
   getAgentTemplate,
   isAgentTemplateSlug,
   normalizeHumanizationConfig,
+  normalizeStageActionConfig,
   sanitizeBusinessHours,
   sanitizeKeywordList,
   type AgentConfig,
+  type AgentTemplate,
   type CreateAgentInput,
   type UpdateAgentInput,
 } from "@persia/shared/ai-agent";
+import type { AgentDb } from "@/lib/ai-agent/db";
 import { revalidatePath } from "next/cache";
 import { slugify } from "./utils";
 import { getDefaultStopAgentTool } from "@/lib/ai-agent/tools/registry";
@@ -104,25 +107,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
   // pode adicionar stages manualmente depois.
   if (input.template_slug && isAgentTemplateSlug(input.template_slug)) {
     const template = getAgentTemplate(input.template_slug);
-    if (template.stages.length > 0) {
-      const stageRows = template.stages.map((stage, index) => ({
-        organization_id: orgId,
-        config_id: config.id,
-        situation: stage.situation,
-        instruction: stage.instruction,
-        transition_hint: stage.transition_hint ?? null,
-        rag_enabled: false,
-        rag_top_k: 3,
-        order_index: index,
-        slug: slugify(stage.situation),
-      }));
-      const { error: stagesError } = await db.from("agent_stages").insert(stageRows);
-      if (stagesError) {
-        // Log + segue. O agente foi criado; cliente vai cair na aba Etapas
-        // vazia e pode criar manualmente. Melhor que falhar tudo.
-        console.error("Failed to seed template stages:", stagesError.message);
-      }
-    }
+    await applyTemplate(db, orgId, config, template);
   }
 
   for (const path of agentPaths()) revalidatePath(path);
@@ -300,5 +285,148 @@ export async function deleteAgent(configId: string): Promise<void> {
 
   if (error) throw new Error(error.message);
   for (const path of agentPaths()) revalidatePath(path);
+}
+
+// ============================================================================
+// applyTemplate — PR-AI-AGENT-TEMPLATE-FULL-STACK (mai/2026)
+// ----------------------------------------------------------------------------
+// Materializa um template novo (v2 com seed_tags / appointment_types /
+// notification_templates / humanization / stages v2 com action_type +
+// auto_actions). Templates antigos (so com stages basicas) continuam
+// funcionando — campos novos sao todos opcionais.
+//
+// Estrategia "best-effort": falha em qualquer parte loga + segue. O
+// agente foi criado; cliente pode editar/recriar recursos faltantes
+// manualmente. Melhor que rollback total.
+// ============================================================================
+async function applyTemplate(
+  db: AgentDb,
+  orgId: string,
+  config: AgentConfig,
+  template: AgentTemplate,
+): Promise<void> {
+  // 1. Atualiza humanization_config + behavior_mode se o template define.
+  // (Esses campos nao foram passados no INSERT inicial porque o normalize
+  // do input nao espera default vindo de template.)
+  const configPatch: Record<string, unknown> = {};
+  if (template.behavior_mode) {
+    configPatch.behavior_mode = template.behavior_mode;
+  }
+  if (template.humanization_config) {
+    configPatch.humanization_config = normalizeHumanizationConfig(
+      template.humanization_config,
+    );
+  }
+  if (Object.keys(configPatch).length > 0) {
+    const { error } = await db
+      .from("agent_configs")
+      .update(configPatch)
+      .eq("id", config.id)
+      .eq("organization_id", orgId);
+    if (error) {
+      console.error("[applyTemplate] failed to patch config:", error.message);
+    }
+  }
+
+  // 2. Seed de tags na org (idempotente — unique constraint em (org_id, name)).
+  // Tag existente mantem cor/descricao originais (NAO sobrescreve).
+  if (template.seed_tags && template.seed_tags.length > 0) {
+    for (const tag of template.seed_tags) {
+      const { data: existing } = await db
+        .from("tags")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("name", tag.name)
+        .maybeSingle();
+      if (existing) continue;
+      const { error } = await db.from("tags").insert({
+        organization_id: orgId,
+        name: tag.name,
+        description: tag.description ?? null,
+        color: tag.color ?? "#6366f1",
+      });
+      if (error) {
+        console.error(`[applyTemplate] seed tag "${tag.name}" failed:`, error.message);
+      }
+    }
+  }
+
+  // 3. Seed de tipos de agendamento (agenda_services) — idempotente por slug.
+  if (template.seed_appointment_types && template.seed_appointment_types.length > 0) {
+    for (const t of template.seed_appointment_types) {
+      const slug = slugify(t.name);
+      const { data: existing } = await db
+        .from("agenda_services")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("slug", slug)
+        .maybeSingle();
+      if (existing) continue;
+      const { error } = await db.from("agenda_services").insert({
+        organization_id: orgId,
+        slug,
+        name: t.name,
+        description: t.description ?? null,
+        duration_minutes: t.duration_minutes,
+        default_channel: t.default_channel ?? null,
+        default_location: t.default_location ?? null,
+        default_meeting_url: t.default_meeting_url ?? null,
+      });
+      if (error) {
+        console.error(
+          `[applyTemplate] seed appointment_type "${t.name}" failed:`,
+          error.message,
+        );
+      }
+    }
+  }
+
+  // 4. Seed de templates de notificacao (escopados ao config recem-criado).
+  // target_address vai vazio — cliente preenche depois.
+  if (
+    template.seed_notification_templates &&
+    template.seed_notification_templates.length > 0
+  ) {
+    const rows = template.seed_notification_templates.map((t) => ({
+      organization_id: orgId,
+      config_id: config.id,
+      name: t.name,
+      description: t.description ?? null,
+      target_type: "phone",
+      target_address: t.target_address ?? "",
+      body: t.body,
+      status: "active",
+    }));
+    const { error } = await db.from("agent_notification_templates").insert(rows);
+    if (error) {
+      console.error("[applyTemplate] seed notification_templates failed:", error.message);
+    }
+  }
+
+  // 5. Stages — agora com action_type + action_config. Stages antigas
+  // (sem esses campos) continuam funcionando: action_type fica null
+  // e action_config '{}' (default da migration 049).
+  if (template.stages.length > 0) {
+    const stageRows = template.stages.map((stage, index) => ({
+      organization_id: orgId,
+      config_id: config.id,
+      situation: stage.situation,
+      instruction: stage.instruction,
+      transition_hint: stage.transition_hint ?? null,
+      rag_enabled: false,
+      rag_top_k: 3,
+      order_index: index,
+      slug: slugify(stage.situation),
+      // Novos campos opcionais (PR-AGENT-INTEGRATION-4 e PR3 do A+C)
+      action_type: stage.action_type ?? null,
+      action_config: stage.auto_actions
+        ? normalizeStageActionConfig({ auto_actions: stage.auto_actions })
+        : {},
+    }));
+    const { error } = await db.from("agent_stages").insert(stageRows);
+    if (error) {
+      console.error("[applyTemplate] failed to seed stages:", error.message);
+    }
+  }
 }
 

@@ -10,21 +10,71 @@
 //     STARTER_PROMPT base, adicionando contexto específico)
 //   - stages pré-criadas com situation/instruction/transition_hint
 //
-// Tools e RAG NÃO são habilitadas por template — cliente liga conforme
-// o caso (FAQ-first liga RAG ao adicionar Documentos/FAQs, handoff é
-// auto-criado pra todo agente em createAgent).
+// PR-AI-AGENT-TEMPLATE-FULL-STACK (mai/2026): templates ganham campos
+// novos opcionais pra usar TUDO que o plano A+C entregou:
+//   - humanization_config (pause/resume + split + business hours)
+//   - behavior_mode='actions' + action_type por stage
+//   - action_config.auto_actions por stage (dispara automatico)
+//   - seed_tags / seed_appointment_types / seed_notification_templates
+//     (recursos da org criados junto com o agente — sem isso as
+//     auto_actions referenciariam nomes que nao existem)
+//
+// Templates legados (sem esses campos) continuam funcionando — todos
+// os campos novos sao opcionais e o createAgent server action defaulta.
+
+import type { AgentActionType } from "./types";
+import type { HumanizationConfig } from "./humanization";
+import type { StageAutoAction } from "./stage-actions";
 
 export type AgentTemplateSlug =
   | "blank"
   | "atendimento_whatsapp"
   | "pre_venda"
   | "pos_venda_cobranca"
-  | "tira_duvidas_faq";
+  | "tira_duvidas_faq"
+  | "consultor_funil_completo";
 
 export interface AgentTemplateStage {
   situation: string;
   instruction: string;
   transition_hint?: string;
+  /** PR-AI-AGENT-TEMPLATE-FULL-STACK: action_type quando o template usa
+   * behavior_mode='actions'. Ignorado em mode='stages'. */
+  action_type?: AgentActionType;
+  /** Auto-actions disparadas ao entrar nesta etapa (PR 3+4 do plano A+C).
+   * Referencia recursos seedados via seed_tags / seed_notification_templates.
+   * Cliente pode editar via UI "Acoes por etapa" depois (PR 5). */
+  auto_actions?: StageAutoAction[];
+}
+
+/** Tag seedada quando cliente cria agente do template. Idempotente — se
+ * a tag ja existe na org com mesmo nome, reusa sem duplicar. */
+export interface AgentTemplateSeedTag {
+  name: string;
+  description?: string;
+  color?: string; // hex
+}
+
+/** Tipo de agendamento seedado em agenda_services. */
+export interface AgentTemplateSeedAppointmentType {
+  name: string;
+  description?: string;
+  duration_minutes: number;
+  default_channel?: "whatsapp" | "phone" | "online" | "in_person";
+  default_location?: string;
+  default_meeting_url?: string;
+}
+
+/** Template de notificacao seedado em agent_notification_templates
+ * (vinculado ao agent_config criado). */
+export interface AgentTemplateSeedNotificationTemplate {
+  name: string;
+  description?: string;
+  /** Onde a notificacao vai (telefone ou nome de grupo WhatsApp).
+   * Default: campo vazio — cliente precisa preencher antes de testar. */
+  target_address?: string;
+  /** Corpo da notificacao (template parser). */
+  body: string;
 }
 
 export interface AgentTemplate {
@@ -34,6 +84,18 @@ export interface AgentTemplate {
   long_description: string;  // Tooltip / preview detalhado
   system_prompt: string;
   stages: AgentTemplateStage[];
+  /** Modo de execucao default do template. Quando 'actions', o wizard
+   * de criacao usa action_type por stage. */
+  behavior_mode?: "stages" | "actions";
+  /** Settings de humanizacao (pause/resume + split + business hours).
+   * Mergeado com defaults do humanization.ts. */
+  humanization_config?: Partial<HumanizationConfig>;
+  /** Tags a criar na org junto com o agente. */
+  seed_tags?: AgentTemplateSeedTag[];
+  /** Tipos de agendamento a criar em agenda_services. */
+  seed_appointment_types?: AgentTemplateSeedAppointmentType[];
+  /** Templates de notificacao a criar (vinculados ao novo agent_config). */
+  seed_notification_templates?: AgentTemplateSeedNotificationTemplate[];
 }
 
 // Prompt comum a todos os templates não-blank.
@@ -180,6 +242,179 @@ Sua função é responder dúvidas técnicas/operacionais consultando a base de 
         situation: "Tira-dúvidas com base de conhecimento",
         instruction:
           "Receba a pergunta do cliente, consulte a base de conhecimento e responda baseado APENAS no que a base retornar. Se a base não retornar info relevante, diga 'Não tenho essa informação confirmada, vou transferir pra um especialista' e peça transferência.",
+      },
+    ],
+  },
+
+  // ============================================================================
+  // PR-AI-AGENT-TEMPLATE-FULL-STACK: template que usa TODAS as features do
+  // plano A+C entregue em mai/2026. Consultor de vendas consultivas full-funil
+  // (recepção → qualificação → apresentação → agendamento → fechamento) com:
+  //  - humanização completa (pause/resume + picotar + horário comercial)
+  //  - 5 stages com action_type + auto_actions disparando handlers nativos
+  //  - tags, tipos de agendamento e templates de notificação seedados junto
+  //
+  // Cliente sai do wizard com TUDO funcionando — só precisa subir mídia na
+  // Biblioteca e ligar a tool send_media nas stages que quiser.
+  // ============================================================================
+  consultor_funil_completo: {
+    slug: "consultor_funil_completo",
+    label: "Consultor (funil completo)",
+    short_description:
+      "Funil completo: recepção → qualificação → apresentação → agendamento → fechamento. Com humanização, ações automáticas, tags, agendamentos e notificações.",
+    long_description: `Template MAIS COMPLETO. Cobre o ciclo inteiro de vendas consultivas em 5 etapas, com TUDO configurado de fábrica:
+
+✓ Humanização: pausa por palavra-chave (PAUSAR/HUMANO), retomada (ATIVAR), picotagem de respostas longas em mensagens curtas com delay (mais humano), horário comercial seg-sex 9-18h
+✓ Ações automáticas por etapa: tag adicionada automaticamente em Qualificação, equipe notificada quando lead chega em Agendamento, lead movido pra "Ganhou" no Fechamento
+✓ Tipos de agendamento prontos: "Consulta inicial 30min" + "Reunião de fechamento 60min"
+✓ Templates de notificação prontos: 3 templates pra equipe (qualificou, agendou, fechou)
+✓ Tags prontas: qualificado, material-enviado, agendou-reuniao, cliente-fechado
+
+PRÉ-REQUISITO MÍNIMO: ter o pipeline padrão criado (já vem com o CRM). DEPOIS DE CRIAR: preencha os destinatários nos 3 templates de notificação (telefone WhatsApp da equipe). OPCIONAL: subir uma mídia "catálogo" em Automação > Biblioteca de mídia + adicionar ação send_media na etapa Apresentação via "Ações por etapa".`,
+    system_prompt: `${COMMON_GUARDRAILS}
+
+Sua função é ser consultor de vendas: receber o lead, entender a dor, apresentar a solução, agendar uma reunião e fechar a venda. Você opera com humanização ativa — suas mensagens podem ser picotadas em várias bolhas, fora do horário comercial você responde com mensagem padrão.
+
+Regras do funil:
+- Em Qualificação, faça perguntas abertas pra entender o cenário do cliente (orçamento, prazo, decisor) ANTES de oferecer solução.
+- Em Apresentação, conecte a dor descoberta com a solução em poucas frases. NUNCA prometa preço sem confirmar com humano.
+- Em Agendamento, ofereça os tipos de agendamento configurados (Consulta inicial 30min ou Reunião de fechamento 60min). Confirme telefone/email pra envio do convite.
+- Em Fechamento, só avance quando o cliente CONFIRMAR explicitamente que vai comprar/fechar. Não force.`,
+    behavior_mode: "actions",
+    humanization_config: {
+      pause_keywords: ["PAUSAR", "HUMANO", "STOP IA"],
+      resume_keywords: ["ATIVAR", "IA ON", "VOLTAR IA"],
+      auto_pause_minutes: 30,
+      split_enabled: true,
+      split_threshold_chars: 180,
+      split_delay_seconds: 2,
+      business_hours_enabled: true,
+      business_hours_timezone: "America/Sao_Paulo",
+      business_hours: {
+        monday: { start: "09:00", end: "18:00" },
+        tuesday: { start: "09:00", end: "18:00" },
+        wednesday: { start: "09:00", end: "18:00" },
+        thursday: { start: "09:00", end: "18:00" },
+        friday: { start: "09:00", end: "18:00" },
+        saturday: null,
+        sunday: null,
+      },
+      after_hours_message:
+        "Olá! Recebi sua mensagem. Estamos fora do horário de atendimento (seg-sex 9h-18h). Retorno assim que possível!",
+      handoff_include_summary: true,
+    },
+    seed_tags: [
+      {
+        name: "qualificado",
+        description: "Lead passou pela qualificação (dor/orçamento/prazo confirmados)",
+        color: "#22c55e",
+      },
+      {
+        name: "material-enviado",
+        description: "Cliente recebeu apresentação/catálogo",
+        color: "#3b82f6",
+      },
+      {
+        name: "agendou-reuniao",
+        description: "Cliente marcou reunião com o time",
+        color: "#f59e0b",
+      },
+      {
+        name: "cliente-fechado",
+        description: "Negócio fechado — virar cliente",
+        color: "#a855f7",
+      },
+    ],
+    seed_appointment_types: [
+      {
+        name: "Consulta inicial",
+        description:
+          "Primeira conversa de 30min pra entender o caso do cliente em mais profundidade.",
+        duration_minutes: 30,
+        default_channel: "online",
+      },
+      {
+        name: "Reunião de fechamento",
+        description:
+          "Apresentação detalhada de proposta e fechamento. 60min, com decisor presente.",
+        duration_minutes: 60,
+        default_channel: "online",
+      },
+    ],
+    seed_notification_templates: [
+      {
+        name: "Lead qualificado",
+        description:
+          "Avisa a equipe que um lead passou pela qualificação e está pronto pra abordagem comercial.",
+        body: "🎯 Lead qualificado: {{lead.name}} ({{lead.phone}})\n\nResumo: {{summary}}\n\nAbra o CRM pra continuar: {{lead.url}}",
+      },
+      {
+        name: "Reuniao agendada",
+        description:
+          "Avisa a equipe que o agente marcou uma reunião com o lead.",
+        body: "📅 Reunião agendada: {{lead.name}}\n\nAcesse a Agenda pra ver detalhes.",
+      },
+      {
+        name: "Venda fechada",
+        description:
+          "Avisa a equipe que o lead confirmou fechamento — bora celebrar e iniciar onboarding.",
+        body: "🎉 VENDA FECHADA: {{lead.name}} ({{lead.phone}})\n\n{{custom.produto}} — {{custom.valor}}\n\nIniciar onboarding agora!",
+      },
+    ],
+    stages: [
+      {
+        situation: "Boas-vindas",
+        instruction:
+          "Cumprimente o cliente pelo nome (se souber), apresente-se brevemente como consultor e pergunte de forma genérica como pode ajudar. NÃO assuma vertical de negócio.",
+        transition_hint:
+          "Quando o cliente disser o motivo do contato, avance pra Qualificação.",
+        action_type: "free_message",
+      },
+      {
+        situation: "Qualificação",
+        instruction:
+          "Faça 3-4 perguntas abertas pra entender o cenário: qual o problema concreto, qual o orçamento aproximado, qual o prazo desejado, quem é o decisor. Tome notas mentais.",
+        transition_hint:
+          "Após o cliente responder as 4 perguntas (idealmente em 3-4 mensagens), avance pra Apresentação.",
+        action_type: "qualify",
+        auto_actions: [
+          { type: "add_tag", tag_name: "qualificado" },
+          { type: "trigger_notification", template_name: "Lead qualificado" },
+        ],
+      },
+      {
+        situation: "Apresentação da solução",
+        instruction:
+          "Conecte a dor descoberta com a solução da empresa em poucas frases. Use exemplos concretos. Pergunte se faz sentido pra ele.",
+        transition_hint:
+          "Quando o cliente demonstrar interesse, avance pra Agendamento. Se hesitar, contorne primeiro.",
+        action_type: "send_material",
+        auto_actions: [{ type: "add_tag", tag_name: "material-enviado" }],
+      },
+      {
+        situation: "Agendamento de reunião",
+        instruction:
+          "Ofereça os tipos de agendamento configurados (Consulta inicial 30min OU Reunião de fechamento 60min, dependendo da maturidade do lead). Pergunte qual horário funciona. Use create_appointment com type_slug correto.",
+        transition_hint:
+          "Após confirmar data/hora, avance pra Fechamento se foi reunião de fechamento, senão encerre pra retomar depois.",
+        action_type: "schedule",
+        auto_actions: [
+          { type: "add_tag", tag_name: "agendou-reuniao" },
+          { type: "trigger_notification", template_name: "Reuniao agendada" },
+        ],
+      },
+      {
+        situation: "Fechamento",
+        instruction:
+          "Confirme com o cliente que ele vai prosseguir com a compra. Combine próximos passos (pagamento, documentação, onboarding). Só avance quando o cliente CONFIRMAR explicitamente.",
+        transition_hint:
+          "Após confirmação explícita de fechamento, dispara as ações de fechar venda.",
+        action_type: "move_pipeline",
+        auto_actions: [
+          { type: "add_tag", tag_name: "cliente-fechado" },
+          { type: "move_pipeline_stage", stage_name: "Ganhou" },
+          { type: "trigger_notification", template_name: "Venda fechada" },
+        ],
       },
     ],
   },

@@ -13,6 +13,7 @@ import {
   Plus,
   Sparkles,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import {
   AGENT_TEMPLATES,
@@ -91,6 +92,11 @@ const TEMPLATE_VISUALS: Record<
     Icon: BookOpen,
     accent: "from-progress/15 to-progress/5",
     iconColor: "bg-progress-soft text-progress-soft-foreground",
+  },
+  consultor_funil_completo: {
+    Icon: Zap,
+    accent: "from-primary/20 to-primary/5",
+    iconColor: "bg-primary/20 text-primary",
   },
 };
 
