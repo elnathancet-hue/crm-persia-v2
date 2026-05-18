@@ -60,7 +60,6 @@ interface AppointmentTypeRow {
 interface LeadRow {
   id: string;
   assigned_to: string | null;
-  timezone: string | null;
 }
 
 export const createAppointmentHandler: NativeHandler = async (context, input) => {
@@ -135,7 +134,7 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
   //    fica olhando a agenda).
   const { data: leadRow, error: leadError } = await db
     .from("leads")
-    .select("id, assigned_to, timezone")
+    .select("id, assigned_to")
     .eq("organization_id", context.organization_id)
     .eq("id", context.lead_id)
     .maybeSingle();
@@ -152,7 +151,12 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
 
   const endMs = startMs + resolvedDuration * 60_000;
   const end_at = new Date(endMs).toISOString();
-  const timezone = lead.timezone || "America/Sao_Paulo";
+  // PR-FIX-LEADS-TIMEZONE (mai/2026): tabela `leads` NAO tem coluna
+  // `timezone` (descoberto em teste live — handler tentava SELECT
+  // timezone e falhava 4x antes de IA cair em stop_agent). Default
+  // America/Sao_Paulo direto (timezone real do lead pode entrar em
+  // migration futura se necessario).
+  const timezone = "America/Sao_Paulo";
 
   if (context.dry_run) {
     return successResult(
