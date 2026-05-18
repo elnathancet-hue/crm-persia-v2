@@ -10,6 +10,7 @@ import {
   clampSplitDelaySeconds,
   clampSplitThresholdChars,
   getAgentTemplate,
+  getPreset,
   isAgentTemplateSlug,
   normalizeHumanizationConfig,
   normalizeStageActionConfig,
@@ -18,12 +19,16 @@ import {
   type AgentConfig,
   type AgentTemplate,
   type CreateAgentInput,
+  type NativeHandlerName,
   type UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "@/lib/ai-agent/db";
 import { revalidatePath } from "next/cache";
 import { slugify } from "./utils";
-import { getDefaultStopAgentTool } from "@/lib/ai-agent/tools/registry";
+import {
+  getDefaultStopAgentTool,
+  materializePresetTool,
+} from "@/lib/ai-agent/tools/registry";
 import {
   assertAgentStatus,
   assertConfigBelongsToOrg,
@@ -423,9 +428,108 @@ async function applyTemplate(
         ? normalizeStageActionConfig({ auto_actions: stage.auto_actions })
         : {},
     }));
-    const { error } = await db.from("agent_stages").insert(stageRows);
-    if (error) {
-      console.error("[applyTemplate] failed to seed stages:", error.message);
+    const { data: insertedStages, error: stagesError } = await db
+      .from("agent_stages")
+      .insert(stageRows)
+      .select("id, slug");
+    if (stagesError) {
+      console.error("[applyTemplate] failed to seed stages:", stagesError.message);
+      return;
+    }
+
+    // 6. PR-AI-AGENT-TEMPLATE-SEED-TOOLS (mai/2026): materializa tools
+    // nativas necessarias e linka em agent_stage_tools (is_enabled=true)
+    // em todas as stages. Sem isso, o LLM nao via as tools no API call
+    // e nao chamava add_tag/create_appointment/etc — auto_actions
+    // disparariam OK quando entrava em etapa, mas IA nao tinha capacidade
+    // de chamar por iniciativa.
+    //
+    // Stop agent ja foi criado fora do applyTemplate (linha 99). Aqui
+    // adicionamos as outras tools nativas que o Consultor template usa.
+    const stageIds = ((insertedStages ?? []) as Array<{ id: string }>)
+      .map((s) => s.id)
+      .filter(Boolean);
+
+    // Coleta tools referenciadas pelas auto_actions + tools "padrao"
+    // do funil completo (agendamento). Set evita duplicar.
+    const toolHandlers = new Set<NativeHandlerName>();
+    for (const stage of template.stages) {
+      for (const action of stage.auto_actions ?? []) {
+        // O type da auto_action coincide com o native_handler equivalente.
+        toolHandlers.add(action.type as NativeHandlerName);
+      }
+    }
+    // Tools de agenda (sempre uteis em templates completos)
+    if (template.seed_appointment_types && template.seed_appointment_types.length > 0) {
+      toolHandlers.add("create_appointment");
+      toolHandlers.add("list_lead_appointments");
+      toolHandlers.add("cancel_appointment");
+      toolHandlers.add("reschedule_appointment");
+    }
+    // transfer_to_user e sempre util pra escalation manual
+    toolHandlers.add("transfer_to_user");
+    // stop_agent ja foi criado — pular pra nao duplicar
+    toolHandlers.delete("stop_agent");
+
+    const toolsToCreate = [...toolHandlers]
+      .map((handler) => {
+        const preset = getPreset(handler);
+        if (!preset) return null;
+        return materializePresetTool({
+          configId: config.id,
+          organizationId: orgId,
+          preset,
+        });
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null);
+
+    if (toolsToCreate.length > 0) {
+      const { data: createdTools, error: toolsError } = await db
+        .from("agent_tools")
+        .insert(toolsToCreate)
+        .select("id, native_handler");
+      if (toolsError) {
+        console.error("[applyTemplate] failed to seed tools:", toolsError.message);
+      } else if (createdTools && stageIds.length > 0) {
+        // 7. Linka todas as tools criadas em TODAS as stages com
+        // is_enabled=true. Cliente pode restringir depois via UI
+        // (StageSheet > Ferramentas).
+        const allTools = createdTools as Array<{ id: string; native_handler: string }>;
+        // Tambem inclui stop_agent (criado fora do applyTemplate)
+        const { data: stopAgentRow } = await db
+          .from("agent_tools")
+          .select("id")
+          .eq("config_id", config.id)
+          .eq("native_handler", "stop_agent")
+          .maybeSingle();
+        const allToolIds = [
+          ...allTools.map((t) => t.id),
+          ...(stopAgentRow ? [(stopAgentRow as { id: string }).id] : []),
+        ];
+
+        const stageToolRows: Array<Record<string, unknown>> = [];
+        for (const stageId of stageIds) {
+          for (const toolId of allToolIds) {
+            stageToolRows.push({
+              stage_id: stageId,
+              tool_id: toolId,
+              organization_id: orgId,
+              is_enabled: true,
+            });
+          }
+        }
+        if (stageToolRows.length > 0) {
+          const { error: junctionError } = await db
+            .from("agent_stage_tools")
+            .insert(stageToolRows);
+          if (junctionError) {
+            console.error(
+              "[applyTemplate] failed to seed agent_stage_tools:",
+              junctionError.message,
+            );
+          }
+        }
+      }
     }
   }
 }
