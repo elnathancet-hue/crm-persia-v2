@@ -76,6 +76,7 @@ import { sendAssistantReply } from "./send-reply";
 import {
   loadAgentCatalog,
   loadAgentStageCatalog,
+  loadAppointmentTypeCatalog,
   loadKanbanStageCatalog,
   loadMemberCatalog,
   loadNotificationTemplateCatalog,
@@ -575,6 +576,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       kanbanStageCatalog,
       agentStageCatalog,
       notificationTemplateCatalog,
+      appointmentTypeCatalog,
     ] = await Promise.all([
       enabledHandlers.has("send_media")
         ? loadMediaCatalog(params.db, params.orgId)
@@ -606,6 +608,9 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
             params.config.id,
           )
         : Promise.resolve(null),
+      enabledHandlers.has("create_appointment")
+        ? loadAppointmentTypeCatalog(params.db, params.orgId)
+        : Promise.resolve(null),
     ]);
 
     const system = buildSystemPromptWithRag(
@@ -620,6 +625,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         kanbanStages: kanbanStageCatalog,
         agentStages: agentStageCatalog,
         notificationTemplates: notificationTemplateCatalog,
+        appointmentTypes: appointmentTypeCatalog,
       },
     );
 
@@ -1333,6 +1339,7 @@ interface ToolCatalogs {
   kanbanStages: string | null;
   agentStages: string | null;
   notificationTemplates: string | null;
+  appointmentTypes: string | null;
 }
 
 function buildSystemPromptWithRag(
@@ -1362,14 +1369,16 @@ function buildSystemPromptWithRag(
     stage.transition_hint ? `Dica de transicao: ${stage.transition_hint}` : "",
     mediaCatalog,
     // PR-AI-AGENT-TOOLS-NAMES: catalogos das tools nativas (tags,
-    // members, etapas Kanban, etapas do agente, agentes, templates).
-    // Cada bloco vem como string ja formatada ou null (silencia).
+    // members, etapas Kanban, etapas do agente, agentes, templates,
+    // tipos de agendamento). Cada bloco vem como string ja formatada
+    // ou null (silencia).
     toolCatalogs?.tags ?? null,
     toolCatalogs?.kanbanStages ?? null,
     toolCatalogs?.agentStages ?? null,
     toolCatalogs?.members ?? null,
     toolCatalogs?.agents ?? null,
     toolCatalogs?.notificationTemplates ?? null,
+    toolCatalogs?.appointmentTypes ?? null,
     "Responda ao cliente em portugues brasileiro, de forma objetiva e util.",
     "Use ferramentas apenas quando a acao for necessaria e permitida.",
   ]

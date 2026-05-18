@@ -413,7 +413,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "create_appointment",
     display_name: "Criar agendamento",
     description:
-      "Schedule a new appointment for the current lead. Returns the appointment id, start and end times. Server-side conflict check rejects overlapping slots; lead receives WhatsApp confirmation reminder via the org's reminder configs.",
+      "Schedule a new appointment for the current lead. Use `type_slug` to reference an appointment type defined by the organization — duration, title, channel and location are inherited from the type. The system prompt lists available types. Returns appointment id, start and end times. Server-side conflict check rejects overlapping slots.",
     ui_description:
       "Cria um agendamento para o lead da conversa, validando disponibilidade.",
     icon_name: "CalendarPlus",
@@ -421,7 +421,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
-      required: ["start_at", "duration_minutes", "title"],
+      required: ["start_at"],
       properties: {
         start_at: {
           type: "string",
@@ -429,35 +429,41 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
           description:
             "Start time in ISO 8601 with timezone (e.g. 2026-05-20T14:00:00-03:00). Must be in the future.",
         },
+        type_slug: {
+          type: "string",
+          description:
+            "Slug EXATO do tipo de agendamento configurado pela organizacao (ex: 'consulta-inicial'). Quando passado, duration/title/channel/location/meeting_url sao herdados do tipo. RECOMENDADO sempre quando ha tipos cadastrados.",
+        },
+        description: {
+          type: "string",
+          description: "Detalhes/contexto adicional do agendamento (opcional).",
+        },
         duration_minutes: {
           type: "integer",
           minimum: 15,
           maximum: 480,
           description:
-            "Appointment duration in minutes (15 to 480). Most consultations are 30-60 min.",
+            "Override de duracao em minutos. Quando passa type_slug, este campo SOBRESCREVE a duracao padrao do tipo. Sem type_slug, e obrigatorio.",
         },
         title: {
           type: "string",
-          description: "Short title for the appointment (e.g. 'Consulta inicial').",
-        },
-        description: {
-          type: "string",
-          description: "Optional details/context for the appointment.",
+          description:
+            "Override de titulo. Quando passa type_slug, sobrescreve o nome do tipo. Sem type_slug, e obrigatorio.",
         },
         channel: {
           type: "string",
           enum: ["whatsapp", "phone", "online", "in_person"],
-          description: "Channel where the appointment will happen.",
+          description: "Override do canal padrao do tipo (opcional).",
         },
         location: {
           type: "string",
           description:
-            "Physical address when channel='in_person'. Empty for online/phone.",
+            "Override do endereco padrao (use quando channel='in_person'). Opcional.",
         },
         meeting_url: {
           type: "string",
           description:
-            "Meeting URL (Zoom/Meet/etc) when channel='online'. Empty for in_person/phone.",
+            "Override da URL de reuniao (use quando channel='online'). Opcional.",
         },
       },
     },

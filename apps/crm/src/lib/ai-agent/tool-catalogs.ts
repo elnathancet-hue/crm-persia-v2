@@ -252,6 +252,62 @@ export async function loadAgentStageCatalog(
 }
 
 // ============================================================================
+// Tipos de agendamento — para `create_appointment`
+// ============================================================================
+
+export async function loadAppointmentTypeCatalog(
+  db: AgentDb,
+  orgId: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("agenda_services")
+    .select(
+      "slug, name, description, duration_minutes, default_channel, default_location, default_meeting_url",
+    )
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .not("slug", "is", null)
+    .order("name", { ascending: true })
+    .limit(CATALOG_LIMIT);
+  if (error || !data || data.length === 0) return null;
+
+  const rows = data as ReadonlyArray<{
+    slug?: string | null;
+    name?: string | null;
+    description?: string | null;
+    duration_minutes?: number | null;
+    default_channel?: string | null;
+  }>;
+  const lines: string[] = [];
+  for (const r of rows) {
+    if (!r.slug || !r.name) continue;
+    const parts: string[] = [`- slug: "${r.slug}" — ${r.name}`];
+    if (typeof r.duration_minutes === "number") {
+      parts.push(`(${r.duration_minutes}min)`);
+    }
+    if (r.default_channel) {
+      const labels: Record<string, string> = {
+        whatsapp: "WhatsApp",
+        phone: "telefone",
+        online: "online",
+        in_person: "presencial",
+      };
+      parts.push(`[${labels[r.default_channel] ?? r.default_channel}]`);
+    }
+    const line = parts.join(" ");
+    const desc = r.description?.trim();
+    lines.push(desc ? `${line} — ${desc}` : line);
+  }
+  if (lines.length === 0) return null;
+
+  return [
+    "Tipos de agendamento disponíveis (use create_appointment com o slug EXATO — duracao, canal e local saem do tipo):",
+    ...lines,
+    "Se nenhum tipo encaixar, transfira pra humano (stop_agent) em vez de inventar.",
+  ].join("\n");
+}
+
+// ============================================================================
 // Templates de notificacao — para `trigger_notification`
 // ============================================================================
 
