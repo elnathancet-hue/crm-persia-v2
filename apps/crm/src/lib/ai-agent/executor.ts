@@ -716,7 +716,14 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       const toolCalls = extractToolCalls(choice?.message);
       if (choice?.finish_reason !== "tool_calls" || toolCalls.length === 0) {
         assistantReply = extractText(choice?.message) || HANDOFF_REPLY;
-        if (!params.dryRun && params.provider) {
+        // PR-AI-AGENT-TESTER-RENDER-BUBBLE (mai/2026): chamamos
+        // sendAssistantReply sempre que ha provider, INCLUSIVE em
+        // dryRun (Tester). O stub do tester e o provider em modo
+        // teste — sem essa chamada, o TesterSheet nao recebe os
+        // eventos send_text/setTyping e a bolha de resposta nao
+        // aparece. dry_run continua valendo pros HANDLERS de tools
+        // individuais (cada um respeita context.dry_run interno).
+        if (params.provider) {
           await sendAssistantReply({
             provider: params.provider,
             phone: params.msg.phone,
@@ -815,7 +822,10 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     throw new GuardrailError("run_iterations", "AI agent max iterations reached");
   } catch (error) {
     if (error instanceof GuardrailError) {
-      if (!params.dryRun && params.provider) {
+      // PR-AI-AGENT-TESTER-RENDER-BUBBLE: provider stub do Tester
+      // tambem precisa receber o HANDOFF_REPLY pra renderizar bolha
+      // de fallback no caminho de guardrail.
+      if (params.provider) {
         // HANDOFF_REPLY e curto (<200 chars); split nao vai ativar de
         // verdade, mas usamos sendAssistantReply pra manter consistencia
         // com setTyping e o caminho default.
