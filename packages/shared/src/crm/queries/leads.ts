@@ -209,6 +209,13 @@ export async function listLeads(
     query = query.in("id", combinedIds);
   }
 
+  // PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): esconde lead sintetico
+  // do Tester (metadata.is_test=true). Reusado entre runs pra exercitar
+  // pipeline real, mas nunca aparece na lista operacional de leads.
+  query = query.or(
+    "metadata->>is_test.is.null,metadata->>is_test.neq.true",
+  );
+
   const { data, error, count } = await query;
   if (error) throw new Error(error.message);
 

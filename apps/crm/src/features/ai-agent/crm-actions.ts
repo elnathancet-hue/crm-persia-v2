@@ -32,7 +32,11 @@ import {
   listEntryConditions,
   updateEntryCondition,
 } from "@/actions/ai-agent/entry-conditions";
-import { testAgent } from "@/actions/ai-agent/tester";
+import {
+  resetTesterConversation,
+  testAgent,
+  testAgentLive,
+} from "@/actions/ai-agent/tester";
 import { listRuns } from "@/actions/ai-agent/audit";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
 import { getUsageStats } from "@/actions/ai-agent/usage";
@@ -93,6 +97,8 @@ export const crmAgentActions: AgentActions = {
   removeAllowedDomain,
   setNativeAgentEnabled,
   testAgent,
+  testAgentLive,
+  resetTesterConversation,
   listRuns,
   setCostLimit,
   deleteCostLimit,
