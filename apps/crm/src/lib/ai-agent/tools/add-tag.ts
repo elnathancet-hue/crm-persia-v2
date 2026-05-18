@@ -28,11 +28,18 @@ export const addTagHandler: NativeHandler = async (context, input) => {
 
   const tagName = normalizeTagName(parsed.data.tag_name);
 
+  // PR-AI-AGENT-TOOLS-NAMES (mai/2026): lookup case-insensitive contra
+  // o catalogo de tags da org. O catalogo e injetado no system prompt
+  // (tool-catalogs.ts) — IA deveria escolher um nome existente. Aqui
+  // fazemos ilike pra absorver pequenas variacoes de caixa (raro mas
+  // possivel). Se mesmo assim nao bater, ainda CRIAMOS a tag — manter
+  // comportamento antigo pra nao quebrar configs existentes; UI pode
+  // adicionar toggle "strict mode" no futuro.
   const { data: existingTag, error: tagLookupError } = await db
     .from("tags")
     .select("id, name")
     .eq("organization_id", context.organization_id)
-    .eq("name", tagName)
+    .ilike("name", tagName)
     .maybeSingle();
 
   if (tagLookupError) return failureResult(tagLookupError.message);

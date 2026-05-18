@@ -323,6 +323,14 @@ describe("ai-agent PR7.1 trigger_notification runtime", () => {
     const supabase = createSupabaseMock();
     supabase.queue("agent_runs", { data: { id: "run-a" }, error: null });
     supabase.queue("messages", { data: [], error: null });
+    // PR-AI-AGENT-TOOLS-NAMES: executor agora chama
+    // loadNotificationTemplateCatalog ANTES do handler executar, pra
+    // injetar o catalogo de templates no system prompt. Precisa de 1
+    // queue extra com a mesma data.
+    supabase.queue("agent_notification_templates", {
+      data: [template()],
+      error: null,
+    });
     supabase.queue("agent_notification_templates", {
       data: [template()],
       error: null,

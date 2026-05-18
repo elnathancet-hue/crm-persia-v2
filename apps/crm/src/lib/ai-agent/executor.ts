@@ -73,6 +73,14 @@ import {
 } from "./webhook-caller";
 import { isImplementedNativeHandler, nativeHandlers } from "./tools/registry";
 import { sendAssistantReply } from "./send-reply";
+import {
+  loadAgentCatalog,
+  loadAgentStageCatalog,
+  loadKanbanStageCatalog,
+  loadMemberCatalog,
+  loadNotificationTemplateCatalog,
+  loadTagCatalog,
+} from "./tool-catalogs";
 
 type OpenAIToolCallWire = {
   id: string;
@@ -547,22 +555,72 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     if (retrieval) {
       orderIndex += retrieval.insertedStep ? 1 : 0;
     }
-    // PR-AI-AGENT-HUMAN-D: se send_media esta habilitado nesta stage,
-    // carrega catalogo da biblioteca pra injetar no system prompt. LLM
-    // precisa saber slugs + descricoes pra chamar a tool corretamente.
-    // Carrega no maximo 50 mídias ativas — mais que isso vira ruido.
-    const sendMediaEnabled = params.tools.some(
-      (t) => t.is_enabled && t.native_handler === "send_media",
+    // PR-AI-AGENT-TOOLS-NAMES (mai/2026): carrega catalogos pra cada
+    // tool habilitada que precisa que o LLM saiba as opcoes existentes
+    // antes de chamar. Sem isso a IA inventa nomes (add_tag) ou usa UUID
+    // (move_pipeline_stage, transfer_*). Cada catalogo so e carregado se
+    // a tool esta ativa nesta stage — evita queries desnecessarias.
+    // Paralelo via Promise.all — todos os loaders sao independentes.
+    const enabledHandlers = new Set(
+      params.tools
+        .filter((t) => t.is_enabled && t.native_handler !== null)
+        .map((t) => t.native_handler!),
     );
-    const mediaCatalog = sendMediaEnabled
-      ? await loadMediaCatalog(params.db, params.orgId)
-      : null;
+
+    const [
+      mediaCatalog,
+      tagCatalog,
+      memberCatalog,
+      agentCatalog,
+      kanbanStageCatalog,
+      agentStageCatalog,
+      notificationTemplateCatalog,
+    ] = await Promise.all([
+      enabledHandlers.has("send_media")
+        ? loadMediaCatalog(params.db, params.orgId)
+        : Promise.resolve(null),
+      enabledHandlers.has("add_tag")
+        ? loadTagCatalog(params.db, params.orgId)
+        : Promise.resolve(null),
+      enabledHandlers.has("transfer_to_user")
+        ? loadMemberCatalog(params.db, params.orgId)
+        : Promise.resolve(null),
+      enabledHandlers.has("transfer_to_agent")
+        ? loadAgentCatalog(params.db, params.orgId, params.config.id)
+        : Promise.resolve(null),
+      enabledHandlers.has("move_pipeline_stage")
+        ? loadKanbanStageCatalog(params.db, params.orgId, params.leadId)
+        : Promise.resolve(null),
+      enabledHandlers.has("transfer_to_stage")
+        ? loadAgentStageCatalog(
+            params.db,
+            params.orgId,
+            params.config.id,
+            params.stage.id,
+          )
+        : Promise.resolve(null),
+      enabledHandlers.has("trigger_notification")
+        ? loadNotificationTemplateCatalog(
+            params.db,
+            params.orgId,
+            params.config.id,
+          )
+        : Promise.resolve(null),
+    ]);
 
     const system = buildSystemPromptWithRag(
       params.config,
       params.stage,
       retrieval?.hits?.length ? buildRagContextBlock(retrieval.hits) : null,
       mediaCatalog,
+      {
+        tags: tagCatalog,
+        members: memberCatalog,
+        agents: agentCatalog,
+        kanbanStages: kanbanStageCatalog,
+        agentStages: agentStageCatalog,
+        notificationTemplates: notificationTemplateCatalog,
+      },
     );
 
     await updateRunStatus(params.db, run.id, params.orgId, "running");
@@ -1268,11 +1326,21 @@ const ACTION_TYPE_INSTRUCTIONS: Record<
     "Esta etapa é de MENSAGEM LIVRE: siga a instrução abaixo livremente.",
 };
 
+interface ToolCatalogs {
+  tags: string | null;
+  members: string | null;
+  agents: string | null;
+  kanbanStages: string | null;
+  agentStages: string | null;
+  notificationTemplates: string | null;
+}
+
 function buildSystemPromptWithRag(
   config: AgentConfig,
   stage: AgentStage,
   ragContext: string | null,
   mediaCatalog: string | null,
+  toolCatalogs?: ToolCatalogs,
 ): string {
   const isActionsMode = config.behavior_mode === "actions";
   // Em modo actions, NAO usamos stage.instruction como sub-prompt — o
@@ -1293,6 +1361,15 @@ function buildSystemPromptWithRag(
     stageInstruction,
     stage.transition_hint ? `Dica de transicao: ${stage.transition_hint}` : "",
     mediaCatalog,
+    // PR-AI-AGENT-TOOLS-NAMES: catalogos das tools nativas (tags,
+    // members, etapas Kanban, etapas do agente, agentes, templates).
+    // Cada bloco vem como string ja formatada ou null (silencia).
+    toolCatalogs?.tags ?? null,
+    toolCatalogs?.kanbanStages ?? null,
+    toolCatalogs?.agentStages ?? null,
+    toolCatalogs?.members ?? null,
+    toolCatalogs?.agents ?? null,
+    toolCatalogs?.notificationTemplates ?? null,
     "Responda ao cliente em portugues brasileiro, de forma objetiva e util.",
     "Use ferramentas apenas quando a acao for necessaria e permitida.",
   ]

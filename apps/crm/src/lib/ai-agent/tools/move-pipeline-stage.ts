@@ -28,8 +28,14 @@ import {
 //   - pipeline_id informado mas diferente -> error
 //   - Stage de outro funil         -> error (validado abaixo)
 //   - Idempotencia (mesma stage)   -> retorna sucesso com noop=true
+//
+// PR-AI-AGENT-TOOLS-NAMES (mai/2026): aceita `stage_name` (nome amigavel
+// vindo do catalogo no system prompt) OU `stage_id` (UUID — retrocompat).
+// Pelo menos um e obrigatorio. Validacao no codigo, nao no zod (precisa
+// de refinement custom — preferimos mensagem clara).
 const moveStageSchema = z.object({
-  stage_id: z.string().uuid(),
+  stage_name: z.string().trim().min(1).max(120).optional(),
+  stage_id: z.string().uuid().optional(),
   pipeline_id: z.string().uuid().optional(),
   reason: z.string().trim().min(1).max(500).optional(),
 });
@@ -84,16 +90,44 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
     );
   }
 
-  // 2. Valida stage de destino: existe + pertence ao org + pertence ao mesmo
-  //    funil do lead.
-  const { data: targetStage, error: stageError } = await db
-    .from("pipeline_stages")
-    .select("id, name, pipeline_id, organization_id")
-    .eq("id", parsed.data.stage_id)
-    .maybeSingle();
+  // 2. Resolve a stage de destino — aceita stage_name OU stage_id.
+  // Pelo menos um obrigatorio.
+  if (!parsed.data.stage_name && !parsed.data.stage_id) {
+    return failureResult("informe stage_name (recomendado) ou stage_id");
+  }
 
-  if (stageError) return failureResult(stageError.message);
-  if (!targetStage) return failureResult("etapa de destino nao encontrada");
+  let targetStage: StageRow | null = null;
+  if (parsed.data.stage_id) {
+    const { data, error: stageError } = await db
+      .from("pipeline_stages")
+      .select("id, name, pipeline_id, organization_id")
+      .eq("id", parsed.data.stage_id)
+      .maybeSingle();
+    if (stageError) return failureResult(stageError.message);
+    targetStage = (data as StageRow | null) ?? null;
+  } else if (parsed.data.stage_name) {
+    // Lookup por nome dentro do funil do lead (case-insensitive).
+    // Restringe ao mesmo pipeline pra evitar match com etapa de outro
+    // funil quando ha nomes repetidos entre funis (comum: "Novo",
+    // "Qualificado").
+    const { data, error: stageError } = await db
+      .from("pipeline_stages")
+      .select("id, name, pipeline_id, organization_id")
+      .eq("organization_id", context.organization_id)
+      .eq("pipeline_id", lead.pipeline_id)
+      .ilike("name", parsed.data.stage_name)
+      .limit(1)
+      .maybeSingle();
+    if (stageError) return failureResult(stageError.message);
+    targetStage = (data as StageRow | null) ?? null;
+  }
+
+  if (!targetStage) {
+    return failureResult("etapa de destino nao encontrada", {
+      requested: parsed.data.stage_name ?? parsed.data.stage_id,
+      hint: "use o nome EXATO da lista de etapas no contexto",
+    });
+  }
 
   const stage = targetStage as StageRow;
   if (stage.organization_id !== context.organization_id) {
