@@ -51,10 +51,26 @@ export async function ensureTesterContext(
   // ----- LEAD -----
   let { data: lead } = await db
     .from("leads")
-    .select("id, metadata")
+    .select("id, metadata, assigned_to")
     .eq("organization_id", orgId)
     .eq("phone", phone)
     .maybeSingle();
+
+  // PR-FIX-TESTER-ASSIGNED-TO (mai/2026): create_appointment exige
+  // lead.assigned_to setado (responsavel da reuniao). Tester precisa
+  // herdar um membro ativo qualquer da org pra que IA consiga simular
+  // agendamento fielmente sem o handler retornar "lead nao tem
+  // responsavel atribuido".
+  let defaultAssignee: string | null = null;
+  const { data: members } = await db
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .limit(1);
+  if (members && members.length > 0) {
+    defaultAssignee = (members[0] as { user_id?: string | null }).user_id ?? null;
+  }
 
   if (!lead) {
     const { data: newLead, error } = await db
@@ -66,9 +82,10 @@ export async function ensureTesterContext(
         source: "system",
         status: "new",
         channel: "whatsapp",
+        assigned_to: defaultAssignee,
         metadata: { is_test: true, created_by: "ai_agent_tester" },
       })
-      .select("id, metadata")
+      .select("id, metadata, assigned_to")
       .single();
     if (error || !newLead) {
       throw new Error(`failed to create tester lead: ${error?.message}`);
@@ -76,15 +93,18 @@ export async function ensureTesterContext(
     lead = newLead;
   } else {
     // Defensivo: se lead foi criado manualmente antes (rollout), garante
-    // a flag metadata.is_test pra que os filtros escondam.
+    // a flag metadata.is_test pra que os filtros escondam + assigned_to.
     const md = (lead.metadata as Record<string, unknown> | null) ?? {};
+    const updates: Record<string, unknown> = {};
     if (md.is_test !== true) {
-      await db
-        .from("leads")
-        .update({
-          metadata: { ...md, is_test: true, created_by: "ai_agent_tester" },
-        })
-        .eq("id", lead.id);
+      updates.metadata = { ...md, is_test: true, created_by: "ai_agent_tester" };
+    }
+    const leadRow = lead as { assigned_to?: string | null };
+    if (!leadRow.assigned_to && defaultAssignee) {
+      updates.assigned_to = defaultAssignee;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.from("leads").update(updates).eq("id", lead.id);
     }
   }
 
