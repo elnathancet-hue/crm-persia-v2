@@ -13,11 +13,24 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
+  AgentActionType,
   AgentStage,
   AgentTool,
   CreateStageInput,
   UpdateStageInput,
 } from "@persia/shared/ai-agent";
+
+// PR-AGENT-INTEGRATION-4: labels curtos pro badge no timeline. Versao
+// reduzida de ACTION_LABELS do StageSheet (so o label, sem help).
+const ACTION_TYPE_LABELS: Record<AgentActionType, string> = {
+  qualify: "Qualificar",
+  send_material: "Enviar material",
+  schedule: "Agendar",
+  add_tag: "Etiquetar",
+  move_pipeline: "Mover funil",
+  transfer: "Transferir",
+  free_message: "Mensagem livre",
+};
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import {
@@ -52,9 +65,12 @@ interface Props {
   stages: AgentStage[];
   tools: AgentTool[];
   onChange: (next: AgentStage[]) => void;
+  // PR-AGENT-INTEGRATION-4: define se etapas sao acoes tipadas
+  // (mode='actions', wizard novo) ou sub-prompts (mode='stages', legado).
+  behaviorMode?: "stages" | "actions";
 }
 
-export function StagesTab({ configId, stages, tools, onChange }: Props) {
+export function StagesTab({ configId, stages, tools, onChange, behaviorMode }: Props) {
   const { createStage, updateStage, deleteStage } = useAgentActions();
   const [editing, setEditing] = React.useState<AgentStage | null>(null);
   const [creating, setCreating] = React.useState(false);
@@ -146,6 +162,7 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
         tools={tools}
         isPending={isPending}
         onSubmit={(input) => handleCreate(input as CreateStageInput)}
+        behaviorMode={behaviorMode}
       />
       <StageSheet
         open={!!editing}
@@ -155,6 +172,7 @@ export function StagesTab({ configId, stages, tools, onChange }: Props) {
         tools={tools}
         isPending={isPending}
         onSubmit={(input) => editing && handleUpdate(editing.id, input)}
+        behaviorMode={behaviorMode}
       />
       <AlertDialog
         open={!!deleteTarget}
@@ -336,6 +354,17 @@ function StageRow({
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2 flex-wrap min-w-0">
               <p className="font-semibold tracking-tight truncate">{stage.situation}</p>
+              {/* PR-AGENT-INTEGRATION-4: badge do tipo de acao (so quando
+                  agente esta em behavior_mode='actions' E stage tem
+                  action_type setado). */}
+              {stage.action_type ? (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium"
+                  title={`Tipo de ação: ${ACTION_TYPE_LABELS[stage.action_type]}`}
+                >
+                  {ACTION_TYPE_LABELS[stage.action_type]}
+                </span>
+              ) : null}
               {stage.rag_enabled ? (
                 <span
                   className="text-[10px] px-1.5 py-0.5 rounded bg-progress-soft text-progress-soft-foreground font-medium"

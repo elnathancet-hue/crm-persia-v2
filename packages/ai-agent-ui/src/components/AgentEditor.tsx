@@ -367,6 +367,7 @@ export function AgentEditor({
               stages={stages}
               tools={tools}
               onChange={setStages}
+              behaviorMode={agent.behavior_mode}
             />
           )}
           {activeSection === "faq" && (

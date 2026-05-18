@@ -70,6 +70,11 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           // contexto adicional.
           system_prompt: tpl.system_prompt,
           template_slug: input.templateSlug,
+          // PR-AGENT-INTEGRATION-4: agentes novos nascem com behavior_mode
+          // "actions" — etapas como acoes tipadas em vez de sub-prompt
+          // por estado. Agentes legados (criados antes da migration 046)
+          // ficam com 'stages' default.
+          behavior_mode: "actions",
         });
         setAgents((prev) => [created, ...prev]);
         setCreateOpen(false);
