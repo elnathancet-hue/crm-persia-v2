@@ -334,7 +334,11 @@ async function applyTemplate(
   }
 
   // 2. Seed de tags na org (idempotente — unique constraint em (org_id, name)).
-  // Tag existente mantem cor/descricao originais (NAO sobrescreve).
+  // Tag existente mantem cor original (NAO sobrescreve).
+  //
+  // PR-AI-AGENT-TEMPLATE-SCHEMA-FIX (mai/2026): tabela tags (migration
+  // 001) so tem id/organization_id/name/color/created_at — NAO tem
+  // description. Removido daqui pra evitar 'column not found'.
   if (template.seed_tags && template.seed_tags.length > 0) {
     for (const tag of template.seed_tags) {
       const { data: existing } = await db
@@ -347,7 +351,6 @@ async function applyTemplate(
       const { error } = await db.from("tags").insert({
         organization_id: orgId,
         name: tag.name,
-        description: tag.description ?? null,
         color: tag.color ?? "#6366f1",
       });
       if (error) {
@@ -387,21 +390,38 @@ async function applyTemplate(
   }
 
   // 4. Seed de templates de notificacao (escopados ao config recem-criado).
-  // target_address vai vazio — cliente preenche depois.
+  //
+  // PR-AI-AGENT-TEMPLATE-SCHEMA-FIX (mai/2026): schema real da tabela
+  // (migration 023):
+  //   - body_template (NAO body)
+  //   - description NOT NULL com CHECK char_length BETWEEN 10 AND 500
+  //   - target_address NOT NULL com CHECK BETWEEN 5 AND 80
+  //   - name CHECK BETWEEN 3 AND 60
+  //
+  // target_address: como o cliente ainda nao configurou destinatario,
+  // usa placeholder "0000000000" (10 chars, dentro do range). Cliente
+  // troca pelo numero real via UI antes de testar.
+  const PLACEHOLDER_TARGET = "0000000000";
   if (
     template.seed_notification_templates &&
     template.seed_notification_templates.length > 0
   ) {
-    const rows = template.seed_notification_templates.map((t) => ({
-      organization_id: orgId,
-      config_id: config.id,
-      name: t.name,
-      description: t.description ?? null,
-      target_type: "phone",
-      target_address: t.target_address ?? "",
-      body: t.body,
-      status: "active",
-    }));
+    const rows = template.seed_notification_templates.map((t) => {
+      // description CHECK 10-500. Garante minimo 10 chars com fallback.
+      const description = t.description?.trim() || `Notificacao do template ${t.name}`;
+      return {
+        organization_id: orgId,
+        config_id: config.id,
+        name: t.name,
+        description: description.length < 10
+          ? `${description} (configure pra completar)`
+          : description,
+        target_type: "phone",
+        target_address: t.target_address?.trim() || PLACEHOLDER_TARGET,
+        body_template: t.body,
+        status: "active",
+      };
+    });
     const { error } = await db.from("agent_notification_templates").insert(rows);
     if (error) {
       console.error("[applyTemplate] seed notification_templates failed:", error.message);
