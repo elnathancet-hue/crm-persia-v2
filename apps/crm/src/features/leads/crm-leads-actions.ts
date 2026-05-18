@@ -39,6 +39,13 @@ import {
   reactivateAgent,
 } from "@/actions/ai-agent/reactivate";
 import {
+  getLeadAgentStatus,
+  listLeadAgentActivities,
+  listLeadAgentRuns,
+  pauseLeadAgent,
+  resumeLeadAgent,
+} from "@/actions/ai-agent/lead-status";
+import {
   createLeadComment,
   deleteLeadComment,
   getLeadComments,
@@ -83,6 +90,12 @@ export const crmLeadsActions: LeadsActions = {
   getLeadDealsList,
   // PR-AGENDA-DRAWER (mai/2026): tab Agenda no drawer
   getLeadAppointments: (leadId) => getLeadAppointmentsCrm(leadId),
+  // PR-AGENT-INTEGRATION-5 (mai/2026): tab Agente IA no drawer
+  getLeadAgentStatus,
+  pauseLeadAgent,
+  resumeLeadAgent,
+  listLeadAgentRuns,
+  listLeadAgentActivities,
   // PR-K-CENTRIC (mai/2026): lead-centric stage/pipeline ops
   getLeadStageContext,
   listPipelines: listPipelinesForLead,

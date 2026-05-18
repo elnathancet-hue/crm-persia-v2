@@ -34,6 +34,11 @@ import {
   Calendar,
   Clock,
   Video,
+  // PR-AGENT-INTEGRATION-5 (mai/2026): tab Agente IA
+  Bot,
+  Pause,
+  Play,
+  Sparkles,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { TagBadge } from "@persia/tags-ui";
@@ -790,10 +795,11 @@ export function LeadInfoDrawer({
         <LeadStatsCards stats={stats} loading={statsLoading} />
 
         <Tabs defaultValue="dados" className="flex-1 flex flex-col min-h-0">
-          {/* PR-AGENDA-DRAWER (mai/2026): 5 tabs (era 4). Tab "Agenda"
-              lista appointments do lead — fecha loop CRM<->Agenda.
-              Mobile: 2 cols (3 linhas); Desktop: 5 cols (1 linha). */}
-          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-5">
+          {/* PR-AGENT-INTEGRATION-5 (mai/2026): 6 tabs (era 5). Tab
+              "Agente IA" fecha loop CRM<->AI Agent — operador ve o
+              que a IA fez no lead. Mobile: 2 cols (3 linhas); Desktop:
+              6 cols (1 linha). */}
+          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-6">
             <TabsTrigger value="dados">
               <Contact className="size-4" />
               Dados
@@ -807,6 +813,11 @@ export function LeadInfoDrawer({
             <TabsTrigger value="agenda">
               <Calendar className="size-4" />
               Agenda
+            </TabsTrigger>
+            {/* PR-AGENT-INTEGRATION-5 (mai/2026): tab Agente IA */}
+            <TabsTrigger value="agente">
+              <Bot className="size-4" />
+              Agente IA
             </TabsTrigger>
             {/* PR-E: tab "Produtos" virou "Campos" — renderizacao
                 dinamica dos custom_fields da org. Quando user
@@ -1120,6 +1131,12 @@ export function LeadInfoDrawer({
 
             <TabsContent value="agenda" className="mt-0">
               <LeadAgendaTab leadId={lead.id} open={open} />
+            </TabsContent>
+
+            {/* PR-AGENT-INTEGRATION-5: tab Agente IA — status atual,
+                pause/resume manual, trilha de runs + activities. */}
+            <TabsContent value="agente" className="mt-0">
+              <LeadAgentTab leadId={lead.id} open={open} />
             </TabsContent>
 
             <TabsContent value="campos" className="mt-0">
@@ -2467,6 +2484,253 @@ function AppointmentCardRow({
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PR-AGENT-INTEGRATION-5 (mai/2026): tab "Agente IA" do LeadDrawer.
+// Status atual da conversa com IA + pause/resume manual + trilha
+// de runs + lead_activities. Tudo via DI (useLeadsActions). Quando
+// app caller nao implementa getLeadAgentStatus, tab some.
+// ============================================================
+
+function LeadAgentTab({ leadId, open }: { leadId: string; open: boolean }) {
+  const actions = useLeadsActions();
+  const [status, setStatus] = React.useState<
+    import("@persia/shared/ai-agent").LeadAgentStatus | null
+  >(null);
+  const [runs, setRuns] = React.useState<
+    import("@persia/shared/ai-agent").AgentRunSummary[]
+  >([]);
+  const [activities, setActivities] = React.useState<
+    import("@persia/shared/ai-agent").LeadAgentActivitySummary[]
+  >([]);
+  const [loading, setLoading] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    if (!actions.getLeadAgentStatus) return;
+    setLoading(true);
+    try {
+      const [s, r, a] = await Promise.all([
+        actions.getLeadAgentStatus(leadId),
+        actions.listLeadAgentRuns?.(leadId, 5) ?? Promise.resolve([]),
+        actions.listLeadAgentActivities?.(leadId, 10) ?? Promise.resolve([]),
+      ]);
+      setStatus(s);
+      setRuns(r);
+      setActivities(a);
+    } catch (err) {
+      console.error("[LeadAgentTab] failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [actions, leadId]);
+
+  React.useEffect(() => {
+    if (open) void reload();
+  }, [open, reload]);
+
+  if (!actions.getLeadAgentStatus) {
+    return (
+      <div className="rounded-xl border border-dashed p-12 text-center text-sm text-muted-foreground">
+        Agente IA indisponível neste app.
+      </div>
+    );
+  }
+
+  if (loading && !status) {
+    return (
+      <div className="space-y-2 py-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-20 w-full bg-muted rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="rounded-xl border border-dashed p-12 text-center">
+        <Bot className="size-8 text-muted-foreground/40 mx-auto mb-3" />
+        <p className="text-sm font-medium">Nenhum agente IA respondeu este lead</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Quando a IA enviar a primeira mensagem, aparece aqui.
+        </p>
+      </div>
+    );
+  }
+
+  const isPaused = status.paused_at !== null;
+
+  const handlePause = async () => {
+    if (!actions.pauseLeadAgent) return;
+    setPending(true);
+    try {
+      await actions.pauseLeadAgent(status.agent_conversation_id);
+      toast.success("Agente pausado");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao pausar");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (!actions.resumeLeadAgent) return;
+    setPending(true);
+    try {
+      await actions.resumeLeadAgent(status.agent_conversation_id);
+      toast.success("Agente reativado");
+      await reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao reativar");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header: status atual + botão pause/resume */}
+      <div className="rounded-xl border bg-card p-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div
+              className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${
+                isPaused
+                  ? "bg-muted text-muted-foreground"
+                  : "bg-primary/15 text-primary"
+              }`}
+            >
+              <Sparkles className="size-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm truncate">{status.config_name}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                    isPaused
+                      ? "bg-warning-soft text-warning-soft-foreground"
+                      : "bg-success-soft text-success-soft-foreground"
+                  }`}
+                >
+                  {isPaused ? "Pausado" : "Ativo"}
+                </span>
+                {status.last_interaction_at ? (
+                  <span className="text-[11px] text-muted-foreground">
+                    Última msg{" "}
+                    <RelativeTime iso={status.last_interaction_at} />
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {isPaused ? (
+            <Button
+              size="sm"
+              onClick={handleResume}
+              disabled={pending || !actions.resumeLeadAgent}
+            >
+              {pending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Play className="size-3.5" />
+              )}
+              Reativar IA
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handlePause}
+              disabled={pending || !actions.pauseLeadAgent}
+            >
+              {pending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Pause className="size-3.5" />
+              )}
+              Pausar IA
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Trilha de ações da IA neste lead */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
+          Ações da IA neste lead
+        </h3>
+        {activities.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic px-1 py-2">
+            Nenhuma ação registrada ainda.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {activities.map((a) => (
+              <li
+                key={a.id}
+                className="rounded-lg border bg-muted/30 px-3 py-2 text-xs"
+              >
+                <p className="font-medium">{a.description}</p>
+                <p className="text-muted-foreground mt-0.5">
+                  <RelativeTime iso={a.created_at} />
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Últimas execuções */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
+          Últimas execuções
+        </h3>
+        {runs.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic px-1 py-2">
+            Nenhuma execução registrada.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {runs.map((r) => (
+              <li
+                key={r.id}
+                className="rounded-lg border bg-muted/30 px-3 py-2 text-xs flex items-center justify-between gap-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`size-1.5 rounded-full shrink-0 ${
+                      r.status === "succeeded"
+                        ? "bg-success"
+                        : r.status === "failed"
+                          ? "bg-destructive"
+                          : r.status === "fallback"
+                            ? "bg-warning"
+                            : "bg-muted-foreground/50"
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {r.model}
+                  </span>
+                  {r.error_msg ? (
+                    <span className="text-destructive truncate">
+                      · {r.error_msg}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                  <RelativeTime iso={r.created_at} /> · {r.duration_ms}ms
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

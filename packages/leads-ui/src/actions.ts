@@ -240,6 +240,25 @@ export interface LeadsActions {
    */
   getLeadAppointments?: (leadId: string) => Promise<LeadAppointmentItem[]>;
 
+  // ============================================================
+  // PR-AGENT-INTEGRATION-5 (mai/2026): visibilidade do AI Agent no
+  // LeadDrawer. Todos opcionais — quando ausentes, a tab some.
+  // Admin pode skip (foco do admin e config, nao chat operacao).
+  // ============================================================
+  getLeadAgentStatus?: (
+    leadId: string,
+  ) => Promise<import("@persia/shared/ai-agent").LeadAgentStatus | null>;
+  pauseLeadAgent?: (agentConversationId: string) => Promise<void>;
+  resumeLeadAgent?: (agentConversationId: string) => Promise<void>;
+  listLeadAgentRuns?: (
+    leadId: string,
+    limit?: number,
+  ) => Promise<import("@persia/shared/ai-agent").AgentRunSummary[]>;
+  listLeadAgentActivities?: (
+    leadId: string,
+    limit?: number,
+  ) => Promise<import("@persia/shared/ai-agent").LeadAgentActivitySummary[]>;
+
   /**
    * PR-K-CENTRIC (mai/2026): pipeline + stage atual do lead + lista
    * de stages do pipeline (popover "Mudar etapa").
