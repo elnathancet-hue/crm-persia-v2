@@ -82,6 +82,10 @@ import {
   loadNotificationTemplateCatalog,
   loadTagCatalog,
 } from "./tool-catalogs";
+import {
+  detectStageTransitionAndRunActions,
+  runStageAutoActionsIfPending,
+} from "./stage-actions-runtime";
 
 type OpenAIToolCallWire = {
   id: string;
@@ -631,6 +635,29 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
 
     await updateRunStatus(params.db, run.id, params.orgId, "running");
 
+    // PR-AI-AGENT-STAGE-ACTIONS-RUNTIME (mai/2026): dispara auto_actions
+    // configuradas pra esta etapa ANTES do LLM responder. Idempotente:
+    // se ja foi disparado pra esta conversa+etapa, e no-op. Sucesso
+    // parcial e ok (1 falha nao bloqueia outras). Steps inseridos em
+    // agent_steps com native_handler + input { _trigger:
+    // 'stage_auto_action' } pra diferenciar de chamadas do LLM.
+    const stageActionsResult = await runStageAutoActionsIfPending({
+      db: params.db,
+      orgId: params.orgId,
+      agentConversation: params.agentConversation,
+      stage: params.stage,
+      config: params.config,
+      runId: run.id,
+      leadId: params.leadId,
+      crmConversationId: params.crmConversationId,
+      provider: params.provider ?? null,
+      openaiClient: client,
+      dryRun: params.dryRun,
+      startingOrderIndex: orderIndex,
+      insertStep: (step) => insertStep(params.db, step),
+    });
+    orderIndex = stageActionsResult.nextOrderIndex;
+
     for (let iteration = 0; iteration < guardrails.max_iterations; iteration++) {
       assertWithinDeadline(startedAt, guardrails);
       await assertWithinCostLimits({
@@ -699,6 +726,32 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
             conversationId: params.crmConversationId,
           });
         }
+
+        // PR-AI-AGENT-STAGE-ACTIONS-RUNTIME: detecta mudanca de etapa
+        // durante este run (tool call transfer_to_stage/transfer_to_agent
+        // mexeu em current_stage_id) e dispara as auto_actions da etapa
+        // NOVA antes de finalizar. Garantia: lead transferido pra etapa
+        // "Ganhou" no fechamento dispara as acoes dela JA (move kanban,
+        // notifica equipe), sem esperar proxima mensagem.
+        const finalStageId = await detectStageTransitionAndRunActions({
+          db: params.db,
+          orgId: params.orgId,
+          agentConversation: params.agentConversation,
+          initialStageId: params.stage.id,
+          config: params.config,
+          runId: run.id,
+          leadId: params.leadId,
+          crmConversationId: params.crmConversationId,
+          provider: params.provider ?? null,
+          openaiClient: client,
+          dryRun: params.dryRun,
+          startingOrderIndex: orderIndex,
+          insertStep: (step) => insertStep(params.db, step),
+        });
+        if (finalStageId.nextOrderIndex !== orderIndex) {
+          orderIndex = finalStageId.nextOrderIndex;
+        }
+
         if (params.allowSummarization !== false && params.agentConversation.crm_conversation_id) {
           const updatedConversation = await incrementConversationSummaryCounters({
             db: params.db,
@@ -729,7 +782,11 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
           tokensOutput,
           model: executionModel,
         });
-        return { ...final, assistantReply, nextStageId: params.stage.id };
+        return {
+          ...final,
+          assistantReply,
+          nextStageId: finalStageId.stageId,
+        };
       }
 
       messages.push({
