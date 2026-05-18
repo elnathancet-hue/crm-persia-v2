@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient } from "@supabase/supabase-js";
 import type {
   AgentConfig,
   AgentStepType,
@@ -13,7 +14,7 @@ import type {
   TesterStepSummary,
 } from "@persia/shared/ai-agent";
 import { normalizeHumanizationConfig } from "@persia/shared/ai-agent";
-import type { AgentDb } from "@/lib/ai-agent/db";
+import { asAgentDb, type AgentDb } from "@/lib/ai-agent/db";
 import {
   executeDebouncedBatch,
   executeTesterAgent,
@@ -94,12 +95,36 @@ export async function testAgentForOrg(
 //   4. Eventos retornados em ordem cronologica pra UI reconstruir conversa
 // ============================================================================
 
+/**
+ * Service-role client pro pipeline real (webhook UAZAPI usa o mesmo padrao
+ * em apps/crm/src/app/api/whatsapp/webhook/route.ts:getSupabase). As RPCs
+ * de debounce (enqueue_pending_message, claim/complete/release flush) tem
+ * GRANT EXECUTE so pra service_role — sem isso, o Tester explode com
+ * "permission denied for function enqueue_pending_message" porque o
+ * user-auth da sessao admin nao tem permissao.
+ *
+ * Autorizacao continua via requireAgentRole("admin") — quem nao for
+ * admin nem chega aqui. Apos validar, usamos service_role pro pipeline
+ * (mesma elevacao que o webhook UAZAPI faz em prod).
+ */
+function getServiceRoleSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
+
 export async function testAgentLive(
   req: TesterLiveRequest,
 ): Promise<TesterLiveResponse> {
-  const { db, orgId, supabase } = await requireAgentRole("admin");
+  // Autorizacao via user-auth (precisa ser admin da org).
+  const { orgId } = await requireAgentRole("admin");
   if (!req.config_id) throw new Error("config_id e obrigatorio");
   if (!req.message?.trim()) throw new Error("Mensagem e obrigatoria");
+
+  // Pipeline real usa service_role — paridade com webhook UAZAPI.
+  const supabase = getServiceRoleSupabase();
+  const db = asAgentDb(supabase as never);
 
   // 1. Carrega config do agente alvo pra:
   //    a) snapshot do humanization_config (UI mostra "split=on, etc")
@@ -268,7 +293,11 @@ export async function testAgentLive(
 }
 
 export async function resetTesterConversation(): Promise<{ ok: true }> {
-  const { db, orgId } = await requireAgentRole("admin");
+  // Autorizacao via user-auth + DELETE via service_role (RLS pode
+  // bloquear DELETEs em agent_conversations / pending_messages mesmo
+  // pro admin da org).
+  const { orgId } = await requireAgentRole("admin");
+  const db = asAgentDb(getServiceRoleSupabase() as never);
   await resetTesterConvImpl(db, orgId);
   return { ok: true };
 }
