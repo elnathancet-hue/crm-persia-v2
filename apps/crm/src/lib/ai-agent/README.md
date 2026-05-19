@@ -299,10 +299,22 @@ Runtime ([`lib/ai-agent/followups/tick.ts`](followups/tick.ts)) é um tick chama
 
 Limites por tick: `MAX_PROCESSED_PER_TICK = 200`. Em escala alta, configurar tick mais frequente (a cada 5min) em vez de aumentar o cap (evita timeout do route).
 
-**Cron sugerido**: a cada 10-15min via EasyPanel scheduled command (ou similar):
-```bash
-curl -X POST https://crm.funilpersia.top/api/ai-agent/followups/tick \
-  -H "X-Persia-Scheduler-Secret: $PERSIA_SCHEDULER_SECRET"
+**Cron**: agendado dentro da própria DB via [`pg_cron`](https://github.com/citusdata/pg_cron) — não depende de cron externo (EasyPanel/Vercel Cron/etc). Migration 051 registra o job `ai-agent-followups-tick` que roda `*/10 * * * *` (a cada 10min) e faz `net.http_post` no endpoint, reusando as DB settings `app.settings.scheduler_tick_url`/`_secret` (mesma infra do `scheduler-tick` da migration 025).
+
+Pra inspecionar/parar/alterar a frequência depois:
+```sql
+-- Listar jobs ativos
+SELECT jobname, schedule, active FROM cron.job WHERE jobname LIKE 'ai-agent%';
+
+-- Ver últimas execuções
+SELECT runid, start_time, status, return_message
+  FROM cron.job_run_details
+  WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'ai-agent-followups-tick')
+  ORDER BY start_time DESC LIMIT 10;
+
+-- Pausar / re-ativar
+SELECT cron.unschedule('ai-agent-followups-tick');
+-- (re-rodar a migration 051 ou cron.schedule(...) pra restaurar)
 ```
 
 **Limitações conhecidas**:
