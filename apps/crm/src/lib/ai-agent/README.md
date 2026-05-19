@@ -47,7 +47,8 @@ Schema introduzido pelas **migrations 017 → 049** (cronologicamente). Tabelas 
 | `agent_notification_templates` | `config_id`, `name`, `description`, `target_type`, `target_address`, `body_template` | Templates WhatsApp pra equipe |
 | `agent_knowledge_sources` | `config_id`, `type` (`faq`\|`document`), `status`, `embedding_*` | RAG via Voyage AI (dim 1024) |
 | `agent_calendar_connections` | `user_id`, `provider`, `refresh_token_vault_secret_id` | OAuth Google Calendar (runtime ainda placeholder) |
-| `agent_followups` | `config_id`, `name`, `template_id` (→ `agent_notification_templates`), `delay_hours` (1..720), `is_enabled`, `order_index` | Follow-up scheduler — runtime ainda pendente (PR4) |
+| `agent_followups` | `config_id`, `name`, `template_id` (→ `agent_notification_templates`), `delay_hours` (1..720), `is_enabled`, `order_index` | Follow-up scheduler — runtime em [`lib/ai-agent/followups/tick.ts`](followups/tick.ts), endpoint [`POST /api/ai-agent/followups/tick`](../../app/api/ai-agent/followups/tick/route.ts) |
+| `agent_followup_runs` | `followup_id`, `conversation_id`, `fired_at`, `UNIQUE(followup_id, conversation_id)` | Idempotency log do dispatcher de followups. INSERT antes do `sendText` — `23505` em re-entrada concorrente vira skip silencioso |
 
 ### Tabelas externas que o agente lê/escreve
 
@@ -283,6 +284,34 @@ Best-effort: falha em qualquer seed loga `console.error` mas segue. Agente criad
 
 ---
 
+## 9b. Follow-ups runtime (PR4 / mai/2026)
+
+Cliente configura "avisar lead 24h sem resposta" via UI **"Follow-ups"** ([`FollowupsEditor`](../../../../../packages/ai-agent-ui/src/components/FollowupsEditor.tsx)). Cada `agent_followup` aponta pra um `agent_notification_template` (corpo da msg) + `delay_hours` (1..720).
+
+Runtime ([`lib/ai-agent/followups/tick.ts`](followups/tick.ts)) é um tick chamado por cron externo via `POST /api/ai-agent/followups/tick` com auth `PERSIA_SCHEDULER_SECRET` ou `CRM_API_SECRET`. Pipeline:
+
+1. Carrega todos `agent_followups` com `is_enabled=true` (cross-org via service_role)
+2. Pra cada followup: query `agent_conversations` onde `last_interaction_at < now() - delay_hours` AND `human_handoff_at IS NULL` AND `config_id = followup.config_id`
+3. Filtra conversas já em `agent_followup_runs(followup_id, conversation_id)` (dedupe)
+4. **INSERT em `agent_followup_runs` ANTES do `provider.sendText`** — UNIQUE constraint garante idempotency mesmo com ticks concorrentes
+5. Renderiza `template.body_template` com vars (`{{lead_name}}`, `{{agent_name}}`, `{{wa_link}}`, `{{lead_phone}}`) e envia pra **`lead.phone`** (NÃO pro `template.target_address` — templates aqui são reusados só como corpo da mensagem; destino sempre é o lead)
+6. Falha de `sendText` pós-INSERT NÃO faz rollback do run — preferimos não retentar automaticamente pra evitar spam quando provider está flaky
+
+Limites por tick: `MAX_PROCESSED_PER_TICK = 200`. Em escala alta, configurar tick mais frequente (a cada 5min) em vez de aumentar o cap (evita timeout do route).
+
+**Cron sugerido**: a cada 10-15min via EasyPanel scheduled command (ou similar):
+```bash
+curl -X POST https://crm.funilpersia.top/api/ai-agent/followups/tick \
+  -H "X-Persia-Scheduler-Secret: $PERSIA_SCHEDULER_SECRET"
+```
+
+**Limitações conhecidas**:
+- **Sem business_hours check**: pode disparar às 3am se a janela bate. Cliente configura delays compatíveis (48h em vez de 24h) ou aguarda follow-up que integre `isWithinBusinessHours` do `humanization_config`.
+- **`last_interaction_at` é atualizado em qualquer atividade** (agente ou lead), então se a IA respondeu há pouco mas o lead não, o relógio re-iniciou. Aceitável pro caso "X horas sem resposta na conversa", mas refinamento futuro: campo separado `last_inbound_message_at`.
+- **Cleanup de `agent_followup_runs`**: não implementado. Migration 027 sugere TTL >90d via job de manutenção (TODO).
+
+---
+
 ## 10. Bugs conhecidos / pendências
 
 Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação completa nos PRs linkados.
@@ -291,7 +320,6 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 
 | # | Sintoma | Impacto | Mitigação atual |
 |---|---|---|---|
-| **#7 — Alucinação de agendamento** | IA responde *"Agendei a Consulta inicial..."* mas chama só `trigger_notification`, NÃO `create_appointment`. Agenda do CRM fica vazia. | **Alto** — vendas perdidas, equipe espera lead sem evento real | Refinar template do prompt: enfatizar "SEMPRE chame `create_appointment` ANTES de confirmar". Validação server-side futura: warning se reply menciona "agendei/marquei" sem step `create_appointment` no run |
 | **#8 — Transição de etapa não acontece** | LLM faz qualificação + apresentação + agendamento todos inline na etapa "Boas-vindas". `auto_actions` de etapas posteriores nunca disparam | Médio — features de auto_actions inativas | Refinar `transition_hint` pra ser explícito; ou mover auto_actions críticas pra primeira etapa |
 | **UX — Resetar fecha o sheet** | Clique no botão Resetar do Tester fecha o painel | Baixo (friction de teste) | Reabrir Tester manualmente após reset |
 
@@ -304,6 +332,12 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 | 3 | Template não seedava `agent_stage_tools` — IA criada sem tools habilitadas | [#254](https://github.com/elnathancet-hue/crm-persia-v2/pull/254) |
 | 4 | Schema mismatches em `applyTemplate` — `tags.description` não existe + `body` vs `body_template` | [#255](https://github.com/elnathancet-hue/crm-persia-v2/pull/255) |
 | 5 | `create_appointment` selecionava `leads.timezone` (coluna inexistente) + Tester lead sem `assigned_to` | [#256](https://github.com/elnathancet-hue/crm-persia-v2/pull/256) |
+| 6 | PR1 quick wins: `sendAssistantReply` não persistia em `messages`, `transfer_to_user` não pausava IA, auto-action queimava em placeholder, gpt-5* truncava em HANDOFF_REPLY (reasoning tokens dentro do budget) | [#259](https://github.com/elnathancet-hue/crm-persia-v2/pull/259) |
+| **#7** | **PR2 — Alucinação de agendamento.** Causa raiz: auto_actions disparavam ON_ENTER (notif "lead agendou" saía mesmo sem appointment real). Fix: trigger opcional `on_tool_success` no schema + hook em `executeToolCall` pós-success. Template seed + migration 050 atualizados | [#260](https://github.com/elnathancet-hue/crm-persia-v2/pull/260) |
+
+### 🟡 Dívidas conhecidas (decidido NÃO fazer agora)
+
+- **Retry policy de auto-actions falhas** — quando uma auto-action falha (provider down, network), `persistMark` ainda roda e a stage fica marcada como visitada. Lead perde o side effect dessa etapa pra sempre nesta conversa. **Por que não fizemos:** retry genérico sem idempotency-key duplica side effects (send_media envia mídia 2x, trigger_notification notifica equipe 2x). Solução correta exige per-action tracking (`actions_executed_detail` JSONB com status/attempts/last_error por ação). Voltar quando user reportar "lead não recebeu a tag" ou quando observability mostrar `stage_auto_action_threw` alto. Detalhes na memory `project_ai_agent_pr3_retry_debt.md`. Exceção segura HOJE: `placeholder_skip` (PR1 #6) retorna ANTES de qualquer side effect, então retry indefinido é seguro.
 
 ### 📋 Follow-ups futuros (sem PR ainda)
 
@@ -312,7 +346,7 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 - **Refator compartilhado `ensureCrmContext`** — achado #2 da auditoria 360, code smell não-bug
 - **Bucket `tools` privado** — atualmente público, deveria virar signed URL
 - **Hardening `usage_count`** em `automation_tools` — campo existe mas não é incrementado
-- **Telemetria de alucinação** (Bug #7) — logar warning quando reply menciona ação não executada
+- **Telemetria de alucinação** (Bug #7 belt-and-suspenders) — logar warning quando reply menciona "agendei" sem step `create_appointment succeeded` no run
 - **Refinamento de prompts dos templates** — forçar `transfer_to_stage` mais cedo, evitar handoff prematuro
 
 ---
