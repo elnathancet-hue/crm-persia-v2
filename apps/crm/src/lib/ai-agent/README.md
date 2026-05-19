@@ -347,10 +347,7 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 | **#7** | **PR2 — Alucinação de agendamento.** Causa raiz: auto_actions disparavam ON_ENTER (notif "lead agendou" saía mesmo sem appointment real). Fix: trigger opcional `on_tool_success` no schema + hook em `executeToolCall` pós-success. Template seed + migration 050 atualizados | [#260](https://github.com/elnathancet-hue/crm-persia-v2/pull/260) |
 | **PR4** | Runtime de `agent_followups` (cron tick dispatcher) — schema/UI/CRUD existiam desde 027 mas faltava o dispatcher real. Pipeline: load enabled followups → dueConversations → INSERT idempotency lock → render + sendText pra lead. Migration 051 (PR #262) registra o pg_cron job `*/10 * * * *` | [#261](https://github.com/elnathancet-hue/crm-persia-v2/pull/261) + [#262](https://github.com/elnathancet-hue/crm-persia-v2/pull/262) |
 | **#8** | **`transfer_to_stage` faltava no seed.** Causa raiz: `applyTemplate` coletava tools só de `auto_actions` + agenda + `transfer_to_user`. IA ficava presa na etapa 1 fazendo qualificação + apresentação + agendamento inline. Fix em 4 camadas: seed (configs.ts) + tool description imperativa (tool-presets.ts) + REGRA DE TRANSIÇÃO no system prompt + migration 052 (seed retroativo idempotente) | [#263](https://github.com/elnathancet-hue/crm-persia-v2/pull/263) |
-
-### 🟡 Dívidas conhecidas (decidido NÃO fazer agora)
-
-- **Retry policy de auto-actions falhas** — quando uma auto-action falha (provider down, network), `persistMark` ainda roda e a stage fica marcada como visitada. Lead perde o side effect dessa etapa pra sempre nesta conversa. **Por que não fizemos:** retry genérico sem idempotency-key duplica side effects (send_media envia mídia 2x, trigger_notification notifica equipe 2x). Solução correta exige per-action tracking (`actions_executed_detail` JSONB com status/attempts/last_error por ação). Voltar quando user reportar "lead não recebeu a tag" ou quando observability mostrar `stage_auto_action_threw` alto. Detalhes na memory `project_ai_agent_pr3_retry_debt.md`. Exceção segura HOJE: `placeholder_skip` (PR1 #6) retorna ANTES de qualquer side effect, então retry indefinido é seguro.
+| **PR3** | **Per-action retry tracking pra auto-actions on_enter.** Antes: 1 ação falhando marcava a stage inteira como visitada — side effect perdido pra sempre. Agora: tracking estruturado em `actions_executed_detail` JSONB (key `on_enter:<stage_id>`) com `succeeded[]` + `failed{}` por índice. Re-entrada retenta SÓ as falhas até `MAX_AUTO_ACTION_RETRIES=3`. Persist por ação garante crash-safety. Helpers em [stage-actions.ts](../../../../../packages/shared/src/ai-agent/stage-actions.ts), migration 053 | [#265](https://github.com/elnathancet-hue/crm-persia-v2/pull/265) |
 
 ### 📋 Follow-ups futuros (sem PR ainda)
 
@@ -361,6 +358,8 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 - **Hardening `usage_count`** em `automation_tools` — campo existe mas não é incrementado
 - **Telemetria de alucinação** (Bug #7 belt-and-suspenders) — logar warning quando reply menciona "agendei" sem step `create_appointment succeeded` no run
 - **Refinamento de prompts dos templates** — forçar `transfer_to_stage` mais cedo, evitar handoff prematuro
+- **UI debug do PR3 retry tracking** — LeadDrawer mostrando estado `succeeded[]`/`failed{}` por ação + `last_error` (útil pra debug em prod sem precisar consultar SQL)
+- **Telemetria de on_tool_success** usando `makeOnToolSuccessKey` — helper já pronto na PR3 mas sem uso runtime atual
 
 ---
 
