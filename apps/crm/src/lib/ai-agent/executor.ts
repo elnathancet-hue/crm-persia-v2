@@ -667,6 +667,12 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       executionModel,
       guardrails.max_iterations,
     );
+
+    // PR-FIX-APPOINTMENT-HALLUCINATION (mai/2026): trackeia tool calls
+    // bem-sucedidas durante o loop. Usado pra detectar Bug #7 (IA
+    // aluciona "agendei" sem chamar create_appointment) na saida do
+    // loop, sem precisar de query no DB.
+    const successfulToolHandlers = new Set<string>();
     for (let iteration = 0; iteration < effectiveMaxIterations; iteration++) {
       assertWithinDeadline(startedAt, guardrails, executionModel);
       await assertWithinCostLimits({
@@ -725,6 +731,36 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
       const toolCalls = extractToolCalls(choice?.message);
       if (choice?.finish_reason !== "tool_calls" || toolCalls.length === 0) {
         assistantReply = extractText(choice?.message) || HANDOFF_REPLY;
+
+        // PR-FIX-APPOINTMENT-HALLUCINATION (mai/2026): Bug #7 — LLM
+        // (gpt-5-mini observado em Test 3 round 5) responde verbalmente
+        // "agendei/marquei/reservei" mas NUNCA chama create_appointment.
+        // Em prod isso = cliente acha que agendou, agenda vazia, no-show.
+        //
+        // Guard server-side: se reply contem verbo de confirmacao de
+        // agendamento E nao houve create_appointment com success=true
+        // neste run, sobrescreve com mensagem honesta e loga warning.
+        // Funciona independente do modelo (gpt-4*, gpt-5*) e do prompt.
+        //
+        // Verbos escolhidos cobrem flexoes do verbo agendar/marcar +
+        // sinonimos comuns (reservar). Falsos positivos esperados:
+        // "agendei sua duvida pra te responder amanha" — raro, mas se
+        // virar problema, refinar com janela ?(?<!\\b(duvida|tarefa)\\b\\s+).
+        if (!successfulToolHandlers.has("create_appointment")) {
+          const APPOINTMENT_CONFIRMATION_VERBS =
+            /\b(agendei|agendou|agendamos|agendado|agendada|marquei|marcou|marcamos|marcado|marcada|reservei|reservou|reservamos|reservado|reservada|confirmei|confirmou|confirmamos|confirmado|confirmada)\b/i;
+          if (APPOINTMENT_CONFIRMATION_VERBS.test(assistantReply)) {
+            logError("ai_agent_appointment_hallucination", {
+              organization_id: params.orgId,
+              run_id: run.id,
+              agent_conversation_id: params.agentConversation.id,
+              reply_excerpt: assistantReply.slice(0, 300),
+              tools_used: Array.from(successfulToolHandlers),
+            });
+            assistantReply =
+              "Deixa eu conferir esse agendamento com a equipe e te confirmo aqui em breve.";
+          }
+        }
         // PR-AI-AGENT-TESTER-RENDER-BUBBLE (mai/2026): chamamos
         // sendAssistantReply sempre que ha provider, INCLUSIVE em
         // dryRun (Tester). O stub do tester e o provider em modo
@@ -842,6 +878,9 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         //   - dryRun: pula no Tester. As acoes ja sao testaveis via
         //     on_enter; on_tool_success exigiria mock de DB write da tool
         //     antes pra ter sentido — escopo futuro.
+        if (toolResult.success && tool?.native_handler) {
+          successfulToolHandlers.add(tool.native_handler);
+        }
         if (toolResult.success && tool?.native_handler && !params.dryRun) {
           try {
             const hookResult = await runStageActionsOnToolSuccess({
