@@ -163,7 +163,8 @@ export function StageActionsEditor({ stage, configId }: Props) {
             Ações automáticas
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Disparam toda vez que o lead entra nesta etapa. Sem precisar do agente decidir.
+            Disparam automaticamente — ao entrar na etapa ou depois que uma
+            tool específica (ex: criar agendamento) retornar sucesso.
           </p>
         </div>
         <AddActionMenu
@@ -176,7 +177,8 @@ export function StageActionsEditor({ stage, configId }: Props) {
         <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
           <Sparkles className="size-5 mx-auto mb-2 text-muted-foreground/60" />
           <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-            Nenhuma ação automática. Adicione uma e ela vai disparar quando o lead chegar nesta etapa.
+            Nenhuma ação automática. Adicione uma — você decide se dispara
+            ao entrar na etapa ou só depois de uma tool específica rodar.
           </p>
         </div>
       ) : (

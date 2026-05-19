@@ -84,6 +84,7 @@ import {
 } from "./tool-catalogs";
 import {
   detectStageTransitionAndRunActions,
+  runStageActionsOnToolSuccess,
   runStageAutoActionsIfPending,
 } from "./stage-actions-runtime";
 
@@ -825,6 +826,50 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
           tool_call_id: call.id,
           content: serializeToolResult(toolResult),
         });
+
+        // PR2 (mai/2026): hook on_tool_success — dispara auto_actions da
+        // etapa atual que estavam dormentes esperando esta tool retornar
+        // sucesso. Resolve Bug #7 (IA aluciona agendamento): a notif
+        // "lead agendou reuniao" so dispara APOS create_appointment ok.
+        //
+        // Restricoes:
+        //   - So pra native_handlers (webhook tools nao tem nome canonico
+        //     no schema das auto_actions). tool.native_handler null = skip.
+        //   - dryRun: pula no Tester. As acoes ja sao testaveis via
+        //     on_enter; on_tool_success exigiria mock de DB write da tool
+        //     antes pra ter sentido — escopo futuro.
+        if (toolResult.success && tool?.native_handler && !params.dryRun) {
+          try {
+            const hookResult = await runStageActionsOnToolSuccess({
+              db: params.db,
+              orgId: params.orgId,
+              agentConversation: params.agentConversation,
+              config: params.config,
+              runId: run.id,
+              leadId: params.leadId,
+              crmConversationId: params.crmConversationId,
+              provider: params.provider ?? null,
+              openaiClient: client,
+              dryRun: params.dryRun,
+              startingOrderIndex: orderIndex,
+              insertStep: (step) => insertStep(params.db, step),
+              toolName: tool.native_handler,
+            });
+            if (hookResult.nextOrderIndex !== orderIndex) {
+              orderIndex = hookResult.nextOrderIndex;
+            }
+          } catch (err: unknown) {
+            // Falha de hook NAO bloqueia o resto do run — apenas loga.
+            // A tool em si ja completou; perder side-effects derivados
+            // e menos ruim que abortar a conversa.
+            logError("stage_actions_on_tool_success_hook_failed", {
+              organization_id: params.orgId,
+              run_id: run.id,
+              tool: tool.native_handler,
+              error: errorMessage(err),
+            });
+          }
+        }
       }
     }
 

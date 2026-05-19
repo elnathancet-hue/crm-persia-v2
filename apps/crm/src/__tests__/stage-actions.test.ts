@@ -121,6 +121,102 @@ describe("stage-actions", () => {
     });
   });
 
+  // ==========================================================================
+  // PR2 (mai/2026) — trigger on_enter vs on_tool_success
+  // ==========================================================================
+  describe("trigger fields", () => {
+    it("retrocompat: acao sem trigger fica como on_enter (sem fields explicitos)", () => {
+      const result = sanitizeStageAutoAction({
+        type: "add_tag",
+        tag_name: "qualificado",
+      });
+      expect(result).toEqual({ type: "add_tag", tag_name: "qualificado" });
+      // Confirma que NAO incluiu trigger/on_tool_success_of
+      expect(result).not.toHaveProperty("trigger");
+      expect(result).not.toHaveProperty("on_tool_success_of");
+    });
+
+    it("preserva trigger='on_tool_success' com handler valido", () => {
+      const result = sanitizeStageAutoAction({
+        type: "add_tag",
+        tag_name: "agendou",
+        trigger: "on_tool_success",
+        on_tool_success_of: "create_appointment",
+      });
+      expect(result).toEqual({
+        type: "add_tag",
+        tag_name: "agendou",
+        trigger: "on_tool_success",
+        on_tool_success_of: "create_appointment",
+      });
+    });
+
+    it("DROPA a acao quando trigger=on_tool_success sem on_tool_success_of", () => {
+      const result = sanitizeStageAutoAction({
+        type: "trigger_notification",
+        template_name: "Lead novo",
+        trigger: "on_tool_success",
+      });
+      expect(result).toBeNull();
+    });
+
+    it("DROPA a acao quando trigger=on_tool_success com handler invalido", () => {
+      const result = sanitizeStageAutoAction({
+        type: "add_tag",
+        tag_name: "tag",
+        trigger: "on_tool_success",
+        on_tool_success_of: "blow_up_database",
+      });
+      expect(result).toBeNull();
+    });
+
+    it("DROPA a acao quando trigger e string desconhecida", () => {
+      const result = sanitizeStageAutoAction({
+        type: "add_tag",
+        tag_name: "tag",
+        trigger: "on_purple_moon",
+      });
+      expect(result).toBeNull();
+    });
+
+    it("aceita trigger='on_enter' explicito (no-op vs default)", () => {
+      const result = sanitizeStageAutoAction({
+        type: "add_tag",
+        tag_name: "tag",
+        trigger: "on_enter",
+      });
+      // on_enter explicito nao polui o shape — fica equivalente ao default.
+      expect(result).toEqual({ type: "add_tag", tag_name: "tag" });
+    });
+
+    it("normalizeStageActionConfig dropa acoes com trigger invalido + mantem outras", () => {
+      const result = normalizeStageActionConfig({
+        auto_actions: [
+          { type: "add_tag", tag_name: "ok" }, // valida
+          {
+            type: "add_tag",
+            tag_name: "tag",
+            trigger: "on_tool_success", // sem on_tool_success_of → dropa
+          },
+          {
+            type: "trigger_notification",
+            template_name: "Reuniao",
+            trigger: "on_tool_success",
+            on_tool_success_of: "create_appointment",
+          }, // valida
+        ],
+      });
+      expect(result.auto_actions).toHaveLength(2);
+      expect(result.auto_actions[0]).toEqual({ type: "add_tag", tag_name: "ok" });
+      expect(result.auto_actions[1]).toMatchObject({
+        type: "trigger_notification",
+        template_name: "Reuniao",
+        trigger: "on_tool_success",
+        on_tool_success_of: "create_appointment",
+      });
+    });
+  });
+
   describe("actions_executed idempotency", () => {
     it("normalizeActionsExecuted dedup + ignora invalidos", () => {
       expect(
