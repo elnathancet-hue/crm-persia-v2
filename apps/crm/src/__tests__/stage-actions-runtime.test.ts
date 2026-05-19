@@ -4,7 +4,10 @@ import type {
   AgentConversation,
   AgentStage,
 } from "@persia/shared/ai-agent";
-import { runStageAutoActionsIfPending } from "@/lib/ai-agent/stage-actions-runtime";
+import {
+  runStageActionsOnToolSuccess,
+  runStageAutoActionsIfPending,
+} from "@/lib/ai-agent/stage-actions-runtime";
 import { createSupabaseMock } from "@/test/helpers/supabase-mock";
 
 // PR-AI-AGENT-STAGE-ACTIONS-RUNTIME: testes do disparo automatico de
@@ -319,6 +322,219 @@ describe("runStageAutoActionsIfPending", () => {
 
     // handler foi chamado, mas nada foi persistido
     expect(handlerCalls).toHaveLength(1);
+    expect(supabase.updates.agent_conversations).toBeUndefined();
+  });
+
+  // ==========================================================================
+  // PR2 (mai/2026) — on_enter filter + on_tool_success
+  // ==========================================================================
+
+  it("on_enter filter: pula acoes com trigger='on_tool_success'", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("agent_conversations", { data: null, error: null });
+
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          // dispara on_enter (default)
+          { type: "add_tag", tag_name: "qualificado" },
+          // dorme: so dispara apos create_appointment
+          {
+            type: "trigger_notification",
+            template_name: "Lead agendou",
+            trigger: "on_tool_success",
+            on_tool_success_of: "create_appointment",
+          },
+          // dispara on_enter (sem trigger)
+          { type: "send_media", slug: "catalogo-2026" },
+        ],
+      },
+    });
+
+    const result = await runStageAutoActionsIfPending({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation(),
+      stage,
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+    });
+
+    expect(result.executed).toBe(2);
+    expect(result.failed).toBe(0);
+    // Confirma que SO os 2 on_enter foram executados — trigger_notification
+    // (que tem trigger='on_tool_success') NAO foi chamado aqui.
+    expect(handlerCalls.map((c) => c.handler)).toEqual(["add_tag", "send_media"]);
+    expect(handlerCalls.some((c) => c.handler === "trigger_notification")).toBe(false);
+  });
+});
+
+describe("runStageActionsOnToolSuccess", () => {
+  beforeEach(() => {
+    handlerCalls.length = 0;
+    vi.clearAllMocks();
+  });
+
+  it("dispara acoes ligadas ao tool especifico, ignora demais", async () => {
+    const supabase = createSupabaseMock();
+    // 1. re-fetch current_stage_id da conversa
+    supabase.queue("agent_conversations", {
+      data: { current_stage_id: "stage-a" },
+      error: null,
+    });
+    // 2. carrega stage com action_config
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          { type: "add_tag", tag_name: "on-enter-only" }, // on_enter → skip aqui
+          {
+            type: "add_tag",
+            tag_name: "agendou-reuniao",
+            trigger: "on_tool_success",
+            on_tool_success_of: "create_appointment",
+          }, // match
+          {
+            type: "trigger_notification",
+            template_name: "Lead reagendou",
+            trigger: "on_tool_success",
+            on_tool_success_of: "reschedule_appointment",
+          }, // outro tool → skip
+        ],
+      },
+    });
+    supabase.queue("agent_stages", { data: stage, error: null });
+
+    const result = await runStageActionsOnToolSuccess({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation(),
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 7,
+      insertStep: vi.fn(),
+      toolName: "create_appointment",
+    });
+
+    expect(result.skipped).toBe(false);
+    expect(result.executed).toBe(1);
+    expect(handlerCalls).toHaveLength(1);
+    expect(handlerCalls[0]?.handler).toBe("add_tag");
+    expect(handlerCalls[0]?.input).toEqual({ tag_name: "agendou-reuniao" });
+  });
+
+  it("skip quando current_stage_id nao existe", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("agent_conversations", {
+      data: { current_stage_id: null },
+      error: null,
+    });
+
+    const result = await runStageActionsOnToolSuccess({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation({ current_stage_id: null as never }),
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+      toolName: "create_appointment",
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(handlerCalls).toHaveLength(0);
+  });
+
+  it("skip quando stage nao tem nenhuma acao matching o tool", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("agent_conversations", {
+      data: { current_stage_id: "stage-a" },
+      error: null,
+    });
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          { type: "add_tag", tag_name: "qualificado" }, // on_enter
+        ],
+      },
+    });
+    supabase.queue("agent_stages", { data: stage, error: null });
+
+    const result = await runStageActionsOnToolSuccess({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation(),
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+      toolName: "create_appointment",
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(handlerCalls).toHaveLength(0);
+  });
+
+  it("NAO marca stage como executada (sem persistMark — pode disparar de novo)", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("agent_conversations", {
+      data: { current_stage_id: "stage-a" },
+      error: null,
+    });
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          {
+            type: "add_tag",
+            tag_name: "agendou-reuniao",
+            trigger: "on_tool_success",
+            on_tool_success_of: "create_appointment",
+          },
+        ],
+      },
+    });
+    supabase.queue("agent_stages", { data: stage, error: null });
+
+    await runStageActionsOnToolSuccess({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation(),
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+      toolName: "create_appointment",
+    });
+
+    // O re-fetch e o load do stage usam .from('agent_conversations') e
+    // .from('agent_stages'). Confirma que NENHUM update foi feito em
+    // agent_conversations.actions_executed (cada tool success pode re-disparar).
     expect(supabase.updates.agent_conversations).toBeUndefined();
   });
 });

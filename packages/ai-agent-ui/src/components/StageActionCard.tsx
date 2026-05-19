@@ -17,7 +17,9 @@ import {
 import type {
   StageAutoAction,
   StageAutoActionType,
+  ToolSuccessTriggerHandler,
 } from "@persia/shared/ai-agent";
+import { TOOL_SUCCESS_TRIGGER_HANDLERS } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -153,8 +155,124 @@ export function StageActionCard({
       </div>
 
       <ActionPicker action={action} catalogs={catalogs} onChange={onChange} />
+      <TriggerPicker action={action} onChange={onChange} />
     </div>
   );
+}
+
+// ============================================================================
+// TriggerPicker — quando a acao dispara (PR2, mai/2026)
+// ----------------------------------------------------------------------------
+// 2 modos:
+//   - "on_enter" (default): dispara uma vez ao entrar na etapa, idempotente.
+//   - "on_tool_success": dispara toda vez que a tool selecionada retornar
+//     sucesso dentro desta etapa. Sem idempotency tracking — multiplo ok.
+// ============================================================================
+
+const TRIGGER_LABELS: Record<ToolSuccessTriggerHandler, string> = {
+  create_appointment: "Após agendar reunião",
+  reschedule_appointment: "Após reagendar reunião",
+  cancel_appointment: "Após cancelar reunião",
+  transfer_to_user: "Após transferir pra humano",
+  transfer_to_agent: "Após transferir pra outro agente",
+};
+
+function TriggerPicker({
+  action,
+  onChange,
+}: {
+  action: StageAutoAction;
+  onChange: (next: StageAutoAction) => void;
+}) {
+  const isOnToolSuccess = action.trigger === "on_tool_success";
+  const currentTool = action.on_tool_success_of ?? "create_appointment";
+
+  function handleModeChange(value: string | null) {
+    if (!value || value === "on_enter") {
+      const next = { ...action };
+      delete (next as Partial<StageAutoAction>).trigger;
+      delete (next as Partial<StageAutoAction>).on_tool_success_of;
+      onChange(next as StageAutoAction);
+    } else {
+      onChange({
+        ...action,
+        trigger: "on_tool_success",
+        on_tool_success_of: currentTool,
+      });
+    }
+  }
+
+  function handleToolChange(value: string | null) {
+    if (!value || !isToolSuccessTriggerHandler(value)) return;
+    onChange({
+      ...action,
+      trigger: "on_tool_success",
+      on_tool_success_of: value,
+    });
+  }
+
+  return (
+    <div className="space-y-1.5 pt-1 border-t border-border/60">
+      <Label className="text-xs">Quando disparar?</Label>
+      <Select
+        value={isOnToolSuccess ? "on_tool_success" : "on_enter"}
+        onValueChange={handleModeChange}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="on_enter">
+            <div className="flex flex-col items-start">
+              <span>Ao entrar na etapa</span>
+              <span className="text-[10px] text-muted-foreground">
+                Dispara uma vez quando o lead chega aqui
+              </span>
+            </div>
+          </SelectItem>
+          <SelectItem value="on_tool_success">
+            <div className="flex flex-col items-start">
+              <span>Após tool específica</span>
+              <span className="text-[10px] text-muted-foreground">
+                Só dispara quando a tool retornar sucesso
+              </span>
+            </div>
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      {isOnToolSuccess ? (
+        <div className="space-y-1.5 pt-1.5">
+          <Label className="text-xs text-muted-foreground">Tool gatilho</Label>
+          <Select value={currentTool} onValueChange={handleToolChange}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TOOL_SUCCESS_TRIGGER_HANDLERS.map((tool) => (
+                <SelectItem key={tool} value={tool}>
+                  <div className="flex flex-col items-start">
+                    <span>{TRIGGER_LABELS[tool]}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {tool}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-muted-foreground">
+            Útil pra confirmar agendamento real: a tag/notificação só dispara
+            depois que a tool agendou de verdade — evita IA "prometer" e equipe
+            ser notificada sem evento no banco.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function isToolSuccessTriggerHandler(value: string): value is ToolSuccessTriggerHandler {
+  return (TOOL_SUCCESS_TRIGGER_HANDLERS as readonly string[]).includes(value);
 }
 
 // ============================================================================

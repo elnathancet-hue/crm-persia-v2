@@ -478,13 +478,29 @@ REGRAS CRÍTICAS:
 - ASSIM QUE tiver TODOS os dados, VOCÊ DEVE chamar create_appointment(type_slug, start_at) — type_slug é o slug exato do tipo (ex: 'consulta-inicial', NÃO o nome humano)
 - start_at é ISO 8601 com timezone (ex: '2026-05-25T14:00:00-03:00')
 - NUNCA diga "agendei" ou "marquei" ANTES de create_appointment retornar sucesso. Se a tool falhar, diga "não consegui agendar, vou pedir uma pessoa pra ajudar" e chame stop_agent.
-- A notificação interna pra equipe é disparada AUTOMATICAMENTE quando você entrar nesta etapa — NÃO chame trigger_notification manualmente.`,
+- A tag "agendou-reuniao" e a notificação pra equipe disparam AUTOMATICAMENTE QUANDO create_appointment retornar sucesso — NÃO chame add_tag ou trigger_notification manualmente.`,
         transition_hint:
           "DEPOIS que create_appointment retornar sucesso, confirme verbalmente pro cliente (Ex: 'Pronto, sua Consulta inicial está marcada para X às Y'). Se a reunião agendada foi 'Reunião de fechamento', VOCÊ DEVE chamar transfer_to_stage com target_stage_name='Fechamento'. Senão, encerre cordialmente.",
         action_type: "schedule",
+        // PR2 (mai/2026): essas 2 auto_actions disparam APOS
+        // create_appointment retornar sucesso. Antes da PR2 disparavam
+        // ON_ENTER, o que abria a porta pra Bug #7 — IA entrava na
+        // etapa, notificacao saia, mas IA esquecia de chamar a tool e
+        // "agendei" ficava sendo uma promessa vazia. Agora a notif so
+        // sai com appointment REAL no DB.
         auto_actions: [
-          { type: "add_tag", tag_name: "agendou-reuniao" },
-          { type: "trigger_notification", template_name: "Avisar equipe: nova reunião agendada" },
+          {
+            type: "add_tag",
+            tag_name: "agendou-reuniao",
+            trigger: "on_tool_success",
+            on_tool_success_of: "create_appointment",
+          },
+          {
+            type: "trigger_notification",
+            template_name: "Avisar equipe: nova reunião agendada",
+            trigger: "on_tool_success",
+            on_tool_success_of: "create_appointment",
+          },
         ],
       },
       {

@@ -477,6 +477,13 @@ async function applyTemplate(
       for (const action of stage.auto_actions ?? []) {
         // O type da auto_action coincide com o native_handler equivalente.
         toolHandlers.add(action.type as NativeHandlerName);
+        // PR2 (mai/2026): pra on_tool_success funcionar, a tool gatilho
+        // tem que estar na allowlist da etapa (senao a IA nao consegue
+        // chama-la). Garantimos isso aqui mesmo se a tool gatilho nao
+        // aparece como action.type em nenhum outro stage.
+        if (action.trigger === "on_tool_success" && action.on_tool_success_of) {
+          toolHandlers.add(action.on_tool_success_of as NativeHandlerName);
+        }
       }
     }
     // Tools de agenda (sempre uteis em templates completos)

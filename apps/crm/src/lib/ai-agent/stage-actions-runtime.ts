@@ -12,6 +12,8 @@ import type {
 } from "@persia/shared/ai-agent";
 import {
   hasActionsBeenExecuted,
+  isOnEnterAction,
+  isOnToolSuccessAction,
   markActionsExecuted,
   normalizeActionsExecuted,
   normalizeStageActionConfig,
@@ -181,9 +183,15 @@ export async function runStageAutoActionsIfPending(
   const config = normalizeStageActionConfig(
     (stage as AgentStage & { action_config?: unknown }).action_config,
   );
-  if (config.auto_actions.length === 0) {
-    // Sem acoes — ainda assim marca a etapa como "visitada" pra
-    // proximas msgs pularem rapido sem nem ler o JSONB.
+  // PR2 (mai/2026): apenas acoes com trigger='on_enter' (ou ausente,
+  // retrocompat) entram no disparo de entrada. As demais ficam dormentes
+  // ate a tool correspondente rodar — vide runStageActionsOnToolSuccess.
+  const onEnterActions = config.auto_actions.filter(isOnEnterAction);
+  if (onEnterActions.length === 0) {
+    // Sem acoes on_enter — ainda assim marca a etapa como "visitada" pra
+    // proximas msgs pularem rapido sem nem ler o JSONB. Acoes
+    // on_tool_success da mesma etapa ficam disponiveis pra disparo no
+    // proximo tool success (NAO sao bloqueadas por actions_executed).
     await persistMark(params, executedSoFar, stage.id);
     return {
       executed: 0,
@@ -193,13 +201,75 @@ export async function runStageAutoActionsIfPending(
     };
   }
 
+  const executeResult = await runActionsBatch({
+    actions: onEnterActions,
+    params,
+    agentConversation,
+    stage,
+    trigger: "stage_auto_action",
+  });
+
+  // Marca stage como executada — mesmo com falhas parciais. Semantica:
+  // "ja tentei aqui, nao tento de novo nesta conversa". Se cliente
+  // arrumar a config e quiser re-disparar, opcao seria botao "Resetar
+  // acoes da etapa" no LeadDrawer (escopo futuro).
+  //
+  // EXCECAO (PR1 #6): se houve `placeholder_skip` em alguma acao
+  // (target_address ainda no default do seed), NAO marcamos a stage.
+  // Cliente arruma a config + lead volta pra etapa = nova chance.
+  if (executeResult.placeholderSkipDetected) {
+    logError("stage_auto_actions_placeholder_skip", {
+      organization_id: params.orgId,
+      agent_conversation_id: params.agentConversation.id,
+      stage_id: stage.id,
+      executed: executeResult.executed,
+      failed: executeResult.failed,
+    });
+  } else {
+    await persistMark(params, executedSoFar, stage.id);
+  }
+
+  return {
+    executed: executeResult.executed,
+    failed: executeResult.failed,
+    nextOrderIndex: executeResult.nextOrderIndex,
+    skipped: false,
+  };
+}
+
+// ============================================================================
+// Loop de execucao reusavel — usado tanto por on_enter quanto por
+// on_tool_success.
+// ----------------------------------------------------------------------------
+// Recebe a lista de acoes ja filtradas e o `trigger` (string que vira no
+// agent_steps.input._trigger pra audit). NAO toca em actions_executed —
+// idempotency e responsabilidade do caller (so on_enter persiste mark).
+// ============================================================================
+
+interface RunActionsBatchParams {
+  actions: StageAutoAction[];
+  params: RunStageAutoActionsParams;
+  agentConversation: AgentConversation;
+  stage: AgentStage;
+  /** Label do disparo logado em agent_steps.input._trigger. */
+  trigger: "stage_auto_action" | "tool_success_action";
+}
+
+interface RunActionsBatchResult {
+  executed: number;
+  failed: number;
+  nextOrderIndex: number;
+  placeholderSkipDetected: boolean;
+}
+
+async function runActionsBatch(
+  batch: RunActionsBatchParams,
+): Promise<RunActionsBatchResult> {
+  const { actions, params, agentConversation, stage, trigger } = batch;
+
   let orderIndex = params.startingOrderIndex;
   let executed = 0;
   let failed = 0;
-  // PR1 #6 (mai/2026): se qualquer auto-action falhou por `placeholder_skip`
-  // (ex: trigger_notification com target_address='0000000000' do seed),
-  // NAO marcamos a stage como visitada — assim, cliente arruma a config,
-  // lead volta pra etapa e as acoes re-disparam.
   let placeholderSkipDetected = false;
 
   // Context enriquecido reusado pra todas as acoes — paridade total
@@ -220,7 +290,7 @@ export async function runStageAutoActionsIfPending(
     openaiClient: params.openaiClient ?? null,
   };
 
-  for (const action of config.auto_actions) {
+  for (const action of actions) {
     const startedAt = Date.now();
     const { handler: handlerName, input } = actionToHandlerInput(action);
     const handler = nativeHandlers[handlerName];
@@ -246,6 +316,7 @@ export async function runStageAutoActionsIfPending(
           agent_conversation_id: agentConversation.id,
           stage_id: stage.id,
           handler: handlerName,
+          trigger,
           error: errorMessage(err),
         });
       }
@@ -268,7 +339,7 @@ export async function runStageAutoActionsIfPending(
       stepType: "tool",
       toolId: null,
       nativeHandler: handlerName,
-      input: { ...input, _trigger: "stage_auto_action" },
+      input: { ...input, _trigger: trigger },
       output: result.success
         ? { success: true, ...result.output }
         : { success: false, error: result.error ?? "unknown error", ...result.output },
@@ -276,32 +347,7 @@ export async function runStageAutoActionsIfPending(
     });
   }
 
-  // Marca stage como executada — mesmo com falhas parciais. Semantica:
-  // "ja tentei aqui, nao tento de novo nesta conversa". Se cliente
-  // arrumar a config e quiser re-disparar, opcao seria botao "Resetar
-  // acoes da etapa" no LeadDrawer (escopo futuro).
-  //
-  // EXCECAO (PR1 #6): se houve `placeholder_skip` em alguma acao
-  // (target_address ainda no default do seed), NAO marcamos a stage.
-  // Cliente arruma a config + lead volta pra etapa = nova chance.
-  if (placeholderSkipDetected) {
-    logError("stage_auto_actions_placeholder_skip", {
-      organization_id: params.orgId,
-      agent_conversation_id: params.agentConversation.id,
-      stage_id: stage.id,
-      executed,
-      failed,
-    });
-  } else {
-    await persistMark(params, executedSoFar, stage.id);
-  }
-
-  return {
-    executed,
-    failed,
-    nextOrderIndex: orderIndex,
-    skipped: false,
-  };
+  return { executed, failed, nextOrderIndex: orderIndex, placeholderSkipDetected };
 }
 
 async function persistMark(
@@ -471,5 +517,153 @@ export async function detectStageTransitionAndRunActions(
   return {
     stageId: newStageId,
     nextOrderIndex: result.nextOrderIndex,
+  };
+}
+
+// ============================================================================
+// runStageActionsOnToolSuccess — chamado APOS uma tool nativa retornar
+// success=true em executeToolCall (apps/crm/src/lib/ai-agent/executor.ts).
+// ----------------------------------------------------------------------------
+// PR2 (mai/2026): resolve Bug #7. Antes desta PR, as auto_actions da
+// etapa "Agendamento" disparavam ON_ENTER — bastava o lead entrar pra
+// notificar a equipe que ele "agendou", mesmo que a IA so prometesse
+// e nao chamasse create_appointment. Agora a notificacao pode ser
+// configurada como trigger='on_tool_success' OF 'create_appointment' —
+// so dispara quando o appointment EXISTE de fato no DB.
+//
+// Sem idempotency: cada sucesso da tool dispara as acoes ligadas. Se um
+// lead agenda 2 reunioes na mesma conversa, recebe 2 notificacoes — e
+// isso e o comportamento desejado (cada booking real e um evento real).
+//
+// Stage usado: o `current_stage_id` da conversa AO MOMENTO da chamada.
+// Se a tool em si mudou o stage (transfer_to_stage), o caller deve usar
+// detectStageTransitionAndRunActions DEPOIS pra rodar as on_enter da
+// nova etapa.
+// ============================================================================
+
+export interface RunStageActionsOnToolSuccessParams {
+  db: AgentDb;
+  orgId: string;
+  agentConversation: AgentConversation;
+  config: AgentConfig;
+  runId: string;
+  leadId: string;
+  crmConversationId: string;
+  provider: WhatsAppProvider | null;
+  openaiClient: OpenAI | null;
+  dryRun: boolean;
+  startingOrderIndex: number;
+  insertStep: StepInserter;
+  /** Nome do handler nativo que acabou de retornar success=true. */
+  toolName: string;
+}
+
+export interface RunStageActionsOnToolSuccessResult {
+  executed: number;
+  failed: number;
+  nextOrderIndex: number;
+  /** True quando nao havia stage atual carregavel ou nenhuma acao
+   * configurada — distinto de "rodou e falhou". */
+  skipped: boolean;
+}
+
+export async function runStageActionsOnToolSuccess(
+  params: RunStageActionsOnToolSuccessParams,
+): Promise<RunStageActionsOnToolSuccessResult> {
+  // Re-fetch do `current_stage_id` direto do DB: a tool que acabou de
+  // rodar pode ter alterado a etapa (transfer_to_stage/transfer_to_agent)
+  // — o snapshot em params.agentConversation pode estar desatualizado.
+  // Defensive fallback: se o re-fetch falhar, usamos o snapshot.
+  const { data: convRow } = await params.db
+    .from("agent_conversations")
+    .select("current_stage_id")
+    .eq("id", params.agentConversation.id)
+    .eq("organization_id", params.orgId)
+    .maybeSingle();
+  const stageId =
+    (convRow as { current_stage_id?: string | null } | null)?.current_stage_id ??
+    (params.agentConversation as AgentConversation & { current_stage_id?: string | null })
+      .current_stage_id ??
+    null;
+
+  if (!stageId) {
+    return {
+      executed: 0,
+      failed: 0,
+      nextOrderIndex: params.startingOrderIndex,
+      skipped: true,
+    };
+  }
+
+  // Re-fetch da stage pra ler `action_config` mais recente.
+  const { data: stageRow, error } = await params.db
+    .from("agent_stages")
+    .select("*")
+    .eq("id", stageId)
+    .eq("organization_id", params.orgId)
+    .maybeSingle();
+
+  if (error || !stageRow) {
+    logError("stage_actions_on_tool_success_load_stage_failed", {
+      organization_id: params.orgId,
+      stage_id: stageId,
+      tool: params.toolName,
+      error: error?.message ?? "stage not found",
+    });
+    return {
+      executed: 0,
+      failed: 0,
+      nextOrderIndex: params.startingOrderIndex,
+      skipped: true,
+    };
+  }
+
+  const stage = stageRow as unknown as AgentStage;
+  const config = normalizeStageActionConfig(
+    (stage as AgentStage & { action_config?: unknown }).action_config,
+  );
+  const matchingActions = config.auto_actions.filter((action) =>
+    isOnToolSuccessAction(action, params.toolName),
+  );
+  if (matchingActions.length === 0) {
+    return {
+      executed: 0,
+      failed: 0,
+      nextOrderIndex: params.startingOrderIndex,
+      skipped: true,
+    };
+  }
+
+  // Reusa runActionsBatch — mesmo loop, mesma forma de logar steps. SEM
+  // persistMark: idempotency e por-disparo da tool, nao por-etapa.
+  const batchParams: RunStageAutoActionsParams = {
+    db: params.db,
+    orgId: params.orgId,
+    agentConversation: params.agentConversation,
+    stage,
+    config: params.config,
+    runId: params.runId,
+    leadId: params.leadId,
+    crmConversationId: params.crmConversationId,
+    provider: params.provider,
+    openaiClient: params.openaiClient,
+    dryRun: params.dryRun,
+    startingOrderIndex: params.startingOrderIndex,
+    insertStep: params.insertStep,
+  };
+
+  const batchResult = await runActionsBatch({
+    actions: matchingActions,
+    params: batchParams,
+    agentConversation: params.agentConversation,
+    stage,
+    trigger: "tool_success_action",
+  });
+
+  return {
+    executed: batchResult.executed,
+    failed: batchResult.failed,
+    nextOrderIndex: batchResult.nextOrderIndex,
+    skipped: false,
   };
 }
