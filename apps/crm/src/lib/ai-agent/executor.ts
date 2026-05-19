@@ -755,27 +755,50 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         // sinonimos comuns (reservar). Falsos positivos esperados:
         // "agendei sua duvida pra te responder amanha" — raro, mas se
         // virar problema, refinar com janela ?(?<!\\b(duvida|tarefa)\\b\\s+).
+        // PR-FIX-APPOINTMENT-HALLUCINATION: guard server-side de duas
+        // camadas pra Bug #7 (LLM responde 'agendei' sem chamar
+        // create_appointment).
+        //
+        // CAMADA A — etapa de agendamento sem tool call (PR auditoria
+        // 19/mai): se a etapa atual e' tipo 'schedule' (Agendamento) E
+        // create_appointment NAO foi chamado E reply nao e' vazio,
+        // substitui. Independe de verbos — mais robusto que regex.
+        //
+        // CAMADA B — regex de verbos (fallback): pega casos onde a IA
+        // afirma agendamento em etapas que nao sao schedule (ex: durante
+        // qualificacao ela diz 'ja agendei seu horario'). Defensivo.
         const APPOINTMENT_CONFIRMATION_VERBS =
           /\b(agendei|agendou|agendamos|agendado|agendada|marquei|marcou|marcamos|marcado|marcada|reservei|reservou|reservamos|reservado|reservada|confirmei|confirmou|confirmamos|confirmado|confirmada)\b/i;
         const hasCreateAppointment = successfulToolHandlers.has("create_appointment");
         const verbMatch = APPOINTMENT_CONFIRMATION_VERBS.test(assistantReply);
-        // PR-HALLUCINATION-OBSERVABILITY (mai/2026): log estruturado de
-        // CADA execucao do guard, mesmo quando nao substitui. Sem isso
-        // nao dava pra saber se o guard estava rodando ou se o bundle
-        // em prod era stale. logInfo vai pro console.info do EasyPanel.
+        const stageIsSchedule =
+          currentStage?.action_type === "schedule";
+        const replyNotEmpty = assistantReply.trim().length > 0
+          && assistantReply !== HANDOFF_REPLY;
+        // CAMADA A trigger: etapa Agendamento + sem create_appointment
+        const layerATrigger = stageIsSchedule && !hasCreateAppointment && replyNotEmpty;
+        // CAMADA B trigger: verbo de confirmacao + sem create_appointment
+        const layerBTrigger = !hasCreateAppointment && verbMatch;
+        const willSubstitute = layerATrigger || layerBTrigger;
+        // PR-HALLUCINATION-OBSERVABILITY: log estruturado pra debug.
         logInfo("ai_agent_appointment_guard_check", {
           organization_id: params.orgId,
           run_id: run.id,
+          stage_action_type: currentStage?.action_type ?? null,
           has_create_appointment: hasCreateAppointment,
           verb_match: verbMatch,
-          will_substitute: !hasCreateAppointment && verbMatch,
+          layer_a_trigger: layerATrigger,
+          layer_b_trigger: layerBTrigger,
+          will_substitute: willSubstitute,
           tools_used: Array.from(successfulToolHandlers),
         });
-        if (!hasCreateAppointment && verbMatch) {
+        if (willSubstitute) {
           logError("ai_agent_appointment_hallucination", {
             organization_id: params.orgId,
             run_id: run.id,
             agent_conversation_id: params.agentConversation.id,
+            stage_action_type: currentStage?.action_type ?? null,
+            trigger_layer: layerATrigger ? "stage_schedule_no_tool" : "verb_match_no_tool",
             reply_excerpt: assistantReply.slice(0, 300),
             tools_used: Array.from(successfulToolHandlers),
           });
