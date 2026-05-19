@@ -663,7 +663,11 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     });
     orderIndex = stageActionsResult.nextOrderIndex;
 
-    for (let iteration = 0; iteration < guardrails.max_iterations; iteration++) {
+    const effectiveMaxIterations = buildMaxIterations(
+      executionModel,
+      guardrails.max_iterations,
+    );
+    for (let iteration = 0; iteration < effectiveMaxIterations; iteration++) {
       assertWithinDeadline(startedAt, guardrails, executionModel);
       await assertWithinCostLimits({
         db: params.db,
@@ -1752,6 +1756,29 @@ function buildTimeoutMs(model: string, seconds: number): number {
     return base * 3;
   }
   return base;
+}
+
+// PR-FIX-GPT5-ITERATIONS (mai/2026): trio com os fixes de tokens (* 4),
+// timeout per-call (* 3) e deadline global (* 3). gpt-5* gasta tool-calls
+// extras pra encadear transfer_to_stage + auto-actions on_enter antes de
+// chegar ao destino real (ex: create_appointment). max_iterations=5
+// default era apertado: a IA fazia 2 transfers + 1 trigger_notification
+// (que falhava por placeholder) + tags duplicadas, e ficava sem budget
+// pra emitir create_appointment.
+//
+// Sintoma observado em Test 3 round 3 (pós #267 + #268):
+//   10 passos no UI, mas estouro de max_iterations no executor antes de
+//   create_appointment ser chamado. UI renderiza guardrail + HANDOFF_REPLY.
+//
+// Fix: dobra max_iterations pra gpt-5* (5 → 10). gpt-4*/gpt-3.5 mantem
+// o default do agent_config. Band-aid honesto: a raiz real (achado #1
+// da auditoria) e auto-actions on_enter distraindo. PR2 arquitetural
+// vai separar on_enter de on_tool_success no schema.
+function buildMaxIterations(model: string, baseIterations: number): number {
+  if (model.startsWith("gpt-5")) {
+    return baseIterations * 2;
+  }
+  return baseIterations;
 }
 
 function resolveModel(model: string): string {
