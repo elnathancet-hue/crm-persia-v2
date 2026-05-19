@@ -12,6 +12,7 @@ import {
   RefreshCcw,
   Send,
   Wand2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -90,6 +91,14 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
   const [faithfulMode, setFaithfulMode] = React.useState(hasLive);
   const [expediteDebounce, setExpediteDebounce] = React.useState(true);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  // PR-TESTER-CANCEL (mai/2026): UX escape pra runs gpt-5* longos.
+  // Server action nao aceita AbortSignal nativamente, entao usamos um
+  // flag mutavel: cancel marca cancelledRef.current=true; a continuation
+  // do startTransition checa o flag antes de appendar turns e mostra
+  // bolha "Cancelado pelo usuario" em vez do resultado real. Backend
+  // segue processando em background (writes em agent_runs continuam) —
+  // ok porque sao registros de auditoria, nao bloqueiam o cliente.
+  const cancelledRef = React.useRef(false);
 
   React.useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -111,6 +120,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
   };
 
   const runFaithful = (text: string) => {
+    cancelledRef.current = false;
     startTransition(async () => {
       try {
         const res = await actions.testAgentLive!({
@@ -118,8 +128,10 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           message: text,
           expedite_debounce: expediteDebounce,
         });
+        if (cancelledRef.current) return;
         appendFaithfulTurns(setTurns, res);
       } catch (err) {
+        if (cancelledRef.current) return;
         toast.error(err instanceof Error ? err.message : "Falha ao testar");
         setTurns((prev) => [
           ...prev,
@@ -134,6 +146,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
   };
 
   const runLegacy = (text: string) => {
+    cancelledRef.current = false;
     startTransition(async () => {
       try {
         const res: TesterResponse = await actions.testAgent({
@@ -141,6 +154,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           message: text,
           dry_run: true,
         });
+        if (cancelledRef.current) return;
         setTurns((prev) => [
           ...prev,
           {
@@ -159,9 +173,27 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
             : []),
         ]);
       } catch (err) {
+        if (cancelledRef.current) return;
         toast.error(err instanceof Error ? err.message : "Falha ao testar");
       }
     });
+  };
+
+  // PR-TESTER-CANCEL: client-side abort. Marca flag e imediatamente
+  // mostra bolha "Cancelado". Backend continua processando mas UI fica
+  // livre pra novo input. Resolve hang aparente de 5min+ quando gpt-5
+  // demora pra chegar no exit do loop.
+  const handleCancel = () => {
+    if (!isPending) return;
+    cancelledRef.current = true;
+    setTurns((prev) => [
+      ...prev,
+      {
+        kind: "system",
+        icon: "info",
+        text: "Cancelado pelo usuario (backend pode continuar em background)",
+      },
+    ]);
   };
 
   const handleReset = () => {
@@ -290,12 +322,25 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
                 disabled={isPending || stages.length === 0}
                 aria-label="Mensagem de teste"
               />
-              <Button
-                type="submit"
-                disabled={isPending || !message.trim() || stages.length === 0}
-              >
-                <Send className="size-4" />
-              </Button>
+              {isPending ? (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  onClick={handleCancel}
+                  title="Cancelar (backend pode continuar processando)"
+                  aria-label="Cancelar run"
+                >
+                  <X className="size-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={!message.trim() || stages.length === 0}
+                >
+                  <Send className="size-4" />
+                </Button>
+              )}
             </form>
           </div>
         </SheetFooter>
@@ -330,7 +375,7 @@ function EmptyState({
             : "Mande uma mensagem como se fosse o cliente. Agente responde 1x sem picotar."}
         </p>
         {stagesCount === 0 ? (
-          <p className="text-xs text-amber-600 mt-2">
+          <p className="text-xs text-muted-foreground mt-2">
             Sem etapas cadastradas — agente vai responder com prompt base.
           </p>
         ) : null}
