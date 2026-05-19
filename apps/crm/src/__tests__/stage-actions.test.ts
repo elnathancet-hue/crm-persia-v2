@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  getStageActionState,
   hasActionsBeenExecuted,
+  isStageFullyCompleted,
+  makeOnEnterKey,
+  makeOnToolSuccessKey,
   markActionsExecuted,
+  MAX_AUTO_ACTION_RETRIES,
   normalizeActionsExecuted,
+  normalizeActionsExecutedDetail,
   normalizeStageActionConfig,
+  recordActionFailure,
+  recordActionSuccess,
   sanitizeStageAutoAction,
+  shouldSkipActionIndex,
   STAGE_AUTO_ACTION_TYPES,
 } from "@persia/shared/ai-agent";
 
@@ -234,6 +243,197 @@ describe("stage-actions", () => {
       expect(after).toEqual(["stage-1", "stage-2"]);
       const sameAgain = markActionsExecuted(after, "stage-1");
       expect(sameAgain).toEqual(["stage-1", "stage-2"]); // dedup
+    });
+  });
+
+  // ==========================================================================
+  // PR3 (mai/2026) — per-action retry tracking helpers
+  // ==========================================================================
+  describe("per-action retry tracking", () => {
+    describe("trigger keys", () => {
+      it("makeOnEnterKey usa formato 'on_enter:<stage_id>'", () => {
+        expect(makeOnEnterKey("stage-123")).toBe("on_enter:stage-123");
+      });
+
+      it("makeOnToolSuccessKey usa formato 'on_tool_success:<stage>:<tool>'", () => {
+        expect(makeOnToolSuccessKey("stage-1", "create_appointment")).toBe(
+          "on_tool_success:stage-1:create_appointment",
+        );
+      });
+    });
+
+    describe("normalizeActionsExecutedDetail", () => {
+      it("retorna vazio quando raw e null/invalido/array", () => {
+        expect(normalizeActionsExecutedDetail(null)).toEqual({});
+        expect(normalizeActionsExecutedDetail(undefined)).toEqual({});
+        expect(normalizeActionsExecutedDetail([])).toEqual({});
+        expect(normalizeActionsExecutedDetail("string")).toEqual({});
+      });
+
+      it("preserva shape valido + descarta indices nao-numericos em failed", () => {
+        const result = normalizeActionsExecutedDetail({
+          "on_enter:s1": {
+            succeeded: [0, 2],
+            failed: {
+              "1": { attempts: 2, last_error: "timeout" },
+              "abc": { attempts: 1, last_error: "x" }, // descartado
+              "-1": { attempts: 1, last_error: "x" }, // descartado
+            },
+          },
+        });
+        expect(result["on_enter:s1"]?.succeeded).toEqual([0, 2]);
+        expect(result["on_enter:s1"]?.failed).toEqual({
+          "1": { attempts: 2, last_error: "timeout" },
+        });
+      });
+
+      it("descarta valores nao-numericos em succeeded + dedup", () => {
+        const result = normalizeActionsExecutedDetail({
+          "on_enter:s1": {
+            succeeded: [0, "bad", 0, NaN, 2],
+            failed: {},
+          },
+        });
+        expect(result["on_enter:s1"]?.succeeded).toEqual([0, 2]);
+      });
+
+      it("trunca last_error em 500 chars (defensive)", () => {
+        const longError = "x".repeat(1000);
+        const result = normalizeActionsExecutedDetail({
+          "on_enter:s1": {
+            succeeded: [],
+            failed: { "0": { attempts: 1, last_error: longError } },
+          },
+        });
+        expect(result["on_enter:s1"]?.failed["0"]?.last_error.length).toBe(500);
+      });
+    });
+
+    describe("recordActionSuccess", () => {
+      it("adiciona indice em succeeded + limpa de failed se existir", () => {
+        const initial = {
+          "on_enter:s1": {
+            succeeded: [0],
+            failed: { "1": { attempts: 2, last_error: "x" } },
+          },
+        };
+        const result = recordActionSuccess(initial, "on_enter:s1", 1);
+        expect(result["on_enter:s1"]?.succeeded).toEqual([0, 1]);
+        expect(result["on_enter:s1"]?.failed).toEqual({}); // limpou
+      });
+
+      it("idempotente: gravar success 2x nao duplica", () => {
+        const first = recordActionSuccess({}, "on_enter:s1", 0);
+        const second = recordActionSuccess(first, "on_enter:s1", 0);
+        expect(second["on_enter:s1"]?.succeeded).toEqual([0]);
+      });
+    });
+
+    describe("recordActionFailure", () => {
+      it("incrementa attempts a cada chamada", () => {
+        const a = recordActionFailure({}, "on_enter:s1", 0, "err1");
+        const b = recordActionFailure(a, "on_enter:s1", 0, "err2");
+        const c = recordActionFailure(b, "on_enter:s1", 0, "err3");
+        expect(c["on_enter:s1"]?.failed["0"]?.attempts).toBe(3);
+        expect(c["on_enter:s1"]?.failed["0"]?.last_error).toBe("err3");
+      });
+
+      it("nao afeta succeeded de outros indices", () => {
+        const initial = {
+          "on_enter:s1": { succeeded: [0], failed: {} },
+        };
+        const result = recordActionFailure(initial, "on_enter:s1", 1, "err");
+        expect(result["on_enter:s1"]?.succeeded).toEqual([0]);
+        expect(result["on_enter:s1"]?.failed["1"]?.attempts).toBe(1);
+      });
+    });
+
+    describe("shouldSkipActionIndex", () => {
+      it("skipa quando ja succeeded", () => {
+        const state = getStageActionState(
+          { "on_enter:s1": { succeeded: [0, 2], failed: {} } },
+          "on_enter:s1",
+        );
+        expect(shouldSkipActionIndex(state, 0)).toBe(true);
+        expect(shouldSkipActionIndex(state, 2)).toBe(true);
+        expect(shouldSkipActionIndex(state, 1)).toBe(false);
+      });
+
+      it("skipa quando attempts >= MAX_RETRIES", () => {
+        const state = getStageActionState(
+          {
+            "on_enter:s1": {
+              succeeded: [],
+              failed: { "0": { attempts: MAX_AUTO_ACTION_RETRIES, last_error: "x" } },
+            },
+          },
+          "on_enter:s1",
+        );
+        expect(shouldSkipActionIndex(state, 0)).toBe(true);
+      });
+
+      it("NAO skipa quando attempts < MAX_RETRIES", () => {
+        const state = getStageActionState(
+          {
+            "on_enter:s1": {
+              succeeded: [],
+              failed: { "0": { attempts: 1, last_error: "x" } },
+            },
+          },
+          "on_enter:s1",
+        );
+        expect(shouldSkipActionIndex(state, 0)).toBe(false);
+      });
+    });
+
+    describe("isStageFullyCompleted", () => {
+      it("true quando todos os indices estao em succeeded", () => {
+        const state = getStageActionState(
+          { "on_enter:s1": { succeeded: [0, 1, 2], failed: {} } },
+          "on_enter:s1",
+        );
+        expect(isStageFullyCompleted(state, 3)).toBe(true);
+      });
+
+      it("true quando mistura: alguns succeeded + outros exceeded retries", () => {
+        const state = getStageActionState(
+          {
+            "on_enter:s1": {
+              succeeded: [0],
+              failed: { "1": { attempts: MAX_AUTO_ACTION_RETRIES, last_error: "x" } },
+            },
+          },
+          "on_enter:s1",
+        );
+        expect(isStageFullyCompleted(state, 2)).toBe(true);
+      });
+
+      it("false quando algum indice tem attempts < MAX_RETRIES", () => {
+        const state = getStageActionState(
+          {
+            "on_enter:s1": {
+              succeeded: [0],
+              failed: { "1": { attempts: 1, last_error: "x" } },
+            },
+          },
+          "on_enter:s1",
+        );
+        expect(isStageFullyCompleted(state, 2)).toBe(false);
+      });
+
+      it("false quando algum indice nao apareceu nem em succeeded nem em failed", () => {
+        const state = getStageActionState(
+          { "on_enter:s1": { succeeded: [0], failed: {} } },
+          "on_enter:s1",
+        );
+        // index 1 nao foi tocado — proxima entrada deve rodar
+        expect(isStageFullyCompleted(state, 2)).toBe(false);
+      });
+
+      it("true pra stage com zero acoes (caso degenerado)", () => {
+        const state = getStageActionState({}, "on_enter:s1");
+        expect(isStageFullyCompleted(state, 0)).toBe(true);
+      });
     });
   });
 });

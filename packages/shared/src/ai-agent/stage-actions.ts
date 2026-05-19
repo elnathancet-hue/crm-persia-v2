@@ -420,3 +420,224 @@ export function markActionsExecuted(
   if (executed.includes(stageId)) return [...executed];
   return [...executed, stageId];
 }
+
+// ============================================================================
+// PR3 (mai/2026): per-action retry tracking — actions_executed_detail
+// ----------------------------------------------------------------------------
+// Antes da PR3, idempotency era POR STAGE: o primeiro disparo marcava
+// stage_id em `actions_executed` (string[]) e a etapa nao re-rodava nunca
+// mais nesta conversa. Problema: se 1 das N acoes falhasse, a etapa
+// AINDA era marcada — o side effect daquela acao perdia.
+//
+// Agora: tracking POR ACAO via JSONB `actions_executed_detail` indexado
+// por chave estruturada (vide makeOnEnterKey / makeOnToolSuccessKey
+// abaixo). Runtime pula acoes ja em `succeeded`, retenta acoes em
+// `failed` ate MAX_AUTO_ACTION_RETRIES, e marca stage no array legado
+// SOMENTE quando todos os indices completaram.
+//
+// Trade-off: helpers nao-idempotentes (send_media, trigger_notification)
+// ja sao re-runable porque retry so dispara o que falhou — handlers
+// idempotentes (add_tag, move_pipeline_stage, transfer_*) tambem sao
+// safe. Side effects ja-bem-sucedidos NAO sao re-disparados (succeeded
+// e check primeiro).
+// ============================================================================
+
+/**
+ * Limite de retentativas por acao. Apos atingir, runtime desiste daquela
+ * acao especifica (loga + segue) e a etapa pode ser marcada como
+ * completada mesmo com 1+ acao em estado "exceeded retries".
+ */
+export const MAX_AUTO_ACTION_RETRIES = 3;
+
+/**
+ * Chave de tracking padronizada por trigger. Hoje so `on_enter` tem
+ * runtime ativo de retry; `on_tool_success` mantido por design SEM
+ * idempotency (cada tool success pode disparar acoes novamente). A key
+ * existe pra preparar telemetria futura ("trigger_notification falhou
+ * 3 vezes em row pra mesma stage+tool").
+ */
+export function makeOnEnterKey(stageId: string): string {
+  return `on_enter:${stageId}`;
+}
+
+export function makeOnToolSuccessKey(stageId: string, toolName: string): string {
+  return `on_tool_success:${stageId}:${toolName}`;
+}
+
+/**
+ * Estado individual de uma acao que ja falhou pelo menos uma vez.
+ */
+export interface ActionAttemptState {
+  attempts: number;
+  last_error: string;
+}
+
+/**
+ * Estado agregado por (trigger + stage [+ tool]). `succeeded` lista os
+ * indices que retornaram sucesso (ordem de execucao preservada).
+ * `failed` mapeia indice -> historico de attempts.
+ */
+export interface StageActionExecutionState {
+  succeeded: number[];
+  /** Key: action_index serializado como string (limitacao do JSONB). */
+  failed: Record<string, ActionAttemptState>;
+}
+
+export type ActionsExecutedDetail = Record<string, StageActionExecutionState>;
+
+/** Sentinela usado quando o detail nao tem entry pra essa key. */
+export const EMPTY_STAGE_ACTION_STATE: StageActionExecutionState = Object.freeze({
+  succeeded: [],
+  failed: {},
+});
+
+const MAX_LAST_ERROR_LENGTH = 500;
+
+/**
+ * Sanitiza o JSONB inteiro vindo do DB. Tolerante a shapes corrompidos:
+ *   - Chaves com valor invalido sao descartadas (nao quebra runtime).
+ *   - Indices nao-numericos em `failed` sao descartados.
+ *   - `last_error` cortado em MAX_LAST_ERROR_LENGTH chars (defensive
+ *     contra payload gigante).
+ */
+export function normalizeActionsExecutedDetail(raw: unknown): ActionsExecutedDetail {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: ActionsExecutedDetail = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const obj = value as Record<string, unknown>;
+    const succeeded = Array.isArray(obj.succeeded)
+      ? Array.from(
+          new Set(
+            obj.succeeded.filter(
+              (n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0,
+            ),
+          ),
+        )
+      : [];
+    const failed: Record<string, ActionAttemptState> = {};
+    if (obj.failed && typeof obj.failed === "object" && !Array.isArray(obj.failed)) {
+      for (const [idxStr, fState] of Object.entries(obj.failed as Record<string, unknown>)) {
+        const idxNum = Number(idxStr);
+        if (!Number.isInteger(idxNum) || idxNum < 0) continue;
+        if (!fState || typeof fState !== "object") continue;
+        const f = fState as Record<string, unknown>;
+        const attempts =
+          typeof f.attempts === "number" && Number.isFinite(f.attempts) && f.attempts >= 0
+            ? Math.floor(f.attempts)
+            : 0;
+        const last_error =
+          typeof f.last_error === "string"
+            ? f.last_error.slice(0, MAX_LAST_ERROR_LENGTH)
+            : "";
+        failed[idxStr] = { attempts, last_error };
+      }
+    }
+    out[key] = { succeeded, failed };
+  }
+  return out;
+}
+
+/** Le o estado pra uma key especifica, devolvendo vazio quando ausente. */
+export function getStageActionState(
+  detail: ActionsExecutedDetail,
+  key: string,
+): StageActionExecutionState {
+  return detail[key] ?? { succeeded: [], failed: {} };
+}
+
+/**
+ * Marca uma acao como bem-sucedida. Se a acao estava em `failed` antes,
+ * remove de la (o sucesso "limpa" o historico de falhas, evitando
+ * confusao em diagnostico).
+ */
+export function recordActionSuccess(
+  detail: ActionsExecutedDetail,
+  key: string,
+  actionIndex: number,
+): ActionsExecutedDetail {
+  const state = getStageActionState(detail, key);
+  const idxStr = String(actionIndex);
+  const alreadySucceeded = state.succeeded.includes(actionIndex);
+  const wasFailed = idxStr in state.failed;
+  if (alreadySucceeded && !wasFailed) return detail;
+
+  const newSucceeded = alreadySucceeded
+    ? state.succeeded
+    : [...state.succeeded, actionIndex].sort((a, b) => a - b);
+  const newFailed = { ...state.failed };
+  delete newFailed[idxStr];
+
+  return {
+    ...detail,
+    [key]: { succeeded: newSucceeded, failed: newFailed },
+  };
+}
+
+/**
+ * Registra falha (ou re-falha) de uma acao. Incrementa attempts e
+ * sobrescreve last_error. NAO toca em `succeeded` — se a acao ja estava
+ * marcada como sucesso, este e um caso anomalo (handler retornou
+ * success=false depois de success=true antes) que a gente prefere
+ * tratar como falha nova.
+ */
+export function recordActionFailure(
+  detail: ActionsExecutedDetail,
+  key: string,
+  actionIndex: number,
+  error: string,
+): ActionsExecutedDetail {
+  const state = getStageActionState(detail, key);
+  const idxStr = String(actionIndex);
+  const prev = state.failed[idxStr];
+  const attempts = (prev?.attempts ?? 0) + 1;
+  return {
+    ...detail,
+    [key]: {
+      succeeded: state.succeeded,
+      failed: {
+        ...state.failed,
+        [idxStr]: {
+          attempts,
+          last_error: error.slice(0, MAX_LAST_ERROR_LENGTH),
+        },
+      },
+    },
+  };
+}
+
+/**
+ * True se a acao ja foi resolvida (sucesso OU desistencia apos
+ * exceder retries). Runtime usa pra pular indices que nao precisam
+ * de nova tentativa.
+ */
+export function shouldSkipActionIndex(
+  state: StageActionExecutionState,
+  actionIndex: number,
+  maxRetries: number = MAX_AUTO_ACTION_RETRIES,
+): boolean {
+  if (state.succeeded.includes(actionIndex)) return true;
+  const f = state.failed[String(actionIndex)];
+  if (f && f.attempts >= maxRetries) return true;
+  return false;
+}
+
+/**
+ * True quando TODAS as acoes 0..totalActions-1 estao resolvidas (cada
+ * uma succeeded OU exceeded retries). Runtime usa pra decidir se marca
+ * stage_id no array legado `actions_executed` (semantica: "ja tentei
+ * tudo aqui, nao re-entro").
+ */
+export function isStageFullyCompleted(
+  state: StageActionExecutionState,
+  totalActions: number,
+  maxRetries: number = MAX_AUTO_ACTION_RETRIES,
+): boolean {
+  for (let i = 0; i < totalActions; i++) {
+    if (state.succeeded.includes(i)) continue;
+    const f = state.failed[String(i)];
+    if (f && f.attempts >= maxRetries) continue;
+    return false;
+  }
+  return true;
+}

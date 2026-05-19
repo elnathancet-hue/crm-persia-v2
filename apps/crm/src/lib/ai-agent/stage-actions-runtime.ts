@@ -11,12 +11,20 @@ import type {
   StageAutoAction,
 } from "@persia/shared/ai-agent";
 import {
+  getStageActionState,
   hasActionsBeenExecuted,
   isOnEnterAction,
   isOnToolSuccessAction,
+  isStageFullyCompleted,
+  makeOnEnterKey,
   markActionsExecuted,
   normalizeActionsExecuted,
+  normalizeActionsExecutedDetail,
   normalizeStageActionConfig,
+  recordActionFailure,
+  recordActionSuccess,
+  shouldSkipActionIndex,
+  type ActionsExecutedDetail,
 } from "@persia/shared/ai-agent";
 import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { errorMessage, logError } from "@/lib/observability";
@@ -170,6 +178,10 @@ export async function runStageAutoActionsIfPending(
 ): Promise<RunStageAutoActionsResult> {
   const { stage, agentConversation } = params;
 
+  // RETROCOMPAT PR3: rows existentes que ja tinham stage_id no legacy
+  // `actions_executed` ANTES da migration 053 continuam pulando. Detail
+  // vazio combinado com legacy flag = "rodei tudo antes do tracking
+  // detalhado", nao re-executa. Novas execucoes vao popular o detail.
   const executedSoFar = normalizeActionsExecuted(agentConversation.actions_executed);
   if (hasActionsBeenExecuted(executedSoFar, stage.id)) {
     return {
@@ -201,40 +213,225 @@ export async function runStageAutoActionsIfPending(
     };
   }
 
-  const executeResult = await runActionsBatch({
-    actions: onEnterActions,
-    params,
-    agentConversation,
-    stage,
-    trigger: "stage_auto_action",
-  });
+  // PR3 (mai/2026): per-action retry tracking via actions_executed_detail.
+  // Carrega snapshot, filtra indices ja-resolvidos, executa pendentes
+  // com persist imediato apos cada tentativa.
+  const onEnterKey = makeOnEnterKey(stage.id);
+  let workingDetail = normalizeActionsExecutedDetail(
+    (agentConversation as AgentConversation & { actions_executed_detail?: unknown })
+      .actions_executed_detail,
+  );
 
-  // Marca stage como executada — mesmo com falhas parciais. Semantica:
-  // "ja tentei aqui, nao tento de novo nesta conversa". Se cliente
-  // arrumar a config e quiser re-disparar, opcao seria botao "Resetar
-  // acoes da etapa" no LeadDrawer (escopo futuro).
-  //
-  // EXCECAO (PR1 #6): se houve `placeholder_skip` em alguma acao
-  // (target_address ainda no default do seed), NAO marcamos a stage.
-  // Cliente arruma a config + lead volta pra etapa = nova chance.
-  if (executeResult.placeholderSkipDetected) {
+  // Indexed pendings: preservam o original_index pra que recordSuccess
+  // / recordFailure usem a posicao real na lista (ordem importa pra
+  // retentativa de "ja rodei addtag mas falhou send_media" — addtag
+  // continua em succeeded[0], send_media volta como failed[1]).
+  const pending: Array<{ action: StageAutoAction; originalIndex: number }> = [];
+  for (let i = 0; i < onEnterActions.length; i++) {
+    const state = getStageActionState(workingDetail, onEnterKey);
+    if (shouldSkipActionIndex(state, i)) continue;
+    pending.push({ action: onEnterActions[i]!, originalIndex: i });
+  }
+
+  if (pending.length === 0) {
+    // Todas as acoes ja resolvidas (sucesso OU max_retries exceeded).
+    // Marca stage no legacy flag pra short-circuit nas proximas msgs.
+    if (
+      isStageFullyCompleted(
+        getStageActionState(workingDetail, onEnterKey),
+        onEnterActions.length,
+      )
+    ) {
+      await persistMark(params, executedSoFar, stage.id);
+    }
+    return {
+      executed: 0,
+      failed: 0,
+      nextOrderIndex: params.startingOrderIndex,
+      skipped: true,
+    };
+  }
+
+  let orderIndex = params.startingOrderIndex;
+  let executed = 0;
+  let failed = 0;
+  let placeholderSkipDetected = false;
+
+  // Context enriquecido reusado pra todas as acoes — paridade total
+  // com o que executeToolCall passa pros handlers do LLM.
+  const baseContext = {
+    organization_id: params.orgId,
+    lead_id: params.leadId,
+    crm_conversation_id: params.crmConversationId,
+    agent_conversation_id: agentConversation.id,
+    run_id: params.runId,
+    dry_run: params.dryRun,
+    db: params.db,
+    provider: params.provider ?? null,
+    config: params.config,
+    agentConversation,
+    openaiClient: params.openaiClient ?? null,
+  };
+
+  for (const { action, originalIndex } of pending) {
+    const startedAt = Date.now();
+    const { handler: handlerName, input } = actionToHandlerInput(action);
+    const handler = nativeHandlers[handlerName];
+
+    let result: NativeHandlerResult;
+    if (!handler) {
+      result = {
+        success: false,
+        output: { error: `handler "${handlerName}" not registered` },
+        error: `handler "${handlerName}" nao implementado no runtime`,
+      };
+    } else {
+      try {
+        result = await handler(baseContext as never, input);
+      } catch (err: unknown) {
+        result = {
+          success: false,
+          output: {},
+          error: errorMessage(err),
+        };
+        logError("stage_auto_action_threw", {
+          organization_id: params.orgId,
+          agent_conversation_id: agentConversation.id,
+          stage_id: stage.id,
+          handler: handlerName,
+          trigger: "stage_auto_action",
+          action_index: originalIndex,
+          error: errorMessage(err),
+        });
+      }
+    }
+
+    // Atualiza estado in-memory ANTES de logar step + persistir DB.
+    // Ordem importante: se persist falhar, ainda temos o agent_step
+    // logado pra audit, mesmo que retry seja perdido.
+    if (result.success) {
+      executed++;
+      workingDetail = recordActionSuccess(workingDetail, onEnterKey, originalIndex);
+    } else {
+      failed++;
+      const output = result.output as { placeholder_skip?: unknown } | null;
+      if (output?.placeholder_skip === true) {
+        // placeholder_skip NAO conta como attempt — config-bound, nao
+        // transient. Retentaremos indefinidamente ate o user arrumar
+        // o target_address. Mantemos o comportamento da PR1 #6.
+        placeholderSkipDetected = true;
+      } else {
+        workingDetail = recordActionFailure(
+          workingDetail,
+          onEnterKey,
+          originalIndex,
+          result.error ?? "unknown error",
+        );
+      }
+    }
+
+    await params.insertStep({
+      orgId: params.orgId,
+      runId: params.runId,
+      orderIndex: orderIndex++,
+      stepType: "tool",
+      toolId: null,
+      nativeHandler: handlerName,
+      input: { ...input, _trigger: "stage_auto_action", _action_index: originalIndex },
+      output: result.success
+        ? { success: true, ...result.output }
+        : { success: false, error: result.error ?? "unknown error", ...result.output },
+      durationMs: Date.now() - startedAt,
+    });
+
+    // PR3: persiste detail IMEDIATAMENTE apos cada tentativa. Se o run
+    // crashar entre acoes, sucessos anteriores ficam gravados — re-
+    // entrada na stage nao re-roda essas acoes. Custo: 1 UPDATE por
+    // acao (~2-5 por stage tipica). Skip em dry-run (Tester) pra nao
+    // poluir DB de prod.
+    await persistActionsDetail({
+      db: params.db,
+      orgId: params.orgId,
+      agentConversationId: agentConversation.id,
+      detail: workingDetail,
+      stageId: stage.id,
+      actionIndex: originalIndex,
+      dryRun: params.dryRun,
+    });
+    // Sincroniza in-memory pro caller (executor) ler estado atualizado.
+    (agentConversation as AgentConversation & {
+      actions_executed_detail?: unknown;
+    }).actions_executed_detail = workingDetail;
+  }
+
+  // Decisao final: marcar stage como completa no array legacy?
+  //  - placeholder_skip: nao marca (PR1 #6) — cliente arruma config + lead volta.
+  //  - Caso contrario: marca SE todos os indices terminaram (succeeded
+  //    OU exceeded retries). Se algum index ainda tem attempts < max,
+  //    deixamos sem marcar — proxima entrada re-tenta.
+  if (placeholderSkipDetected) {
     logError("stage_auto_actions_placeholder_skip", {
       organization_id: params.orgId,
       agent_conversation_id: params.agentConversation.id,
       stage_id: stage.id,
-      executed: executeResult.executed,
-      failed: executeResult.failed,
+      executed,
+      failed,
     });
-  } else {
+  } else if (
+    isStageFullyCompleted(
+      getStageActionState(workingDetail, onEnterKey),
+      onEnterActions.length,
+    )
+  ) {
     await persistMark(params, executedSoFar, stage.id);
   }
 
   return {
-    executed: executeResult.executed,
-    failed: executeResult.failed,
-    nextOrderIndex: executeResult.nextOrderIndex,
+    executed,
+    failed,
+    nextOrderIndex: orderIndex,
     skipped: false,
   };
+}
+
+// ============================================================================
+// PR3 helper: persiste actions_executed_detail apos cada tentativa
+// ----------------------------------------------------------------------------
+// Falha de persist NAO interrompe o loop — apenas loga. Custo: a
+// proxima tentativa nao saberia que ja rodou, podendo duplicar side
+// effects de handlers nao-idempotentes (send_media, trigger_notification).
+// Aceitavel porque persist falhar e raro (DB outage); diluido em handler
+// idempotente nao tem efeito.
+// ============================================================================
+
+interface PersistActionsDetailParams {
+  db: AgentDb;
+  orgId: string;
+  agentConversationId: string;
+  detail: ActionsExecutedDetail;
+  stageId: string;
+  actionIndex: number;
+  dryRun: boolean;
+}
+
+async function persistActionsDetail(
+  params: PersistActionsDetailParams,
+): Promise<void> {
+  if (params.dryRun) return;
+  const { error } = await params.db
+    .from("agent_conversations")
+    .update({ actions_executed_detail: params.detail })
+    .eq("id", params.agentConversationId)
+    .eq("organization_id", params.orgId);
+  if (error) {
+    logError("stage_auto_action_detail_persist_failed", {
+      organization_id: params.orgId,
+      agent_conversation_id: params.agentConversationId,
+      stage_id: params.stageId,
+      action_index: params.actionIndex,
+      error: error.message,
+    });
+  }
 }
 
 // ============================================================================
