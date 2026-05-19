@@ -89,7 +89,12 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     name: "transfer_to_stage",
     display_name: "Avancar etapa do agente",
     description:
-      "Advance the agent conversation to a different stage in the SAME agent. Use the stage's situation (name) — the system prompt lists all stages of this agent. Do NOT use UUIDs.",
+      // FIX Bug #8 (mai/2026): descricao reescrita pra ser IMPERATIVA. " +
+      // "Advance the conversation if..." e passivo demais — o LLM le como
+      // sugestao opcional. Agora deixamos explicito: chamar e MANDATORIO
+      // quando a condicao de transicao da etapa atual foi cumprida. Vide
+      // contracto detalhado no system prompt.
+      "Mandatory: call this tool whenever the CURRENT stage's transition condition is met (the stage's transition_hint defines it). DO NOT continue conversing in the current stage when the lead has fulfilled the conditions to advance — that would skip auto-actions of later stages and leave the funnel broken. The system prompt lists all stages of this agent — use the stage's exact `situation` (name) as target_stage_name; never UUIDs.",
     ui_description: "Move a conversa para outra etapa do mesmo agente.",
     icon_name: "ArrowRightCircle",
     category: "transfer",

@@ -1486,6 +1486,17 @@ function buildSystemPromptWithRag(
       : null;
   const stageInstruction = isActionsMode ? null : stage.instruction;
 
+  // FIX Bug #8 (mai/2026): nudge explicito de avaliar transicao a cada
+  // turno. Antes desta linha, o LLM via transition_hint como "dica" e
+  // ficava preso na etapa inicial fazendo o funil inteiro inline.
+  // Agora forcamos um check antes do reply: se condicao bate, chama
+  // transfer_to_stage ANTES de responder. So injetamos quando ha
+  // transition_hint configurado E ha tool transfer_to_stage disponivel
+  // (single-stage agent nao precisa).
+  const transitionRule = stage.transition_hint
+    ? "REGRA DE TRANSICAO (avaliar a CADA turno, ANTES de responder): se a condicao da `Dica de transicao` abaixo foi cumprida nesta conversa, VOCE DEVE chamar transfer_to_stage com o nome da proxima etapa AGORA — nao na proxima mensagem, nao depois de mais uma pergunta. Auto-actions da etapa de destino dependem disso pra rodar."
+    : null;
+
   return [
     ragContext,
     config.system_prompt,
@@ -1493,6 +1504,7 @@ function buildSystemPromptWithRag(
     `Etapa atual: ${stage.situation}`,
     actionLine,
     stageInstruction,
+    transitionRule,
     stage.transition_hint ? `Dica de transicao: ${stage.transition_hint}` : "",
     mediaCatalog,
     // PR-AI-AGENT-TOOLS-NAMES: catalogos das tools nativas (tags,
