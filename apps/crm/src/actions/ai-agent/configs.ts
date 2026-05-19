@@ -470,8 +470,8 @@ async function applyTemplate(
       .map((s) => s.id)
       .filter(Boolean);
 
-    // Coleta tools referenciadas pelas auto_actions + tools "padrao"
-    // do funil completo (agendamento). Set evita duplicar.
+    // Coleta tools referenciadas pelas auto_actions (runtime PRECISA
+    // delas, mesmo se template.tool_handlers omitir). Set evita duplicar.
     const toolHandlers = new Set<NativeHandlerName>();
     for (const stage of template.stages) {
       for (const action of stage.auto_actions ?? []) {
@@ -486,29 +486,35 @@ async function applyTemplate(
         }
       }
     }
-    // Tools de agenda (sempre uteis em templates completos)
-    if (template.seed_appointment_types && template.seed_appointment_types.length > 0) {
-      toolHandlers.add("create_appointment");
-      toolHandlers.add("list_lead_appointments");
-      toolHandlers.add("cancel_appointment");
-      toolHandlers.add("reschedule_appointment");
+
+    if (template.tool_handlers && template.tool_handlers.length > 0) {
+      // Refactor single-stage (mai/2026): template define allowlist
+      // EXPLICITA. Pula a heuristica default (transfer_to_user, transfer_to_agent,
+      // cancel/reschedule, transfer_to_stage) — usa exatamente o set
+      // declarado + tools referenciadas por auto_actions ja coletadas acima.
+      for (const handler of template.tool_handlers) {
+        toolHandlers.add(handler);
+      }
+    } else {
+      // Heuristica default (retrocompat com templates legados sem tool_handlers).
+      if (template.seed_appointment_types && template.seed_appointment_types.length > 0) {
+        toolHandlers.add("create_appointment");
+        toolHandlers.add("list_lead_appointments");
+        toolHandlers.add("cancel_appointment");
+        toolHandlers.add("reschedule_appointment");
+      }
+      // transfer_to_user e sempre util pra escalation manual
+      toolHandlers.add("transfer_to_user");
+      // FIX BUG #8 (mai/2026): transfer_to_stage e VITAL pra funis com
+      // mais de 1 etapa — sem essa tool a IA fica presa na etapa inicial
+      // e faz qualificacao/apresentacao/agendamento todos inline.
+      if (template.stages.length > 1) {
+        toolHandlers.add("transfer_to_stage");
+      }
+      // transfer_to_agent pra orquestracao multi-agente (recepcao -> vendas).
+      toolHandlers.add("transfer_to_agent");
     }
-    // transfer_to_user e sempre util pra escalation manual
-    toolHandlers.add("transfer_to_user");
-    // FIX BUG #8 (mai/2026): transfer_to_stage e VITAL pra funis com
-    // mais de 1 etapa — sem essa tool a IA fica presa na etapa inicial
-    // e faz qualificacao/apresentacao/agendamento todos inline.
-    // Auto_actions de etapas 2-N nunca disparam. Adicionamos
-    // incondicionalmente: agentes com 1 etapa apenas (raros) ignoram
-    // a tool sem custo, mas garantimos que multi-stage SEMPRE funciona.
-    if (template.stages.length > 1) {
-      toolHandlers.add("transfer_to_stage");
-    }
-    // transfer_to_agent pra orquestracao multi-agente (recepcao -> vendas).
-    // Adicionamos por default tambem — agente sozinho ignora; agente em
-    // squad consegue passar pra outro sem precisar de retoque manual.
-    toolHandlers.add("transfer_to_agent");
-    // stop_agent ja foi criado — pular pra nao duplicar
+    // stop_agent ja foi criado fora do applyTemplate — pular pra nao duplicar
     toolHandlers.delete("stop_agent");
 
     const toolsToCreate = [...toolHandlers]
