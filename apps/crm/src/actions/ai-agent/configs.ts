@@ -495,6 +495,19 @@ async function applyTemplate(
     }
     // transfer_to_user e sempre util pra escalation manual
     toolHandlers.add("transfer_to_user");
+    // FIX BUG #8 (mai/2026): transfer_to_stage e VITAL pra funis com
+    // mais de 1 etapa — sem essa tool a IA fica presa na etapa inicial
+    // e faz qualificacao/apresentacao/agendamento todos inline.
+    // Auto_actions de etapas 2-N nunca disparam. Adicionamos
+    // incondicionalmente: agentes com 1 etapa apenas (raros) ignoram
+    // a tool sem custo, mas garantimos que multi-stage SEMPRE funciona.
+    if (template.stages.length > 1) {
+      toolHandlers.add("transfer_to_stage");
+    }
+    // transfer_to_agent pra orquestracao multi-agente (recepcao -> vendas).
+    // Adicionamos por default tambem — agente sozinho ignora; agente em
+    // squad consegue passar pra outro sem precisar de retoque manual.
+    toolHandlers.add("transfer_to_agent");
     // stop_agent ja foi criado — pular pra nao duplicar
     toolHandlers.delete("stop_agent");
 
