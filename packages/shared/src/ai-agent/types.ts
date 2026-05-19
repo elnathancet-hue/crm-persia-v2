@@ -252,6 +252,11 @@ export interface AgentConversation {
   // Migration 049 adiciona com default '[]'. Runtime normaliza via
   // normalizeActionsExecuted antes de usar.
   actions_executed?: string[];
+  // PR3 (mai/2026): per-action retry tracking. Shape detalhado em
+  // `ActionsExecutedDetail` (vide ai-agent/stage-actions.ts). Migration
+  // 053 adiciona com default '{}'. Runtime normaliza via
+  // normalizeActionsExecutedDetail antes de usar.
+  actions_executed_detail?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

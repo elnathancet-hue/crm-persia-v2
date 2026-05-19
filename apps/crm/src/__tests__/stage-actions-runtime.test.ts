@@ -257,8 +257,11 @@ describe("runStageAutoActionsIfPending", () => {
     });
   });
 
-  it("sucesso parcial: 1 ok + 1 falha + 1 throw -> continua e marca todas", async () => {
+  it("sucesso parcial: 1 ok + 1 falha + 1 throw -> persiste detail, NAO marca legacy (attempts < max)", async () => {
     const supabase = createSupabaseMock();
+    // 4 UPDATEs esperados (1 por acao + 0 marca legacy ja que nao completou)
+    supabase.queue("agent_conversations", { data: null, error: null });
+    supabase.queue("agent_conversations", { data: null, error: null });
     supabase.queue("agent_conversations", { data: null, error: null });
 
     const stage = makeStage({
@@ -289,10 +292,20 @@ describe("runStageAutoActionsIfPending", () => {
 
     expect(result.executed).toBe(1);
     expect(result.failed).toBe(2);
-    // ainda assim marca como visitada (semantica: ja tentou aqui)
-    expect(supabase.updates.agent_conversations?.[0]).toMatchObject({
-      actions_executed: ["stage-a"],
-    });
+    // PR3: NAO marca legacy (attempts dos failed ainda < MAX_RETRIES=3).
+    // Proxima entrada do lead na etapa deve re-tentar as falhas.
+    const updates = (supabase.updates.agent_conversations ?? []) as Array<Record<string, unknown>>;
+    const legacyMark = updates.find((u) => Array.isArray(u.actions_executed));
+    expect(legacyMark).toBeUndefined();
+    // Em vez disso, atualizou actions_executed_detail (persist per-action).
+    const detailUpdates = updates.filter((u) => "actions_executed_detail" in u);
+    expect(detailUpdates.length).toBe(3); // 1 per acao
+    const lastDetail = detailUpdates[detailUpdates.length - 1]?.actions_executed_detail as Record<string, unknown>;
+    expect(lastDetail).toHaveProperty("on_enter:stage-a");
+    const stageState = lastDetail["on_enter:stage-a"] as { succeeded: number[]; failed: Record<string, unknown> };
+    expect(stageState.succeeded).toEqual([0]); // add_tag rodou
+    expect(stageState.failed).toHaveProperty("1"); // move_pipeline falhou
+    expect(stageState.failed).toHaveProperty("2"); // trigger_notification throw
   });
 
   it("dry_run NAO persiste actions_executed", async () => {
@@ -373,6 +386,217 @@ describe("runStageAutoActionsIfPending", () => {
     // (que tem trigger='on_tool_success') NAO foi chamado aqui.
     expect(handlerCalls.map((c) => c.handler)).toEqual(["add_tag", "send_media"]);
     expect(handlerCalls.some((c) => c.handler === "trigger_notification")).toBe(false);
+  });
+
+  // ==========================================================================
+  // PR3 (mai/2026) — per-action retry tracking via actions_executed_detail
+  // ==========================================================================
+
+  it("PR3: re-entrada pula sucessos e retenta SO as falhas pendentes", async () => {
+    const supabase = createSupabaseMock();
+
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          { type: "add_tag", tag_name: "qualificado" }, // index 0 — succeeded antes
+          { type: "move_pipeline_stage", stage_name: "Negociacao" }, // index 1 — failed antes
+        ],
+      },
+    });
+
+    // Simula segundo tick: lead voltou na stage com detail preenchido
+    // (idx 0 succeeded; idx 1 failed com attempts=1).
+    const convWithHistory = makeConversation({
+      actions_executed_detail: {
+        "on_enter:stage-a": {
+          succeeded: [0],
+          failed: { "1": { attempts: 1, last_error: "first try fail" } },
+        },
+      } as never,
+    });
+
+    await runStageAutoActionsIfPending({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: convWithHistory,
+      stage,
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+    });
+
+    // Apenas move_pipeline_stage (que falhou antes) e re-chamado.
+    expect(handlerCalls.map((c) => c.handler)).toEqual(["move_pipeline_stage"]);
+    // add_tag JA estava em succeeded — nao re-roda mesmo sendo idempotente
+    // (evita audit duplicado + custo de handler).
+  });
+
+  it("PR3: ao atingir MAX_RETRIES, marca legacy actions_executed + desiste", async () => {
+    const supabase = createSupabaseMock();
+
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          { type: "move_pipeline_stage", stage_name: "Negociacao" }, // SEMPRE falha (mock)
+        ],
+      },
+    });
+
+    // Detail com attempts=2 — proxima falha = 3, atinge MAX_RETRIES.
+    const convNearMax = makeConversation({
+      actions_executed_detail: {
+        "on_enter:stage-a": {
+          succeeded: [],
+          failed: { "0": { attempts: 2, last_error: "previous error" } },
+        },
+      } as never,
+    });
+
+    const result = await runStageAutoActionsIfPending({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: convNearMax,
+      stage,
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+    });
+
+    expect(result.failed).toBe(1);
+    expect(result.executed).toBe(0);
+    // PR3: como attempts atingiu MAX_RETRIES=3, stage e marcada legacy
+    // como "tentei tudo, desisto" — proxima entrada NAO re-tenta.
+    const updates = (supabase.updates.agent_conversations ?? []) as Array<Record<string, unknown>>;
+    const legacyMark = updates.find((u) => Array.isArray(u.actions_executed));
+    expect(legacyMark).toMatchObject({ actions_executed: ["stage-a"] });
+  });
+
+  it("PR3: stage pula totalmente quando todos os indices ja resolvidos", async () => {
+    const supabase = createSupabaseMock();
+
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          { type: "add_tag", tag_name: "qualificado" }, // idx 0 — succeeded
+          { type: "send_media", slug: "catalogo" }, // idx 1 — exceeded retries
+        ],
+      },
+    });
+
+    const convDone = makeConversation({
+      actions_executed_detail: {
+        "on_enter:stage-a": {
+          succeeded: [0],
+          failed: { "1": { attempts: 3, last_error: "gave up" } },
+        },
+      } as never,
+    });
+
+    const result = await runStageAutoActionsIfPending({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: convDone,
+      stage,
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+    });
+
+    // Nada novo chamado — tudo ja resolvido.
+    expect(handlerCalls).toHaveLength(0);
+    expect(result.skipped).toBe(true);
+    // Marca legacy pra short-circuit nas proximas msgs.
+    const updates = (supabase.updates.agent_conversations ?? []) as Array<Record<string, unknown>>;
+    const legacyMark = updates.find((u) => Array.isArray(u.actions_executed));
+    expect(legacyMark).toMatchObject({ actions_executed: ["stage-a"] });
+  });
+
+  it("PR3: persist por acao — UPDATE em cada iteracao do loop", async () => {
+    const supabase = createSupabaseMock();
+
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [
+          { type: "add_tag", tag_name: "tag1" },
+          { type: "add_tag", tag_name: "tag2" },
+        ],
+      },
+    });
+
+    await runStageAutoActionsIfPending({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation(),
+      stage,
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+    });
+
+    // 2 acoes -> 2 UPDATEs em actions_executed_detail + 1 UPDATE marca legacy
+    const updates = (supabase.updates.agent_conversations ?? []) as Array<Record<string, unknown>>;
+    const detailUpdates = updates.filter((u) => "actions_executed_detail" in u);
+    expect(detailUpdates.length).toBe(2);
+    // Primeiro detail update ja tem idx 0 em succeeded; segundo tem idx 0 e 1.
+    const first = detailUpdates[0]?.actions_executed_detail as Record<string, unknown>;
+    const second = detailUpdates[1]?.actions_executed_detail as Record<string, unknown>;
+    expect((first["on_enter:stage-a"] as { succeeded: number[] }).succeeded).toEqual([0]);
+    expect((second["on_enter:stage-a"] as { succeeded: number[] }).succeeded).toEqual([0, 1]);
+  });
+
+  it("PR3: retrocompat — stage_id em actions_executed legado + detail vazio = skip total", async () => {
+    const supabase = createSupabaseMock();
+
+    const stage = makeStage({
+      action_config: {
+        auto_actions: [{ type: "add_tag", tag_name: "x" }],
+      },
+    });
+
+    const result = await runStageAutoActionsIfPending({
+      db: supabase as never,
+      orgId: ORG,
+      agentConversation: makeConversation({
+        actions_executed: ["stage-a"], // legado: marcou antes da PR3
+      }),
+      stage,
+      config: makeConfig(),
+      runId: RUN_ID,
+      leadId: LEAD_ID,
+      crmConversationId: CRM_CONV_ID,
+      provider: null,
+      openaiClient: null,
+      dryRun: false,
+      startingOrderIndex: 0,
+      insertStep: vi.fn(),
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(handlerCalls).toHaveLength(0);
   });
 });
 
