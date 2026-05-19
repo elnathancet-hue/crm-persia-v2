@@ -664,7 +664,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     orderIndex = stageActionsResult.nextOrderIndex;
 
     for (let iteration = 0; iteration < guardrails.max_iterations; iteration++) {
-      assertWithinDeadline(startedAt, guardrails);
+      assertWithinDeadline(startedAt, guardrails, executionModel);
       await assertWithinCostLimits({
         db: params.db,
         orgId: params.orgId,
