@@ -548,7 +548,15 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         content: params.msg.text || "[incoming media message]",
       });
     }
-    const tools = params.tools.map(toOpenAITool);
+    // PR-FIX-PROMPT-MID-RUN (mai/2026): convertidos pra `let` pra
+    // permitir rebuild apos transfer_to_stage. Veja bloco no fim do
+    // tool-call loop. Sem isso, IA chega na etapa Agendamento mas a
+    // proxima iteração do mesmo run vai com instrução da etapa
+    // ANTERIOR (Boas-vindas), o que explica "anda no CRM" mas não
+    // chama create_appointment ate o turno seguinte.
+    let tools = params.tools.map(toOpenAITool);
+    let currentStage = params.stage;
+    let currentRawTools = params.tools;
     const retrieval = params.stage.rag_enabled
       ? await maybeRetrieveKnowledge({
           db: params.db,
@@ -622,9 +630,10 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         : Promise.resolve(null),
     ]);
 
-    const system = buildSystemPromptWithRag(
+    // PR-FIX-PROMPT-MID-RUN: `let` permite rebuild apos transfer_to_stage.
+    let system = buildSystemPromptWithRag(
       params.config,
-      params.stage,
+      currentStage,
       retrieval?.hits?.length ? buildRagContextBlock(retrieval.hits) : null,
       mediaCatalog,
       {
@@ -863,8 +872,16 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         content: typeof choice?.message?.content === "string" ? choice.message.content : null,
         tool_calls: choice?.message?.tool_calls ?? [],
       });
+      // PR-FIX-PROMPT-MID-RUN: flag por-iteração pra saber se a IA mudou
+      // de etapa via transfer_to_stage. Se sim, ao final do for-of vamos
+      // refazer system prompt + tools list pra que a próxima iteração
+      // veja as instruções da etapa NOVA.
+      let stageChangedInThisIteration = false;
       for (const call of toolCalls) {
-        const tool = params.tools.find((candidate) => candidate.name === call.name) ?? null;
+        // PR-FIX-PROMPT-MID-RUN: usar `currentRawTools` (atualizado apos
+        // transfer_to_stage) em vez de `params.tools` (frozen) pra resolver
+        // tool calls que sao validas na etapa atual mas nao na original.
+        const tool = currentRawTools.find((candidate) => candidate.name === call.name) ?? null;
         const toolResult = await executeToolCall(params, {
           runId: run.id,
           orderIndex: orderIndex++,
@@ -892,6 +909,9 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         //     antes pra ter sentido — escopo futuro.
         if (toolResult.success && tool?.native_handler) {
           successfulToolHandlers.add(tool.native_handler);
+          if (tool.native_handler === "transfer_to_stage") {
+            stageChangedInThisIteration = true;
+          }
         }
         if (toolResult.success && tool?.native_handler && !params.dryRun) {
           try {
@@ -924,6 +944,74 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
               error: errorMessage(err),
             });
           }
+        }
+      }
+
+      // PR-FIX-PROMPT-MID-RUN (mai/2026): se a IA chamou transfer_to_stage
+      // com sucesso nesta iteração, refaz `currentStage` + `tools` +
+      // `system` ANTES da próxima iteração. Senão, a próxima LLM call
+      // ainda usaria as instruções da etapa ANTIGA e poderia divagar
+      // (caso observado em Test 3: agente entrava em Agendamento mas
+      // continuava puxando comportamento de Boas-vindas e nunca chamava
+      // create_appointment no mesmo turno).
+      if (stageChangedInThisIteration) {
+        try {
+          const { data: convRow } = await params.db
+            .from("agent_conversations")
+            .select("current_stage_id")
+            .eq("id", params.agentConversation.id)
+            .maybeSingle();
+          const newStageId = (convRow as { current_stage_id?: string | null } | null)
+            ?.current_stage_id ?? null;
+          if (newStageId && newStageId !== currentStage?.id) {
+            const newStage = await loadStage(
+              params.db,
+              params.orgId,
+              params.config.id,
+              newStageId,
+            );
+            if (newStage) {
+              const newRawTools = await loadAllowedTools(
+                params.db,
+                params.orgId,
+                params.config.id,
+                newStage.id,
+              );
+              currentStage = newStage;
+              currentRawTools = newRawTools;
+              tools = newRawTools.map(toOpenAITool);
+              system = buildSystemPromptWithRag(
+                params.config,
+                currentStage,
+                retrieval?.hits?.length ? buildRagContextBlock(retrieval.hits) : null,
+                mediaCatalog,
+                {
+                  tags: tagCatalog,
+                  members: memberCatalog,
+                  agents: agentCatalog,
+                  kanbanStages: kanbanStageCatalog,
+                  agentStages: agentStageCatalog,
+                  notificationTemplates: notificationTemplateCatalog,
+                  appointmentTypes: appointmentTypeCatalog,
+                },
+              );
+              logInfo("ai_agent_stage_rebuild_mid_run", {
+                organization_id: params.orgId,
+                run_id: run.id,
+                new_stage_id: newStage.id,
+                new_stage_situation: newStage.situation,
+                allowed_tools_count: newRawTools.length,
+              });
+            }
+          }
+        } catch (err) {
+          // Se rebuild falhar, deixa a iteracao continuar com prompt antigo
+          // (degradação graciosa) — pior caso = comportamento atual.
+          logError("ai_agent_stage_rebuild_failed", {
+            organization_id: params.orgId,
+            run_id: run.id,
+            error: errorMessage(err),
+          });
         }
       }
     }
