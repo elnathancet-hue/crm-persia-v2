@@ -268,17 +268,17 @@ Wizard em [`packages/ai-agent-ui/src/components/AgentCreationWizard.tsx`](../../
 | `tira_duvidas_faq` | 1 | RAG-first (use após popular Documentos/FAQ) |
 | `consultor_funil_completo` | 5 | **Mais completo**: humanização + auto-actions + seedda tags/tipos de agendamento/templates de notificação |
 
-### Seed automático (PR #251 + fixes #254/#255)
+### Seed automático (PR #251 + fixes #254/#255; refactor single-stage mai/2026)
 
 Quando o cliente escolhe o template `consultor_funil_completo`, o `applyTemplate` (em [`actions/ai-agent/configs.ts`](../../actions/ai-agent/configs.ts)):
 
-1. Cria o `agent_config` com `behavior_mode='actions'` + `humanization_config`
-2. Cria 4 tags (`qualificado`, `material-enviado`, `agendou-reuniao`, `cliente-fechado`)
+1. Cria o `agent_config` com `behavior_mode='stages'` + `humanization_config`
+2. Cria 2 tags (`qualificado`, `agendou-reuniao`)
 3. Cria 2 `agenda_services` (`Consulta inicial 30min online`, `Reunião de fechamento 60min online`)
-4. Cria 3 `agent_notification_templates` (target placeholder — cliente troca depois)
-5. Materializa ~9 tools nativas em `agent_tools`
-6. Linka todas as tools em todas as 5 stages via `agent_stage_tools` (45 rows)
-7. Cria as 5 stages com `action_type` + `action_config.auto_actions`
+4. Cria 1 `agent_notification_template` (`Avisar equipe: nova reunião agendada` — target placeholder, cliente troca depois)
+5. Materializa 5 tools nativas (`add_tag`, `create_appointment`, `list_lead_appointments`, `send_media`, `stop_agent`) em `agent_tools`
+6. Linka as 5 tools na única stage via `agent_stage_tools`
+7. Cria a stage única `Atendimento` com `action_type='free_message'` + `action_config.auto_actions` (2 ações on_tool_success de `create_appointment`)
 
 Best-effort: falha em qualquer seed loga `console.error` mas segue. Agente criado sempre — cliente pode editar o que faltou.
 
