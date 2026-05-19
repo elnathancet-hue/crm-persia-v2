@@ -746,20 +746,32 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
         // sinonimos comuns (reservar). Falsos positivos esperados:
         // "agendei sua duvida pra te responder amanha" — raro, mas se
         // virar problema, refinar com janela ?(?<!\\b(duvida|tarefa)\\b\\s+).
-        if (!successfulToolHandlers.has("create_appointment")) {
-          const APPOINTMENT_CONFIRMATION_VERBS =
-            /\b(agendei|agendou|agendamos|agendado|agendada|marquei|marcou|marcamos|marcado|marcada|reservei|reservou|reservamos|reservado|reservada|confirmei|confirmou|confirmamos|confirmado|confirmada)\b/i;
-          if (APPOINTMENT_CONFIRMATION_VERBS.test(assistantReply)) {
-            logError("ai_agent_appointment_hallucination", {
-              organization_id: params.orgId,
-              run_id: run.id,
-              agent_conversation_id: params.agentConversation.id,
-              reply_excerpt: assistantReply.slice(0, 300),
-              tools_used: Array.from(successfulToolHandlers),
-            });
-            assistantReply =
-              "Deixa eu conferir esse agendamento com a equipe e te confirmo aqui em breve.";
-          }
+        const APPOINTMENT_CONFIRMATION_VERBS =
+          /\b(agendei|agendou|agendamos|agendado|agendada|marquei|marcou|marcamos|marcado|marcada|reservei|reservou|reservamos|reservado|reservada|confirmei|confirmou|confirmamos|confirmado|confirmada)\b/i;
+        const hasCreateAppointment = successfulToolHandlers.has("create_appointment");
+        const verbMatch = APPOINTMENT_CONFIRMATION_VERBS.test(assistantReply);
+        // PR-HALLUCINATION-OBSERVABILITY (mai/2026): log estruturado de
+        // CADA execucao do guard, mesmo quando nao substitui. Sem isso
+        // nao dava pra saber se o guard estava rodando ou se o bundle
+        // em prod era stale. logInfo vai pro console.info do EasyPanel.
+        logInfo("ai_agent_appointment_guard_check", {
+          organization_id: params.orgId,
+          run_id: run.id,
+          has_create_appointment: hasCreateAppointment,
+          verb_match: verbMatch,
+          will_substitute: !hasCreateAppointment && verbMatch,
+          tools_used: Array.from(successfulToolHandlers),
+        });
+        if (!hasCreateAppointment && verbMatch) {
+          logError("ai_agent_appointment_hallucination", {
+            organization_id: params.orgId,
+            run_id: run.id,
+            agent_conversation_id: params.agentConversation.id,
+            reply_excerpt: assistantReply.slice(0, 300),
+            tools_used: Array.from(successfulToolHandlers),
+          });
+          assistantReply =
+            "Deixa eu conferir esse agendamento com a equipe e te confirmo aqui em breve.";
         }
         // PR-AI-AGENT-TESTER-RENDER-BUBBLE (mai/2026): chamamos
         // sendAssistantReply sempre que ha provider, INCLUSIVE em
