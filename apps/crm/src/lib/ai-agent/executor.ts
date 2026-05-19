@@ -687,7 +687,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
           tools: tools as never,
           tool_choice: "auto",
         } as never),
-        Math.max(1, guardrails.timeout_seconds) * 1000,
+        buildTimeoutMs(executionModel, guardrails.timeout_seconds),
       ) as OpenAIResponse;
       const choice = response.choices?.[0];
       const usage = readUsage(response);
@@ -786,7 +786,7 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
             config: params.config,
             conversation: updatedConversation,
             requestId: params.requestId,
-            timeoutMs: Math.max(1, guardrails.timeout_seconds) * 1000,
+            timeoutMs: buildTimeoutMs(executionModel, guardrails.timeout_seconds),
           });
           tokensInput += summaryResult.tokensInput;
           tokensOutput += summaryResult.tokensOutput;
@@ -1731,6 +1731,27 @@ function buildMaxTokensParam(model: string, maxTokens: number): {
     return { max_completion_tokens: maxTokens * 4 };
   }
   return { max_tokens: maxTokens };
+}
+
+// PR-FIX-GPT5-TIMEOUT (mai/2026): irmão do fix de tokens. gpt-5* gasta
+// wall-clock real em reasoning antes de emitir output (10-40s observado
+// em prod). Default timeout 30s estoura ANTES do output em prompts
+// complexos como agendamento (precisa resolver type_slug + parsear ISO
+// + cadear transfer_to_stage → create_appointment).
+//
+// Sintoma: step com stepType='guardrail' (UI labela "Verificacao de
+// regra") em ~30220ms, depois HANDOFF_REPLY literal. Test 3 (agendamento)
+// caiu nisso enquanto Tests 1/2 passaram porque cada LLM call deles
+// individual ficou <30s.
+//
+// Fix: triplicar timeout pra gpt-5* (30s → 90s). gpt-4* não muda.
+// Não afeta cost_ceiling — esse e' contado em tokens, nao em tempo.
+function buildTimeoutMs(model: string, seconds: number): number {
+  const base = Math.max(1, seconds) * 1000;
+  if (model.startsWith("gpt-5")) {
+    return base * 3;
+  }
+  return base;
 }
 
 function resolveModel(model: string): string {
