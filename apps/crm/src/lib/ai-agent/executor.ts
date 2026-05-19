@@ -306,6 +306,10 @@ export async function tryEnqueueForNativeAgent(
                 humanization,
                 orgId: params.orgId,
                 conversationId: resolved.crm.crmConversationId,
+                persist: {
+                  db,
+                  leadId: resolved.crm.leadId,
+                },
               });
             } catch (err: unknown) {
               logError("after_hours_message_send_failed", {
@@ -731,6 +735,11 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
             humanization,
             orgId: params.orgId,
             conversationId: params.crmConversationId,
+            // PR1 #2: persistir so quando NAO eh dryRun (Tester usa ids
+            // sinteticos 'tester' que nao casam com FK em messages).
+            persist: params.dryRun
+              ? undefined
+              : { db: params.db, leadId: params.leadId },
           });
         }
 
@@ -836,6 +845,12 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
           humanization,
           orgId: params.orgId,
           conversationId: params.crmConversationId,
+          // PR1 #2: HANDOFF_REPLY tambem entra no historico — guardrail
+          // dispara antes de qualquer resposta valida do LLM, mas a IA
+          // ja respondeu pro cliente. Mesma logica de dryRun.
+          persist: params.dryRun
+            ? undefined
+            : { db: params.db, leadId: params.leadId },
         });
       }
       await insertStep(params.db, {
@@ -1647,7 +1662,16 @@ function buildMaxTokensParam(model: string, maxTokens: number): {
   max_tokens?: number;
 } {
   if (model.startsWith("gpt-5")) {
-    return { max_completion_tokens: maxTokens };
+    // PR1 #5 (mai/2026): gpt-5* gasta `reasoning_tokens` internos DENTRO
+    // do budget de `max_completion_tokens` antes de emitir a saida
+    // visivel. Em runs reais o reasoning queimava 700-900 tokens, sobrando
+    // 100-300 pro texto da resposta — frequentemente truncado e renderizado
+    // como HANDOFF_REPLY. Multiplicamos por 4 pra reservar headroom de
+    // reasoning + output completo. Acima de gpt-5* o consumo de tokens
+    // ainda fica dentro dos limits operacionais; o teto duro continua
+    // sendo `guardrails.cost_ceiling_tokens` na enforcment de cost-limits.
+    // Detalhes: memory project_gpt5_reasoning_tokens_bug.md.
+    return { max_completion_tokens: maxTokens * 4 };
   }
   return { max_tokens: maxTokens };
 }

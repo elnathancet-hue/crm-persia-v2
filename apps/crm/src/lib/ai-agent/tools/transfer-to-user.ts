@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { nowIso } from "../db";
+import { pauseAgent } from "../pause-agent";
+import { errorMessage, logError } from "@/lib/observability";
 import { failureResult, getHandlerDb, insertLeadActivity, successResult, trimReason } from "./shared";
 
 // PR-AI-AGENT-TOOLS-NAMES (mai/2026): aceita `user` (nome ou email
@@ -138,6 +140,26 @@ export const transferToUserHandler: NativeHandler = async (context, input) => {
 
   if (leadError) return failureResult(leadError.message);
 
+  // PR1 #4: assim que o lead troca de assignee, o agente nativo precisa
+  // parar de responder — senao o cliente conversa com 2 atendentes (IA
+  // + humano) ao mesmo tempo. Pausar e best-effort: se falhar, log e
+  // segue, porque o lead JA foi reatribuido (preferimos lead "atribuido
+  // + IA respondendo" a falhar o transfer inteiro e deixar lead orfao).
+  const pauseResult = await pauseAgent({
+    db,
+    orgId: context.organization_id,
+    agentConversationId: context.agent_conversation_id,
+    reason: `agent_transferred_to_user:${displayName}`,
+  });
+  if (pauseResult.error) {
+    logError("transfer_to_user_pause_failed", {
+      organization_id: context.organization_id,
+      agent_conversation_id: context.agent_conversation_id,
+      assigned_to: targetUserId,
+      error: pauseResult.error,
+    });
+  }
+
   await insertLeadActivity({
     db,
     organizationId: context.organization_id,
@@ -149,8 +171,14 @@ export const transferToUserHandler: NativeHandler = async (context, input) => {
       agent_conversation_id: context.agent_conversation_id,
       assigned_to: targetUserId,
       run_id: context.run_id,
+      agent_paused: pauseResult.paused,
     },
   });
+
+  const notes = [`assigned lead to ${displayName}`, "added internal lead activity note"];
+  if (pauseResult.paused) {
+    notes.push("paused native agent for this conversation");
+  }
 
   return successResult(
     {
@@ -158,8 +186,9 @@ export const transferToUserHandler: NativeHandler = async (context, input) => {
       assigned_to: targetUserId,
       assignee_name: displayName,
       reason,
+      agent_paused: pauseResult.paused,
     },
-    [`assigned lead to ${displayName}`, "added internal lead activity note"],
+    notes,
   );
 };
 

@@ -7,7 +7,7 @@ import {
   sendHandoffNotification,
   type SendHandoffNotificationResult,
 } from "../handoff-notification";
-import { nowIso } from "../db";
+import { pauseAgent } from "../pause-agent";
 import {
   failureResult,
   getHandlerConfig,
@@ -54,18 +54,15 @@ export const stopAgentHandler: NativeHandler = async (context, input) => {
   const db = getHandlerDb(context);
   if (!db) return failureResult("database context missing");
 
-  const { error } = await db
-    .from("agent_conversations")
-    .update({
-      human_handoff_at: nowIso(),
-      human_handoff_reason: reason,
-      updated_at: nowIso(),
-    })
-    .eq("id", context.agent_conversation_id)
-    .eq("organization_id", context.organization_id);
-
-  if (error) {
-    return failureResult(error.message);
+  // PR1 #4: pausa via helper unificado (mesmo update usado por transfer_to_user).
+  const pauseResult = await pauseAgent({
+    db,
+    orgId: context.organization_id,
+    agentConversationId: context.agent_conversation_id,
+    reason,
+  });
+  if (pauseResult.error) {
+    return failureResult(pauseResult.error);
   }
 
   await insertLeadActivity({

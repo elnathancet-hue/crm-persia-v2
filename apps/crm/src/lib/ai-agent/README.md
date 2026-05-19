@@ -47,7 +47,7 @@ Schema introduzido pelas **migrations 017 → 049** (cronologicamente). Tabelas 
 | `agent_notification_templates` | `config_id`, `name`, `description`, `target_type`, `target_address`, `body_template` | Templates WhatsApp pra equipe |
 | `agent_knowledge_sources` | `config_id`, `type` (`faq`\|`document`), `status`, `embedding_*` | RAG via Voyage AI (dim 1024) |
 | `agent_calendar_connections` | `user_id`, `provider`, `refresh_token_vault_secret_id` | OAuth Google Calendar (runtime ainda placeholder) |
-| `agent_followups` | `config_id`, `trigger_event`, `delay_minutes`, `template_text` | Follow-up scheduler |
+| `agent_followups` | `config_id`, `name`, `template_id` (→ `agent_notification_templates`), `delay_hours` (1..720), `is_enabled`, `order_index` | Follow-up scheduler — runtime ainda pendente (PR4) |
 
 ### Tabelas externas que o agente lê/escreve
 

@@ -196,6 +196,11 @@ export async function runStageAutoActionsIfPending(
   let orderIndex = params.startingOrderIndex;
   let executed = 0;
   let failed = 0;
+  // PR1 #6 (mai/2026): se qualquer auto-action falhou por `placeholder_skip`
+  // (ex: trigger_notification com target_address='0000000000' do seed),
+  // NAO marcamos a stage como visitada — assim, cliente arruma a config,
+  // lead volta pra etapa e as acoes re-disparam.
+  let placeholderSkipDetected = false;
 
   // Context enriquecido reusado pra todas as acoes — paridade total
   // com o que executeToolCall passa pros handlers do LLM (apps/crm/src/
@@ -250,6 +255,10 @@ export async function runStageAutoActionsIfPending(
       executed++;
     } else {
       failed++;
+      const output = result.output as { placeholder_skip?: unknown } | null;
+      if (output?.placeholder_skip === true) {
+        placeholderSkipDetected = true;
+      }
     }
 
     await params.insertStep({
@@ -271,7 +280,21 @@ export async function runStageAutoActionsIfPending(
   // "ja tentei aqui, nao tento de novo nesta conversa". Se cliente
   // arrumar a config e quiser re-disparar, opcao seria botao "Resetar
   // acoes da etapa" no LeadDrawer (escopo futuro).
-  await persistMark(params, executedSoFar, stage.id);
+  //
+  // EXCECAO (PR1 #6): se houve `placeholder_skip` em alguma acao
+  // (target_address ainda no default do seed), NAO marcamos a stage.
+  // Cliente arruma a config + lead volta pra etapa = nova chance.
+  if (placeholderSkipDetected) {
+    logError("stage_auto_actions_placeholder_skip", {
+      organization_id: params.orgId,
+      agent_conversation_id: params.agentConversation.id,
+      stage_id: stage.id,
+      executed,
+      failed,
+    });
+  } else {
+    await persistMark(params, executedSoFar, stage.id);
+  }
 
   return {
     executed,
