@@ -16,6 +16,7 @@ import {
   matchesPauseKeyword,
   matchesResumeKeyword,
   normalizeHumanizationConfig,
+  normalizeStageActionConfig,
   shouldSendAfterHoursMessage,
   shouldTriggerSummarization,
   toOpenAITool,
@@ -554,9 +555,16 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
     // proxima iteração do mesmo run vai com instrução da etapa
     // ANTERIOR (Boas-vindas), o que explica "anda no CRM" mas não
     // chama create_appointment ate o turno seguinte.
-    let tools = params.tools.map(toOpenAITool);
+    //
+    // PR-HIDE-AUTOACTION-TOOLS (mai/2026): tools que ja sao auto_action
+    // da etapa NAO devem aparecer pro LLM. Senao a IA chama manualmente
+    // o que ja vai rodar automatico (visto em Test 3 round 8: IA chamou
+    // trigger_notification em Agendamento mesmo ela sendo on_tool_success
+    // de create_appointment — ruido puro que gasta iterações). Mantemos
+    // `currentRawTools` como a view VISIVEL ao LLM.
     let currentStage = params.stage;
-    let currentRawTools = params.tools;
+    let currentRawTools = filterAutoActionTools(params.tools, currentStage);
+    let tools = currentRawTools.map(toOpenAITool);
     const retrieval = params.stage.rag_enabled
       ? await maybeRetrieveKnowledge({
           db: params.db,
@@ -1000,9 +1008,14 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
                 params.config.id,
                 newStage.id,
               );
+              // PR-HIDE-AUTOACTION-TOOLS: re-aplica filtro na NOVA etapa.
+              // Sem isso, tools que eram auto-actions da etapa antiga
+              // ficariam visiveis (ou tools que sao auto-actions da nova
+              // etapa apareceriam por engano).
+              const newVisibleTools = filterAutoActionTools(newRawTools, newStage);
               currentStage = newStage;
-              currentRawTools = newRawTools;
-              tools = newRawTools.map(toOpenAITool);
+              currentRawTools = newVisibleTools;
+              tools = newVisibleTools.map(toOpenAITool);
               system = buildSystemPromptWithRag(
                 params.config,
                 currentStage,
@@ -1024,6 +1037,15 @@ export async function executeAgent(params: ExecuteAgentParams): Promise<ExecuteA
                 new_stage_id: newStage.id,
                 new_stage_situation: newStage.situation,
                 allowed_tools_count: newRawTools.length,
+                visible_tools_count: newVisibleTools.length,
+                hidden_handlers: newRawTools
+                  .filter(
+                    (t) =>
+                      !newVisibleTools.some(
+                        (vt) => vt.native_handler === t.native_handler,
+                      ),
+                  )
+                  .map((t) => t.native_handler ?? "unknown"),
               });
             }
           }
@@ -1941,6 +1963,35 @@ function buildMaxIterations(model: string, baseIterations: number): number {
     return baseIterations * 2;
   }
   return baseIterations;
+}
+
+// PR-HIDE-AUTOACTION-TOOLS (mai/2026): retira do array de tools as que
+// ja sao auto_action da etapa atual. Mapeamento 1:1 entre auto_action.type
+// e tool.native_handler (ambos enums internos: add_tag,
+// trigger_notification, move_pipeline_stage, send_media, transfer_to_user,
+// transfer_to_agent, stop_agent).
+//
+// NAO esconde tools referenciadas em on_tool_success_of — esse campo
+// indica o GATILHO da auto_action (ex: create_appointment dispara
+// notif_agendada). O gatilho deve continuar visivel pro LLM, senao
+// o fluxo nao roda.
+//
+// Filtro idempotente: se a etapa nao tem auto_actions ou stage e' null,
+// retorna params.tools intacto.
+function filterAutoActionTools<T extends { native_handler?: string | null }>(
+  toolsList: T[],
+  stage: AgentStage | null,
+): T[] {
+  if (!stage) return toolsList;
+  const config = normalizeStageActionConfig(stage.action_config ?? null);
+  if (config.auto_actions.length === 0) return toolsList;
+  const hiddenHandlers = new Set<string>(
+    config.auto_actions.map((action) => action.type as string),
+  );
+  return toolsList.filter((tool) => {
+    if (!tool.native_handler) return true;
+    return !hiddenHandlers.has(tool.native_handler);
+  });
 }
 
 function resolveModel(model: string): string {
