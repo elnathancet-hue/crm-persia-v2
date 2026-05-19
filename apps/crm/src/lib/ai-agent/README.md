@@ -332,7 +332,6 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 
 | # | Sintoma | Impacto | Mitigação atual |
 |---|---|---|---|
-| **#8 — Transição de etapa não acontece** | LLM faz qualificação + apresentação + agendamento todos inline na etapa "Boas-vindas". `auto_actions` de etapas posteriores nunca disparam | Médio — features de auto_actions inativas | Refinar `transition_hint` pra ser explícito; ou mover auto_actions críticas pra primeira etapa |
 | **UX — Resetar fecha o sheet** | Clique no botão Resetar do Tester fecha o painel | Baixo (friction de teste) | Reabrir Tester manualmente após reset |
 
 ### ✅ Corrigidos na sessão de teste live
@@ -346,6 +345,8 @@ Sessão de teste live em prod (mai/2026) descobriu 7 bugs. Documentação comple
 | 5 | `create_appointment` selecionava `leads.timezone` (coluna inexistente) + Tester lead sem `assigned_to` | [#256](https://github.com/elnathancet-hue/crm-persia-v2/pull/256) |
 | 6 | PR1 quick wins: `sendAssistantReply` não persistia em `messages`, `transfer_to_user` não pausava IA, auto-action queimava em placeholder, gpt-5* truncava em HANDOFF_REPLY (reasoning tokens dentro do budget) | [#259](https://github.com/elnathancet-hue/crm-persia-v2/pull/259) |
 | **#7** | **PR2 — Alucinação de agendamento.** Causa raiz: auto_actions disparavam ON_ENTER (notif "lead agendou" saía mesmo sem appointment real). Fix: trigger opcional `on_tool_success` no schema + hook em `executeToolCall` pós-success. Template seed + migration 050 atualizados | [#260](https://github.com/elnathancet-hue/crm-persia-v2/pull/260) |
+| **PR4** | Runtime de `agent_followups` (cron tick dispatcher) — schema/UI/CRUD existiam desde 027 mas faltava o dispatcher real. Pipeline: load enabled followups → dueConversations → INSERT idempotency lock → render + sendText pra lead. Migration 051 (PR #262) registra o pg_cron job `*/10 * * * *` | [#261](https://github.com/elnathancet-hue/crm-persia-v2/pull/261) + [#262](https://github.com/elnathancet-hue/crm-persia-v2/pull/262) |
+| **#8** | **`transfer_to_stage` faltava no seed.** Causa raiz: `applyTemplate` coletava tools só de `auto_actions` + agenda + `transfer_to_user`. IA ficava presa na etapa 1 fazendo qualificação + apresentação + agendamento inline. Fix em 4 camadas: seed (configs.ts) + tool description imperativa (tool-presets.ts) + REGRA DE TRANSIÇÃO no system prompt + migration 052 (seed retroativo idempotente) | [#263](https://github.com/elnathancet-hue/crm-persia-v2/pull/263) |
 
 ### 🟡 Dívidas conhecidas (decidido NÃO fazer agora)
 
