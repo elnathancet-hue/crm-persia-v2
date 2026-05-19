@@ -4,6 +4,7 @@ import type { HumanizationConfig } from "@persia/shared/ai-agent";
 import { splitMessage } from "@/lib/ai/message-splitter";
 import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { errorMessage, logError } from "@/lib/observability";
+import { type AgentDb, nowIso } from "./db";
 
 // PR-AI-AGENT-HUMAN-B (mai/2026): envia resposta do agente nativo
 // respeitando o split_enabled da humanization_config. Quando enabled e
@@ -28,19 +29,28 @@ export interface SendAssistantReplyParams {
   // numa das partes intermediarias.
   orgId: string;
   conversationId: string;
+  // PR1 #2 (mai/2026): quando setado, persiste cada parte enviada como
+  // row em `messages` (sender='ai'). Caller decide se quer persistir —
+  // dryRun do Tester e fluxos com IDs sinteticos (leadId='tester') NAO
+  // devem passar `persist` pra evitar lixo no DB.
+  persist?: {
+    db: AgentDb;
+    leadId: string;
+  };
 }
 
 export async function sendAssistantReply(
   params: SendAssistantReplyParams,
 ): Promise<void> {
-  const { provider, phone, text, humanization } = params;
+  const { provider, phone, text, humanization, persist } = params;
 
   // Caminho rapido: split off ou texto curto = envia inteiro.
   if (
     !humanization.split_enabled ||
     text.length < humanization.split_threshold_chars
   ) {
-    await provider.sendText({ phone, message: text });
+    const result = await provider.sendText({ phone, message: text });
+    await persistAiMessage(params, text, result?.messageId ?? null);
     return;
   }
 
@@ -55,7 +65,9 @@ export async function sendAssistantReply(
   // Defensivo: se splitMessage retornou 1 (fallback ou texto curto pos-
   // GPT), evita o overhead de loop + setTyping.
   if (parts.length <= 1) {
-    await provider.sendText({ phone, message: parts[0] ?? text });
+    const onlyPart = parts[0] ?? text;
+    const result = await provider.sendText({ phone, message: onlyPart });
+    await persistAiMessage(params, onlyPart, result?.messageId ?? null);
     return;
   }
 
@@ -76,7 +88,55 @@ export async function sendAssistantReply(
       }
       await sleep(delayMs);
     }
-    await provider.sendText({ phone, message: parts[i] });
+    // Persistir DENTRO do loop: cada bolha enviada vira 1 row, espelhando
+    // o que o cliente recebe no WhatsApp. Insert e fire-and-await por
+    // parte — falha de insert em uma nao bloqueia as outras (log + segue).
+    const result = await provider.sendText({ phone, message: parts[i] });
+    await persistAiMessage(params, parts[i], result?.messageId ?? null);
+  }
+}
+
+// PR1 #2: INSERT em `messages` quando caller pediu persistencia.
+// Shape espelhado de tools/send-media.ts:173 (unico INSERT existente no
+// modulo). Sem `persist` (dryRun Tester, fluxos sinteticos), no-op.
+//
+// Erros de DB sao logados mas NAO propagam — a bolha ja foi enviada ao
+// cliente; persistir e best-effort pra dashboards/historico. Bloquear
+// o fluxo seria pior que ter um gap no historico.
+async function persistAiMessage(
+  params: SendAssistantReplyParams,
+  content: string,
+  whatsappMessageId: string | null,
+): Promise<void> {
+  if (!params.persist) return;
+  const { db, leadId } = params.persist;
+  try {
+    const { error } = await db.from("messages").insert({
+      organization_id: params.orgId,
+      conversation_id: params.conversationId,
+      lead_id: leadId,
+      content,
+      sender: "ai",
+      type: "text",
+      whatsapp_msg_id: whatsappMessageId,
+      status: "sent",
+      created_at: nowIso(),
+    });
+    if (error) {
+      logError("send_assistant_reply_persist_failed", {
+        organization_id: params.orgId,
+        conversation_id: params.conversationId,
+        lead_id: leadId,
+        error: error.message,
+      });
+    }
+  } catch (err: unknown) {
+    logError("send_assistant_reply_persist_failed", {
+      organization_id: params.orgId,
+      conversation_id: params.conversationId,
+      lead_id: leadId,
+      error: errorMessage(err),
+    });
   }
 }
 

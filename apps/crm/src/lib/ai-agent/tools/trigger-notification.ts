@@ -70,6 +70,25 @@ export const triggerNotificationHandler: NativeHandler = async (
       });
     }
 
+    // PR1 #6 (mai/2026): detecta target_address placeholder do seed
+    // ("0000000000" — `apps/crm/src/actions/ai-agent/configs.ts:404`).
+    // Acontece quando cliente nao configurou o destinatario antes de
+    // testar. Antes deste check, trigger_notification falhava no provider
+    // mas a auto-action JA tinha sido marcada como executada — queimando
+    // o disparo. Agora devolvemos `placeholder_skip: true` pra que o
+    // runtime de stage-actions NAO persista a execucao e re-tente na
+    // proxima entrada do lead na etapa (cliente arruma + lead volta).
+    if (isPlaceholderTargetAddress(template.target_address)) {
+      return failureResult(
+        "notification target address is a placeholder — configure o destinatário antes de disparar",
+        {
+          template_id: template.id,
+          template_name: template.name,
+          placeholder_skip: true,
+        },
+      );
+    }
+
     const lead = await loadNotificationLead(
       db,
       context.organization_id,
@@ -133,6 +152,16 @@ export const triggerNotificationHandler: NativeHandler = async (
     );
   }
 };
+
+// PR1 #6: target_address e considerado placeholder quando colapsa pra
+// uma string so de zeros depois de remover nao-digitos. Casa o seed
+// "0000000000" e tambem variacoes mascaradas tipo "00 0000-0000".
+function isPlaceholderTargetAddress(targetAddress: string | null | undefined): boolean {
+  if (!targetAddress) return false;
+  const digits = targetAddress.replace(/\D/g, "");
+  if (digits.length === 0) return false;
+  return /^0+$/.test(digits);
+}
 
 function validateCustomVariables(
   custom: Record<string, string> | undefined,
