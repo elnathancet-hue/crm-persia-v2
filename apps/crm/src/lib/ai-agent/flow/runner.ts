@@ -61,6 +61,8 @@ export async function runFlow(
     tool_calls_succeeded: 0,
     tool_calls_failed: 0,
     hit_max_iterations: false,
+    tokens_input: 0,
+    tokens_output: 0,
     events: ctx.provider.getEvents(), // referência live — runner adiciona via ctx.provider.emit
   };
 
@@ -289,14 +291,18 @@ async function executeAIAgentNode(
       return null;
     }
     const llmDuration = Date.now() - llmStart;
+    const tokensIn = completion.usage?.prompt_tokens ?? 0;
+    const tokensOut = completion.usage?.completion_tokens ?? 0;
+    result.tokens_input += tokensIn;
+    result.tokens_output += tokensOut;
     ctx.provider.emit({
       kind: "llm_call",
       payload: {
         iteration: iter,
         finish_reason: completion.choices[0]?.finish_reason ?? "unknown",
         duration_ms: llmDuration,
-        tokens_in: completion.usage?.prompt_tokens ?? 0,
-        tokens_out: completion.usage?.completion_tokens ?? 0,
+        tokens_in: tokensIn,
+        tokens_out: tokensOut,
       },
     });
 

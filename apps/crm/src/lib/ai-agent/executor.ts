@@ -33,6 +33,12 @@ import { createProvider } from "@persia/shared/providers";
 import { phoneBR } from "@persia/shared/validation";
 import {
   NATIVE_AGENT_FEATURE_FLAG,
+  calculateCostUsdCents,
+  isAutoPauseExpired,
+  isWithinBusinessHours,
+  matchesPauseKeyword,
+  matchesResumeKeyword,
+  normalizeHumanizationConfig,
   type DebounceFlushBatch,
   type OrganizationSettings,
 } from "@persia/shared/ai-agent";
@@ -106,7 +112,7 @@ export async function tryEnqueueForNativeAgent(
   // 2. Resolve agent primário da org. Sem primary → cai pra legacy.
   const { data: primaryRow } = await db
     .from("agent_configs")
-    .select("id, debounce_window_ms")
+    .select("id, debounce_window_ms, humanization_config")
     .eq("organization_id", orgId)
     .eq("is_primary", true)
     .eq("status", "active")
@@ -121,6 +127,9 @@ export async function tryEnqueueForNativeAgent(
   const debounceWindowMs =
     (primaryRow as { debounce_window_ms?: number | null }).debounce_window_ms ??
     DEBOUNCE_WINDOW_MS_DEFAULT;
+  const humanization = normalizeHumanizationConfig(
+    (primaryRow as { humanization_config?: unknown }).humanization_config,
+  );
 
   // 3. Skip mensagens sem texto (V1 — PR posterior aceita media via
   // descrição automática).
@@ -249,7 +258,7 @@ export async function tryEnqueueForNativeAgent(
     // find-or-create.
     let { data: agentConv } = await db
       .from("agent_conversations")
-      .select("id, current_node_id")
+      .select("id, current_node_id, human_handoff_at")
       .eq("organization_id", orgId)
       .eq("config_id", agentConfigId)
       .eq("lead_id", leadId)
@@ -278,6 +287,97 @@ export async function tryEnqueueForNativeAgent(
       agentConv = newAgentConv;
     }
     const agentConversationId = (agentConv as { id: string }).id;
+    const humanHandoffAt = (agentConv as { human_handoff_at?: string | null })
+      .human_handoff_at ?? null;
+
+    // 9b. Humanization (PR 6, mai/2026): pause / resume keywords + auto-pause.
+    //
+    // Regras (avaliadas nessa ordem):
+    //   a) Lead mandou resume keyword (ex: "ATIVAR") → limpa
+    //      human_handoff_at + enfileira normalmente. IA volta a responder.
+    //   b) Lead mandou pause keyword (ex: "PAUSAR") → seta human_handoff_at
+    //      = now + SKIP enqueue. Humano assumiu.
+    //   c) human_handoff_at já setado E ainda não expirou (auto_pause_minutes)
+    //      → SKIP enqueue. Humano ainda no controle.
+    //   d) human_handoff_at setado MAS expirou → clear + enfileira.
+    //   e) Nada bate → enfileira normalmente.
+    //
+    // Mensagem enviada por humano via chat-window NÃO passa por aqui
+    // (essa rota só processa msgs do lead). Sem necessidade de detectar
+    // "humano enviou msg" pra setar auto-pause — vai num PR futuro
+    // (precisa hook em send-reply.ts).
+    const matchResume = matchesResumeKeyword(msg.text, humanization);
+    const matchPause = matchesPauseKeyword(msg.text, humanization);
+
+    if (matchResume) {
+      await db
+        .from("agent_conversations")
+        .update({ human_handoff_at: null, human_handoff_reason: null })
+        .eq("organization_id", orgId)
+        .eq("id", agentConversationId);
+    } else if (matchPause) {
+      await db
+        .from("agent_conversations")
+        .update({
+          human_handoff_at: new Date().toISOString(),
+          human_handoff_reason: "pause_keyword",
+        })
+        .eq("organization_id", orgId)
+        .eq("id", agentConversationId);
+      return {
+        handled: true,
+        response: {
+          ok: true,
+          handledBy: "ai_native_flow",
+          leadId,
+          conversationId,
+          status: "paused_by_keyword",
+        },
+      };
+    } else if (humanHandoffAt) {
+      const expired = isAutoPauseExpired(humanHandoffAt, humanization);
+      if (!expired) {
+        return {
+          handled: true,
+          response: {
+            ok: true,
+            handledBy: "ai_native_flow",
+            leadId,
+            conversationId,
+            status: "paused_active",
+          },
+        };
+      }
+      // expirou → clear + segue
+      await db
+        .from("agent_conversations")
+        .update({ human_handoff_at: null, human_handoff_reason: null })
+        .eq("organization_id", orgId)
+        .eq("id", agentConversationId);
+    }
+
+    // 9c. Business hours: silencia fora do horário comercial. V1 simples —
+    // não envia after_hours_message (PR posterior adiciona, requer cooldown
+    // pra não spammar o lead).
+    if (humanization.business_hours_enabled) {
+      const inBusinessHours = isWithinBusinessHours(
+        new Date(),
+        humanization.business_hours,
+        humanization.business_hours_timezone,
+      );
+      if (!inBusinessHours) {
+        return {
+          handled: true,
+          response: {
+            ok: true,
+            handledBy: "ai_native_flow",
+            leadId,
+            conversationId,
+            status: "after_hours",
+          },
+        };
+      }
+    }
 
     // 10. Enfileira em pending_messages via RPC. RPC também atualiza
     // agent_conversations.next_flush_at = received_at + debounceWindowMs.
@@ -378,7 +478,7 @@ export async function executeDebouncedBatch(input: {
     const [configRes, flowRes, leadRes, connRes] = await Promise.all([
       db
         .from("agent_configs")
-        .select("id, model, system_prompt")
+        .select("id, model, system_prompt, humanization_config")
         .eq("organization_id", orgId)
         .eq("id", agentConv.config_id)
         .maybeSingle(),
@@ -416,7 +516,13 @@ export async function executeDebouncedBatch(input: {
       return { runId: null, status: "failed" };
     }
 
-    const agentConfig = configRes.data as { id: string; model: string; system_prompt: string };
+    const agentConfig = configRes.data as {
+      id: string;
+      model: string;
+      system_prompt: string;
+      humanization_config?: unknown;
+    };
+    const humanization = normalizeHumanizationConfig(agentConfig.humanization_config);
     const leadPhone = (leadRes.data as { phone: string }).phone;
     // createProvider espera a row inteira de whatsapp_connections — defensive cast.
     const provider = createProvider(connRes.data as Parameters<typeof createProvider>[0]);
@@ -448,7 +554,8 @@ export async function executeDebouncedBatch(input: {
     }
 
     // 4. Provider realtime que envia via WhatsApp + persiste outbound em
-    // messages.
+    // messages. Passa humanization pra ele aplicar split + delay entre
+    // chunks.
     const realtimeProvider = createRealtimeProvider({
       db,
       provider,
@@ -456,6 +563,7 @@ export async function executeDebouncedBatch(input: {
       leadId: agentConv.lead_id,
       conversationId: agentConv.crm_conversation_id,
       organizationId: orgId,
+      humanization,
     });
 
     // 5. Build FlowRunContext + roda o flow.
@@ -479,23 +587,46 @@ export async function executeDebouncedBatch(input: {
     const result = await runFlow(db, ctx, agentConv.current_node_id);
     const duration = Date.now() - startedAt;
 
-    // 6. Persiste current_node_id e fecha agent_run.
+    // 6. Persiste current_node_id, last_interaction_at e acumula tokens.
+    // tokens_used_total é incremento — V1 faz SELECT + UPDATE (V2 pode
+    // virar RPC atômico se houver concorrência alta).
+    const totalTokensTurn = result.tokens_input + result.tokens_output;
+    const { data: convRow } = await db
+      .from("agent_conversations")
+      .select("tokens_used_total")
+      .eq("organization_id", orgId)
+      .eq("id", agentConv.id)
+      .maybeSingle();
+    const prevTotal =
+      (convRow as { tokens_used_total?: number } | null)?.tokens_used_total ?? 0;
     await db
       .from("agent_conversations")
       .update({
         current_node_id: result.ending_node_id,
         last_interaction_at: new Date().toISOString(),
+        tokens_used_total: prevTotal + totalTokensTurn,
       })
       .eq("organization_id", orgId)
       .eq("id", agentConv.id);
 
     if (runId) {
       const finalStatus = result.fatal_error ? "failed" : "succeeded";
+      // PR 6 (mai/2026): audit completo de tokens + cost. tokens vêm
+      // acumulados do runner.tokens_input/output (soma de cada
+      // iteração LLM ping-pong). cost calculado a partir do model.
+      const costCents = calculateCostUsdCents(
+        agentConfig.model,
+        result.tokens_input,
+        result.tokens_output,
+      );
       await db
         .from("agent_runs")
         .update({
           status: finalStatus,
           duration_ms: duration,
+          tokens_input: result.tokens_input,
+          tokens_output: result.tokens_output,
+          cost_usd_cents: costCents,
           error_msg: result.fatal_error ?? null,
         })
         .eq("id", runId);
