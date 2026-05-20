@@ -17,6 +17,7 @@ import {
   Filter,
   Image as ImageIcon,
   ListChecks,
+  MessageCircle,
   MessageSquare,
   Pencil,
   Power,
@@ -214,6 +215,20 @@ const ACTION_ITEMS: FlowSidebarItem[] = [
       label: "Salvar dado do lead",
       action_type: "set_lead_custom_field" satisfies FlowActionType,
       config: { field_key: "", value: "" },
+    },
+  },
+  {
+    task_key: "action.send_whatsapp_message",
+    category: "acoes",
+    label: "Enviar mensagem WhatsApp",
+    description:
+      "Envia um texto literal pro lead via WhatsApp, SEM passar pela IA. Aceita placeholders {{lead.name}}, {{lead.phone}}, {{lead.email}}. Use pra boas-vindas, lembretes ou avisos padrão.",
+    icon: MessageCircle,
+    node_type: "action",
+    default_data: {
+      label: "Enviar mensagem WhatsApp",
+      action_type: "send_whatsapp_message" satisfies FlowActionType,
+      config: { message: "" },
     },
   },
 ];

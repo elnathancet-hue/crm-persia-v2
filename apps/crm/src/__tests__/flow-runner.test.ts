@@ -272,6 +272,125 @@ describe("flow-runner", () => {
     expect(result.hit_max_iterations).toBe(true);
   });
 
+  it("send_whatsapp_message action emite send_text com placeholders resolvidos", async () => {
+    // PR 9 (mai/2026): action node standalone — texto literal com
+    // {{lead.X}}. Validamos: (a) evento send_text emitido, (b) placeholder
+    // interpolado contra lead carregado do DB, (c) flow segue edge default.
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "msg-1",
+            type: "action",
+            position: { x: 200, y: 0 },
+            data: {
+              label: "Boas-vindas",
+              action_type: "send_whatsapp_message",
+              config: { message: "Oi {{lead.name}}, tudo bem?" },
+            },
+          },
+        ],
+        edges: [
+          {
+            id: "e1",
+            source: "entry-1",
+            target: "msg-1",
+            sourceHandle: "default",
+          },
+        ],
+      }),
+    );
+    const ctx = makeCtx(flow);
+    // DB stub específico desse teste — retorna name="Ana" pra `leads`.
+    const dbWithLead = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: { name: "Ana", phone: "+5511999", email: null },
+                  error: null,
+                }),
+            }),
+          }),
+        }),
+      }),
+    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const result = await runFlow(dbWithLead, ctx, null);
+
+    expect(result.fatal_error).toBeUndefined();
+    expect(result.ending_node_id).toBe("msg-1");
+    expect(result.tool_calls_succeeded).toBe(1);
+    expect(result.assistant_reply).toBe("Oi Ana, tudo bem?");
+
+    const events = ctx.provider.getEvents();
+    const sendText = events.find((e) => e.kind === "send_text");
+    expect(sendText).toBeDefined();
+    expect((sendText?.payload as { message: string }).message).toBe(
+      "Oi Ana, tudo bem?",
+    );
+    expect((sendText?.payload as { via?: string }).via).toBe("action_node");
+  });
+
+  it("send_whatsapp_message com message vazio falha gracefully e segue default", async () => {
+    // Config corrompida (message vazio) não deve crashar — só emite
+    // tool_result com error e segue edge.
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "msg-empty",
+            type: "action",
+            position: { x: 200, y: 0 },
+            data: {
+              label: "Vazio",
+              action_type: "send_whatsapp_message",
+              config: { message: "   " },
+            },
+          },
+        ],
+        edges: [
+          {
+            id: "e1",
+            source: "entry-1",
+            target: "msg-empty",
+            sourceHandle: "default",
+          },
+        ],
+      }),
+    );
+    const ctx = makeCtx(flow);
+    const result = await runFlow(dbStub, ctx, null);
+
+    expect(result.fatal_error).toBeUndefined();
+    expect(result.tool_calls_failed).toBe(1);
+    const events = ctx.provider.getEvents();
+    const toolResult = events.find(
+      (e) =>
+        e.kind === "tool_result" &&
+        (e.payload as { tool_name?: string }).tool_name ===
+          "send_whatsapp_message",
+    );
+    expect(toolResult).toBeDefined();
+    expect((toolResult?.payload as { success: boolean }).success).toBe(false);
+    expect((toolResult?.payload as { error: string }).error).toBe(
+      "empty_message",
+    );
+  });
+
   it("captura eventos node_entered/exited via provider", async () => {
     const flow = makeLoadedFlow(
       makeFlow({

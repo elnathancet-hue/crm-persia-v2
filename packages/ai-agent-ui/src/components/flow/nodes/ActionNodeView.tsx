@@ -11,6 +11,7 @@ import {
   Calendar,
   Image as ImageIcon,
   ListChecks,
+  MessageCircle,
   Pencil,
   Power,
   StopCircle,
@@ -36,6 +37,7 @@ const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   transfer_to_user: UserCheck,
   transfer_to_agent: UserCog,
   set_lead_custom_field: Pencil,
+  send_whatsapp_message: MessageCircle,
 };
 
 function configPreview(actionType: FlowActionType, config: Record<string, unknown>): string {
@@ -61,6 +63,13 @@ function configPreview(actionType: FlowActionType, config: Record<string, unknow
       const fieldKey = (config.field_key as string) || "campo";
       const value = (config.value as string) || "(vazio)";
       return `${fieldKey} = ${value}`;
+    }
+    case "send_whatsapp_message": {
+      const message = (config.message as string) || "";
+      if (!message.trim()) return "Sem mensagem configurada";
+      // Mostra preview da 1ª linha truncada — sidebar do canvas é apertado.
+      const firstLine = message.split("\n")[0] ?? "";
+      return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
     }
     default:
       return "";

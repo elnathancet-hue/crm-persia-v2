@@ -111,7 +111,11 @@ export type FlowActionType =
   | "transfer_to_agent"
   // PR-FLOW-PIVOT PR 8 (mai/2026): IA escreve em lead_custom_field_values.
   // Action node (não via IA): runtime resolve field_key via config.
-  | "set_lead_custom_field";
+  | "set_lead_custom_field"
+  // PR-FLOW-PIVOT PR 9 (mai/2026): action node envia texto WhatsApp
+  // determinístico SEM passar pela IA. config: { message: string } com
+  // placeholders {{lead.name}}/phone/email.
+  | "send_whatsapp_message";
 
 /**
  * Mapeia FlowActionType pra NativeHandlerName quando aplicável. Alguns
@@ -507,6 +511,9 @@ export function flowActionTypeToNativeHandler(
     transfer_to_user: "transfer_to_user",
     transfer_to_agent: "transfer_to_agent",
     set_lead_custom_field: "set_lead_custom_field",
+    // `send_whatsapp_message` (PR 9) NÃO mapeia: é tratado por
+    // special-case no runner (emite send_text via FlowProviderStub em
+    // vez de chamar handler nativo).
   };
   return direct[actionType] ?? null;
 }

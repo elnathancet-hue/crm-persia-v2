@@ -493,6 +493,25 @@ function ActionForm({
           </div>
         </>
       )}
+
+      {actionType === "send_whatsapp_message" && (
+        <div className="space-y-1.5">
+          <Label htmlFor="action-msg">Mensagem</Label>
+          <Textarea
+            id="action-msg"
+            rows={6}
+            value={(config.message as string) ?? ""}
+            onChange={(e) => updateConfig({ message: e.target.value })}
+            placeholder="Olá {{lead.name}}, tudo bem? Aqui é o time da empresa..."
+          />
+          <p className="text-xs text-muted-foreground">
+            Texto literal enviado ao lead via WhatsApp, sem passar pela IA.
+            Variáveis aceitas:{" "}
+            <code>{"{{lead.name}}"}</code>, <code>{"{{lead.phone}}"}</code>,{" "}
+            <code>{"{{lead.email}}"}</code>. Quebras de linha são preservadas.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
