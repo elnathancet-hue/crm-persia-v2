@@ -573,6 +573,34 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
       },
     },
   },
+  {
+    handler: "set_lead_custom_field",
+    name: "set_lead_custom_field",
+    display_name: "Salvar dado do lead",
+    description:
+      "Save a custom field value on the current lead's profile. Use when the lead provides info you want to remember across turns (age, birthday, document number, profession, etc). The field must already exist in the CRM custom fields config — use the EXACT field_key (slug, not display name). All values are stored as text; the CRM converts to the correct type on read.",
+    ui_description:
+      "IA grava um dado custom no lead durante a conversa (idade, CPF, profissão, etc).",
+    icon_name: "Pencil",
+    category: "tag",
+    shipped_in_pr: "PR8",
+    input_schema: {
+      type: "object",
+      required: ["field_key", "value"],
+      properties: {
+        field_key: {
+          type: "string",
+          description:
+            "EXACT slug of the custom field in CRM (e.g. 'data_nascimento'). Not the display name. Available fields are listed in the system prompt section 'LEAD CUSTOM FIELDS'.",
+        },
+        value: {
+          type: "string",
+          description:
+            "Value to store, as text. Date format ISO 8601 (YYYY-MM-DD). Number/boolean as text representation.",
+        },
+      },
+    },
+  },
 ];
 
 export function getPreset(handler: NativeHandlerName): NativeToolPreset | undefined {

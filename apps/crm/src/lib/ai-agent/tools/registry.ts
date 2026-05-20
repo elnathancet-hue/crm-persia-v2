@@ -13,6 +13,7 @@ import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
 import { rescheduleAppointmentHandler } from "./reschedule-appointment";
 import { sendMediaHandler } from "./send-media";
+import { setLeadCustomFieldHandler } from "./set-lead-custom-field";
 import { stopAgentHandler } from "./stop-agent";
 import { transferToAgentHandler } from "./transfer-to-agent";
 // PR-FLOW-PIVOT (mai/2026): transferToStageHandler deletado. Substituído
@@ -39,6 +40,9 @@ export const nativeHandlers: NativeHandlerRegistry = {
   // flow-runner avançar pelo handle nomeado do AI node. Runner detecta
   // pelo tool_call.function.name + lê handle_name do input.
   emit_event: emitEventHandler,
+  // PR-FLOW-PIVOT PR 8 (mai/2026): IA escreve em lead_custom_field_values.
+  // Paridade com `edit_lead_ia` do flow.json do Jordan.
+  set_lead_custom_field: setLeadCustomFieldHandler,
 };
 
 export function isImplementedNativeHandler(

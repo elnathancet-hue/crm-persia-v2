@@ -11,6 +11,7 @@ import {
   Calendar,
   Image as ImageIcon,
   ListChecks,
+  Pencil,
   Power,
   StopCircle,
   Tag as TagIcon,
@@ -34,6 +35,7 @@ const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   stop_agent: StopCircle,
   transfer_to_user: UserCheck,
   transfer_to_agent: UserCog,
+  set_lead_custom_field: Pencil,
 };
 
 function configPreview(actionType: FlowActionType, config: Record<string, unknown>): string {
@@ -55,6 +57,11 @@ function configPreview(actionType: FlowActionType, config: Record<string, unknow
       return (config.target_agent_name as string) || "Sem agente alvo";
     case "stop_agent":
       return "Encerra a sessão da IA";
+    case "set_lead_custom_field": {
+      const fieldKey = (config.field_key as string) || "campo";
+      const value = (config.value as string) || "(vazio)";
+      return `${fieldKey} = ${value}`;
+    }
     default:
       return "";
   }

@@ -463,6 +463,36 @@ function ActionForm({
           escapar de conversas fora de escopo.
         </div>
       )}
+
+      {actionType === "set_lead_custom_field" && (
+        <>
+          <CatalogSelect
+            label="Campo personalizado"
+            loading={catalogsLoading}
+            value={(config.field_key as string) ?? ""}
+            onChange={(v) => updateConfig({ field_key: v })}
+            options={catalogs.custom_fields.map((f) => ({
+              value: f.field_key,
+              label: `${f.name} (${f.field_type})`,
+            }))}
+            emptyLabel="Nenhum campo personalizado. Crie em CRM → Campos personalizados."
+            placeholder="Selecione um campo"
+          />
+          <div className="space-y-1.5">
+            <Label htmlFor="action-cf-value">Valor a salvar</Label>
+            <Input
+              id="action-cf-value"
+              value={(config.value as string) ?? ""}
+              onChange={(e) => updateConfig({ value: e.target.value })}
+              placeholder="Texto literal ou {{variavel}} da conversa"
+            />
+            <p className="text-xs text-muted-foreground">
+              Pode usar variáveis tipo <code>{"{{lead.name}}"}</code>. Tipo do
+              campo (date/number/boolean) é convertido pelo CRM na leitura.
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -508,15 +538,18 @@ function ConditionForm({
 
       {conditionType === "lead_custom_field_equals" && (
         <>
-          <div className="space-y-1.5">
-            <Label htmlFor="cond-field">Nome do campo</Label>
-            <Input
-              id="cond-field"
-              value={(config.field_name as string) ?? ""}
-              onChange={(e) => updateConfig({ field_name: e.target.value })}
-              placeholder="ex: idade"
-            />
-          </div>
+          <CatalogSelect
+            label="Campo personalizado"
+            loading={catalogsLoading}
+            value={(config.field_name as string) ?? ""}
+            onChange={(v) => updateConfig({ field_name: v })}
+            options={catalogs.custom_fields.map((f) => ({
+              value: f.name,
+              label: `${f.name} (${f.field_type})`,
+            }))}
+            emptyLabel="Nenhum campo personalizado cadastrado."
+            placeholder="Selecione um campo"
+          />
           <div className="space-y-1.5">
             <Label htmlFor="cond-value">Valor esperado</Label>
             <Input
