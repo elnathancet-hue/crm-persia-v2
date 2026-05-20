@@ -32,6 +32,42 @@ function getServiceClient() {
   );
 }
 
+/**
+ * Hotfix PR 14a (mai/2026): atrás do proxy do EasyPanel/Traefik,
+ * `request.url` chega como `http://localhost:3000/...` em vez do
+ * domínio público. Causa: o Next.js vê o request interno depois que
+ * o proxy reverso já tratou TLS.
+ *
+ * Strategy priorizada:
+ *   1. GOOGLE_OAUTH_REDIRECT_URI — admin já configurou com o domínio
+ *      público correto (caso contrário Google nem aceitaria callback).
+ *      Origin extraído daqui é a fonte mais confiável.
+ *   2. Forwarded headers (`x-forwarded-proto` + `x-forwarded-host`) —
+ *      padrão Traefik/nginx pra preservar URL original
+ *   3. `host` header — algumas configs só passam isso
+ *   4. Fallback: `request.url` (que dá localhost no EasyPanel)
+ */
+function getPublicAppOrigin(request: NextRequest): string {
+  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
+  if (redirectUri) {
+    try {
+      return new URL(redirectUri).origin;
+    } catch {
+      // env malformada — segue pros fallbacks
+    }
+  }
+  const fwdProto = request.headers.get("x-forwarded-proto");
+  const fwdHost = request.headers.get("x-forwarded-host");
+  if (fwdHost) {
+    return `${fwdProto ?? "https"}://${fwdHost}`;
+  }
+  const hostHeader = request.headers.get("host");
+  if (hostHeader && !hostHeader.startsWith("localhost")) {
+    return `${fwdProto ?? "https"}://${hostHeader}`;
+  }
+  return new URL(request.url).origin;
+}
+
 function redirectWithStatus(
   origin: string,
   status: "ok" | "error",
@@ -44,7 +80,8 @@ function redirectWithStatus(
 }
 
 export async function GET(request: NextRequest) {
-  const { origin, searchParams } = new URL(request.url);
+  const origin = getPublicAppOrigin(request);
+  const { searchParams } = new URL(request.url);
 
   // 1. Google pode redirecionar com `error=access_denied` se usuário
   // recusou. Trata gracioso.
