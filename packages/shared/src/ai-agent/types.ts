@@ -326,6 +326,25 @@ export interface TesterLiveRequest {
   expedite_debounce: boolean;
 }
 
+/**
+ * PR-FLOW-PIVOT PR 16 (mai/2026): simulação de evento CRM no Tester.
+ *
+ * Permite testar flows com entry trigger `pipeline_stage_entered` ou
+ * `segment_entered` SEM precisar mover lead real / cadastrar tag /
+ * etc. Roda o flow a partir do entry node com inbound vazio (igual o
+ * runtime real faria quando o hook dispara).
+ *
+ * `target_id` deve casar com o `entry.config.stage_id` ou
+ * `entry.config.segment_id` configurado no flow — senão o Tester
+ * retorna skipped pra deixar claro que o trigger não casaria em prod.
+ */
+export interface TesterSimulateEventRequest {
+  config_id: string;
+  trigger_type: "pipeline_stage_entered" | "segment_entered";
+  /** ID da stage ou segmento alvo. */
+  target_id: string;
+}
+
 export type TesterEventKind =
   | "send_text"
   | "set_typing_on"

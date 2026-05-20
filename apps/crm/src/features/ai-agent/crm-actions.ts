@@ -30,6 +30,7 @@ import {
 } from "@/actions/ai-agent/entry-conditions";
 import {
   resetTesterConversation,
+  simulateCrmEvent,
   testAgent,
   testAgentLive,
 } from "@/actions/ai-agent/tester";
@@ -92,6 +93,7 @@ export const crmAgentActions: AgentActions = {
   testAgent,
   testAgentLive,
   resetTesterConversation,
+  simulateCrmEvent,
   listRuns,
   setCostLimit,
   deleteCostLimit,
