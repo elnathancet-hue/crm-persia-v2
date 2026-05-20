@@ -169,8 +169,10 @@ interface LoadedToolRow {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
-  execution_mode: "native" | "n8n_webhook";
+  execution_mode: "native" | "n8n_webhook" | "mcp";
   native_handler: string | null;
+  /** PR 15 (mai/2026): set quando execution_mode='mcp'. */
+  mcp_server_id?: string | null;
 }
 
 async function loadEnabledTools(
@@ -181,7 +183,9 @@ async function loadEnabledTools(
   if (ids.length === 0) return [];
   const { data, error } = await db
     .from("agent_tools")
-    .select("id, name, description, input_schema, execution_mode, native_handler, is_enabled")
+    .select(
+      "id, name, description, input_schema, execution_mode, native_handler, mcp_server_id, is_enabled",
+    )
     .eq("organization_id", ctx.organizationId)
     .in("id", ids);
   if (error) throw new Error(`Falha ao carregar tools: ${error.message}`);
@@ -553,6 +557,85 @@ async function dispatchToolCall(
         },
         input,
       );
+    } catch (err) {
+      return {
+        success: false,
+        output: {},
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  // PR-FLOW-PIVOT PR 15 (mai/2026): MCP tool — chama servidor externo
+  // via JSON-RPC tools/call. Server endpoint + auth carregados da
+  // mcp_server_connections row referenciada.
+  if (toolRow.execution_mode === "mcp") {
+    if (!toolRow.mcp_server_id) {
+      return {
+        success: false,
+        output: {},
+        error: "mcp_tool_sem_server_id",
+      };
+    }
+    // Dry-run (Tester) — não chama servidor externo, simula.
+    if (ctx.dryRun) {
+      return {
+        success: true,
+        output: { simulated: true, mcp_tool: toolRow.name, input },
+        side_effects: [`(dry_run) would call MCP tool "${toolRow.name}" with input`],
+      };
+    }
+    try {
+      const { data: connRow, error: connErr } = await db
+        .from("mcp_server_connections")
+        .select("server_url, auth_type, auth_token, is_active")
+        .eq("organization_id", ctx.organizationId)
+        .eq("id", toolRow.mcp_server_id)
+        .maybeSingle();
+      if (connErr || !connRow) {
+        return {
+          success: false,
+          output: {},
+          error: `mcp_server_not_found:${toolRow.mcp_server_id}`,
+        };
+      }
+      const conn = connRow as {
+        server_url: string;
+        auth_type: "none" | "bearer";
+        auth_token: string | null;
+        is_active: boolean;
+      };
+      if (!conn.is_active) {
+        return {
+          success: false,
+          output: {},
+          error: "mcp_server_inactive",
+        };
+      }
+      // Import dinâmico pra não inflar bundle (MCP só é usado se cliente
+      // configurar).
+      const { callTool, extractTextFromResult } = await import("@/lib/mcp/client");
+      const result = await callTool(
+        {
+          server_url: conn.server_url,
+          auth_type: conn.auth_type,
+          auth_token: conn.auth_token,
+        },
+        toolRow.name,
+        input,
+      );
+      const text = extractTextFromResult(result);
+      if (result.isError) {
+        return {
+          success: false,
+          output: { mcp_result: text },
+          error: text || "mcp_tool_returned_error",
+        };
+      }
+      return {
+        success: true,
+        output: { mcp_result: text, raw_content: result.content },
+      };
     } catch (err) {
       return {
         success: false,

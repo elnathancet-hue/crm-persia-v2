@@ -7,6 +7,7 @@ import {
   Calendar,
   CreditCard,
   ListChecks,
+  Plug,
   Smartphone,
   Users,
   Webhook,
@@ -27,6 +28,7 @@ const tabs = [
   { label: "Webhooks", href: "/settings/webhooks", icon: Webhook },
   { label: "WhatsApp", href: "/settings/whatsapp", icon: Smartphone },
   { label: "Google Calendar", href: "/settings/google-calendar", icon: Calendar },
+  { label: "Servidores MCP", href: "/settings/mcp-servers", icon: Plug },
   { label: "Plano", href: "/settings/billing", icon: CreditCard },
 ];
 
