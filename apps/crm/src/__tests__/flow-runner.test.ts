@@ -159,7 +159,10 @@ describe("flow-runner", () => {
     expect(result.fatal_error).toBe("node_not_found:fantasma");
   });
 
-  it("retorna fatal_error em condition node (V1 não implementa)", async () => {
+  it("condition node sem lead_id segue caminho 'no'", async () => {
+    // PR 5 (mai/2026): condition agora é avaliado. Sem leadId no contexto
+    // (ex: testes iniciais sem lead vinculado), evaluateCondition retorna
+    // false → segue edge "no".
     const flow = makeLoadedFlow(
       makeFlow({
         nodes: [
@@ -179,6 +182,18 @@ describe("flow-runner", () => {
               config: { tag_name: "qualificado" },
             },
           },
+          {
+            id: "yes-target",
+            type: "action",
+            position: { x: 400, y: -80 },
+            data: { label: "Caminho sim", action_type: "stop_agent", config: {} },
+          },
+          {
+            id: "no-target",
+            type: "action",
+            position: { x: 400, y: 80 },
+            data: { label: "Caminho não", action_type: "stop_agent", config: {} },
+          },
         ],
         edges: [
           {
@@ -187,12 +202,28 @@ describe("flow-runner", () => {
             target: "cond-1",
             sourceHandle: "default",
           },
+          {
+            id: "e-yes",
+            source: "cond-1",
+            target: "yes-target",
+            sourceHandle: "yes",
+          },
+          {
+            id: "e-no",
+            source: "cond-1",
+            target: "no-target",
+            sourceHandle: "no",
+          },
         ],
       }),
     );
+    // makeCtx default tem leadId="lead-1" — vamos sobrescrever pra null
+    // pra forçar o caminho "no" defensivo (sem hit DB).
     const ctx = makeCtx(flow);
+    ctx.leadId = null;
     const result = await runFlow(dbStub, ctx, null);
-    expect(result.fatal_error).toBe("condition_node_not_implemented_in_v1");
+    expect(result.fatal_error).toBeUndefined();
+    expect(result.ending_node_id).toBe("no-target");
   });
 
   it("respeita maxIterations e seta hit_max_iterations", async () => {

@@ -42,6 +42,11 @@ export interface FlowCatalogAgent {
   name: string;
 }
 
+export interface FlowCatalogSegment {
+  id: string;
+  name: string;
+}
+
 export interface FlowCatalogs {
   tags: FlowCatalogTag[];
   pipeline_stages: FlowCatalogPipelineStage[];
@@ -49,6 +54,10 @@ export interface FlowCatalogs {
   agenda_services: FlowCatalogAgendaService[];
   members: FlowCatalogMember[];
   other_agents: FlowCatalogAgent[];
+  /** PR-FLOW-PIVOT PR 5 (mai/2026): pra usar no condition node
+   * "Verificar segmentação". Cliente seleciona segmento existente
+   * em vez de digitar UUID. */
+  segments: FlowCatalogSegment[];
 }
 
 export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
@@ -58,4 +67,5 @@ export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
   agenda_services: [],
   members: [],
   other_agents: [],
+  segments: [],
 };

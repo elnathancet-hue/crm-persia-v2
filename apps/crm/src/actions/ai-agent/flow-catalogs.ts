@@ -48,6 +48,7 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
     agendaRes,
     membersRes,
     agentsRes,
+    segmentsRes,
   ] = await Promise.allSettled([
     listTags(ctx, { orderBy: "name" }),
     listStagesForOrg(ctx),
@@ -73,6 +74,11 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
       .eq("organization_id", orgId)
       .neq("id", configId)
       .eq("status", "active")
+      .order("name", { ascending: true }),
+    db
+      .from("segments")
+      .select("id, name")
+      .eq("organization_id", orgId)
       .order("name", { ascending: true }),
   ]);
 
@@ -118,6 +124,10 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
     other_agents:
       agentsRes.status === "fulfilled" && !agentsRes.value.error
         ? ((agentsRes.value.data ?? []) as FlowCatalogAgent[])
+        : [],
+    segments:
+      segmentsRes.status === "fulfilled" && !segmentsRes.value.error
+        ? ((segmentsRes.value.data ?? []) as Array<{ id: string; name: string }>)
         : [],
   };
 }

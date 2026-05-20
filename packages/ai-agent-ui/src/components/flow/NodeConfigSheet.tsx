@@ -485,12 +485,6 @@ function ConditionForm({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-progress/30 bg-progress-soft/30 p-3 text-xs text-progress-soft-foreground">
-        Verificações ainda não são executadas pelo runtime (entram no PR 5).
-        Você já pode configurá-las e conectar no canvas — vão funcionar
-        assim que o runtime entrar.
-      </div>
-
       <div className="space-y-1.5">
         <Label htmlFor="cond-label">Nome da verificação</Label>
         <Input
@@ -536,18 +530,18 @@ function ConditionForm({
       )}
 
       {conditionType === "in_segment" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="cond-segment">ID da segmentação</Label>
-          <Input
-            id="cond-segment"
-            value={(config.segment_id as string) ?? ""}
-            onChange={(e) => updateConfig({ segment_id: e.target.value })}
-            placeholder="UUID da segmentação"
-          />
-          <p className="text-xs text-muted-foreground">
-            Picker de segmentações entra no PR 5.
-          </p>
-        </div>
+        <CatalogSelect
+          label="Segmentação"
+          loading={catalogsLoading}
+          value={(config.segment_id as string) ?? ""}
+          onChange={(v) => updateConfig({ segment_id: v })}
+          options={catalogs.segments.map((s) => ({
+            value: s.id,
+            label: s.name,
+          }))}
+          emptyLabel="Nenhuma segmentação cadastrada. Crie em CRM → Segmentações."
+          placeholder="Selecione uma segmentação"
+        />
       )}
     </div>
   );

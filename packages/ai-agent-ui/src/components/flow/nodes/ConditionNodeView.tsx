@@ -50,9 +50,6 @@ export function ConditionNodeView({ data, selected }: Props) {
         <div className="line-clamp-2">
           {conditionPreview(data.condition_type, data.config)}
         </div>
-        <div className="mt-1 text-[10px] text-muted-foreground">
-          Em breve no runtime
-        </div>
       </NodeShell>
       <Handle
         type="source"
