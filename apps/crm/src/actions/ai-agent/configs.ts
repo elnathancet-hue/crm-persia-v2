@@ -85,9 +85,10 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       handoff_notification_target_address: normalized.handoff_notification_target_address ?? null,
       handoff_notification_template: normalized.handoff_notification_template ?? null,
       calendar_connection_id: normalized.calendar_connection_id ?? null,
-      // PR-AGENT-INTEGRATION-4: behavior_mode. Default 'stages' (retrocompat
-      // — quando wizard antigo nao passa nada). Wizard novo passa 'actions'.
-      behavior_mode: normalized.behavior_mode ?? "stages",
+      // PR-FLOW-PIVOT (mai/2026): único valor aceito pelo CHECK
+      // constraint da migration 054 é 'flow'. Fallback explícito
+      // pra default seguro caso normalizeAgentInput regredisse.
+      behavior_mode: normalized.behavior_mode ?? "flow",
       status: "draft",
     })
     .select("*")
