@@ -1,40 +1,170 @@
 "use server";
 
-// PR-FLOW-PIVOT (mai/2026): runtime velho (executor.ts + tester-context.ts)
-// removido. Este arquivo virou STUB enquanto o flow runtime (PR 2) não
-// aterrissa. Todas as funções retornam erro 503 "AI Agent em migração pra
-// novo runtime (flow canvas)". UI do TesterSheet mostra mensagem amigável.
+// AI Agent — Tester actions.
 //
-// Mantém as assinaturas idênticas pras chamadas existentes (rotas API
-// + adapters do ai-agent-ui) continuarem compilando. PR 2 substitui
-// pelo flow runtime real.
+// PR-FLOW-PIVOT PR 2 (mai/2026): substitui o stub 503 do PR 1.
+// `testAgent` (legado single-shot) e `testAgentLive` (pipeline fiel)
+// agora rodam o novo flow-runner contra o lead/conversation de teste,
+// com provider stub capturando eventos em memória.
+//
+// `testAgent` foi simplificado: chama `testAgentLive` internamente e
+// adapta o shape de retorno. UI antiga que ainda usa testAgent continua
+// funcionando.
 
 import type {
+  TesterEvent,
   TesterLiveRequest,
   TesterLiveResponse,
   TesterRequest,
   TesterResponse,
 } from "@persia/shared/ai-agent";
+import { normalizeHumanizationConfig } from "@persia/shared/ai-agent";
+import { asAgentDb } from "@/lib/ai-agent/db";
+import { loadFlowByConfigId } from "@/lib/ai-agent/flow/loader";
+import { runFlow } from "@/lib/ai-agent/flow/runner";
+import {
+  ensureTesterContext,
+  persistCurrentNode,
+  resetTesterConversation as resetTesterImpl,
+} from "@/lib/ai-agent/flow/tester-context";
+import { createTesterProvider } from "@/lib/ai-agent/flow/tester-provider";
+import type {
+  FlowProviderStub,
+  FlowRunContext,
+  TesterRunEvent,
+} from "@/lib/ai-agent/flow/types";
+import { requireAgentRole } from "./utils";
 
-const STUB_ERROR_MSG =
-  "AI Agent em migração pra novo runtime (flow canvas). Tester volta no PR 2 do pivot.";
+// ============================================================================
+// testAgentLive — pipeline fiel
+// ============================================================================
 
-export async function testAgent(_req: TesterRequest): Promise<TesterResponse> {
+export async function testAgentLive(
+  req: TesterLiveRequest,
+): Promise<TesterLiveResponse> {
+  const { supabase, orgId } = await requireAgentRole("agent");
+  const db = asAgentDb(supabase);
+
+  try {
+    // 1. Resolve agent_config + flow
+    const { data: agentConfig, error: configError } = await db
+      .from("agent_configs")
+      .select("id, humanization_config")
+      .eq("organization_id", orgId)
+      .eq("id", req.config_id)
+      .maybeSingle();
+    if (configError || !agentConfig) {
+      return failedResponse("Agente não encontrado");
+    }
+    const humanizationConfig = normalizeHumanizationConfig(
+      (agentConfig as { humanization_config?: unknown }).humanization_config,
+    );
+
+    const flow = await loadFlowByConfigId(db, orgId, req.config_id);
+    if (!flow) {
+      return failedResponse(
+        "Agente sem fluxo configurado. Recrie a partir de um template ou edite o canvas.",
+      );
+    }
+
+    // 2. Garante lead/conversation/agent_conversation de teste
+    const tester = await ensureTesterContext(db, orgId, req.config_id);
+
+    // 3. Provider stub + contexto de execução
+    const provider = createTesterProvider();
+    const ctx: FlowRunContext = {
+      flow,
+      agentConfigId: req.config_id,
+      organizationId: orgId,
+      crmConversationId: tester.crmConversationId,
+      agentConversationId: tester.agentConversationId,
+      leadId: tester.leadId,
+      inboundMessage: {
+        text: req.message,
+        received_at: new Date().toISOString(),
+      },
+      provider,
+      dryRun: true,
+      flowConfig: flow.config,
+    };
+
+    // 4. Roda o flow a partir do current_node_id atual
+    const result = await runFlow(db, ctx, tester.currentNodeId);
+
+    // 5. Persiste ending_node_id (mesmo se aborted, salvamos pra debug)
+    await persistCurrentNode(
+      db,
+      orgId,
+      tester.agentConversationId,
+      result.ending_node_id,
+    );
+
+    // 6. Converte FlowRunEvent → TesterEvent (subset compatível com UI)
+    const uiEvents: TesterEvent[] = result.events
+      .filter(isUiVisibleEvent)
+      .map((e) => ({ ts: e.ts, kind: mapEventKind(e.kind), payload: e.payload }));
+
+    return {
+      run_id: null,
+      events: uiEvents,
+      steps: [],
+      next_node_id: result.ending_node_id,
+      tokens_used: 0,
+      cost_usd_cents: 0,
+      applied_config: {
+        split_enabled: humanizationConfig.split_enabled,
+        split_threshold_chars: humanizationConfig.split_threshold_chars,
+        split_delay_seconds: humanizationConfig.split_delay_seconds,
+        business_hours_enabled: humanizationConfig.business_hours_enabled,
+        pause_keywords: humanizationConfig.pause_keywords,
+        resume_keywords: humanizationConfig.resume_keywords,
+      },
+      ...(result.fatal_error ? { error: result.fatal_error } : {}),
+    };
+  } catch (err) {
+    return failedResponse(err instanceof Error ? err.message : String(err));
+  }
+}
+
+// ============================================================================
+// testAgent — wrapper legado (single-shot). Compat com TesterRequest.
+// ============================================================================
+
+export async function testAgent(req: TesterRequest): Promise<TesterResponse> {
+  const live = await testAgentLive({
+    config_id: req.config_id,
+    message: req.message,
+    expedite_debounce: true,
+  });
+
   return {
-    run_id: "",
-    status: "failed",
-    assistant_reply: "",
-    steps: [],
-    tokens_used: 0,
-    cost_usd_cents: 0,
-    next_node_id: null,
-    error: STUB_ERROR_MSG,
+    run_id: live.run_id ?? "",
+    status: live.error ? "failed" : "succeeded",
+    assistant_reply: extractAssistantReply(live.events),
+    steps: live.steps,
+    tokens_used: live.tokens_used,
+    cost_usd_cents: live.cost_usd_cents,
+    next_node_id: live.next_node_id,
+    ...(live.error ? { error: live.error } : {}),
   };
 }
 
-export async function testAgentLive(
-  _req: TesterLiveRequest,
-): Promise<TesterLiveResponse> {
+// ============================================================================
+// resetTesterConversation — botão "Resetar" na UI
+// ============================================================================
+
+export async function resetTesterConversation(): Promise<{ ok: true }> {
+  const { supabase, orgId } = await requireAgentRole("agent");
+  const db = asAgentDb(supabase);
+  await resetTesterImpl(db, orgId);
+  return { ok: true };
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function failedResponse(message: string): TesterLiveResponse {
   return {
     run_id: null,
     events: [],
@@ -51,11 +181,51 @@ export async function testAgentLive(
       pause_keywords: [],
       resume_keywords: [],
     },
-    error: STUB_ERROR_MSG,
+    error: message,
   };
 }
 
-export async function resetTesterConversation(): Promise<{ ok: true }> {
-  // No-op até o flow runtime + tester-context novo aparecerem (PR 2).
-  return { ok: true };
+const UI_VISIBLE_KINDS = new Set<TesterRunEvent["kind"]>([
+  "send_text",
+  "set_typing_on",
+  "set_typing_off",
+  "send_media",
+  "skipped",
+]);
+
+function isUiVisibleEvent(event: TesterRunEvent): boolean {
+  return UI_VISIBLE_KINDS.has(event.kind);
 }
+
+function mapEventKind(kind: TesterRunEvent["kind"]): TesterEvent["kind"] {
+  // Restringe kinds internos a um subset que o shared TesterEvent aceita.
+  // Eventos internos (node_entered, llm_call, tool_call) não passam.
+  switch (kind) {
+    case "send_text":
+      return "send_text";
+    case "set_typing_on":
+      return "set_typing_on";
+    case "set_typing_off":
+      return "set_typing_off";
+    case "send_media":
+      return "send_media";
+    case "skipped":
+      return "skipped";
+    default:
+      return "skipped"; // fallback defensivo — não deve atingir por causa do filter acima
+  }
+}
+
+function extractAssistantReply(events: TesterEvent[]): string {
+  const texts: string[] = [];
+  for (const e of events) {
+    if (e.kind === "send_text") {
+      const msg = (e.payload as { message?: string }).message;
+      if (msg) texts.push(msg);
+    }
+  }
+  return texts.join("\n");
+}
+
+// Suprime warnings de imports tipo-only que TypeScript pode marcar:
+type _UnusedRef = FlowProviderStub;
