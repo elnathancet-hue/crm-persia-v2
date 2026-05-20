@@ -8,6 +8,7 @@ import { getPreset } from "@persia/shared/ai-agent";
 import { addTagHandler } from "./add-tag";
 import { cancelAppointmentHandler } from "./cancel-appointment";
 import { createAppointmentHandler } from "./create-appointment";
+import { emitEventHandler } from "./emit-event";
 import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
 import { rescheduleAppointmentHandler } from "./reschedule-appointment";
@@ -34,6 +35,10 @@ export const nativeHandlers: NativeHandlerRegistry = {
   reschedule_appointment: rescheduleAppointmentHandler,
   // PR-AI-AGENT-HUMAN-D (mai/2026): envio de midia da biblioteca
   send_media: sendMediaHandler,
+  // PR-FLOW-PIVOT PR 7 (mai/2026): tool sem side-effect — sinaliza pro
+  // flow-runner avançar pelo handle nomeado do AI node. Runner detecta
+  // pelo tool_call.function.name + lê handle_name do input.
+  emit_event: emitEventHandler,
 };
 
 export function isImplementedNativeHandler(

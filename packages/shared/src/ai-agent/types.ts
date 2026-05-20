@@ -47,6 +47,13 @@ export const NATIVE_HANDLERS = [
   // video, audio) da biblioteca automation_tools. Migration 043 estende
   // o CHECK constraint.
   "send_media",
+  // PR-FLOW-PIVOT PR 7 (mai/2026): tool que a IA chama pra avançar pra
+  // um handle nomeado do AI node no canvas. Cliente cadastra `instructions[]`
+  // no NodeConfigSheet (cada item tem output_handle + descrição). Quando
+  // a IA "cumpre" a instrução semanticamente, chama emit_event(handle_name)
+  // e o runtime segue a edge correspondente. Sem side effect — só
+  // sinalização pro flow-runner.
+  "emit_event",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];

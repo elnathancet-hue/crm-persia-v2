@@ -545,6 +545,34 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
       },
     },
   },
+  {
+    handler: "emit_event",
+    name: "emit_event",
+    display_name: "Avançar pelo fluxo",
+    description:
+      "Mandatory: call this tool to ADVANCE the conversation through the flow. Each AI node in the canvas has named output handles (configured by the user as 'instructions'). When you fulfill an instruction's condition semantically (e.g. 'lead provided email and phone'), call emit_event with the matching handle_name. The runtime will follow the corresponding edge to the next node (action, condition, or another AI node). Available handles are listed in the system prompt section 'EVENTS TO EMIT'.",
+    ui_description:
+      "Permite a IA avançar pelo fluxo emitindo eventos nomeados que correspondem aos handles do node IA.",
+    icon_name: "ArrowRightCircle",
+    category: "transfer",
+    shipped_in_pr: "PR7",
+    input_schema: {
+      type: "object",
+      required: ["handle_name"],
+      properties: {
+        handle_name: {
+          type: "string",
+          description:
+            "EXACT name of the output handle to advance through. Must match one of the 'EVENTS TO EMIT' listed in the system prompt (e.g. 'lead_qualificado', 'agendamento_criado'). Case-sensitive.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "Optional short justification for the event (logged in agent_steps audit).",
+        },
+      },
+    },
+  },
 ];
 
 export function getPreset(handler: NativeHandlerName): NativeToolPreset | undefined {
