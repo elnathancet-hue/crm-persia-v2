@@ -14,7 +14,8 @@
 // indiretamente nos handlers nativos (ai-agent-*.test.ts).
 
 import { describe, expect, it, vi } from "vitest";
-import type { FlowConfig } from "@persia/shared/ai-agent";
+import type { FlowConfig, FlowEntryNode } from "@persia/shared/ai-agent";
+import { shouldTriggerFlowFromInbound } from "@persia/shared/ai-agent";
 
 // server-only é importado transitivamente por alguns handlers nativos
 // (pause-agent, notifications). Stub global pra rodar em ambiente Node
@@ -78,7 +79,7 @@ const dbStub = {
       }),
     }),
   }),
-} as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+} as any;
 
 describe("flow-runner", () => {
   it("retorna fatal_error quando flow não tem entry node", async () => {
@@ -322,7 +323,7 @@ describe("flow-runner", () => {
           }),
         }),
       }),
-    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    } as any;
     const result = await runFlow(dbWithLead, ctx, null);
 
     expect(result.fatal_error).toBeUndefined();
@@ -389,6 +390,59 @@ describe("flow-runner", () => {
     expect((toolResult?.payload as { error: string }).error).toBe(
       "empty_message",
     );
+  });
+
+  describe("shouldTriggerFlowFromInbound (PR 10, mai/2026)", () => {
+    function makeEntry(
+      trigger: FlowEntryNode["data"]["trigger"],
+      config: Record<string, unknown> = {},
+    ): FlowEntryNode {
+      return {
+        id: "entry-1",
+        type: "entry",
+        position: { x: 0, y: 0 },
+        data: { label: "Entrada", trigger, config },
+      };
+    }
+
+    it("conversation_started sempre dispara", () => {
+      const entry = makeEntry("conversation_started");
+      expect(shouldTriggerFlowFromInbound(entry, "qualquer texto")).toBe(true);
+      expect(shouldTriggerFlowFromInbound(entry, "")).toBe(true);
+    });
+
+    it("keyword_match dispara apenas quando msg contém keyword (case-insensitive)", () => {
+      const entry = makeEntry("keyword_match", {
+        keywords: ["Comprar", "Agendar"],
+      });
+      expect(shouldTriggerFlowFromInbound(entry, "quero comprar um")).toBe(
+        true,
+      );
+      expect(shouldTriggerFlowFromInbound(entry, "AGENDAR reunião")).toBe(true);
+      expect(shouldTriggerFlowFromInbound(entry, "qual o preço?")).toBe(false);
+    });
+
+    it("keyword_match sem keywords cadastradas nunca dispara", () => {
+      const entry = makeEntry("keyword_match", { keywords: [] });
+      expect(shouldTriggerFlowFromInbound(entry, "comprar")).toBe(false);
+    });
+
+    it("segment_entered e pipeline_stage_entered NÃO disparam por inbound", () => {
+      // Por design: esses triggers escutam eventos do CRM (segment
+      // evaluator, kanban transition), não inbound WhatsApp.
+      expect(
+        shouldTriggerFlowFromInbound(
+          makeEntry("segment_entered", { segment_id: "seg-1" }),
+          "qualquer texto",
+        ),
+      ).toBe(false);
+      expect(
+        shouldTriggerFlowFromInbound(
+          makeEntry("pipeline_stage_entered", { stage_id: "stage-1" }),
+          "qualquer texto",
+        ),
+      ).toBe(false);
+    });
   });
 
   it("captura eventos node_entered/exited via provider", async () => {

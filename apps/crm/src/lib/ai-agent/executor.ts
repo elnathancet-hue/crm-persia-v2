@@ -34,11 +34,13 @@ import { phoneBR } from "@persia/shared/validation";
 import {
   NATIVE_AGENT_FEATURE_FLAG,
   calculateCostUsdCents,
+  findEntryNode,
   isAutoPauseExpired,
   isWithinBusinessHours,
   matchesPauseKeyword,
   matchesResumeKeyword,
   normalizeHumanizationConfig,
+  shouldTriggerFlowFromInbound,
   type DebounceFlushBatch,
   type OrganizationSettings,
 } from "@persia/shared/ai-agent";
@@ -377,6 +379,42 @@ export async function tryEnqueueForNativeAgent(
           },
         };
       }
+    }
+
+    // 9d. Entry trigger gate (PR-FLOW-PIVOT PR 10, mai/2026).
+    //
+    // Antes do enqueue, checa se o flow desse agente declara um entry
+    // trigger que escuta inbound message. Tipos:
+    //   - conversation_started: sempre passa
+    //   - keyword_match: passa se texto contém alguma keyword
+    //   - segment_entered / pipeline_stage_entered: NUNCA passa por
+    //     inbound (esses eventos vêm de hooks do CRM, não do webhook)
+    //
+    // Defensive: se flow não existir ou não tiver entry node, segue
+    // como conversation_started (compat com agentes que ainda não
+    // configuraram o canvas).
+    try {
+      const flow = await loadFlowByConfigId(db, orgId, agentConfigId);
+      const entry = flow ? findEntryNode(flow.config) : null;
+      if (entry && !shouldTriggerFlowFromInbound(entry, msg.text)) {
+        return {
+          handled: true,
+          response: {
+            ok: true,
+            handledBy: "ai_native_flow",
+            leadId,
+            conversationId,
+            status: `no_trigger_match:${entry.data.trigger}`,
+          },
+        };
+      }
+    } catch (err) {
+      // Falha de load = log + segue (não derruba o lead por bug em flow
+      // config). Pipeline cai pro default conversation_started.
+      logError("native_agent_entry_trigger_check_failed", {
+        ...logCtx,
+        error: errorMessage(err),
+      });
     }
 
     // 10. Enfileira em pending_messages via RPC. RPC também atualiza

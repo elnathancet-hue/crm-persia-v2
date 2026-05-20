@@ -47,17 +47,34 @@ interface FlowNodeBase {
 // ----------------------------------------------------------------------------
 // Node: Entry — gatilho de início do flow
 // ----------------------------------------------------------------------------
-// V1 suporta apenas "conversation_started" (primeira mensagem do lead).
-// Futuras entradas (lead_created, deal_closed, agendamento_cancelado etc)
-// expandem o enum sem quebrar shape.
+// PR-FLOW-PIVOT PR 10 (mai/2026): 4 tipos de gatilho de entrada, paridade
+// com o flow.json do Jordan Moura (Humana Saúde):
+//   - conversation_started: primeira mensagem do lead (V1 — funcional)
+//   - keyword_match: mensagem do lead contém palavra-chave específica
+//     (V1 — funcional, avaliado no enqueue)
+//   - segment_entered: lead entra em segmentação salva (V1 — placeholder
+//     visual, runtime exige hook no segment evaluator do CRM, PR 11)
+//   - pipeline_stage_entered: lead/deal muda pra stage específica (V1 —
+//     placeholder visual, runtime exige hook no Kanban, PR 11)
 
-export type FlowEntryTrigger = "conversation_started";
+export type FlowEntryTrigger =
+  | "conversation_started"
+  | "keyword_match"
+  | "segment_entered"
+  | "pipeline_stage_entered";
 
 export interface FlowEntryNode extends FlowNodeBase {
   type: "entry";
   data: {
     label: string;
     trigger: FlowEntryTrigger;
+    /** Payload específico do trigger. Shape:
+     *  - conversation_started: {} (sem config)
+     *  - keyword_match: { keywords: string[] } (1+ termos; match
+     *    case-insensitive via `includes`)
+     *  - segment_entered: { segment_id: string }
+     *  - pipeline_stage_entered: { stage_id: string } */
+    config?: Record<string, unknown>;
   };
 }
 
@@ -286,15 +303,28 @@ function normalizeNode(raw: unknown): FlowNode | null {
 
   switch (obj.type) {
     case "entry": {
-      const trigger =
-        dataRaw.trigger === "conversation_started"
-          ? "conversation_started"
-          : "conversation_started";
+      // PR 10 (mai/2026): 4 triggers válidos. Default fallback pra
+      // "conversation_started" se shape vier corrompido.
+      const validTriggers: readonly FlowEntryTrigger[] = [
+        "conversation_started",
+        "keyword_match",
+        "segment_entered",
+        "pipeline_stage_entered",
+      ];
+      const trigger = (validTriggers as readonly string[]).includes(
+        dataRaw.trigger as string,
+      )
+        ? (dataRaw.trigger as FlowEntryTrigger)
+        : "conversation_started";
+      const config =
+        dataRaw.config && typeof dataRaw.config === "object" && !Array.isArray(dataRaw.config)
+          ? (dataRaw.config as Record<string, unknown>)
+          : {};
       return {
         id: obj.id,
         type: "entry",
         position,
-        data: { label, trigger },
+        data: { label, trigger, config },
       };
     }
     case "ai_agent": {
@@ -516,4 +546,46 @@ export function flowActionTypeToNativeHandler(
     // vez de chamar handler nativo).
   };
   return direct[actionType] ?? null;
+}
+
+// ============================================================================
+// PR-FLOW-PIVOT PR 10 (mai/2026): Helpers de entry trigger evaluation
+// ============================================================================
+//
+// Runtime usa pra decidir se uma inbound message dispara o flow. Cada
+// trigger tem semantica distinta de fonte de evento:
+//   - conversation_started: sempre dispara em qualquer msg inbound
+//   - keyword_match: dispara se inbound contém alguma palavra-chave
+//   - segment_entered / pipeline_stage_entered: NÃO disparam por msg
+//     inbound — exigem hook do CRM (segment evaluator, kanban). V1 marca
+//     como "não suportado" e o runtime cai pro pipeline legacy (sem flow).
+
+/**
+ * Avalia se uma mensagem inbound dispara o flow com base no entry trigger.
+ *
+ * @returns true = enfileira normalmente; false = skip (flow não escuta
+ *   essa fonte de evento ou keyword não casou)
+ */
+export function shouldTriggerFlowFromInbound(
+  entry: FlowEntryNode,
+  inboundText: string,
+): boolean {
+  const trigger = entry.data.trigger;
+  if (trigger === "conversation_started") return true;
+
+  if (trigger === "keyword_match") {
+    const config = entry.data.config ?? {};
+    const keywords = Array.isArray(config.keywords)
+      ? (config.keywords as unknown[]).filter(
+          (k): k is string => typeof k === "string" && k.trim().length > 0,
+        )
+      : [];
+    if (keywords.length === 0) return false; // sem keywords cadastradas, nunca dispara
+    const normalized = inboundText.toLowerCase();
+    return keywords.some((kw) => normalized.includes(kw.toLowerCase()));
+  }
+
+  // segment_entered / pipeline_stage_entered — não dispara por inbound
+  // (esses eventos vêm de fora do pipeline WhatsApp).
+  return false;
 }
