@@ -11,6 +11,7 @@
 // o WhatsApp já foi entregue, perder o registro local é o menor mal.
 
 import type { WhatsAppProvider } from "@persia/shared/whatsapp";
+import type { HumanizationConfig } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
 import type { FlowProviderStub, TesterRunEvent } from "./types";
 
@@ -25,8 +26,41 @@ export interface CreateRealtimeProviderOptions {
   /** Conversation UUID (pra persistir em messages.conversation_id). */
   conversationId: string;
   organizationId: string;
+  /** Humanization config normalizada — controla split + delay. PR 6
+   * (mai/2026): se split_enabled, divide mensagens longas em chunks. */
+  humanization: HumanizationConfig;
   /** Optional clock pra tests deterministicos. */
   clock?: () => number;
+}
+
+// ============================================================================
+// Split helper — divide msg longa em chunks respeitando quebras naturais
+// ============================================================================
+//
+// Prioridade de quebra: \n\n (parágrafo) > \n (linha) > ". " (frase) > " "
+// (palavra) > hard cut. Garante que ninguém cortou no meio de palavra.
+
+function splitMessage(text: string, thresholdChars: number): string[] {
+  if (text.length <= thresholdChars) return [text];
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > thresholdChars) {
+    const window = remaining.slice(0, thresholdChars);
+    const splitAt =
+      window.lastIndexOf("\n\n") ||
+      window.lastIndexOf("\n") ||
+      window.lastIndexOf(". ") ||
+      window.lastIndexOf(" ");
+    const cut = splitAt > thresholdChars * 0.5 ? splitAt : thresholdChars;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -70,39 +104,66 @@ export function createRealtimeProvider(
         const message = payload.message ?? "";
         if (!message) return;
         void (async () => {
-          try {
-            const result = await opts.provider.sendText({
-              phone: opts.leadPhone,
-              message,
-            });
-            // Insere outbound message em `messages` pra aparecer no chat.
-            // Best-effort — falha aqui só perde o registro local.
+          // PR 6 (mai/2026): split de msg longa em chunks. Entre chunks,
+          // setTyping(on) + delay configurável + setTyping(off) pra ritmo
+          // mais humano (cliente percebe IA "digitando").
+          const chunks =
+            opts.humanization.split_enabled &&
+            message.length > opts.humanization.split_threshold_chars
+              ? splitMessage(message, opts.humanization.split_threshold_chars)
+              : [message];
+          const delayMs = Math.max(
+            0,
+            (opts.humanization.split_delay_seconds ?? 0) * 1000,
+          );
+
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i]!;
             try {
-              await opts.db.from("messages").insert({
-                organization_id: opts.organizationId,
-                conversation_id: opts.conversationId,
-                lead_id: opts.leadId,
-                content: message,
-                sender: "ai",
-                type: "text",
-                whatsapp_msg_id: result?.messageId ?? null,
-                status: result?.success === false ? "failed" : "sent",
+              const result = await opts.provider.sendText({
+                phone: opts.leadPhone,
+                message: chunk,
               });
-            } catch (insertErr) {
-              console.error(
-                "[realtime-provider] insert outbound message failed:",
-                insertErr,
-              );
+              try {
+                await opts.db.from("messages").insert({
+                  organization_id: opts.organizationId,
+                  conversation_id: opts.conversationId,
+                  lead_id: opts.leadId,
+                  content: chunk,
+                  sender: "ai",
+                  type: "text",
+                  whatsapp_msg_id: result?.messageId ?? null,
+                  status: result?.success === false ? "failed" : "sent",
+                });
+              } catch (insertErr) {
+                console.error(
+                  "[realtime-provider] insert outbound message failed:",
+                  insertErr,
+                );
+              }
+            } catch (err) {
+              record({
+                kind: "skipped",
+                payload: {
+                  reason: "provider_send_failed",
+                  error: err instanceof Error ? err.message : String(err),
+                  source_event_ts: recorded.ts,
+                  chunk_index: i,
+                },
+              });
+              return; // aborta resto dos chunks se um falhou
             }
-          } catch (err) {
-            record({
-              kind: "skipped",
-              payload: {
-                reason: "provider_send_failed",
-                error: err instanceof Error ? err.message : String(err),
-                source_event_ts: recorded.ts,
-              },
-            });
+
+            // Delay + setTyping entre chunks (não no último).
+            if (i < chunks.length - 1 && delayMs > 0) {
+              await opts.provider
+                .setTyping(opts.leadPhone, true)
+                .catch(() => {});
+              await sleep(delayMs);
+              await opts.provider
+                .setTyping(opts.leadPhone, false)
+                .catch(() => {});
+            }
           }
         })();
         return;

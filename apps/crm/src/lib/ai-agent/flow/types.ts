@@ -22,6 +22,11 @@ export interface FlowRunResult {
   tool_calls_failed: number;
   /** Quando true, runner parou porque max_iterations bateu — possível loop. */
   hit_max_iterations: boolean;
+  /** Tokens consumidos pelo LLM neste turno (input). Soma de todas as
+   * iterações ping-pong do AI node. Usado pra audit em agent_runs. */
+  tokens_input: number;
+  /** Tokens gerados pelo LLM neste turno (output). */
+  tokens_output: number;
   /** Erro fatal que abortou a execução (ex: flow sem entry node). */
   fatal_error?: string;
   /** Eventos capturados pelo provider stub (apenas modo tester). Em modo
