@@ -108,7 +108,10 @@ export type FlowActionType =
   | "send_media"
   | "stop_agent"
   | "transfer_to_user"
-  | "transfer_to_agent";
+  | "transfer_to_agent"
+  // PR-FLOW-PIVOT PR 8 (mai/2026): IA escreve em lead_custom_field_values.
+  // Action node (não via IA): runtime resolve field_key via config.
+  | "set_lead_custom_field";
 
 /**
  * Mapeia FlowActionType pra NativeHandlerName quando aplicável. Alguns
@@ -503,6 +506,7 @@ export function flowActionTypeToNativeHandler(
     stop_agent: "stop_agent",
     transfer_to_user: "transfer_to_user",
     transfer_to_agent: "transfer_to_agent",
+    set_lead_custom_field: "set_lead_custom_field",
   };
   return direct[actionType] ?? null;
 }

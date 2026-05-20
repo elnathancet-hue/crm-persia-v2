@@ -54,6 +54,10 @@ export const NATIVE_HANDLERS = [
   // e o runtime segue a edge correspondente. Sem side effect — só
   // sinalização pro flow-runner.
   "emit_event",
+  // PR-FLOW-PIVOT PR 8 (mai/2026): IA escreve em lead_custom_field_values.
+  // Paridade com `edit_lead_ia: true` do flow.json do Jordan. Handler resolve
+  // custom_field pelo field_key (slug) e faz upsert no value (TEXT).
+  "set_lead_custom_field",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];

@@ -47,6 +47,13 @@ export interface FlowCatalogSegment {
   name: string;
 }
 
+export interface FlowCatalogCustomField {
+  id: string;
+  name: string;
+  field_key: string;
+  field_type: string;
+}
+
 export interface FlowCatalogs {
   tags: FlowCatalogTag[];
   pipeline_stages: FlowCatalogPipelineStage[];
@@ -58,6 +65,10 @@ export interface FlowCatalogs {
    * "Verificar segmentação". Cliente seleciona segmento existente
    * em vez de digitar UUID. */
   segments: FlowCatalogSegment[];
+  /** PR-FLOW-PIVOT PR 8 (mai/2026): custom fields da org. Action
+   * node "Salvar dado do lead" + condition "Verificar campo
+   * personalizado" usam pra picker. */
+  custom_fields: FlowCatalogCustomField[];
 }
 
 export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
@@ -68,4 +79,5 @@ export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
   members: [],
   other_agents: [],
   segments: [],
+  custom_fields: [],
 };

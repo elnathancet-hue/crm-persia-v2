@@ -577,6 +577,8 @@ async function executeActionNode(
     stop_agent: "stop_agent",
     transfer_to_user: "transfer_to_user",
     transfer_to_agent: "transfer_to_agent",
+    // PR-FLOW-PIVOT PR 8 (mai/2026)
+    set_lead_custom_field: "set_lead_custom_field",
   };
 
   const handlerKey = directHandlers[actionType];

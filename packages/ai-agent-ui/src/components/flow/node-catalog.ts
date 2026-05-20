@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
   ListChecks,
   MessageSquare,
+  Pencil,
   Power,
   StopCircle,
   Tag as TagIcon,
@@ -199,6 +200,20 @@ const ACTION_ITEMS: FlowSidebarItem[] = [
       label: "Encerrar atendimento",
       action_type: "stop_agent" satisfies FlowActionType,
       config: {},
+    },
+  },
+  {
+    task_key: "action.set_lead_custom_field",
+    category: "acoes",
+    label: "Salvar dado do lead",
+    description:
+      "Grava um campo personalizado no perfil do lead (idade, CPF, profissão, etc). O campo precisa estar cadastrado em CRM → Campos personalizados.",
+    icon: Pencil,
+    node_type: "action",
+    default_data: {
+      label: "Salvar dado do lead",
+      action_type: "set_lead_custom_field" satisfies FlowActionType,
+      config: { field_key: "", value: "" },
     },
   },
 ];
