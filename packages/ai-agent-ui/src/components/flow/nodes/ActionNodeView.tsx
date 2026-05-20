@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Pencil,
   Power,
+  Shuffle,
   StopCircle,
   Tag as TagIcon,
   TagsIcon,
@@ -38,6 +39,7 @@ const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   transfer_to_agent: UserCog,
   set_lead_custom_field: Pencil,
   send_whatsapp_message: MessageCircle,
+  round_robin_user: Shuffle,
 };
 
 function configPreview(actionType: FlowActionType, config: Record<string, unknown>): string {
@@ -71,6 +73,8 @@ function configPreview(actionType: FlowActionType, config: Record<string, unknow
       const firstLine = message.split("\n")[0] ?? "";
       return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
     }
+    case "round_robin_user":
+      return "Próximo atendente disponível (menos leads)";
     default:
       return "";
   }

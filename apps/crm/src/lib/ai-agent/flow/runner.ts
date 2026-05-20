@@ -612,6 +612,9 @@ async function executeActionNode(
     // por special-case acima (executeSendWhatsappMessageAction) — emite
     // send_text via ctx.provider em vez de handler nativo, reusando a
     // plumbing já testada do realtime-provider (split + DB persist).
+
+    // PR-FLOW-PIVOT PR 13 (mai/2026)
+    round_robin_user: "round_robin_user",
   };
 
   const handlerKey = directHandlers[actionType];
