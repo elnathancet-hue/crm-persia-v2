@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  Calendar,
   CreditCard,
   ListChecks,
   Smartphone,
@@ -25,6 +26,7 @@ const tabs = [
   { label: "Filas", href: "/settings/queues", icon: ListChecks },
   { label: "Webhooks", href: "/settings/webhooks", icon: Webhook },
   { label: "WhatsApp", href: "/settings/whatsapp", icon: Smartphone },
+  { label: "Google Calendar", href: "/settings/google-calendar", icon: Calendar },
   { label: "Plano", href: "/settings/billing", icon: CreditCard },
 ];
 
