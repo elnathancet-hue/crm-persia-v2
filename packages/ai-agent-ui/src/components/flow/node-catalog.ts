@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Pencil,
   Power,
+  Shuffle,
   StopCircle,
   Tag as TagIcon,
   TagsIcon,
@@ -219,6 +220,20 @@ const ACTION_ITEMS: FlowSidebarItem[] = [
       label: "Transferir pra humano",
       action_type: "transfer_to_user" satisfies FlowActionType,
       config: { user: "" },
+    },
+  },
+  {
+    task_key: "action.round_robin_user",
+    category: "acoes",
+    label: "Distribuir lead (rodízio)",
+    description:
+      "Atribui o lead ao atendente com MENOS leads ativos no momento (algoritmo least-loaded). Pausa o agente IA automaticamente. Use quando não importa QUEM atende, só que a fila gire.",
+    icon: Shuffle,
+    node_type: "action",
+    default_data: {
+      label: "Distribuir lead (rodízio)",
+      action_type: "round_robin_user" satisfies FlowActionType,
+      config: {},
     },
   },
   {

@@ -714,6 +714,24 @@ function ActionForm({
           </p>
         </div>
       )}
+
+      {actionType === "round_robin_user" && (
+        <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
+          <p>
+            O lead é atribuído ao membro da equipe com MENOS leads ativos
+            no momento (algoritmo &quot;least-loaded&quot;).
+          </p>
+          <p>
+            Candidatos: todos com perfil <strong>Atendente</strong>,{" "}
+            <strong>Admin</strong> ou <strong>Owner</strong> ativos. Quem
+            tiver papel <strong>Viewer</strong> não recebe leads.
+          </p>
+          <p>
+            Após atribuir, o agente IA é pausado automaticamente nessa
+            conversa (humano assumiu).
+          </p>
+        </div>
+      )}
     </div>
   );
 }

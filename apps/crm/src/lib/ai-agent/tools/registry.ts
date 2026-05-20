@@ -12,6 +12,7 @@ import { emitEventHandler } from "./emit-event";
 import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
 import { rescheduleAppointmentHandler } from "./reschedule-appointment";
+import { roundRobinUserHandler } from "./round-robin-user";
 import { sendMediaHandler } from "./send-media";
 import { setLeadCustomFieldHandler } from "./set-lead-custom-field";
 import { stopAgentHandler } from "./stop-agent";
@@ -43,6 +44,10 @@ export const nativeHandlers: NativeHandlerRegistry = {
   // PR-FLOW-PIVOT PR 8 (mai/2026): IA escreve em lead_custom_field_values.
   // Paridade com `edit_lead_ia` do flow.json do Jordan.
   set_lead_custom_field: setLeadCustomFieldHandler,
+  // PR-FLOW-PIVOT PR 13 (mai/2026): distribuição automática de leads
+  // (algoritmo least-loaded). Paridade com queue/round-robin do
+  // flow.json do Jordan.
+  round_robin_user: roundRobinUserHandler,
 };
 
 export function isImplementedNativeHandler(

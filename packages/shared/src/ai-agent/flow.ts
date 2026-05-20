@@ -132,7 +132,12 @@ export type FlowActionType =
   // PR-FLOW-PIVOT PR 9 (mai/2026): action node envia texto WhatsApp
   // determinístico SEM passar pela IA. config: { message: string } com
   // placeholders {{lead.name}}/phone/email.
-  | "send_whatsapp_message";
+  | "send_whatsapp_message"
+  // PR-FLOW-PIVOT PR 13 (mai/2026): distribui lead pra um atendente
+  // humano via algoritmo least-loaded. config: {} (V1 sem filtros —
+  // todos os membros assignable da org são candidatos). Paridade com
+  // queue/round-robin do flow.json do Jordan.
+  | "round_robin_user";
 
 /**
  * Mapeia FlowActionType pra NativeHandlerName quando aplicável. Alguns
@@ -544,6 +549,7 @@ export function flowActionTypeToNativeHandler(
     // `send_whatsapp_message` (PR 9) NÃO mapeia: é tratado por
     // special-case no runner (emite send_text via FlowProviderStub em
     // vez de chamar handler nativo).
+    round_robin_user: "round_robin_user",
   };
   return direct[actionType] ?? null;
 }
