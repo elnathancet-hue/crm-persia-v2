@@ -73,6 +73,11 @@ export interface AgentActions {
     configId: string,
     config: FlowConfig,
   ) => Promise<{ ok: true; version: number }>;
+  /** Carrega catálogos pros pickers do NodeConfigSheet (tags, stages,
+   * templates, agenda, membros, outros agentes). Single roundtrip. */
+  getFlowCatalogs: (
+    configId: string,
+  ) => Promise<import("./components/flow/catalog-types").FlowCatalogs>;
 
   // Tools
   createToolFromPreset: (input: CreateToolFromPresetInput) => Promise<AgentTool>;

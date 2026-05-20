@@ -7,6 +7,7 @@
 import type { AgentActions } from "@persia/ai-agent-ui";
 import { createAgent, deleteAgent, setPrimaryAgent, updateAgent } from "@/actions/ai-agent/configs";
 import { getFlow, saveFlow } from "@/actions/ai-agent/flow";
+import { getFlowCatalogs } from "@/actions/ai-agent/flow-catalogs";
 // PR-FLOW-PIVOT (mai/2026): stages + stage-action-config + setStageTool
 // removidos. Allowlist de tools migra pra agent_flows.enabled_tools.
 import {
@@ -79,6 +80,7 @@ export const crmAgentActions: AgentActions = {
   deleteEntryCondition,
   getFlow,
   saveFlow,
+  getFlowCatalogs,
   createToolFromPreset,
   createCustomWebhookTool,
   updateTool,

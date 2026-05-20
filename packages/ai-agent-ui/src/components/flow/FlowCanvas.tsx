@@ -26,6 +26,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type NodeMouseHandler,
   type NodeTypes,
   type OnConnect,
   type OnEdgesChange,
@@ -41,8 +42,11 @@ import type {
 import { normalizeFlowConfig } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { useAgentActions } from "../../context";
+import type { FlowCatalogs } from "./catalog-types";
+import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
 import { findSidebarItem } from "./node-catalog";
+import { NodeConfigSheet } from "./NodeConfigSheet";
 import { EntryNodeView } from "./nodes/EntryNodeView";
 import { AIAgentNodeView } from "./nodes/AIAgentNodeView";
 import { ActionNodeView } from "./nodes/ActionNodeView";
@@ -144,6 +148,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const [saving, setSaving] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
+  const [configSheetOpen, setConfigSheetOpen] = React.useState(false);
+  const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
+  const [catalogsLoading, setCatalogsLoading] = React.useState(false);
 
   // -- Load flow --
   React.useEffect(() => {
@@ -201,6 +209,75 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     );
     setDirty(true);
   }, []);
+
+  // -- Lazy load dos catálogos quando o usuário abre o primeiro node --
+  const ensureCatalogsLoaded = React.useCallback(async () => {
+    if (catalogsLoading) return;
+    if (
+      catalogs.tags.length > 0 ||
+      catalogs.pipeline_stages.length > 0 ||
+      catalogs.notification_templates.length > 0
+    ) {
+      return; // já carregado
+    }
+    setCatalogsLoading(true);
+    try {
+      const next = await actions.getFlowCatalogs(configId);
+      setCatalogs(next);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao carregar catálogos",
+      );
+    } finally {
+      setCatalogsLoading(false);
+    }
+  }, [actions, catalogs, catalogsLoading, configId]);
+
+  // -- Click em node abre Sheet de config --
+  const onNodeClick: NodeMouseHandler = React.useCallback(
+    (_, node) => {
+      setSelectedNodeId(node.id);
+      setConfigSheetOpen(true);
+      void ensureCatalogsLoaded();
+    },
+    [ensureCatalogsLoaded],
+  );
+
+  // -- Sheet salvou → update node data --
+  const handleNodeSave = React.useCallback(
+    (nodeId: string, newData: Record<string, unknown>) => {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, data: newData } : n)),
+      );
+      setDirty(true);
+    },
+    [],
+  );
+
+  // -- Sheet pediu remoção do node --
+  const handleNodeDelete = React.useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      setEdges((eds) =>
+        eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      );
+      setDirty(true);
+    },
+    [],
+  );
+
+  // Node atualmente selecionado pra renderizar no Sheet
+  const selectedNode = React.useMemo(() => {
+    if (!selectedNodeId) return null;
+    const rfNode = nodes.find((n) => n.id === selectedNodeId);
+    if (!rfNode) return null;
+    return {
+      id: rfNode.id,
+      type: rfNode.type,
+      position: rfNode.position,
+      data: rfNode.data,
+    } as PersiaFlowNode;
+  }, [nodes, selectedNodeId]);
 
   // -- Drag-drop do sidebar --
   const onDragOver = React.useCallback((e: React.DragEvent) => {
@@ -305,6 +382,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
           defaultViewport={viewport}
           onMoveEnd={(_, v) => {
@@ -332,6 +410,15 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           </div>
         ) : null}
       </div>
+      <NodeConfigSheet
+        node={selectedNode}
+        open={configSheetOpen}
+        catalogs={catalogs}
+        catalogsLoading={catalogsLoading}
+        onOpenChange={setConfigSheetOpen}
+        onSave={handleNodeSave}
+        onDelete={handleNodeDelete}
+      />
     </div>
   );
 }

@@ -30,6 +30,7 @@ export {
 export { RulesTab } from "./components/RulesTab";
 // PR-FLOW-PIVOT PR 3 (mai/2026): FlowCanvas substitui StagesTab/ToolsTab.
 export { FlowCanvas } from "./components/flow/FlowCanvas";
+export * from "./components/flow/catalog-types";
 export { AuditTab } from "./components/AuditTab";
 export { LimitsUsageTab } from "./components/LimitsUsageTab";
 export { FAQTab } from "./components/FAQTab";
