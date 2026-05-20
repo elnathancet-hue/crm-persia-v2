@@ -296,9 +296,11 @@ function EntryForm({
             emptyLabel="Nenhuma etapa configurada."
             placeholder="Selecione uma etapa"
           />
-          <p className="text-xs text-muted-foreground italic">
-            Em breve: runtime que detecta mudança de etapa ainda não está
-            ativo. Use &quot;Em qualquer mensagem do lead&quot; por enquanto.
+          <p className="text-xs text-muted-foreground">
+            O fluxo dispara quando o lead entra nesta etapa — seja por
+            drag no Kanban ou via outro agente. Desenhe começando com uma
+            ação (ex: &quot;Enviar mensagem WhatsApp&quot;) porque não há
+            mensagem do lead pra IA reagir.
           </p>
         </>
       )}

@@ -223,6 +223,23 @@ async function executeAIAgentNode(
   node: FlowAIAgentNode,
   result: FlowRunResult,
 ): Promise<string | null> {
+  // PR-FLOW-PIVOT PR 11 (mai/2026): se o flow foi disparado por evento
+  // CRM (stage transition, segment entry), inboundMessage.text vem
+  // vazio — não há msg do lead pra IA reagir. Skip LLM call gracioso +
+  // segue edge default. Cliente deve desenhar flows event-driven
+  // começando com action node (ex: send_whatsapp_message proativo).
+  if (!ctx.inboundMessage.text.trim()) {
+    ctx.provider.emit({
+      kind: "guardrail",
+      payload: {
+        reason: "ai_node_skipped_no_inbound",
+        node_id: node.id,
+        hint: "flow disparado por evento CRM (sem msg inbound) — desenhe começando com action node",
+      },
+    });
+    return followDefaultEdge(ctx, node);
+  }
+
   const [agentConfig, tools] = await Promise.all([
     loadAgentConfig(db, ctx),
     loadEnabledTools(db, ctx),

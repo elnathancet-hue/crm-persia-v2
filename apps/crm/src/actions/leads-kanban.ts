@@ -98,6 +98,21 @@ export async function moveLeadStage(
 ): Promise<void> {
   const { supabase, orgId } = await requireRole("agent");
   await moveLeadToStageShared({ db: supabase, orgId }, leadId, stageId, sortOrder);
+
+  // PR-FLOW-PIVOT PR 11 (mai/2026): dispara agent_flows com entry
+  // pipeline_stage_entered. Fire-and-forget — drag-drop do Kanban
+  // continua responsivo mesmo se flow demorar.
+  void import("@/lib/ai-agent/flow/triggers")
+    .then(({ triggerAgentFlowsForStageEntry }) =>
+      triggerAgentFlowsForStageEntry(supabase, orgId, leadId, stageId),
+    )
+    .catch((err) => {
+      console.error(
+        "[moveLeadStage] triggerAgentFlowsForStageEntry failed:",
+        err,
+      );
+    });
+
   revalidatePath("/crm");
 }
 
