@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
-  AgentStage,
   TesterEvent,
   TesterLiveResponse,
   TesterResponse,
@@ -48,7 +47,10 @@ import { useAgentActions } from "../context";
 
 interface Props {
   configId: string;
-  stages: AgentStage[];
+  // PR-FLOW-PIVOT (mai/2026): prop `stages` removida. UI continua mostrando
+  // descritor textual via started_node_id/next_node_id (string id do React
+  // Flow). Mapeamento id → label vem do FlowConfig (PR 3); por enquanto a
+  // UI mostra IDs raw.
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -74,13 +76,13 @@ interface SystemTurn {
 interface StepsTurn {
   kind: "steps";
   steps: TesterStepSummary[];
-  next_stage_id?: string | null;
+  next_node_id?: string | null;
   started_stage_id?: string;
 }
 
 type Turn = UserTurn | AgentTurn | SystemTurn | StepsTurn;
 
-export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
+export function TesterSheet({ configId, open, onOpenChange }: Props) {
   const actions = useAgentActions();
   const hasLive = typeof actions.testAgentLive === "function";
   const hasReset = typeof actions.resetTesterConversation === "function";
@@ -167,7 +169,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
                 {
                   kind: "steps" as const,
                   steps: res.steps,
-                  next_stage_id: res.next_stage_id,
+                  next_node_id: res.next_node_id,
                 },
               ]
             : []),
@@ -270,11 +272,9 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
           className="flex-1 overflow-y-auto px-4 py-2 space-y-3 bg-muted/20"
         >
           {turns.length === 0 ? (
-            <EmptyState faithfulMode={faithfulMode} stagesCount={stages.length} />
+            <EmptyState faithfulMode={faithfulMode} stagesCount={0} />
           ) : (
-            turns.map((turn, i) => (
-              <TurnRenderer key={i} turn={turn} stages={stages} />
-            ))
+            turns.map((turn, i) => <TurnRenderer key={i} turn={turn} />)
           )}
           {isPending ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 py-1">
@@ -289,11 +289,8 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
         </div>
 
         <SheetFooter className="flex-col gap-2">
-          {stages.length === 0 ? (
-            <p className="text-xs text-muted-foreground self-start">
-              Crie pelo menos uma etapa na aba <strong>Etapas</strong> antes de testar.
-            </p>
-          ) : null}
+          {/* PR-FLOW-PIVOT (mai/2026): aviso "crie etapa antes" removido —
+              flow nasce com node IA default a partir do template. */}
           <div className="flex flex-row gap-2 w-full">
             <Button
               type="button"
@@ -314,12 +311,8 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
               <Input
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder={
-                  stages.length === 0
-                    ? "Crie uma etapa primeiro"
-                    : "Digite como se fosse o lead..."
-                }
-                disabled={isPending || stages.length === 0}
+                placeholder="Digite como se fosse o lead..."
+                disabled={isPending}
                 aria-label="Mensagem de teste"
               />
               {isPending ? (
@@ -334,10 +327,7 @@ export function TesterSheet({ configId, stages, open, onOpenChange }: Props) {
                   <X className="size-4" />
                 </Button>
               ) : (
-                <Button
-                  type="submit"
-                  disabled={!message.trim() || stages.length === 0}
-                >
+                <Button type="submit" disabled={!message.trim()}>
                   <Send className="size-4" />
                 </Button>
               )}
@@ -384,7 +374,7 @@ function EmptyState({
   );
 }
 
-function TurnRenderer({ turn, stages }: { turn: Turn; stages: AgentStage[] }) {
+function TurnRenderer({ turn }: { turn: Turn }) {
   switch (turn.kind) {
     case "user":
       return (
@@ -411,7 +401,7 @@ function TurnRenderer({ turn, stages }: { turn: Turn; stages: AgentStage[] }) {
     case "system":
       return <SystemBanner turn={turn} />;
     case "steps":
-      return <StepsBlock turn={turn} stages={stages} />;
+      return <StepsBlock turn={turn} />;
   }
 }
 
@@ -442,23 +432,17 @@ function SystemBanner({ turn }: { turn: SystemTurn }) {
   );
 }
 
-function StepsBlock({
-  turn,
-  stages,
-}: {
-  turn: StepsTurn;
-  stages: AgentStage[];
-}) {
+function StepsBlock({ turn }: { turn: StepsTurn }) {
   const transition =
-    turn.next_stage_id && turn.next_stage_id !== turn.started_stage_id
-      ? findStageDescriptor(stages, turn.next_stage_id)
+    turn.next_node_id && turn.next_node_id !== turn.started_stage_id
+      ? { node_id: turn.next_node_id }
       : null;
   return (
     <div className="flex flex-col items-start gap-1.5 ml-1">
       {transition ? (
         <div className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
           <span aria-hidden>→</span>
-          Avancou pra Etapa {transition.order}: {transition.situation}
+          Avançou para node: {transition.node_id}
         </div>
       ) : null}
       {turn.steps.length > 0 ? (
@@ -566,11 +550,11 @@ function appendFaithfulTurns(
   }
 
   // Steps + transicao no fim
-  if (res.steps.length > 0 || res.next_stage_id) {
+  if (res.steps.length > 0 || res.next_node_id) {
     newTurns.push({
       kind: "steps",
       steps: res.steps,
-      next_stage_id: res.next_stage_id,
+      next_node_id: res.next_node_id,
     });
   }
 
@@ -632,12 +616,5 @@ function formatDelay(ms: number): string {
   return `${(seconds / 60).toFixed(1)}min`;
 }
 
-function findStageDescriptor(
-  stages: AgentStage[],
-  stageId: string,
-): { order: number; situation: string } | null {
-  const sorted = stages.slice().sort((a, b) => a.order_index - b.order_index);
-  const idx = sorted.findIndex((s) => s.id === stageId);
-  if (idx < 0) return null;
-  return { order: idx + 1, situation: sorted[idx]!.situation };
-}
+// PR-FLOW-PIVOT (mai/2026): findStageDescriptor removido — labels de
+// node virão do FlowConfig carregado pela aba Fluxo (PR 3).

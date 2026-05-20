@@ -3,13 +3,11 @@
 import {
   WEBHOOK_SECRET_MIN_LENGTH,
   getPreset,
-  type AgentStageTool,
   type AgentTool,
   type CreateCustomWebhookToolInput,
   type CreateToolFromPresetInput,
   type CreateToolInput,
   type NativeHandlerName,
-  type SetStageToolInput,
   type UpdateToolInput,
 } from "@persia/shared/ai-agent";
 import { revalidatePath } from "next/cache";
@@ -23,12 +21,10 @@ import {
 import {
   agentPaths,
   assertConfigBelongsToOrg,
-  assertStageBelongsToOrg,
   assertToolBelongsToOrg,
   auditAdminAgentAction,
   auditAdminAgentFailure,
   requireAdminAgentOrg,
-  upsertStageToolRow,
 } from "./utils";
 
 // PR-AGENT-INTEGRATION-2 (mai/2026): paridade com CRM tools.ts.
@@ -388,69 +384,8 @@ export async function deleteTool(orgId: string, toolId: string): Promise<void> {
   }
 }
 
-export async function setStageTool(
-  orgId: string,
-  input: SetStageToolInput,
-): Promise<AgentStageTool> {
-  const { db, userId } = await requireAdminAgentOrg(orgId);
-
-  try {
-    const stage = await assertStageBelongsToOrg(db, orgId, input.stage_id);
-    const tool = await assertToolBelongsToOrg(db, orgId, input.tool_id);
-
-    if (stage.config_id !== tool.config_id) {
-      throw new Error("Etapa e ferramenta precisam pertencer ao mesmo agente");
-    }
-
-    const row = await upsertStageToolRow(db, orgId, input.stage_id, input.tool_id, input.is_enabled);
-
-    await auditAdminAgentAction({
-      userId,
-      orgId,
-      action: "admin_ai_agent_stage_tool_set",
-      entityType: "agent_stage_tool",
-      entityId: `${input.stage_id}:${input.tool_id}`,
-      metadata: {
-        config_id: stage.config_id,
-        stage_id: input.stage_id,
-        tool_id: input.tool_id,
-        is_enabled: input.is_enabled,
-      },
-    });
-
-    for (const path of agentPaths(stage.config_id)) revalidatePath(path);
-    return row;
-  } catch (error) {
-    await auditAdminAgentFailure({
-      userId,
-      orgId,
-      action: "admin_ai_agent_stage_tool_set",
-      entityType: "agent_stage_tool",
-      entityId: `${input.stage_id}:${input.tool_id}`,
-      metadata: {
-        stage_id: input.stage_id,
-        tool_id: input.tool_id,
-        is_enabled: input.is_enabled,
-      },
-      error,
-    });
-    throw error;
-  }
-}
-
-export async function listStageTools(orgId: string, stageId: string): Promise<AgentStageTool[]> {
-  const { db } = await requireAdminAgentOrg(orgId);
-  await assertStageBelongsToOrg(db, orgId, stageId);
-
-  const { data, error } = await fromAny(db, "agent_stage_tools")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("stage_id", stageId)
-    .order("created_at", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as AgentStageTool[];
-}
+// PR-FLOW-PIVOT (mai/2026): setStageTool + listStageTools removidos.
+// Allowlist de tools migra pra agent_flows.enabled_tools.
 
 async function validateToolPayload(
   db: Awaited<ReturnType<typeof requireAdminAgentOrg>>["db"],

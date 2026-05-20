@@ -6,7 +6,6 @@ import type {
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentScheduledJob,
-  AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
 import { AgentActionsProvider, AgentEditor } from "@persia/ai-agent-ui";
@@ -14,7 +13,10 @@ import { crmAgentActions } from "@/features/ai-agent/crm-actions";
 
 interface Props {
   initialAgent: AgentConfig;
-  initialStages: AgentStage[];
+  // PR-FLOW-PIVOT (mai/2026): initialStages mantido como `unknown[]` pra
+  // não quebrar contrato do AgentEditor durante a transição. Aba "Fluxo"
+  // do canvas (PR 3) ignora esse prop e busca de agent_flows.
+  initialStages: unknown[];
   initialTools: AgentTool[];
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];

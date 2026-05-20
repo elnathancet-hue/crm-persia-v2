@@ -8,19 +8,13 @@ import {
   listEntryConditions,
   updateEntryCondition,
 } from "@/actions/ai-agent/entry-conditions";
-import {
-  createStage,
-  deleteStage,
-  reorderStages,
-  updateStage,
-} from "@/actions/ai-agent/stages";
+// PR-FLOW-PIVOT (mai/2026): stages CRUD + setStageTool removidos. Allowlist
+// de tools migra pra agent_flows.enabled_tools.
 import {
   createCustomWebhookTool,
   createToolFromPreset,
   deleteTool,
-  listStageTools,
   setNativeToolEnabled,
-  setStageTool,
   updateTool,
 } from "@/actions/ai-agent/tools";
 import {
@@ -75,16 +69,10 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     createEntryCondition: (input) => createEntryCondition(orgId, input),
     updateEntryCondition: (id, input) => updateEntryCondition(orgId, id, input),
     deleteEntryCondition: (id) => deleteEntryCondition(orgId, id),
-    createStage: (configId, input) => createStage(orgId, configId, input),
-    updateStage: (stageId, input) => updateStage(orgId, stageId, input),
-    deleteStage: (stageId) => deleteStage(orgId, stageId),
-    reorderStages: (input) => reorderStages(orgId, input),
     createToolFromPreset: (input) => createToolFromPreset(orgId, input),
     createCustomWebhookTool: (input) => createCustomWebhookTool(orgId, input),
     updateTool: (toolId, input) => updateTool(orgId, toolId, input),
     deleteTool: (toolId) => deleteTool(orgId, toolId),
-    setStageTool: (input) => setStageTool(orgId, input),
-    listStageTools: (stageId) => listStageTools(orgId, stageId),
     setNativeToolEnabled: (input) => setNativeToolEnabled(orgId, input),
     addAllowedDomain: (input) => addAllowedDomain(orgId, input),
     removeAllowedDomain: (domain) => removeAllowedDomain(orgId, domain),

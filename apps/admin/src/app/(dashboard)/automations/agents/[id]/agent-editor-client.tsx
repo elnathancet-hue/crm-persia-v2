@@ -8,13 +8,13 @@ import type {
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentScheduledJob,
-  AgentStage,
   AgentTool,
 } from "@persia/shared/ai-agent";
 import { ClientSelector } from "@/components/client-selector";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { getAgent } from "@/actions/ai-agent/configs";
-import { listStages } from "@/actions/ai-agent/stages";
+// PR-FLOW-PIVOT (mai/2026): listStages removido. Flow vive em
+// agent_flows e será carregado pelo FlowCanvas no PR 3.
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
 import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
@@ -34,7 +34,10 @@ export function AgentEditorClient({ agentId }: Props) {
     [activeOrgId],
   );
   const [agent, setAgent] = React.useState<AgentConfig | null>(null);
-  const [stages, setStages] = React.useState<AgentStage[]>([]);
+  // PR-FLOW-PIVOT: stages array vazio durante migração — flow vive em
+  // agent_flows e FlowCanvas (PR 3) carrega direto. Mantido como prop
+  // pra não quebrar contrato de AgentEditor.
+  const [stages, _setStages] = React.useState<unknown[]>([]);
   const [tools, setTools] = React.useState<AgentTool[]>([]);
   const [allowedDomains, setAllowedDomains] = React.useState<string[]>([]);
   const [knowledgeSources, setKnowledgeSources] = React.useState<
@@ -54,7 +57,6 @@ export function AgentEditorClient({ agentId }: Props) {
     async function load() {
       if (!activeOrgId || !isManagingClient) {
         setAgent(null);
-        setStages([]);
         setTools([]);
         setAllowedDomains([]);
         setKnowledgeSources([]);
@@ -70,7 +72,6 @@ export function AgentEditorClient({ agentId }: Props) {
         if (!nextAgent) {
           if (!cancelled) {
             setAgent(null);
-            setStages([]);
             setTools([]);
             setAllowedDomains([]);
             setKnowledgeSources([]);
@@ -81,14 +82,12 @@ export function AgentEditorClient({ agentId }: Props) {
         }
 
         const [
-          nextStages,
           nextTools,
           nextAllowedDomains,
           nextKnowledgeSources,
           nextNotificationTemplates,
           nextScheduledJobs,
         ] = await Promise.all([
-          listStages(activeOrgId, agentId),
           listToolsForAgent(activeOrgId, agentId),
           listAllowedDomains(activeOrgId),
           listKnowledgeSources(activeOrgId, agentId),
@@ -98,7 +97,6 @@ export function AgentEditorClient({ agentId }: Props) {
 
         if (!cancelled) {
           setAgent(nextAgent);
-          setStages(nextStages);
           setTools(nextTools);
           setAllowedDomains(nextAllowedDomains);
           setKnowledgeSources(nextKnowledgeSources);

@@ -70,18 +70,17 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           // contexto adicional.
           system_prompt: tpl.system_prompt,
           template_slug: input.templateSlug,
-          // PR-AGENT-INTEGRATION-4: agentes novos nascem com behavior_mode
-          // "actions" — etapas como acoes tipadas em vez de sub-prompt
-          // por estado. Agentes legados (criados antes da migration 046)
-          // ficam com 'stages' default.
-          behavior_mode: "actions",
+          // PR-FLOW-PIVOT (mai/2026): único valor aceito é 'flow' (canvas
+          // visual via @xyflow/react). Substitui modelos legados
+          // stages/actions.
+          behavior_mode: "flow",
         });
         setAgents((prev) => [created, ...prev]);
         setCreateOpen(false);
         toast.success(
-          tpl.stages.length > 0
-            ? `Agente criado com ${tpl.stages.length} etapa${tpl.stages.length === 1 ? "" : "s"} pré-configuradas`
-            : "Agente criado",
+          input.templateSlug === "blank"
+            ? "Agente criado"
+            : "Agente criado com flow pré-configurado",
         );
       } catch (err) {
         toast.error(
