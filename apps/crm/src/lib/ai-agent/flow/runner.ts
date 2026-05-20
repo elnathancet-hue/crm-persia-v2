@@ -231,17 +231,22 @@ async function executeAIAgentNode(
   const model = node.data.model ?? agentConfig.model;
 
   // Montagem do system prompt: agent base + node-specific prompt +
-  // instructions textuais (cliente cadastra no canvas). Em V1 não
-  // injetamos histórico — cada turn é stateless. Pré-PR de history
-  // summarization vai puxar do agent_conversations.
+  // instructions textuais com handles nomeados (cliente cadastra no
+  // canvas). PR-FLOW-PIVOT PR 7 (mai/2026): listamos eventos como
+  // "EVENTS TO EMIT" pra IA saber EXATAMENTE quais handles usar com
+  // a tool emit_event(handle_name).
   const systemParts: string[] = [];
   if (agentConfig.system_prompt.trim()) systemParts.push(agentConfig.system_prompt.trim());
   if (node.data.system_prompt.trim()) systemParts.push(node.data.system_prompt.trim());
   if (node.data.instructions.length > 0) {
     const list = node.data.instructions
-      .map((i, idx) => `${idx + 1}. ${i.description}`)
+      .map((i, idx) =>
+        `${idx + 1}. handle "${i.output_handle}" → ${i.description}`,
+      )
       .join("\n");
-    systemParts.push(`Instruções deste passo:\n${list}`);
+    systemParts.push(
+      `EVENTS TO EMIT (call emit_event with the matching handle when the condition is met):\n${list}`,
+    );
   }
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -262,6 +267,10 @@ async function executeAIAgentNode(
   const toolByName = new Map(tools.map((t) => [t.name, t]));
 
   let lastSuccessfulToolName: string | null = null;
+  // PR-FLOW-PIVOT PR 7 (mai/2026): se a IA chamar emit_event(handle),
+  // o runner sobrescreve a edge a seguir pelo `<handle>` (não pelo
+  // tool_success:emit_event). Captura aqui pra usar depois do loop.
+  let emittedHandleName: string | null = null;
 
   for (let iter = 0; iter < MAX_LLM_TOOL_PINGPONG; iter++) {
     const llmStart = Date.now();
@@ -415,15 +424,53 @@ async function executeAIAgentNode(
       if (handlerResult.success) {
         result.tool_calls_succeeded++;
         lastSuccessfulToolName = call.function.name;
+        // PR-FLOW-PIVOT PR 7 (mai/2026): se foi emit_event, captura o
+        // handle_name pra sobrescrever a edge a seguir. Output do handler
+        // tem o handle_name normalizado (vide handlers/emit-event.ts).
+        if (call.function.name === "emit_event") {
+          const emittedHandle = (handlerResult.output as { handle_name?: string })
+            ?.handle_name;
+          if (typeof emittedHandle === "string" && emittedHandle.length > 0) {
+            emittedHandleName = emittedHandle;
+          }
+        }
       } else {
         result.tool_calls_failed++;
       }
     }
   }
 
-  // Decide próximo node: prioriza edge `tool_success:<name>` da última tool
-  // bem-sucedida. Fallback pra edge `default`. Se nada match, flow termina aqui.
-  if (lastSuccessfulToolName) {
+  // Decide próximo node. Ordem de prioridade:
+  //   1. PR 7 (mai/2026): emit_event(handle) → segue edge `<handle>` direto
+  //      (sem prefixo tool_success:). Permite handles nomeados que o
+  //      cliente configurou nas instructions[] do node IA.
+  //   2. tool_success:<tool_name> da última tool bem-sucedida (PR 2).
+  //   3. edge `default` (fallback quando IA só respondeu texto).
+  if (emittedHandleName) {
+    const handleEdges = findOutgoingEdges(ctx.flowConfig, node.id, emittedHandleName);
+    if (handleEdges[0]) {
+      ctx.provider.emit({
+        kind: "edge_traversed",
+        payload: {
+          from: node.id,
+          to: handleEdges[0].target,
+          handle: emittedHandleName,
+          via: "emit_event",
+        },
+      });
+      return handleEdges[0].target;
+    }
+    // Edge cadastrada não existe — loga warning + cai pro fluxo normal
+    // (tool_success → default). LLM pode ter inventado handle.
+    ctx.provider.emit({
+      kind: "guardrail",
+      payload: {
+        reason: "emit_event_handle_no_edge",
+        handle: emittedHandleName,
+      },
+    });
+  }
+  if (lastSuccessfulToolName && lastSuccessfulToolName !== "emit_event") {
     const successHandle = `tool_success:${lastSuccessfulToolName}`;
     const successEdges = findOutgoingEdges(ctx.flowConfig, node.id, successHandle);
     if (successEdges[0]) {

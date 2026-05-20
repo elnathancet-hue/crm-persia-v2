@@ -24,7 +24,9 @@ import { revalidatePath } from "next/cache";
 import { slugify } from "./utils";
 import {
   getDefaultStopAgentTool,
+  materializePresetTool,
 } from "@/lib/ai-agent/tools/registry";
+import { getPreset } from "@persia/shared/ai-agent";
 import {
   assertAgentStatus,
   assertConfigBelongsToOrg,
@@ -426,6 +428,33 @@ async function applyTemplate(
   // com 1 node de entrada + 1 node IA usando o system_prompt do template.
   // Tools nativas (todas exceto transfer_to_stage que não existe mais)
   // ficam disponíveis na enabled_tools — UI canvas refina depois.
+  // PR-FLOW-PIVOT PR 7 (mai/2026): seed da tool emit_event. Permite a
+  // IA avançar pelos handles nomeados das instructions[] do node IA.
+  // Sem isso, LLM não tem a tool exposta no API call → handles ficam
+  // desconectados.
+  const emitEventPreset = getPreset("emit_event");
+  let emitEventToolId: string | null = null;
+  if (emitEventPreset) {
+    const emitEventTool = materializePresetTool({
+      configId: config.id,
+      organizationId: orgId,
+      preset: emitEventPreset,
+    });
+    const { data: insertedEmit, error: emitErr } = await db
+      .from("agent_tools")
+      .insert(emitEventTool)
+      .select("id")
+      .maybeSingle();
+    if (emitErr) {
+      console.error(
+        "[applyTemplate] failed to seed emit_event tool:",
+        emitErr.message,
+      );
+    } else {
+      emitEventToolId = (insertedEmit as { id?: string } | null)?.id ?? null;
+    }
+  }
+
   const flowConfig = template.flow_config ?? {
     nodes: [
       {
@@ -457,7 +486,7 @@ async function applyTemplate(
       },
     ],
     viewport: { x: 0, y: 0, zoom: 1 },
-    enabled_tools: [],
+    enabled_tools: emitEventToolId ? [emitEventToolId] : [],
   };
 
   const { error: flowError } = await db.from("agent_flows").insert({
