@@ -275,9 +275,12 @@ function EntryForm({
             emptyLabel="Nenhuma segmentação cadastrada."
             placeholder="Selecione uma segmentação"
           />
-          <p className="text-xs text-muted-foreground italic">
-            Em breve: runtime que detecta entrada em segmentação ainda não
-            está ativo. Use &quot;Em qualquer mensagem do lead&quot; por enquanto.
+          <p className="text-xs text-muted-foreground">
+            O fluxo dispara quando o lead começa a casar com as regras
+            desta segmentação (após criar lead, mudar tags ou atualizar
+            campos). Desenhe começando com uma ação (ex: &quot;Enviar
+            mensagem WhatsApp&quot;) porque não há mensagem do lead pra IA
+            reagir.
           </p>
         </>
       )}

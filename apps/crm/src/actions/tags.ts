@@ -23,9 +23,20 @@ function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamen
 // add/removeTagToLead. Carregado dinamicamente.
 function makeOnLeadChanged(orgId: string) {
   return (leadId: string) => {
+    // UAZAPI sync (legacy).
     import("@/lib/whatsapp/sync")
       .then(({ syncLeadToUazapi }) => syncLeadToUazapi(orgId, leadId))
       .catch((err) => console.error("[tag-action] sync error:", err));
+    // PR-FLOW-PIVOT PR 12 (mai/2026): tags afetam regras de segmentos
+    // (condition tags.contains/not_contains). Reavalia memberships
+    // após mudança de tag pra disparar segment_entered flows.
+    import("@/lib/segments/lead-hook")
+      .then(({ dispatchSegmentMembershipHook }) =>
+        dispatchSegmentMembershipHook(orgId, leadId),
+      )
+      .catch((err) =>
+        console.error("[tag-action] segment evaluator error:", err),
+      );
   };
 }
 

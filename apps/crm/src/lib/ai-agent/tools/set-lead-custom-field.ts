@@ -85,6 +85,21 @@ export const setLeadCustomFieldHandler: NativeHandler = async (context, input) =
     return failureResult(`failed to upsert value: ${upsertErr.message}`);
   }
 
+  // PR-FLOW-PIVOT PR 12 (mai/2026): custom field afeta regras de
+  // segmentos (futuro — V1 segments só matcha em tags/status/score/
+  // dates, mas o hook é barato e protege quando rules expandirem).
+  // Fire-and-forget pra não atrasar resposta da IA.
+  import("@/lib/segments/lead-hook")
+    .then(({ dispatchSegmentMembershipHook }) =>
+      dispatchSegmentMembershipHook(context.organization_id, context.lead_id),
+    )
+    .catch((err) =>
+      console.error(
+        "[set-lead-custom-field] segment evaluator error:",
+        err,
+      ),
+    );
+
   return successResult(
     { field_key, value, custom_field_id: customFieldId },
     [`set lead.custom_fields.${field_key} = "${value}"`],

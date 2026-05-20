@@ -126,6 +126,84 @@ export async function triggerAgentFlowsForStageEntry(
   return { triggered, skipped, failed };
 }
 
+/**
+ * PR-FLOW-PIVOT PR 12 (mai/2026): hook chamado APÓS lead entrar em
+ * uma segmentação (membership recém-criada em `segment_memberships`).
+ * Dispara flows ativos da org com entry trigger
+ * `segment_entered { segment_id: segmentId }`.
+ *
+ * Fire-and-forget: caller (evaluator hook) envolve em void.
+ */
+export async function triggerAgentFlowsForSegmentEntry(
+  supabaseOrAgentDb: AgentDb | { from: (table: string) => unknown },
+  orgId: string,
+  leadId: string,
+  segmentId: string,
+): Promise<{ triggered: number; skipped: number; failed: number }> {
+  const db = asAgentDb(supabaseOrAgentDb as AgentDb);
+  const logCtx = {
+    organization_id: orgId,
+    lead_id: leadId,
+    segment_id: segmentId,
+    trigger_type: "segment_entered" as const,
+  };
+
+  let flows: LoadedFlow[];
+  try {
+    flows = await loadFlowsByEntryTrigger(db, orgId, "segment_entered");
+  } catch (err) {
+    logError("trigger_load_flows_failed", {
+      ...logCtx,
+      error: errorMessage(err),
+    });
+    return { triggered: 0, skipped: 0, failed: 0 };
+  }
+
+  if (flows.length === 0) {
+    return { triggered: 0, skipped: 0, failed: 0 };
+  }
+
+  const matching = flows.filter((flow) => {
+    const entry = flow.config.nodes.find((n) => n.type === "entry");
+    if (!entry || entry.type !== "entry") return false;
+    const configSegmentId = (entry.data.config as { segment_id?: unknown } | undefined)
+      ?.segment_id;
+    return typeof configSegmentId === "string" && configSegmentId === segmentId;
+  });
+
+  if (matching.length === 0) {
+    return { triggered: 0, skipped: 0, failed: 0 };
+  }
+
+  let triggered = 0;
+  let skipped = 0;
+  let failed = 0;
+  for (const flow of matching) {
+    try {
+      const outcome = await executeFlowForLeadEvent({
+        db,
+        orgId,
+        leadId,
+        configId: flow.agent_config_id,
+        flow,
+        triggerType: "segment_entered",
+      });
+      if (outcome === "ok") triggered++;
+      else if (outcome === "skipped") skipped++;
+      else failed++;
+    } catch (err) {
+      failed++;
+      logError("trigger_run_flow_failed", {
+        ...logCtx,
+        config_id: flow.agent_config_id,
+        error: errorMessage(err),
+      });
+    }
+  }
+
+  return { triggered, skipped, failed };
+}
+
 // ============================================================================
 // Internal: executa 1 flow disparado por evento CRM
 // ============================================================================
