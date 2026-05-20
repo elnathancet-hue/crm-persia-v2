@@ -89,7 +89,12 @@ export function NodeConfigSheet({
 
         <div className="flex-1 overflow-y-auto py-4 px-1 space-y-4">
           {node.type === "entry" ? (
-            <EntryForm draft={draft} setDraft={setDraft} />
+            <EntryForm
+              draft={draft}
+              setDraft={setDraft}
+              catalogs={catalogs}
+              catalogsLoading={catalogsLoading}
+            />
           ) : null}
           {node.type === "ai_agent" ? (
             <AIAgentForm draft={draft} setDraft={setDraft} />
@@ -171,9 +176,39 @@ interface CatalogFormProps extends FormProps {
   catalogsLoading?: boolean;
 }
 
-function EntryForm({ draft, setDraft }: FormProps) {
+function EntryForm({
+  draft,
+  setDraft,
+  catalogs,
+  catalogsLoading,
+}: CatalogFormProps) {
+  const trigger = (draft.trigger as string) ?? "conversation_started";
+  const config = (draft.config as Record<string, unknown>) ?? {};
+
+  const updateConfig = (patch: Record<string, unknown>) => {
+    setDraft((d) => ({
+      ...d,
+      config: { ...((d.config as Record<string, unknown>) ?? {}), ...patch },
+    }));
+  };
+
+  // PR 10 (mai/2026): troca de trigger reseta config — campos do tipo
+  // antigo viram lixo, melhor zerar.
+  const setTrigger = (newTrigger: string | null) => {
+    if (!newTrigger) return;
+    const freshConfig: Record<string, unknown> =
+      newTrigger === "keyword_match"
+        ? { keywords: [] as string[] }
+        : newTrigger === "segment_entered"
+          ? { segment_id: "" }
+          : newTrigger === "pipeline_stage_entered"
+            ? { stage_id: "" }
+            : {};
+    setDraft((d) => ({ ...d, trigger: newTrigger, config: freshConfig }));
+  };
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="entry-label">Nome desta entrada</Label>
         <Input
@@ -182,10 +217,172 @@ function EntryForm({ draft, setDraft }: FormProps) {
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
           placeholder="Conversa iniciada"
         />
-        <p className="text-xs text-muted-foreground">
-          O fluxo inicia neste node quando o lead manda a primeira mensagem.
-        </p>
       </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="entry-trigger">Quando o fluxo deve disparar?</Label>
+        <Select value={trigger} onValueChange={setTrigger}>
+          <SelectTrigger id="entry-trigger">
+            <SelectValue placeholder="Selecione um gatilho" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="conversation_started">
+              Em qualquer mensagem do lead
+            </SelectItem>
+            <SelectItem value="keyword_match">
+              Quando lead mandar palavra-chave
+            </SelectItem>
+            <SelectItem value="segment_entered">
+              Quando lead entrar em segmentação (em breve)
+            </SelectItem>
+            <SelectItem value="pipeline_stage_entered">
+              Quando lead entrar em etapa do funil (em breve)
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {trigger === "conversation_started" && (
+        <p className="text-xs text-muted-foreground">
+          O fluxo inicia em toda mensagem inbound do lead.
+        </p>
+      )}
+
+      {trigger === "keyword_match" && (
+        <KeywordListField
+          value={
+            Array.isArray(config.keywords)
+              ? (config.keywords as unknown[]).filter(
+                  (k): k is string => typeof k === "string",
+                )
+              : []
+          }
+          onChange={(keywords) => updateConfig({ keywords })}
+        />
+      )}
+
+      {trigger === "segment_entered" && (
+        <>
+          <CatalogSelect
+            label="Segmentação alvo"
+            loading={catalogsLoading}
+            value={(config.segment_id as string) ?? ""}
+            onChange={(v) => updateConfig({ segment_id: v })}
+            options={catalogs.segments.map((s) => ({
+              value: s.id,
+              label: s.name,
+            }))}
+            emptyLabel="Nenhuma segmentação cadastrada."
+            placeholder="Selecione uma segmentação"
+          />
+          <p className="text-xs text-muted-foreground italic">
+            Em breve: runtime que detecta entrada em segmentação ainda não
+            está ativo. Use &quot;Em qualquer mensagem do lead&quot; por enquanto.
+          </p>
+        </>
+      )}
+
+      {trigger === "pipeline_stage_entered" && (
+        <>
+          <CatalogSelect
+            label="Etapa do funil alvo"
+            loading={catalogsLoading}
+            value={(config.stage_id as string) ?? ""}
+            onChange={(v) => updateConfig({ stage_id: v })}
+            options={catalogs.pipeline_stages.map((s) => ({
+              value: s.id,
+              label: s.name,
+            }))}
+            emptyLabel="Nenhuma etapa configurada."
+            placeholder="Selecione uma etapa"
+          />
+          <p className="text-xs text-muted-foreground italic">
+            Em breve: runtime que detecta mudança de etapa ainda não está
+            ativo. Use &quot;Em qualquer mensagem do lead&quot; por enquanto.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// PR 10 (mai/2026): editor de keywords (chips removíveis + input de novo).
+function KeywordListField({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [pending, setPending] = React.useState("");
+
+  const add = () => {
+    const trimmed = pending.trim();
+    if (!trimmed) return;
+    if (value.some((k) => k.toLowerCase() === trimmed.toLowerCase())) {
+      setPending("");
+      return; // duplicada — ignora silencioso
+    }
+    onChange([...value, trimmed]);
+    setPending("");
+  };
+
+  const remove = (idx: number) => {
+    onChange(value.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label>Palavras-chave que disparam o fluxo</Label>
+      <div className="flex gap-2">
+        <Input
+          value={pending}
+          onChange={(e) => setPending(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Ex: comprar, agendar, orçamento"
+        />
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={add}
+          disabled={!pending.trim()}
+        >
+          Adicionar
+        </Button>
+      </div>
+      {value.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Adicione palavras (uma de cada vez). O fluxo dispara quando a
+          mensagem do lead contiver qualquer uma delas (case-insensitive).
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {value.map((kw, idx) => (
+            <span
+              key={`${kw}-${idx}`}
+              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs"
+            >
+              {kw}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => remove(idx)}
+                className="!size-4 text-muted-foreground hover:text-destructive"
+                aria-label={`Remover "${kw}"`}
+              >
+                ×
+              </Button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   BadgeCheck,
   Calendar,
   Filter,
+  Hash,
   Image as ImageIcon,
   ListChecks,
   MessageCircle,
@@ -24,8 +25,10 @@ import {
   StopCircle,
   Tag as TagIcon,
   TagsIcon,
+  TrendingUp,
   UserCheck,
   UserCog,
+  Users,
 } from "lucide-react";
 
 export type FlowSidebarCategory = "entrada" | "acoes" | "segmentacoes";
@@ -52,12 +55,55 @@ const ENTRY_ITEMS: FlowSidebarItem[] = [
     category: "entrada",
     label: "Conversa iniciada",
     description:
-      "Dispara o fluxo quando o lead manda a primeira mensagem no WhatsApp. Ponto de partida do agente.",
+      "Dispara o fluxo em qualquer mensagem do lead. Padrão pra agentes de atendimento.",
     icon: MessageSquare,
     node_type: "entry",
     default_data: {
       label: "Conversa iniciada",
       trigger: "conversation_started",
+      config: {},
+    },
+  },
+  {
+    task_key: "entry.keyword_match",
+    category: "entrada",
+    label: "Palavra-chave recebida",
+    description:
+      "Dispara só quando o lead manda uma palavra específica (ex: \"comprar\", \"agendar\"). Útil pra fluxos especializados.",
+    icon: Hash,
+    node_type: "entry",
+    default_data: {
+      label: "Palavra-chave",
+      trigger: "keyword_match",
+      config: { keywords: [] as string[] },
+    },
+  },
+  {
+    task_key: "entry.segment_entered",
+    category: "entrada",
+    label: "Entrou em segmentação",
+    description:
+      "Dispara quando o lead começa a fazer parte de uma segmentação salva no CRM. (Em breve — disponível visualmente, runtime na próxima atualização.)",
+    icon: Users,
+    node_type: "entry",
+    default_data: {
+      label: "Entrou em segmentação",
+      trigger: "segment_entered",
+      config: { segment_id: "" },
+    },
+  },
+  {
+    task_key: "entry.pipeline_stage_entered",
+    category: "entrada",
+    label: "Entrou em etapa do funil",
+    description:
+      "Dispara quando o lead/deal vai pra uma etapa específica do Kanban. (Em breve — disponível visualmente, runtime na próxima atualização.)",
+    icon: TrendingUp,
+    node_type: "entry",
+    default_data: {
+      label: "Entrou em etapa do funil",
+      trigger: "pipeline_stage_entered",
+      config: { stage_id: "" },
     },
   },
 ];
