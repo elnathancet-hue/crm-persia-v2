@@ -80,19 +80,23 @@ COMMENT ON COLUMN public.agent_conversations.current_node_id IS
 --    Agora: 'flow' fixo (mantém coluna pra futuro multi-modo)
 -- ============================================================
 
--- Atualiza rows existentes pra 'flow' antes de trocar o CHECK (senão
--- o ALTER falha em rows com valor antigo).
+-- ORDEM IMPORTA: drop CHECK ANTIGO antes do UPDATE. Se o UPDATE rodar
+-- com a constraint antiga ainda viva (que só aceita 'stages'/'actions'),
+-- ele viola — porque pretende setar pra 'flow'. Bug encontrado durante
+-- aplicação em prod (mai/2026). Sequência correta:
+--   1. drop constraint antiga
+--   2. UPDATE rows pro novo valor
+--   3. ALTER default
+--   4. ADD constraint nova
+ALTER TABLE public.agent_configs
+  DROP CONSTRAINT IF EXISTS agent_configs_behavior_mode_check;
+
 UPDATE public.agent_configs
   SET behavior_mode = 'flow'
   WHERE behavior_mode IS NULL OR behavior_mode NOT IN ('flow');
 
 ALTER TABLE public.agent_configs
   ALTER COLUMN behavior_mode SET DEFAULT 'flow';
-
--- Drop CHECK antigo (nome canônico postgres-generated; tentamos
--- ambos os formatos possíveis defensivamente).
-ALTER TABLE public.agent_configs
-  DROP CONSTRAINT IF EXISTS agent_configs_behavior_mode_check;
 
 ALTER TABLE public.agent_configs
   ADD CONSTRAINT agent_configs_behavior_mode_check
@@ -137,8 +141,21 @@ CREATE TABLE IF NOT EXISTS public.agent_flows (
 CREATE INDEX IF NOT EXISTS idx_agent_flows_organization
   ON public.agent_flows (organization_id);
 
--- Trigger pra atualizar updated_at automaticamente (reusa função
--- existente do projeto).
+-- Função genérica de set_updated_at — define inline (idempotente via
+-- OR REPLACE). Bug descoberto durante aplicação em prod mai/2026:
+-- algumas migrations criam triggers próprios (tg_agenda_set_updated_at,
+-- etc) mas nunca foi definida uma `public.set_updated_at()` global.
+-- Outras tabelas que querem reusar podem chamar essa.
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER set_updated_at_agent_flows
   BEFORE UPDATE ON public.agent_flows
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

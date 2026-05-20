@@ -42,7 +42,22 @@ export async function loadFlowByConfigId(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Falha ao carregar flow: ${error.message}`);
+    // Hotfix defensivo: se migration 054 não foi aplicada em prod (tabela
+    // não existe), retorna null em vez de throw. UI mostra canvas vazio
+    // com a dica de "arraste a primeira tarefa". Log fica pro admin notar
+    // que precisa rodar `supabase db push`.
+    const msg = error.message ?? "";
+    if (
+      /relation .*agent_flows.* does not exist/i.test(msg) ||
+      /could not find the table/i.test(msg) ||
+      msg.includes("PGRST205") // PostgREST table-not-found code
+    ) {
+      console.warn(
+        "[flow-loader] agent_flows table missing — migration 054 pending?",
+      );
+      return null;
+    }
+    throw new Error(`Falha ao carregar flow: ${msg}`);
   }
   if (!data) return null;
 

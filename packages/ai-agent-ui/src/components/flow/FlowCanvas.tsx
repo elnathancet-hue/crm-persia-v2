@@ -168,9 +168,16 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           setEnabledTools(config.enabled_tools);
         }
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "Falha ao carregar fluxo",
-        );
+        // Hotfix: erro de Server Action no Next 15 vem com mensagem
+        // mascarada em prod ("An error occurred in the Server Components
+        // render..."). Substitui por mensagem amigável e loga o digest
+        // no console pra admin debugar via EasyPanel logs.
+        const raw = err instanceof Error ? err.message : String(err);
+        console.error("[FlowCanvas] getFlow falhou:", err);
+        const userMessage = raw.startsWith("An error occurred in the Server")
+          ? "Não consegui carregar o fluxo. Verifique se o banco está atualizado (migration 054)."
+          : raw;
+        toast.error(userMessage);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -225,9 +232,12 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       const next = await actions.getFlowCatalogs(configId);
       setCatalogs(next);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Falha ao carregar catálogos",
-      );
+      const raw = err instanceof Error ? err.message : String(err);
+      console.error("[FlowCanvas] getFlowCatalogs falhou:", err);
+      const userMessage = raw.startsWith("An error occurred in the Server")
+        ? "Não consegui carregar tags/etapas/templates. Tente recarregar a página."
+        : raw;
+      toast.error(userMessage);
     } finally {
       setCatalogsLoading(false);
     }
@@ -320,9 +330,12 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       setDirty(false);
       toast.success(`Fluxo salvo (versão ${res.version}).`);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Falha ao salvar fluxo",
-      );
+      const raw = err instanceof Error ? err.message : String(err);
+      console.error("[FlowCanvas] saveFlow falhou:", err);
+      const userMessage = raw.startsWith("An error occurred in the Server")
+        ? "Não consegui salvar o fluxo. Verifique se o banco está atualizado (migration 054)."
+        : raw;
+      toast.error(userMessage);
     } finally {
       setSaving(false);
     }
