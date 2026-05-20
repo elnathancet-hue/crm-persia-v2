@@ -119,6 +119,7 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
         default_calendar_id: null,
         calendar_list: [],
         connected_at: null,
+        last_polled_at: null,
       });
       toast.success("Google Calendar desconectado.");
     } finally {
@@ -276,8 +277,18 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
           <p className="text-sm text-muted-foreground">
             Calendar onde a IA cria, atualiza e cancela eventos
             automaticamente quando agenda pelo WhatsApp. Cancel/reschedule
-            sincronizam também.
+            sincronizam também. Mudanças feitas direto no Google
+            (mover/cancelar event) são refletidas no CRM em até 5 minutos
+            via cron.
           </p>
+          {status.last_polled_at && (
+            <p className="text-xs text-muted-foreground">
+              Última sincronização Google → CRM:{" "}
+              <strong>
+                {new Date(status.last_polled_at).toLocaleString("pt-BR")}
+              </strong>
+            </p>
+          )}
           {status.calendar_list.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">
               Nenhum calendar disponível. Clique em &quot;Atualizar lista&quot;.

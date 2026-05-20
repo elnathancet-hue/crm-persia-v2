@@ -31,6 +31,8 @@ export interface GoogleCalendarStatus {
   default_calendar_id: string | null;
   calendar_list: GoogleCalendarSummary[];
   connected_at: string | null;
+  /** PR 14c (mai/2026): última execução do pull sync Google → CRM. */
+  last_polled_at: string | null;
   error?: string;
 }
 
@@ -52,6 +54,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
       default_calendar_id: null,
       calendar_list: [],
       connected_at: null,
+      last_polled_at: null,
     };
   }
 
@@ -61,7 +64,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
     const { data, error } = await asAgentDb(supabase)
       .from("google_calendar_connections")
       .select(
-        "google_account_email, default_calendar_id, calendar_list, is_active, created_at",
+        "google_account_email, default_calendar_id, calendar_list, is_active, created_at, last_polled_at",
       )
       .eq("organization_id", orgId)
       .maybeSingle();
@@ -82,6 +85,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
           default_calendar_id: null,
           calendar_list: [],
           connected_at: null,
+          last_polled_at: null,
           error: "Migration 059 pendente — aplique no SQL Editor.",
         };
       }
@@ -96,6 +100,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
         default_calendar_id: null,
         calendar_list: [],
         connected_at: null,
+        last_polled_at: null,
       };
     }
 
@@ -104,6 +109,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
       default_calendar_id: string | null;
       calendar_list: unknown;
       created_at: string;
+      last_polled_at: string | null;
     };
 
     return {
@@ -115,6 +121,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
         ? (row.calendar_list as GoogleCalendarSummary[])
         : [],
       connected_at: row.created_at,
+      last_polled_at: row.last_polled_at,
     };
   } catch (err) {
     return {
@@ -124,6 +131,7 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
       default_calendar_id: null,
       calendar_list: [],
       connected_at: null,
+      last_polled_at: null,
       error: errorMessage(err),
     };
   }

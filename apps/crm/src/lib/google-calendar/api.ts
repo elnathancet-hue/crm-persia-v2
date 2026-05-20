@@ -151,6 +151,57 @@ export async function listCalendars(
     }));
 }
 
+// ============================================================================
+// Events list (PR 14c)
+// ============================================================================
+
+export interface GoogleCalendarEventListItem {
+  id: string;
+  status?: string; // 'confirmed' | 'tentative' | 'cancelled'
+  summary?: string;
+  start?: { dateTime?: string; date?: string; timeZone?: string };
+  end?: { dateTime?: string; date?: string; timeZone?: string };
+  updated?: string;
+}
+
+/**
+ * Lista events do calendar atualizados desde `updatedMin`. Usado pelo
+ * pull sync (PR 14c) pra detectar mudanças feitas no Google pro CRM
+ * espelhar.
+ *
+ * V1 NÃO usa syncToken (mais limpo mas exige handle de 410 Gone +
+ * baseline na conexão). updatedMin é "good enough" pra MVP.
+ */
+export async function listEventsUpdatedSince(
+  db: MinimalDb,
+  conn: GoogleCalendarConnection,
+  calendarId: string,
+  updatedMin: string,
+): Promise<GoogleCalendarEventListItem[]> {
+  const accessToken = await getValidAccessToken(db, conn);
+  const url = new URL(
+    `${GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
+  );
+  url.searchParams.set("updatedMin", updatedMin);
+  url.searchParams.set("showDeleted", "true");
+  url.searchParams.set("singleEvents", "true");
+  url.searchParams.set("maxResults", "250"); // V1 não pagina; orgs típicas <250 events/5min
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Google events.list falhou (${res.status}): ${text.slice(0, 200)}`,
+    );
+  }
+  const json = (await res.json()) as {
+    items?: GoogleCalendarEventListItem[];
+  };
+  return json.items ?? [];
+}
+
 /**
  * Pega o email da conta autenticada (usado no OAuth callback pra
  * salvar `google_account_email`).
