@@ -208,10 +208,9 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Conecte uma conta Google da sua organização pra que a IA crie
-            agendamentos diretamente no Google Calendar (em breve). Por
-            agora a foundation só armazena tokens; o handler de
-            agendamentos continua usando a Agenda Persia interna.
+            Conecte uma conta Google da sua organização pra que a IA crie,
+            atualize e cancele agendamentos diretamente no Google Calendar
+            quando o lead pedir pelo WhatsApp.
           </p>
           <Button onClick={handleConnect}>
             <ExternalLink className="size-4" />
@@ -275,8 +274,9 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Calendar onde a IA criará eventos quando o handler de
-            agendamentos migrar (PR 14b).
+            Calendar onde a IA cria, atualiza e cancela eventos
+            automaticamente quando agenda pelo WhatsApp. Cancel/reschedule
+            sincronizam também.
           </p>
           {status.calendar_list.length === 0 ? (
             <p className="text-sm text-muted-foreground italic">

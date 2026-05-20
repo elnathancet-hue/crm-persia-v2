@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { cancelAppointment as cancelSharedAppointment } from "@persia/shared/agenda";
 import { notifyLeadAppointmentCancelled } from "@/lib/agenda/notifications/dispatch";
+import { errorMessage, logError } from "@/lib/observability";
+import {
+  deleteGoogleEvent,
+  loadGoogleConnectionForOrg,
+} from "@/lib/google-calendar/events";
 import { failureResult, getHandlerDb, successResult, trimReason } from "./shared";
 
 // PR-AGENDA-TOOLS (mai/2026): AI cancela appointment quando lead pede
@@ -22,6 +27,7 @@ interface AppointmentRow {
   id: string;
   lead_id: string | null;
   status: string;
+  google_event_id: string | null;
 }
 
 export const cancelAppointmentHandler: NativeHandler = async (context, input) => {
@@ -40,7 +46,7 @@ export const cancelAppointmentHandler: NativeHandler = async (context, input) =>
   // 1. Confirma appointment existe + pertence ao org + ao lead da conversa.
   const { data: apptRow, error: apptError } = await db
     .from("appointments")
-    .select("id, lead_id, status")
+    .select("id, lead_id, status, google_event_id")
     .eq("organization_id", context.organization_id)
     .eq("id", parsed.data.appointment_id)
     .maybeSingle();
@@ -97,6 +103,31 @@ export const cancelAppointmentHandler: NativeHandler = async (context, input) =>
       console.error("[cancel-appointment tool] notify failed:", err);
     });
 
+    // 4. PR-FLOW-PIVOT PR 14b (mai/2026): se appointment tinha event no
+    //    Google Calendar, deleta lá também. Best-effort.
+    let googleEventDeleted = false;
+    if (appt.google_event_id) {
+      try {
+        const conn = await loadGoogleConnectionForOrg(db, context.organization_id);
+        if (conn) {
+          await deleteGoogleEvent(
+            db,
+            conn,
+            conn.default_calendar_id,
+            appt.google_event_id,
+          );
+          googleEventDeleted = true;
+        }
+      } catch (gcalErr) {
+        logError("cancel_appointment_gcal_delete_failed", {
+          organization_id: context.organization_id,
+          appointment_id: appt.id,
+          google_event_id: appt.google_event_id,
+          error: errorMessage(gcalErr),
+        });
+      }
+    }
+
     return successResult(
       {
         appointment_id: cancelled.id,
@@ -105,8 +136,12 @@ export const cancelAppointmentHandler: NativeHandler = async (context, input) =>
         cancelled_by_role: cancelled.cancelled_by_role,
         cancellation_reason: cancelled.cancellation_reason,
         noop: false,
+        google_event_deleted: googleEventDeleted,
       },
-      [`cancelled appointment ${cancelled.id} — lead notified via WhatsApp`],
+      [
+        `cancelled appointment ${cancelled.id} — lead notified via WhatsApp`,
+        ...(googleEventDeleted ? ["deleted from Google Calendar"] : []),
+      ],
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "falha ao cancelar agendamento";

@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { rescheduleAppointment as rescheduleSharedAppointment } from "@persia/shared/agenda";
 import { notifyLeadAppointmentRescheduled } from "@/lib/agenda/notifications/dispatch";
+import { errorMessage, logError } from "@/lib/observability";
+import {
+  loadGoogleConnectionForOrg,
+  updateGoogleEvent,
+} from "@/lib/google-calendar/events";
 import { failureResult, getHandlerDb, successResult } from "./shared";
 
 // PR-AGENDA-TOOLS (mai/2026): AI reagenda appointment quando lead pede
@@ -25,6 +30,8 @@ interface AppointmentRow {
   lead_id: string | null;
   duration_minutes: number;
   status: string;
+  google_event_id: string | null;
+  timezone: string | null;
 }
 
 export const rescheduleAppointmentHandler: NativeHandler = async (
@@ -52,7 +59,7 @@ export const rescheduleAppointmentHandler: NativeHandler = async (
   // 1. Confirma appointment existe + pertence ao org + ao lead.
   const { data: apptRow, error: apptError } = await db
     .from("appointments")
-    .select("id, lead_id, duration_minutes, status")
+    .select("id, lead_id, duration_minutes, status, google_event_id, timezone")
     .eq("organization_id", context.organization_id)
     .eq("id", parsed.data.appointment_id)
     .maybeSingle();
@@ -110,6 +117,51 @@ export const rescheduleAppointmentHandler: NativeHandler = async (
       console.error("[reschedule-appointment tool] notify failed:", err);
     });
 
+    // 4. PR-FLOW-PIVOT PR 14b (mai/2026): se original tinha event no
+    //    Google Calendar, ATUALIZA com novo horário + transfere o
+    //    event_id pro replacement (single Google event, lead vê movido
+    //    em vez de "novo + cancelado"). Original perde event_id pra
+    //    evitar double-delete em cancel futuro do row antigo.
+    let googleEventUpdated = false;
+    if (appt.google_event_id) {
+      try {
+        const conn = await loadGoogleConnectionForOrg(db, context.organization_id);
+        if (conn) {
+          const tz = result.replacement.timezone ?? appt.timezone ?? "America/Sao_Paulo";
+          await updateGoogleEvent(
+            db,
+            conn,
+            conn.default_calendar_id,
+            appt.google_event_id,
+            {
+              start: { dateTime: result.replacement.start_at, timeZone: tz },
+              end: { dateTime: result.replacement.end_at, timeZone: tz },
+            },
+          );
+          // Transfere event_id: limpa do original + copia pro replacement.
+          await db
+            .from("appointments")
+            .update({ google_event_id: null })
+            .eq("organization_id", context.organization_id)
+            .eq("id", result.original.id);
+          await db
+            .from("appointments")
+            .update({ google_event_id: appt.google_event_id })
+            .eq("organization_id", context.organization_id)
+            .eq("id", result.replacement.id);
+          googleEventUpdated = true;
+        }
+      } catch (gcalErr) {
+        logError("reschedule_appointment_gcal_update_failed", {
+          organization_id: context.organization_id,
+          original_id: result.original.id,
+          replacement_id: result.replacement.id,
+          google_event_id: appt.google_event_id,
+          error: errorMessage(gcalErr),
+        });
+      }
+    }
+
     return successResult(
       {
         original_id: result.original.id,
@@ -118,9 +170,11 @@ export const rescheduleAppointmentHandler: NativeHandler = async (
         new_end_at: result.replacement.end_at,
         new_duration_minutes: result.replacement.duration_minutes,
         status: result.replacement.status,
+        google_event_updated: googleEventUpdated,
       },
       [
         `rescheduled appointment ${result.original.id} → ${result.replacement.id} at ${result.replacement.start_at}; lead notified via WhatsApp`,
+        ...(googleEventUpdated ? ["updated Google Calendar event"] : []),
       ],
     );
   } catch (err) {
