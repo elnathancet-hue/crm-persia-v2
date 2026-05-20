@@ -28,6 +28,7 @@ import type {
   AgentEntryCondition,
   CreateEntryConditionInput,
   CreateToolFromPresetInput,
+  FlowConfig,
   ListRunsInput,
   NativeHandlerName,
   UpdateEntryConditionInput,
@@ -59,9 +60,19 @@ export interface AgentActions {
   ) => Promise<AgentEntryCondition>;
   deleteEntryCondition: (conditionId: string) => Promise<void>;
 
-  // Stages — REMOVIDO no PR-FLOW-PIVOT (mai/2026). Substituído por
-  // flow_config nodes/edges em agent_flows. Re-aparecerá como CRUD de
-  // nodes no PR da UI canvas.
+  // Flow canvas — PR-FLOW-PIVOT PR 3 (mai/2026). Substituiu o CRUD de
+  // stages: agora o agente tem 1 flow JSONB com nodes/edges visuais.
+  /** Carrega o flow_config do agente. Null = agente sem flow (criado
+   * via API sem template). Canvas deve renderizar estado vazio com
+   * dica de "arraste a primeira tarefa". */
+  getFlow: (configId: string) => Promise<FlowConfig | null>;
+  /** Persiste o flow inteiro (nodes + edges + viewport + enabled_tools).
+   * Retorna a nova version pra UI atualizar state local. Server normaliza
+   * antes de salvar via normalizeFlowConfig. */
+  saveFlow: (
+    configId: string,
+    config: FlowConfig,
+  ) => Promise<{ ok: true; version: number }>;
 
   // Tools
   createToolFromPreset: (input: CreateToolFromPresetInput) => Promise<AgentTool>;

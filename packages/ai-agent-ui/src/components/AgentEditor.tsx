@@ -44,8 +44,8 @@ import {
 import { AgentSidebar, type AgentSidebarGroup } from "./AgentSidebar";
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import { RulesTab } from "./RulesTab";
-// PR-FLOW-PIVOT (mai/2026): StagesTab + ToolsTab removidos. Substituídos
-// pela aba "Fluxo" (canvas @xyflow/react) que entra no PR 3 do pivot.
+// PR-FLOW-PIVOT PR 3 (mai/2026): aba "Fluxo" agora é o canvas visual.
+import { FlowCanvas } from "./flow/FlowCanvas";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { AuditTab } from "./AuditTab";
 import { FAQTab } from "./FAQTab";
@@ -71,7 +71,7 @@ type AgentSectionId =
   | "followups"
   | "audit";
 
-function buildSidebarGroups(opts: {
+function buildSidebarGroups(_opts: {
   stagesCount: number;
 }): AgentSidebarGroup[] {
   return [
@@ -81,10 +81,11 @@ function buildSidebarGroups(opts: {
       items: [
         { id: "rules", label: "Regras", icon: Settings2 },
         {
+          // PR-FLOW-PIVOT PR 3 (mai/2026): "Etapas" → "Fluxo" (canvas visual).
+          // ID `stages` mantido pra retrocompat do localStorage de aba ativa.
           id: "stages",
-          label: "Etapas",
+          label: "Fluxo",
           icon: ListOrdered,
-          badge: opts.stagesCount > 0 ? opts.stagesCount : null,
         },
       ],
     },
@@ -364,13 +365,7 @@ export function AgentEditor({
               onToolsChange={setTools}
             />
           )}
-          {activeSection === "stages" && (
-            <PlaceholderTab
-              icon={ListOrdered}
-              title="Fluxo em construção"
-              description="A aba Fluxo (canvas visual) entra no próximo PR do pivot. Por enquanto, os nodes/edges vivem no banco mas a UI de edição não está disponível."
-            />
-          )}
+          {activeSection === "stages" && <FlowCanvas configId={agent.id} />}
           {activeSection === "faq" && (
             <FAQTab
               configId={agent.id}
