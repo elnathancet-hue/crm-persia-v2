@@ -8,6 +8,7 @@ import {
   listEntryConditions,
   updateEntryCondition,
 } from "@/actions/ai-agent/entry-conditions";
+import { getFlow, saveFlow } from "@/actions/ai-agent/flow";
 // PR-FLOW-PIVOT (mai/2026): stages CRUD + setStageTool removidos. Allowlist
 // de tools migra pra agent_flows.enabled_tools.
 import {
@@ -69,6 +70,8 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     createEntryCondition: (input) => createEntryCondition(orgId, input),
     updateEntryCondition: (id, input) => updateEntryCondition(orgId, id, input),
     deleteEntryCondition: (id) => deleteEntryCondition(orgId, id),
+    getFlow: (configId) => getFlow(orgId, configId),
+    saveFlow: (configId, config) => saveFlow(orgId, configId, config),
     createToolFromPreset: (input) => createToolFromPreset(orgId, input),
     createCustomWebhookTool: (input) => createCustomWebhookTool(orgId, input),
     updateTool: (toolId, input) => updateTool(orgId, toolId, input),

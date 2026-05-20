@@ -28,8 +28,8 @@ export {
 
 // Tab components
 export { RulesTab } from "./components/RulesTab";
-// PR-FLOW-PIVOT (mai/2026): StagesTab + ToolsTab removidos. Substituídos
-// pela aba "Fluxo" no PR 3 (canvas @xyflow/react com nodes/edges).
+// PR-FLOW-PIVOT PR 3 (mai/2026): FlowCanvas substitui StagesTab/ToolsTab.
+export { FlowCanvas } from "./components/flow/FlowCanvas";
 export { AuditTab } from "./components/AuditTab";
 export { LimitsUsageTab } from "./components/LimitsUsageTab";
 export { FAQTab } from "./components/FAQTab";
