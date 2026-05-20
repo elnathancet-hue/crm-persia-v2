@@ -565,6 +565,18 @@ async function executeActionNode(
 ): Promise<string | null> {
   const actionType = node.data.action_type;
 
+  // PR-FLOW-PIVOT PR 9 (mai/2026): action node standalone que envia
+  // mensagem WhatsApp literal. NÃO usa native handler — emite `send_text`
+  // direto pelo ctx.provider (igual a IA quando responde). Realtime
+  // provider já cuida de: split por humanization, sendText via
+  // WhatsAppProvider, persistir em messages com sender='ai'.
+  //
+  // Tratado ANTES do dispatch genérico pra evitar passar pela cadeia de
+  // native handlers (que não tem acesso ao WhatsAppProvider no V1).
+  if (actionType === "send_whatsapp_message") {
+    return executeSendWhatsappMessageAction(db, ctx, node, result);
+  }
+
   // Mapeamento direto FlowActionType → NativeHandlerName quando possível.
   // Action nodes "remove_tag" não tem handler nativo ainda (foi declarado
   // no shared/flow.ts como tipo futuro). V1 marca como guardrail.
@@ -579,6 +591,10 @@ async function executeActionNode(
     transfer_to_agent: "transfer_to_agent",
     // PR-FLOW-PIVOT PR 8 (mai/2026)
     set_lead_custom_field: "set_lead_custom_field",
+    // PR-FLOW-PIVOT PR 9 (mai/2026): `send_whatsapp_message` é tratado
+    // por special-case acima (executeSendWhatsappMessageAction) — emite
+    // send_text via ctx.provider em vez de handler nativo, reusando a
+    // plumbing já testada do realtime-provider (split + DB persist).
   };
 
   const handlerKey = directHandlers[actionType];
@@ -652,6 +668,107 @@ async function executeActionNode(
   } else {
     result.tool_calls_failed++;
   }
+
+  return followDefaultEdge(ctx, node);
+}
+
+// ============================================================================
+// PR-FLOW-PIVOT PR 9 (mai/2026): action node standalone "Enviar mensagem
+// WhatsApp" — texto literal com placeholders {{lead.X}}.
+// ============================================================================
+//
+// Por que special-case em vez de native handler: o WhatsAppProvider é
+// criado em executor.ts e injetado no realtime-provider — não chega ao
+// handler context. Em vez de mudar a assinatura de NativeHandler pra
+// passar provider (mudança invasiva em shared types), emitimos
+// `send_text` direto no ctx.provider. Realtime provider já trata:
+// split, sendText real, persist em messages. Tester provider trata como
+// "Bot diria: ..." (preview sem envio).
+
+function interpolateLeadPlaceholders(
+  template: string,
+  lead: { name?: string | null; phone?: string | null; email?: string | null },
+): string {
+  return template.replace(/\{\{lead\.(\w+)\}\}/g, (_, key) => {
+    const value = (lead as Record<string, unknown>)[key];
+    return typeof value === "string" ? value : "";
+  });
+}
+
+async function executeSendWhatsappMessageAction(
+  db: AgentDb,
+  ctx: FlowRunContext,
+  node: FlowActionNode,
+  result: FlowRunResult,
+): Promise<string | null> {
+  const config = node.data.config;
+  const rawMessage =
+    typeof config.message === "string" ? config.message.trim() : "";
+
+  ctx.provider.emit({
+    kind: "tool_call",
+    payload: {
+      tool_call_id: `action:${node.id}`,
+      tool_name: "send_whatsapp_message",
+      input: { message_length: rawMessage.length },
+      via: "action_node",
+    },
+  });
+
+  if (!rawMessage) {
+    ctx.provider.emit({
+      kind: "tool_result",
+      payload: {
+        tool_call_id: `action:${node.id}`,
+        tool_name: "send_whatsapp_message",
+        success: false,
+        error: "empty_message",
+        via: "action_node",
+      },
+    });
+    result.tool_calls_failed++;
+    return followDefaultEdge(ctx, node);
+  }
+
+  // Carrega lead pra resolver placeholders. Se sem lead_id ou lead não
+  // encontrado, interpolamos com vazios — mensagem ainda é enviada.
+  let lead: { name?: string | null; phone?: string | null; email?: string | null } = {};
+  if (ctx.leadId) {
+    const { data: leadRow } = await db
+      .from("leads")
+      .select("name, phone, email")
+      .eq("organization_id", ctx.organizationId)
+      .eq("id", ctx.leadId)
+      .maybeSingle();
+    if (leadRow) {
+      lead = leadRow as typeof lead;
+    }
+  }
+
+  const interpolated = interpolateLeadPlaceholders(rawMessage, lead);
+
+  // Emite send_text — realtime-provider envia + persiste, tester-provider
+  // só registra evento.
+  ctx.provider.emit({
+    kind: "send_text",
+    payload: { message: interpolated, via: "action_node" },
+  });
+
+  result.assistant_reply += result.assistant_reply
+    ? "\n" + interpolated
+    : interpolated;
+
+  ctx.provider.emit({
+    kind: "tool_result",
+    payload: {
+      tool_call_id: `action:${node.id}`,
+      tool_name: "send_whatsapp_message",
+      success: true,
+      output: { message_length: interpolated.length },
+      via: "action_node",
+    },
+  });
+  result.tool_calls_succeeded++;
 
   return followDefaultEdge(ctx, node);
 }
