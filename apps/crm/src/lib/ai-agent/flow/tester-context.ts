@@ -1,30 +1,20 @@
 import "server-only";
 
-import type { IncomingMessage } from "@/lib/whatsapp/provider";
-import { type AgentDb } from "./db";
-
-// PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): contexto sintetico do Tester
-// fiel. Cria um lead "Tester" persistente por org pra rodar o pipeline
-// REAL (tryEnqueueForNativeAgent + executeDebouncedBatch) com provider
-// stub. Lead escondido das UIs via metadata.is_test=true (filtros em
-// listLeadsKanban + getLeads).
+// AI Agent — contexto do Tester (lead + conversation + agent_conversation
+// de teste). PR-FLOW-PIVOT PR 2 (mai/2026): recriado adaptado pro novo
+// modelo (current_node_id em vez de current_stage_id). Reusa o phone
+// reservado "+5500" + sufixo derivado do orgId — mesmo padrão do
+// tester-context.ts pré-pivot.
 //
-// Idempotente: select-first, insert se ausente. Race entre 2 testers
-// simultaneos na mesma org pode falhar no insert (unique constraint
-// org_id+phone) — caso raro, deixa o erro propagar e a UI mostra toast.
+// Idempotente: select-first, insert se ausente. Lead marcado com
+// metadata.is_test=true pra ficar escondido dos filtros de Kanban/Leads.
 
-// Phone reservado: prefixo "+5500" + 9 zeros + 2 digitos derivados do
-// orgId (apenas digitos pra passar phoneBR.refine). Distinto o suficiente
-// pra nao colidir com nenhum lead real (orgs nao tem clientes com DDD 00).
-// phoneBR.parse vai aplicar `+55` se 10/11 digitos — entrada ja vem com
-// "+55" pra evitar a normalizacao.
+import type { AgentDb } from "../db";
+
 const TESTER_PHONE_PREFIX = "+5500000000";
 
-/** Phone do lead Tester para esta org. Deterministico. */
+/** Phone determinístico do lead Tester por org. */
 export function testerPhoneForOrg(orgId: string): string {
-  // 2 digitos extra derivados do orgId (hash simples) pra evitar
-  // colisao improvavel entre orgs (caso o lookup escape o filtro de
-  // organization_id por bug).
   const digits = orgId.replace(/\D/g, "").slice(0, 2).padEnd(2, "0");
   return `${TESTER_PHONE_PREFIX}${digits}`;
 }
@@ -32,21 +22,37 @@ export function testerPhoneForOrg(orgId: string): string {
 export interface TesterContext {
   leadId: string;
   crmConversationId: string;
+  agentConversationId: string;
+  /** current_node_id no início do turno — runner usa pra retomar. NULL na
+   * primeira mensagem (entry node entra em ação). */
+  currentNodeId: string | null;
 }
 
 /**
- * Garante que existe lead+conversation "Tester" para a org. Idempotente.
- * Reusa entre runs do Tester pra preservar stickiness (agent_conversations)
- * + state (variables, current_stage_id, human_handoff_at).
- *
- * Lead e marcado com `metadata.is_test=true` pra ser escondido dos
- * filtros de Kanban/Leads.
+ * Garante lead + conversation + agent_conversation pra rodar o Tester.
+ * Idempotente — chamadas subsequentes reusam o mesmo lead/conversation
+ * pra preservar state (current_node_id, history_summary, variables).
  */
 export async function ensureTesterContext(
   db: AgentDb,
   orgId: string,
+  agentConfigId: string,
 ): Promise<TesterContext> {
   const phone = testerPhoneForOrg(orgId);
+
+  // Default assignee — pegamos qualquer membro ativo da org pra setar
+  // como responsável do lead (necessário pra alguns handlers como
+  // create_appointment validarem).
+  const { data: members } = await db
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .limit(1);
+  const defaultAssignee =
+    members && members.length > 0
+      ? ((members[0] as { user_id?: string | null }).user_id ?? null)
+      : null;
 
   // ----- LEAD -----
   let { data: lead } = await db
@@ -55,22 +61,6 @@ export async function ensureTesterContext(
     .eq("organization_id", orgId)
     .eq("phone", phone)
     .maybeSingle();
-
-  // PR-FIX-TESTER-ASSIGNED-TO (mai/2026): create_appointment exige
-  // lead.assigned_to setado (responsavel da reuniao). Tester precisa
-  // herdar um membro ativo qualquer da org pra que IA consiga simular
-  // agendamento fielmente sem o handler retornar "lead nao tem
-  // responsavel atribuido".
-  let defaultAssignee: string | null = null;
-  const { data: members } = await db
-    .from("organization_members")
-    .select("user_id")
-    .eq("organization_id", orgId)
-    .eq("is_active", true)
-    .limit(1);
-  if (members && members.length > 0) {
-    defaultAssignee = (members[0] as { user_id?: string | null }).user_id ?? null;
-  }
 
   if (!lead) {
     const { data: newLead, error } = await db
@@ -92,8 +82,6 @@ export async function ensureTesterContext(
     }
     lead = newLead;
   } else {
-    // Defensivo: se lead foi criado manualmente antes (rollout), garante
-    // a flag metadata.is_test pra que os filtros escondam + assigned_to.
     const md = (lead.metadata as Record<string, unknown> | null) ?? {};
     const updates: Record<string, unknown> = {};
     if (md.is_test !== true) {
@@ -138,17 +126,52 @@ export async function ensureTesterContext(
     conv = newConv;
   }
 
-  return { leadId: lead.id, crmConversationId: conv.id };
+  // ----- AGENT_CONVERSATION -----
+  let { data: agentConv } = await db
+    .from("agent_conversations")
+    .select("id, current_node_id")
+    .eq("organization_id", orgId)
+    .eq("config_id", agentConfigId)
+    .eq("lead_id", lead.id)
+    .eq("crm_conversation_id", conv.id)
+    .maybeSingle();
+
+  if (!agentConv) {
+    const { data: newAgentConv, error } = await db
+      .from("agent_conversations")
+      .insert({
+        organization_id: orgId,
+        config_id: agentConfigId,
+        lead_id: lead.id,
+        crm_conversation_id: conv.id,
+        current_node_id: null,
+        variables: {},
+        actions_executed: [],
+        actions_executed_detail: {},
+      })
+      .select("id, current_node_id")
+      .single();
+    if (error || !newAgentConv) {
+      throw new Error(
+        `failed to create tester agent_conversation: ${error?.message}`,
+      );
+    }
+    agentConv = newAgentConv;
+  }
+
+  return {
+    leadId: lead.id,
+    crmConversationId: conv.id,
+    agentConversationId: agentConv.id,
+    currentNodeId: (agentConv as { current_node_id: string | null })
+      .current_node_id,
+  };
 }
 
 /**
- * Apaga TODO o state do Tester pra esta org: messages, agent_runs,
- * agent_steps, pending_messages, agent_conversations. Preserva o lead
- * + crm_conversation (sao recriados na proxima chamada do tester).
- *
- * Usado pelo botao "Resetar conversa" do Tester. Cliente quer voltar
- * pra etapa inicial sem human_handoff_at residual, sem variables
- * acumuladas, etc.
+ * Apaga state do Tester pra esta org/agente: messages, agent_runs,
+ * agent_conversations vinculados ao lead Tester. Preserva lead +
+ * crm_conversation (recriados nos próximos turns).
  */
 export async function resetTesterConversation(
   db: AgentDb,
@@ -161,11 +184,8 @@ export async function resetTesterConversation(
     .eq("organization_id", orgId)
     .eq("phone", phone)
     .maybeSingle();
-  if (!lead) return; // nada pra resetar
+  if (!lead) return;
 
-  // Conversations e agent_conversations sao apagados em cascade via
-  // FK quando o lead some — mas a gente NAO apaga o lead. Vamos apagar
-  // explicitamente cada tabela.
   const { data: convs } = await db
     .from("conversations")
     .select("id")
@@ -173,8 +193,6 @@ export async function resetTesterConversation(
     .eq("lead_id", lead.id);
   const convIds = ((convs ?? []) as Array<{ id: string }>).map((c) => c.id);
 
-  // agent_conversations sao por lead_id (nao por crm conversation_id).
-  // Pegando agent_convs antes pra cascade em agent_runs/steps.
   const { data: agentConvs } = await db
     .from("agent_conversations")
     .select("id")
@@ -185,7 +203,6 @@ export async function resetTesterConversation(
   );
 
   if (agentConvIds.length > 0) {
-    // pending_messages, agent_runs (e via cascade agent_steps)
     await db
       .from("pending_messages")
       .delete()
@@ -203,23 +220,22 @@ export async function resetTesterConversation(
   }
 }
 
-/**
- * Constroi um IncomingMessage sintetico pra passar pro pipeline real
- * (tryEnqueueForNativeAgent). Phone, pushName e messageId determinisicos
- * o suficiente pra que ensureCrmContext encontre o lead Tester existente.
- */
-export function buildTesterIncomingMessage(
+/** Persiste current_node_id ao fim de um turno. */
+export async function persistCurrentNode(
+  db: AgentDb,
   orgId: string,
-  text: string,
-): IncomingMessage {
-  return {
-    phone: testerPhoneForOrg(orgId),
-    pushName: "Tester",
-    text,
-    type: "text",
-    messageId: `tester-${crypto.randomUUID()}`,
-    isGroup: false,
-    isFromMe: false,
-    timestamp: Date.now(),
-  } as IncomingMessage;
+  agentConversationId: string,
+  nodeId: string | null,
+): Promise<void> {
+  const { error } = await db
+    .from("agent_conversations")
+    .update({
+      current_node_id: nodeId,
+      last_interaction_at: new Date().toISOString(),
+    })
+    .eq("organization_id", orgId)
+    .eq("id", agentConversationId);
+  if (error) {
+    throw new Error(`failed to persist current_node_id: ${error.message}`);
+  }
 }

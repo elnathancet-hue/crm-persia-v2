@@ -50,7 +50,7 @@ export async function testAgent(orgId: string, req: TesterRequest): Promise<Test
       entityId: req.config_id,
       metadata: {
         run_id: json.run_id,
-        stage_id: req.stage_id ?? null,
+        node_id: req.node_id ?? null,
         dry_run: true,
       },
     });
@@ -63,7 +63,7 @@ export async function testAgent(orgId: string, req: TesterRequest): Promise<Test
       action: "admin_ai_agent_test",
       entityType: "agent_config",
       entityId: req.config_id,
-      metadata: { stage_id: req.stage_id ?? null, dry_run: true },
+      metadata: { node_id: req.node_id ?? null, dry_run: true },
       error,
     });
     throw error;

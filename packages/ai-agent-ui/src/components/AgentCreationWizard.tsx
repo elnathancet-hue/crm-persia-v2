@@ -364,12 +364,10 @@ function TemplateCard({
 }) {
   const visual = TEMPLATE_VISUALS[template.slug];
   const Icon = visual.Icon;
+  // PR-FLOW-PIVOT: template não tem mais `stages` array. V1 mostra label
+  // genérico — PRs subsequentes vão exibir contagem de nodes do flow_config.
   const stagesLabel =
-    template.stages.length === 0
-      ? "Sem etapas"
-      : template.stages.length === 1
-        ? "1 etapa pronta"
-        : `${template.stages.length} etapas prontas`;
+    template.slug === "blank" ? "Flow vazio" : "Flow pronto";
   return (
     <button
       type="button"
@@ -550,11 +548,11 @@ function Step3Model({
             </dd>
             <dt className="text-muted-foreground">Modelo</dt>
             <dd className="font-medium text-foreground">{template.label}</dd>
-            <dt className="text-muted-foreground">Etapas</dt>
+            <dt className="text-muted-foreground">Flow</dt>
             <dd className="font-medium text-foreground">
-              {template.stages.length === 0
-                ? "Nenhuma (você criará depois)"
-                : `${template.stages.length} pré-configuradas`}
+              {template.slug === "blank"
+                ? "Vazio (você criará no canvas)"
+                : "Pré-configurado"}
             </dd>
             <dt className="text-muted-foreground">IA</dt>
             <dd className="font-medium text-foreground">
@@ -569,18 +567,6 @@ function Step3Model({
               </>
             ) : null}
           </dl>
-          {template.stages.length > 0 ? (
-            <div className="pt-2 border-t">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                Etapas que vão entrar
-              </p>
-              <ol className="list-decimal pl-4 space-y-0.5 text-xs text-muted-foreground">
-                {template.stages.map((s, i) => (
-                  <li key={i}>{s.situation}</li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
     </div>

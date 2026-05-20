@@ -398,10 +398,12 @@ export type Database = {
       }
       agent_conversations: {
         Row: {
+          actions_executed: Json
+          actions_executed_detail: Json
           config_id: string
           created_at: string
           crm_conversation_id: string | null
-          current_stage_id: string | null
+          current_node_id: string | null
           flush_claim_expires_at: string | null
           flush_claimed_at: string | null
           history_summary: string | null
@@ -420,10 +422,12 @@ export type Database = {
           variables: Json
         }
         Insert: {
+          actions_executed?: Json
+          actions_executed_detail?: Json
           config_id: string
           created_at?: string
           crm_conversation_id?: string | null
-          current_stage_id?: string | null
+          current_node_id?: string | null
           flush_claim_expires_at?: string | null
           flush_claimed_at?: string | null
           history_summary?: string | null
@@ -442,10 +446,12 @@ export type Database = {
           variables?: Json
         }
         Update: {
+          actions_executed?: Json
+          actions_executed_detail?: Json
           config_id?: string
           created_at?: string
           crm_conversation_id?: string | null
-          current_stage_id?: string | null
+          current_node_id?: string | null
           flush_claim_expires_at?: string | null
           flush_claimed_at?: string | null
           history_summary?: string | null
@@ -476,13 +482,6 @@ export type Database = {
             columns: ["crm_conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_conversations_current_stage_id_fkey"
-            columns: ["current_stage_id"]
-            isOneToOne: false
-            referencedRelation: "agent_stages"
             referencedColumns: ["id"]
           },
           {
@@ -1078,105 +1077,53 @@ export type Database = {
           },
         ]
       }
-      agent_stage_tools: {
+      agent_flows: {
         Row: {
+          agent_config_id: string
           created_at: string
-          is_enabled: boolean
-          organization_id: string
-          stage_id: string
-          tool_id: string
-        }
-        Insert: {
-          created_at?: string
-          is_enabled?: boolean
-          organization_id: string
-          stage_id: string
-          tool_id: string
-        }
-        Update: {
-          created_at?: string
-          is_enabled?: boolean
-          organization_id?: string
-          stage_id?: string
-          tool_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_stage_tools_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_stage_tools_stage_id_fkey"
-            columns: ["stage_id"]
-            isOneToOne: false
-            referencedRelation: "agent_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "agent_stage_tools_tool_id_fkey"
-            columns: ["tool_id"]
-            isOneToOne: false
-            referencedRelation: "agent_tools"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      agent_stages: {
-        Row: {
-          config_id: string
-          created_at: string
+          edges: Json
+          enabled_tools: Json
           id: string
-          instruction: string
-          order_index: number
+          nodes: Json
           organization_id: string
-          rag_enabled: boolean
-          rag_top_k: number
-          situation: string
-          slug: string
-          transition_hint: string | null
           updated_at: string
+          version: number
+          viewport: Json
         }
         Insert: {
-          config_id: string
+          agent_config_id: string
           created_at?: string
+          edges?: Json
+          enabled_tools?: Json
           id?: string
-          instruction?: string
-          order_index?: number
+          nodes?: Json
           organization_id: string
-          rag_enabled?: boolean
-          rag_top_k?: number
-          situation: string
-          slug: string
-          transition_hint?: string | null
           updated_at?: string
+          version?: number
+          viewport?: Json
         }
         Update: {
-          config_id?: string
+          agent_config_id?: string
           created_at?: string
+          edges?: Json
+          enabled_tools?: Json
           id?: string
-          instruction?: string
-          order_index?: number
+          nodes?: Json
           organization_id?: string
-          rag_enabled?: boolean
-          rag_top_k?: number
-          situation?: string
-          slug?: string
-          transition_hint?: string | null
           updated_at?: string
+          version?: number
+          viewport?: Json
         }
         Relationships: [
           {
-            foreignKeyName: "agent_stages_config_id_fkey"
-            columns: ["config_id"]
-            isOneToOne: false
+            foreignKeyName: "agent_flows_agent_config_id_fkey"
+            columns: ["agent_config_id"]
+            isOneToOne: true
             referencedRelation: "agent_configs"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "agent_stages_organization_id_fkey"
+            foreignKeyName: "agent_flows_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

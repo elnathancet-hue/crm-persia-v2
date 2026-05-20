@@ -23,7 +23,6 @@ import type {
   AgentKnowledgeSource,
   AgentNotificationTemplate,
   AgentScheduledJob,
-  AgentStage,
   AgentStatus,
   AgentTool,
 } from "@persia/shared/ai-agent";
@@ -45,8 +44,9 @@ import {
 import { AgentSidebar, type AgentSidebarGroup } from "./AgentSidebar";
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import { RulesTab } from "./RulesTab";
-import { StagesTab } from "./StagesTab";
-import { ToolsTab } from "./ToolsTab";
+// PR-FLOW-PIVOT (mai/2026): StagesTab + ToolsTab removidos. Substituídos
+// pela aba "Fluxo" (canvas @xyflow/react) que entra no PR 3 do pivot.
+import { PlaceholderTab } from "./PlaceholderTab";
 import { AuditTab } from "./AuditTab";
 import { FAQTab } from "./FAQTab";
 import { DocumentsTab } from "./DocumentsTab";
@@ -118,7 +118,10 @@ function buildSidebarGroups(opts: {
 
 interface Props {
   initialAgent: AgentConfig;
-  initialStages: AgentStage[];
+  // PR-FLOW-PIVOT (mai/2026): initialStages mantido pra compat de assinatura
+  // dos pages SSR. Conteúdo ignorado — flow vive em agent_flows e será
+  // carregado pelo FlowCanvas (PR 3).
+  initialStages: unknown[];
   initialTools: AgentTool[];
   initialAllowedDomains: string[];
   initialKnowledgeSources?: AgentKnowledgeSource[];
@@ -362,12 +365,10 @@ export function AgentEditor({
             />
           )}
           {activeSection === "stages" && (
-            <StagesTab
-              configId={agent.id}
-              stages={stages}
-              tools={tools}
-              onChange={setStages}
-              behaviorMode={agent.behavior_mode}
+            <PlaceholderTab
+              icon={ListOrdered}
+              title="Fluxo em construção"
+              description="A aba Fluxo (canvas visual) entra no próximo PR do pivot. Por enquanto, os nodes/edges vivem no banco mas a UI de edição não está disponível."
             />
           )}
           {activeSection === "faq" && (
@@ -387,12 +388,10 @@ export function AgentEditor({
             />
           )}
           {activeSection === "tools" && (
-            <ToolsTab
-              configId={agent.id}
-              tools={tools}
-              stages={stages}
-              allowedDomains={initialAllowedDomains}
-              onChange={setTools}
+            <PlaceholderTab
+              icon={Wrench}
+              title="Ferramentas em construção"
+              description="A configuração de ferramentas migra pra dentro do canvas (allowlist por flow). PR 3 entrega a UI nova."
             />
           )}
           {activeSection === "followups" && (
@@ -423,7 +422,6 @@ export function AgentEditor({
 
       <TesterSheet
         configId={agent.id}
-        stages={stages}
         open={testerOpen}
         onOpenChange={setTesterOpen}
       />

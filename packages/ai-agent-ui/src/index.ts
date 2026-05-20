@@ -28,8 +28,8 @@ export {
 
 // Tab components
 export { RulesTab } from "./components/RulesTab";
-export { StagesTab } from "./components/StagesTab";
-export { ToolsTab } from "./components/ToolsTab";
+// PR-FLOW-PIVOT (mai/2026): StagesTab + ToolsTab removidos. Substituídos
+// pela aba "Fluxo" no PR 3 (canvas @xyflow/react com nodes/edges).
 export { AuditTab } from "./components/AuditTab";
 export { LimitsUsageTab } from "./components/LimitsUsageTab";
 export { FAQTab } from "./components/FAQTab";
@@ -50,8 +50,8 @@ export { EntryConditionsCard } from "./components/EntryConditionsCard";
 export { IndexingStatusBadge } from "./components/IndexingStatusBadge";
 export { LimitsEditor } from "./components/LimitsEditor";
 export { ReactivateAgentButton } from "./components/ReactivateAgentButton";
-export { StageSheet } from "./components/StageSheet";
-export { StageActionsEditor } from "./components/StageActionsEditor";
+// PR-FLOW-PIVOT: StageSheet + StageActionsEditor removidos. Editor de
+// nodes individual fica dentro do FlowEditor (PR 3).
 export { TesterSheet } from "./components/TesterSheet";
 export { UsageChart } from "./components/UsageChart";
 export { UsageStatsCards } from "./components/UsageStatsCards";

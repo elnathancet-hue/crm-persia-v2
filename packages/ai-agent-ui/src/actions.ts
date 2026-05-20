@@ -18,8 +18,6 @@ import type {
   AgentNotificationTemplate,
   AgentRunWithSteps,
   AgentScheduledJob,
-  AgentStage,
-  AgentStageTool,
   AgentTool,
   CreateAgentInput,
   CreateCustomWebhookToolInput,
@@ -27,16 +25,13 @@ import type {
   CreateFollowupInput,
   CreateNotificationTemplateInput,
   CreateScheduledJobInput,
-  CreateStageInput,
   AgentEntryCondition,
   CreateEntryConditionInput,
   CreateToolFromPresetInput,
   ListRunsInput,
   NativeHandlerName,
   UpdateEntryConditionInput,
-  ReorderStagesInput,
   SetCostLimitInput,
-  SetStageToolInput,
   TesterRequest,
   TesterResponse,
   UpdateAgentInput,
@@ -44,7 +39,6 @@ import type {
   UpdateFollowupInput,
   UpdateNotificationTemplateInput,
   UpdateScheduledJobInput,
-  UpdateStageInput,
   UpdateToolInput,
   UsageStats,
   UsageStatsInput,
@@ -65,19 +59,17 @@ export interface AgentActions {
   ) => Promise<AgentEntryCondition>;
   deleteEntryCondition: (conditionId: string) => Promise<void>;
 
-  // Stages
-  createStage: (configId: string, input: CreateStageInput) => Promise<AgentStage>;
-  updateStage: (stageId: string, input: UpdateStageInput) => Promise<AgentStage>;
-  deleteStage: (stageId: string) => Promise<void>;
-  reorderStages: (input: ReorderStagesInput) => Promise<void>;
+  // Stages — REMOVIDO no PR-FLOW-PIVOT (mai/2026). Substituído por
+  // flow_config nodes/edges em agent_flows. Re-aparecerá como CRUD de
+  // nodes no PR da UI canvas.
 
   // Tools
   createToolFromPreset: (input: CreateToolFromPresetInput) => Promise<AgentTool>;
   createCustomWebhookTool: (input: CreateCustomWebhookToolInput) => Promise<AgentTool>;
   updateTool: (toolId: string, input: UpdateToolInput) => Promise<AgentTool>;
   deleteTool: (toolId: string) => Promise<void>;
-  setStageTool: (input: SetStageToolInput) => Promise<AgentStageTool>;
-  listStageTools: (stageId: string) => Promise<AgentStageTool[]>;
+  // PR-FLOW-PIVOT: setStageTool/listStageTools removidos — allowlist de
+  // tools vive em agent_flows.enabled_tools (allowlist global por flow).
   // PR-AGENT-INTEGRATION-2: toggle nativo por handler (cria ou atualiza
   // is_enabled). Idempotente, preserva config quando desliga.
   setNativeToolEnabled: (input: {
@@ -106,18 +98,9 @@ export interface AgentActions {
    * Usado pelo botao Resetar no TesterSheet pra recomecar do zero. */
   resetTesterConversation?: () => Promise<{ ok: true }>;
 
-  /** PR-AI-AGENT-STAGE-ACTIONS-UI (mai/2026): catalogos pros pickers
-   * (tag/stage/media/template/etc) usados no editor de "Acoes por etapa".
-   * Diferente de tool-catalogs do executor (que monta strings pro LLM),
-   * aqui retorna objetos estruturados pra UI. Opcional pra retrocompat. */
-  getStageActionCatalogs?: (
-    configId: string,
-  ) => Promise<import("./types").StageActionCatalogs>;
-  /** Persiste action_config de uma etapa. */
-  updateStageActionConfig?: (
-    stageId: string,
-    config: import("@persia/shared/ai-agent").StageActionConfig,
-  ) => Promise<{ ok: true; sanitized: import("@persia/shared/ai-agent").StageActionConfig }>;
+  // PR-FLOW-PIVOT (mai/2026): getStageActionCatalogs + updateStageActionConfig
+  // removidos. Catálogos viram parte do FlowEditor (PR 3) que vai injetar
+  // tags/templates/medias via novo método getFlowCatalogs?(configId).
 
   // Audit
   listRuns: (input: ListRunsInput) => Promise<AgentRunWithSteps[]>;

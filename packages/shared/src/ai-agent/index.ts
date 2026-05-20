@@ -24,4 +24,4 @@ export * from "./followups";
 export * from "./humanization";
 export * from "./entry-conditions";
 export * from "./lead-status";
-export * from "./stage-actions";
+export * from "./flow";

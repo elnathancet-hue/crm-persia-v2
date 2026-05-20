@@ -10,16 +10,13 @@ import {
   clampSplitDelaySeconds,
   clampSplitThresholdChars,
   getAgentTemplate,
-  getPreset,
   isAgentTemplateSlug,
   normalizeHumanizationConfig,
-  normalizeStageActionConfig,
   sanitizeBusinessHours,
   sanitizeKeywordList,
   type AgentConfig,
   type AgentTemplate,
   type CreateAgentInput,
-  type NativeHandlerName,
   type UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "@/lib/ai-agent/db";
@@ -27,7 +24,6 @@ import { revalidatePath } from "next/cache";
 import { slugify } from "./utils";
 import {
   getDefaultStopAgentTool,
-  materializePresetTool,
 } from "@/lib/ai-agent/tools/registry";
 import {
   assertAgentStatus,
@@ -310,13 +306,9 @@ async function applyTemplate(
   config: AgentConfig,
   template: AgentTemplate,
 ): Promise<void> {
-  // 1. Atualiza humanization_config + behavior_mode se o template define.
-  // (Esses campos nao foram passados no INSERT inicial porque o normalize
-  // do input nao espera default vindo de template.)
+  // 1. Atualiza humanization_config se o template define. behavior_mode
+  // é fixo 'flow' pós-PR-FLOW-PIVOT (mai/2026).
   const configPatch: Record<string, unknown> = {};
-  if (template.behavior_mode) {
-    configPatch.behavior_mode = template.behavior_mode;
-  }
   if (template.humanization_config) {
     configPatch.humanization_config = normalizeHumanizationConfig(
       template.humanization_config,
@@ -428,155 +420,56 @@ async function applyTemplate(
     }
   }
 
-  // 5. Stages — agora com action_type + action_config. Stages antigas
-  // (sem esses campos) continuam funcionando: action_type fica null
-  // e action_config '{}' (default da migration 049).
-  if (template.stages.length > 0) {
-    const stageRows = template.stages.map((stage, index) => ({
-      organization_id: orgId,
-      config_id: config.id,
-      situation: stage.situation,
-      instruction: stage.instruction,
-      transition_hint: stage.transition_hint ?? null,
-      rag_enabled: false,
-      rag_top_k: 3,
-      order_index: index,
-      slug: slugify(stage.situation),
-      // Novos campos opcionais (PR-AGENT-INTEGRATION-4 e PR3 do A+C)
-      action_type: stage.action_type ?? null,
-      action_config: stage.auto_actions
-        ? normalizeStageActionConfig({ auto_actions: stage.auto_actions })
-        : {},
-    }));
-    const { data: insertedStages, error: stagesError } = await db
-      .from("agent_stages")
-      .insert(stageRows)
-      .select("id, slug");
-    if (stagesError) {
-      console.error("[applyTemplate] failed to seed stages:", stagesError.message);
-      return;
-    }
+  // 5. PR-FLOW-PIVOT (mai/2026): seed do agent_flows. Se o template
+  // define `flow_config` explícito, usa direto. Senão, cria flow mínimo
+  // com 1 node de entrada + 1 node IA usando o system_prompt do template.
+  // Tools nativas (todas exceto transfer_to_stage que não existe mais)
+  // ficam disponíveis na enabled_tools — UI canvas refina depois.
+  const flowConfig = template.flow_config ?? {
+    nodes: [
+      {
+        id: "entry-1",
+        type: "entry",
+        position: { x: 0, y: 0 },
+        data: {
+          label: "Conversa iniciada",
+          trigger: "conversation_started",
+        },
+      },
+      {
+        id: "ai-1",
+        type: "ai_agent",
+        position: { x: 280, y: 0 },
+        data: {
+          label: template.label,
+          system_prompt: template.system_prompt,
+          instructions: [],
+        },
+      },
+    ],
+    edges: [
+      {
+        id: "edge-entry-ai",
+        source: "entry-1",
+        target: "ai-1",
+        sourceHandle: "default",
+      },
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    enabled_tools: [],
+  };
 
-    // 6. PR-AI-AGENT-TEMPLATE-SEED-TOOLS (mai/2026): materializa tools
-    // nativas necessarias e linka em agent_stage_tools (is_enabled=true)
-    // em todas as stages. Sem isso, o LLM nao via as tools no API call
-    // e nao chamava add_tag/create_appointment/etc — auto_actions
-    // disparariam OK quando entrava em etapa, mas IA nao tinha capacidade
-    // de chamar por iniciativa.
-    //
-    // Stop agent ja foi criado fora do applyTemplate (linha 99). Aqui
-    // adicionamos as outras tools nativas que o Consultor template usa.
-    const stageIds = ((insertedStages ?? []) as Array<{ id: string }>)
-      .map((s) => s.id)
-      .filter(Boolean);
-
-    // Coleta tools referenciadas pelas auto_actions (runtime PRECISA
-    // delas, mesmo se template.tool_handlers omitir). Set evita duplicar.
-    const toolHandlers = new Set<NativeHandlerName>();
-    for (const stage of template.stages) {
-      for (const action of stage.auto_actions ?? []) {
-        // O type da auto_action coincide com o native_handler equivalente.
-        toolHandlers.add(action.type as NativeHandlerName);
-        // PR2 (mai/2026): pra on_tool_success funcionar, a tool gatilho
-        // tem que estar na allowlist da etapa (senao a IA nao consegue
-        // chama-la). Garantimos isso aqui mesmo se a tool gatilho nao
-        // aparece como action.type em nenhum outro stage.
-        if (action.trigger === "on_tool_success" && action.on_tool_success_of) {
-          toolHandlers.add(action.on_tool_success_of as NativeHandlerName);
-        }
-      }
-    }
-
-    if (template.tool_handlers && template.tool_handlers.length > 0) {
-      // Refactor single-stage (mai/2026): template define allowlist
-      // EXPLICITA. Pula a heuristica default (transfer_to_user, transfer_to_agent,
-      // cancel/reschedule, transfer_to_stage) — usa exatamente o set
-      // declarado + tools referenciadas por auto_actions ja coletadas acima.
-      for (const handler of template.tool_handlers) {
-        toolHandlers.add(handler);
-      }
-    } else {
-      // Heuristica default (retrocompat com templates legados sem tool_handlers).
-      if (template.seed_appointment_types && template.seed_appointment_types.length > 0) {
-        toolHandlers.add("create_appointment");
-        toolHandlers.add("list_lead_appointments");
-        toolHandlers.add("cancel_appointment");
-        toolHandlers.add("reschedule_appointment");
-      }
-      // transfer_to_user e sempre util pra escalation manual
-      toolHandlers.add("transfer_to_user");
-      // FIX BUG #8 (mai/2026): transfer_to_stage e VITAL pra funis com
-      // mais de 1 etapa — sem essa tool a IA fica presa na etapa inicial
-      // e faz qualificacao/apresentacao/agendamento todos inline.
-      if (template.stages.length > 1) {
-        toolHandlers.add("transfer_to_stage");
-      }
-      // transfer_to_agent pra orquestracao multi-agente (recepcao -> vendas).
-      toolHandlers.add("transfer_to_agent");
-    }
-    // stop_agent ja foi criado fora do applyTemplate — pular pra nao duplicar
-    toolHandlers.delete("stop_agent");
-
-    const toolsToCreate = [...toolHandlers]
-      .map((handler) => {
-        const preset = getPreset(handler);
-        if (!preset) return null;
-        return materializePresetTool({
-          configId: config.id,
-          organizationId: orgId,
-          preset,
-        });
-      })
-      .filter((t): t is NonNullable<typeof t> => t !== null);
-
-    if (toolsToCreate.length > 0) {
-      const { data: createdTools, error: toolsError } = await db
-        .from("agent_tools")
-        .insert(toolsToCreate)
-        .select("id, native_handler");
-      if (toolsError) {
-        console.error("[applyTemplate] failed to seed tools:", toolsError.message);
-      } else if (createdTools && stageIds.length > 0) {
-        // 7. Linka todas as tools criadas em TODAS as stages com
-        // is_enabled=true. Cliente pode restringir depois via UI
-        // (StageSheet > Ferramentas).
-        const allTools = createdTools as Array<{ id: string; native_handler: string }>;
-        // Tambem inclui stop_agent (criado fora do applyTemplate)
-        const { data: stopAgentRow } = await db
-          .from("agent_tools")
-          .select("id")
-          .eq("config_id", config.id)
-          .eq("native_handler", "stop_agent")
-          .maybeSingle();
-        const allToolIds = [
-          ...allTools.map((t) => t.id),
-          ...(stopAgentRow ? [(stopAgentRow as { id: string }).id] : []),
-        ];
-
-        const stageToolRows: Array<Record<string, unknown>> = [];
-        for (const stageId of stageIds) {
-          for (const toolId of allToolIds) {
-            stageToolRows.push({
-              stage_id: stageId,
-              tool_id: toolId,
-              organization_id: orgId,
-              is_enabled: true,
-            });
-          }
-        }
-        if (stageToolRows.length > 0) {
-          const { error: junctionError } = await db
-            .from("agent_stage_tools")
-            .insert(stageToolRows);
-          if (junctionError) {
-            console.error(
-              "[applyTemplate] failed to seed agent_stage_tools:",
-              junctionError.message,
-            );
-          }
-        }
-      }
-    }
+  const { error: flowError } = await db.from("agent_flows").insert({
+    agent_config_id: config.id,
+    organization_id: orgId,
+    nodes: flowConfig.nodes,
+    edges: flowConfig.edges,
+    viewport: flowConfig.viewport,
+    enabled_tools: flowConfig.enabled_tools,
+    version: 1,
+  });
+  if (flowError) {
+    console.error("[applyTemplate] failed to seed agent_flows:", flowError.message);
   }
 }
 

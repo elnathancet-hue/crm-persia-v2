@@ -14,14 +14,15 @@ import { rescheduleAppointmentHandler } from "./reschedule-appointment";
 import { sendMediaHandler } from "./send-media";
 import { stopAgentHandler } from "./stop-agent";
 import { transferToAgentHandler } from "./transfer-to-agent";
-import { transferToStageHandler } from "./transfer-to-stage";
+// PR-FLOW-PIVOT (mai/2026): transferToStageHandler deletado. Substituído
+// por edges nomeadas do canvas (handles do node IA disparam saídas
+// determinísticas).
 import { transferToUserHandler } from "./transfer-to-user";
 import { triggerNotificationHandler } from "./trigger-notification";
 
 export const nativeHandlers: NativeHandlerRegistry = {
   stop_agent: stopAgentHandler,
   transfer_to_user: transferToUserHandler,
-  transfer_to_stage: transferToStageHandler,
   transfer_to_agent: transferToAgentHandler,
   add_tag: addTagHandler,
   trigger_notification: triggerNotificationHandler,

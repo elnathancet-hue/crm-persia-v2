@@ -1,23 +1,17 @@
 import {
-  clampRagTopK,
   clampRecentMessagesCount,
   clampDebounceWindowMs,
   clampTokenThreshold,
   clampTurnThreshold,
   DEFAULT_GUARDRAILS,
   DEFAULT_MODEL,
-  type AgentStageTool,
   isKnownModel,
   type AgentConfig,
   type AgentGuardrails,
-  type AgentStage,
   type AgentTool,
   type AgentStatus,
   type CreateAgentInput,
-  type CreateStageInput,
-  type ReorderStagesInput,
   type UpdateAgentInput,
-  type UpdateStageInput,
 } from "@persia/shared/ai-agent";
 import type { OrgRole } from "@/lib/auth";
 import { requireRole } from "@/lib/auth";
@@ -140,45 +134,9 @@ export function normalizeAgentPatch(
   return patch;
 }
 
-export function normalizeStageInput(input: CreateStageInput): CreateStageInput {
-  const situation = input.situation?.trim();
-  if (!situation) throw new Error("Situacao da etapa e obrigatoria");
-
-  const instruction = input.instruction?.trim();
-  if (!instruction) throw new Error("Instrucao da etapa e obrigatoria");
-
-  return {
-    situation,
-    instruction,
-    transition_hint: input.transition_hint?.trim() || undefined,
-    rag_enabled: input.rag_enabled ?? false,
-    rag_top_k: input.rag_top_k !== undefined ? clampRagTopK(input.rag_top_k) : undefined,
-    order_index: input.order_index,
-    slug: input.slug?.trim() || slugify(situation),
-  };
-}
-
-export function normalizeStagePatch(input: UpdateStageInput): UpdateStageInput {
-  const patch: UpdateStageInput = {};
-  if (input.situation !== undefined) {
-    const situation = input.situation.trim();
-    if (!situation) throw new Error("Situacao da etapa e obrigatoria");
-    patch.situation = situation;
-  }
-  if (input.instruction !== undefined) {
-    const instruction = input.instruction.trim();
-    if (!instruction) throw new Error("Instrucao da etapa e obrigatoria");
-    patch.instruction = instruction;
-  }
-  if (input.transition_hint !== undefined) {
-    patch.transition_hint = input.transition_hint.trim() || undefined;
-  }
-  if (input.rag_enabled !== undefined) patch.rag_enabled = input.rag_enabled;
-  if (input.rag_top_k !== undefined) patch.rag_top_k = clampRagTopK(input.rag_top_k);
-  if (input.order_index !== undefined) patch.order_index = input.order_index;
-  if (input.slug !== undefined) patch.slug = input.slug.trim() || undefined;
-  return patch;
-}
+// PR-FLOW-PIVOT (mai/2026): normalizeStageInput + normalizeStagePatch
+// removidos junto com o modelo de stages. Validação de nodes/edges do
+// flow vive em packages/shared/src/ai-agent/flow.ts (normalizeFlowConfig).
 
 export function mergeGuardrails(
   current: AgentGuardrails | null | undefined,
@@ -213,20 +171,8 @@ export async function assertConfigBelongsToOrg(
   return data as AgentConfig;
 }
 
-export async function assertStageBelongsToOrg(
-  db: AgentDb,
-  orgId: string,
-  stageId: string,
-): Promise<AgentStage> {
-  const { data, error } = await db
-    .from("agent_stages")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("id", stageId)
-    .maybeSingle();
-  if (error || !data) throw new Error("Etapa nao encontrada");
-  return data as AgentStage;
-}
+// PR-FLOW-PIVOT (mai/2026): assertStageBelongsToOrg removido. Nodes
+// vivem em agent_flows.nodes JSONB — validação client-side.
 
 export async function assertToolBelongsToOrg(
   db: AgentDb,
@@ -243,35 +189,9 @@ export async function assertToolBelongsToOrg(
   return data as AgentTool;
 }
 
-export async function upsertStageToolRow(
-  db: AgentDb,
-  orgId: string,
-  stageId: string,
-  toolId: string,
-  isEnabled: boolean,
-): Promise<AgentStageTool> {
-  const { data, error } = await db
-    .from("agent_stage_tools")
-    .upsert({
-      organization_id: orgId,
-      stage_id: stageId,
-      tool_id: toolId,
-      is_enabled: isEnabled,
-    })
-    .select("*")
-    .single();
-
-  if (error || !data) throw new Error(error?.message || "Erro ao salvar permissao da ferramenta");
-  return data as AgentStageTool;
-}
-
-export function validateReorder(input: ReorderStagesInput): ReorderStagesInput {
-  if (!input.config_id) throw new Error("config_id e obrigatorio");
-  if (!Array.isArray(input.stage_ids) || input.stage_ids.length === 0) {
-    throw new Error("stage_ids e obrigatorio");
-  }
-  return input;
-}
+// PR-FLOW-PIVOT (mai/2026): upsertStageToolRow + validateReorder removidos.
+// Permissão de tools vive em agent_flows.enabled_tools (allowlist global
+// do flow). Ordem de nodes é livre no canvas.
 
 export function slugify(value: string): string {
   return value

@@ -2,13 +2,11 @@
 
 import { WEBHOOK_SECRET_MIN_LENGTH, getPreset } from "@persia/shared/ai-agent";
 import type {
-  AgentStageTool,
   AgentTool,
   CreateCustomWebhookToolInput,
   CreateToolFromPresetInput,
   CreateToolInput,
   NativeHandlerName,
-  SetStageToolInput,
   UpdateToolInput,
 } from "@persia/shared/ai-agent";
 import { revalidatePath } from "next/cache";
@@ -22,10 +20,8 @@ import { materializePresetTool } from "@/lib/ai-agent/tools/registry";
 import {
   agentPaths,
   assertConfigBelongsToOrg,
-  assertStageBelongsToOrg,
   assertToolBelongsToOrg,
   requireAgentRole,
-  upsertStageToolRow,
 } from "./utils";
 
 // PR-AGENT-INTEGRATION-2 (mai/2026): PR5/PR7/PR8 liberados ate aqui.
@@ -266,34 +262,9 @@ export async function deleteTool(toolId: string): Promise<void> {
   for (const path of agentPaths(existing.config_id)) revalidatePath(path);
 }
 
-export async function setStageTool(input: SetStageToolInput): Promise<AgentStageTool> {
-  const { db, orgId } = await requireAgentRole("admin");
-  const stage = await assertStageBelongsToOrg(db, orgId, input.stage_id);
-  const tool = await assertToolBelongsToOrg(db, orgId, input.tool_id);
-
-  if (stage.config_id !== tool.config_id) {
-    throw new Error("Etapa e ferramenta precisam pertencer ao mesmo agente");
-  }
-
-  const row = await upsertStageToolRow(db, orgId, input.stage_id, input.tool_id, input.is_enabled);
-  for (const path of agentPaths(stage.config_id)) revalidatePath(path);
-  return row;
-}
-
-export async function listStageTools(stageId: string): Promise<AgentStageTool[]> {
-  const { db, orgId } = await requireAgentRole("agent");
-  await assertStageBelongsToOrg(db, orgId, stageId);
-
-  const { data, error } = await db
-    .from("agent_stage_tools")
-    .select("*")
-    .eq("organization_id", orgId)
-    .eq("stage_id", stageId)
-    .order("created_at", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as AgentStageTool[];
-}
+// PR-FLOW-PIVOT (mai/2026): setStageTool + listStageTools removidos.
+// Allowlist de tools migra pra agent_flows.enabled_tools (global por flow).
+// Adapters do ai-agent-ui não chamam mais esses métodos.
 
 async function validateToolPayload(
   db: Awaited<ReturnType<typeof requireAgentRole>>["db"],

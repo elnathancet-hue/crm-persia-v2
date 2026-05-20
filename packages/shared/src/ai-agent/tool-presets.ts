@@ -84,33 +84,10 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
       },
     },
   },
-  {
-    handler: "transfer_to_stage",
-    name: "transfer_to_stage",
-    display_name: "Avancar etapa do agente",
-    description:
-      // FIX Bug #8 (mai/2026): descricao reescrita pra ser IMPERATIVA. " +
-      // "Advance the conversation if..." e passivo demais — o LLM le como
-      // sugestao opcional. Agora deixamos explicito: chamar e MANDATORIO
-      // quando a condicao de transicao da etapa atual foi cumprida. Vide
-      // contracto detalhado no system prompt.
-      "Mandatory: call this tool whenever the CURRENT stage's transition condition is met (the stage's transition_hint defines it). DO NOT continue conversing in the current stage when the lead has fulfilled the conditions to advance — that would skip auto-actions of later stages and leave the funnel broken. The system prompt lists all stages of this agent — use the stage's exact `situation` (name) as target_stage_name; never UUIDs.",
-    ui_description: "Move a conversa para outra etapa do mesmo agente.",
-    icon_name: "ArrowRightCircle",
-    category: "transfer",
-    shipped_in_pr: "PR3",
-    input_schema: {
-      type: "object",
-      properties: {
-        target_stage_name: {
-          type: "string",
-          description:
-            "Nome (situation) EXATO da etapa de destino, conforme listado no catalogo de etapas do agente no system prompt.",
-        },
-        reason: { type: "string" },
-      },
-    },
-  },
+  // PR-FLOW-PIVOT (mai/2026): preset `transfer_to_stage` removido. No
+  // modelo flow, transições entre etapas são determinísticas via edges
+  // do canvas (não dependem de tool call do LLM). Bug #8 morre por
+  // construção: runtime do flow não pode "esquecer" de avançar.
   {
     handler: "transfer_to_agent",
     name: "transfer_to_agent",

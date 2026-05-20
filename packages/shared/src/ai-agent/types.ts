@@ -21,7 +21,8 @@ import type { HumanizationConfig } from "./humanization";
 
 export const NATIVE_HANDLERS = [
   "transfer_to_user",
-  "transfer_to_stage",
+  // PR-FLOW-PIVOT (mai/2026): "transfer_to_stage" removido. No modelo
+  // flow não há stages — edges nomeadas do canvas substituem.
   "transfer_to_agent",
   "add_tag",
   "assign_source",
@@ -136,67 +137,17 @@ export interface AgentConfig {
   // secundarios baseado em agent_entry_conditions. Default false na
   // migration 044.
   is_primary?: boolean;
-  // PR-AGENT-INTEGRATION-4 (mai/2026): modelo de execucao.
-  //   "stages" (legado): cada agent_stage e sub-prompt que troca o
-  //     contexto do LLM por turno.
-  //   "actions" (novo): system_prompt fixo. Cada agent_stage tem
-  //     action_type que diz qual acao tomar (qualificar/enviar/etc).
-  // Default "stages" na migration 046. Wizard novo nasce com "actions".
-  behavior_mode?: "stages" | "actions";
+  // PR-FLOW-PIVOT (mai/2026): único valor aceito é 'flow' (canvas
+  // visual via @xyflow/react). Substitui o modelo legado de
+  // stages/actions. Coluna mantida pra futuro multi-modo.
+  behavior_mode?: "flow";
   status: AgentStatus;
   created_at: string;
   updated_at: string;
 }
 
 // ============================================================================
-// Stage (agent_stages row) — conversation state machine node
-// ============================================================================
-
-export interface AgentStage {
-  id: string;
-  config_id: string;
-  organization_id: string;
-  slug: string;                   // url-friendly id, unique per config
-  order_index: number;
-  situation: string;              // human label, e.g. "Boas-vindas"
-  instruction: string;            // prompt fragment appended to system on this stage
-  transition_hint: string | null; // natural-language hint to LLM about when to move on
-  rag_enabled: boolean;           // if true, retrieve FAQ/docs before LLM call
-  // PR6 RAG: per-stage retrieval knob. Migration 022 sets NOT NULL DEFAULT 3.
-  // Optional at the TS level during rollout; runtime guards with
-  // `clampRagTopK(stage.rag_top_k)` from rag.ts.
-  rag_top_k?: number;
-  // PR-AGENT-INTEGRATION-4 (mai/2026): tipo de acao quando o agente
-  // pai esta em behavior_mode='actions'. Ignorado em mode='stages'.
-  // Validacao cruzada feita na aplicacao.
-  action_type?: AgentActionType | null;
-  // PR-AI-AGENT-STAGE-ACTION-CONFIG (mai/2026): lista de acoes que
-  // disparam AUTOMATICAMENTE ao entrar nesta etapa. Migration 049
-  // adiciona com default '{}' (= sem acoes — comportamento atual).
-  // Runtime SEMPRE normaliza via normalizeStageActionConfig antes de
-  // usar (ver stage-actions.ts).
-  action_config?: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// PR-AGENT-INTEGRATION-4: tipos de acao tipada. Cada uma mapeia pra um
-// comportamento que o LLM ja sabe executar via tools nativas + injecao
-// no prompt — nao precisa de prompt customizado.
-export const AGENT_ACTION_TYPES = [
-  "qualify",
-  "send_material",
-  "schedule",
-  "add_tag",
-  "move_pipeline",
-  "transfer",
-  "free_message",
-] as const;
-
-export type AgentActionType = (typeof AGENT_ACTION_TYPES)[number];
-
-// ============================================================================
-// Tool (agent_tools row) + stage-tool junction (agent_stage_tools row)
+// Tool (agent_tools row) — junction agent_stage_tools removida no PR-FLOW-PIVOT
 // ============================================================================
 
 export interface AgentTool {
@@ -215,13 +166,6 @@ export interface AgentTool {
   updated_at: string;
 }
 
-export interface AgentStageTool {
-  stage_id: string;
-  tool_id: string;
-  organization_id: string;
-  is_enabled: boolean;
-}
-
 // ============================================================================
 // Conversation state (agent_conversations row)
 // One row per CRM conversation that has been handled by the agent at least once.
@@ -235,7 +179,10 @@ export interface AgentConversation {
   crm_conversation_id: string;   // references public.conversations(id)
   lead_id: string;                // references public.leads(id)
   config_id: string;
-  current_stage_id: string | null;
+  /** PR-FLOW-PIVOT (mai/2026): ID do node ativo no canvas (string client-side
+   * do React Flow). Substitui current_stage_id UUID. NULL antes da conversa
+   * entrar no flow. */
+  current_node_id: string | null;
   history_summary: string | null; // rolling summary, compacted periodically
   // PR5.7: counters since last summary write. Reset to 0 when a fresh
   // summary is persisted. Optional during rollout; migration 020 adds the
@@ -246,16 +193,12 @@ export interface AgentConversation {
   variables: Record<string, unknown>; // key/value extracted facts (nome, email, etc)
   tokens_used_total: number;      // cumulative, for org-level cost views
   last_interaction_at: string | null;
-  // PR-AI-AGENT-STAGE-ACTION-CONFIG (mai/2026): stage_ids onde as
-  // auto_actions ja foram disparadas. Garante idempotencia se a
-  // conversa volta a entrar na mesma etapa (raro via transfer_to_stage).
-  // Migration 049 adiciona com default '[]'. Runtime normaliza via
-  // normalizeActionsExecuted antes de usar.
+  /** PR-FLOW-PIVOT: node_ids onde auto-actions já dispararam. Idempotência
+   * por node. Substitui shape antigo (stage_ids). */
   actions_executed?: string[];
-  // PR3 (mai/2026): per-action retry tracking. Shape detalhado em
-  // `ActionsExecutedDetail` (vide ai-agent/stage-actions.ts). Migration
-  // 053 adiciona com default '{}'. Runtime normaliza via
-  // normalizeActionsExecutedDetail antes de usar.
+  /** PR3 (mai/2026): per-action retry tracking. Keys agora são
+   * "on_enter:<node_id>" ou "on_tool_success:<node_id>:<tool>". Shape
+   * detalhado vive no flow-executor runtime. */
   actions_executed_detail?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -321,14 +264,16 @@ export interface AgentStep {
 
 export interface TesterRequest {
   config_id: string;
-  stage_id?: string;                    // optional; defaults to conversation's current or first stage
+  /** PR-FLOW-PIVOT: node ID inicial (entry point) opcional. Default = node
+   * de tipo 'entry' do flow. */
+  node_id?: string;
   message: string;
   conversation_state?: TesterConversationStateInput;
   dry_run: boolean;                     // true → tool side-effects simulated, not executed
 }
 
 export interface TesterConversationStateInput {
-  current_stage_id: string | null;
+  current_node_id: string | null;
   history_summary: string | null;
   variables: Record<string, unknown>;
 }
@@ -340,7 +285,8 @@ export interface TesterResponse {
   steps: TesterStepSummary[];
   tokens_used: number;
   cost_usd_cents: number;
-  next_stage_id: string | null;         // stage after this run, if transitioned
+  /** PR-FLOW-PIVOT: ID do próximo node a executar (saiu via edge). */
+  next_node_id: string | null;
   error?: string;
 }
 
@@ -407,7 +353,8 @@ export interface TesterLiveResponse {
    * skipped esta setado, o agente nao processou (ex: pausado). */
   skipped?: TesterSkipReason;
   steps: TesterStepSummary[];
-  next_stage_id: string | null;
+  /** PR-FLOW-PIVOT: node onde o flow parou após este run. */
+  next_node_id: string | null;
   tokens_used: number;
   cost_usd_cents: number;
   /** Snapshot do humanization_config aplicado (pra UI exibir
@@ -486,41 +433,19 @@ export interface CreateAgentInput {
   // shallow com o config existente.
   humanization_config?: Partial<HumanizationConfig>;
   // PR onboarding: opcional. Quando informado e nao-blank, server cria
-  // stages pre-definidas (ver agent-templates.ts) junto com o config.
-  // O system_prompt continua vindo do client (cliente preenche com o
-  // prompt do template no form). Template apenas materializa stages.
+  // flow pre-definido (ver agent-templates.ts) junto com o config.
+  // O system_prompt continua vindo do client. Template apenas
+  // materializa nodes/edges no agent_flows.
   template_slug?: import("./agent-templates").AgentTemplateSlug;
-  // PR-AGENT-INTEGRATION-4: modelo de execucao. Default 'stages' pra
-  // retrocompat. Wizard novo passa 'actions'.
-  behavior_mode?: "stages" | "actions";
+  // PR-FLOW-PIVOT: único valor aceito é 'flow'. Default no server.
+  behavior_mode?: "flow";
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
   status?: AgentStatus;
 }
 
-export interface CreateStageInput {
-  situation: string;
-  instruction: string;
-  transition_hint?: string;
-  rag_enabled?: boolean;
-  // PR6: optional. Runtime clamps via clampRagTopK (1..10, default 3).
-  rag_top_k?: number;
-  order_index?: number;
-  slug?: string;
-  // PR-AGENT-INTEGRATION-4: tipo de acao. So usado quando o agente pai
-  // esta em behavior_mode='actions'. Server valida cruzado.
-  action_type?: AgentActionType | null;
-}
-
-export interface UpdateStageInput extends Partial<CreateStageInput> {}
-
-export interface ReorderStagesInput {
-  config_id: string;
-  stage_ids: string[]; // in desired order
-}
-
-// --- PR3 additions: tool CRUD + stage-tool allowlist management ---
+// --- PR3 additions: tool CRUD ---
 
 export interface CreateToolInput {
   config_id: string;
@@ -572,12 +497,6 @@ export interface UpdateCustomWebhookToolInput {
   webhook_url?: string;
   webhook_secret?: string;        // undefined = keep, "" = clear (runtime rejects)
   is_enabled?: boolean;
-}
-
-export interface SetStageToolInput {
-  stage_id: string;
-  tool_id: string;
-  is_enabled: boolean;
 }
 
 // PR5: org-level webhook allowlist management.

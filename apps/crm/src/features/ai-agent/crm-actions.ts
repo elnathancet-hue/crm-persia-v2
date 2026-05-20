@@ -6,19 +6,13 @@
 
 import type { AgentActions } from "@persia/ai-agent-ui";
 import { createAgent, deleteAgent, setPrimaryAgent, updateAgent } from "@/actions/ai-agent/configs";
-import {
-  createStage,
-  deleteStage,
-  reorderStages,
-  updateStage,
-} from "@/actions/ai-agent/stages";
+// PR-FLOW-PIVOT (mai/2026): stages + stage-action-config + setStageTool
+// removidos. Allowlist de tools migra pra agent_flows.enabled_tools.
 import {
   createCustomWebhookTool,
   createToolFromPreset,
   deleteTool,
-  listStageTools,
   setNativeToolEnabled,
-  setStageTool,
   updateTool,
 } from "@/actions/ai-agent/tools";
 import {
@@ -38,10 +32,6 @@ import {
   testAgentLive,
 } from "@/actions/ai-agent/tester";
 import { listRuns } from "@/actions/ai-agent/audit";
-import {
-  getStageActionCatalogs,
-  updateStageActionConfig,
-} from "@/actions/ai-agent/stage-action-config";
 import { deleteCostLimit, setCostLimit } from "@/actions/ai-agent/limits";
 import { getUsageStats } from "@/actions/ai-agent/usage";
 import {
@@ -86,16 +76,10 @@ export const crmAgentActions: AgentActions = {
   createEntryCondition,
   updateEntryCondition,
   deleteEntryCondition,
-  createStage,
-  updateStage,
-  deleteStage,
-  reorderStages,
   createToolFromPreset,
   createCustomWebhookTool,
   updateTool,
   deleteTool,
-  setStageTool,
-  listStageTools,
   setNativeToolEnabled,
   addAllowedDomain,
   removeAllowedDomain,
@@ -103,8 +87,6 @@ export const crmAgentActions: AgentActions = {
   testAgent,
   testAgentLive,
   resetTesterConversation,
-  getStageActionCatalogs,
-  updateStageActionConfig,
   listRuns,
   setCostLimit,
   deleteCostLimit,

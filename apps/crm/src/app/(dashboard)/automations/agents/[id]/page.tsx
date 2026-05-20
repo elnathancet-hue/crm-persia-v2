@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { getAgent } from "@/actions/ai-agent/configs";
-import { listStages } from "@/actions/ai-agent/stages";
 import { listToolsForAgent } from "@/actions/ai-agent/tools";
 import { listAllowedDomains } from "@/actions/ai-agent/webhook-allowlist";
 import { listKnowledgeSources } from "@/actions/ai-agent/knowledge";
@@ -13,17 +12,15 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
-// PR-AI-AGENT-TOKENS-OUT (mai/2026): listCostLimits removido do hydrate.
-// Cliente nao ve mais aba "Limites e Uso" — token/cost e responsabilidade
-// do CRM Persia (plano fixo). Backend continua respeitando limits via
-// guardrails se configurados por admin.
+// PR-FLOW-PIVOT (mai/2026): listStages removido — flow vive em agent_flows.
+// UI canvas (PR 3) carrega flow via novo loader. Por enquanto a aba Fluxo
+// aparece vazia.
 export default async function AgentDetailPage({ params }: PageProps) {
   const { id } = await params;
   const agent = await getAgent(id);
   if (!agent) notFound();
 
   const [
-    stages,
     tools,
     allowedDomains,
     knowledgeSources,
@@ -31,7 +28,6 @@ export default async function AgentDetailPage({ params }: PageProps) {
     scheduledJobs,
     followups,
   ] = await Promise.all([
-    listStages(id),
     listToolsForAgent(id),
     listAllowedDomains(),
     listKnowledgeSources(id),
@@ -43,7 +39,7 @@ export default async function AgentDetailPage({ params }: PageProps) {
   return (
     <AgentEditorClient
       initialAgent={agent}
-      initialStages={stages}
+      initialStages={[]}
       initialTools={tools}
       initialAllowedDomains={allowedDomains}
       initialKnowledgeSources={knowledgeSources}
