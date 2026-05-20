@@ -113,6 +113,12 @@ export interface AgentActions {
   /** Apaga state da conversa Tester (msgs, runs, agent_conversation).
    * Usado pelo botao Resetar no TesterSheet pra recomecar do zero. */
   resetTesterConversation?: () => Promise<{ ok: true }>;
+  /** PR-FLOW-PIVOT PR 16 (mai/2026): simula evento CRM no Tester
+   * (lead entrou em stage/segment) — roda flow do entry node com
+   * inbound vazio. Opcional — UI esconde botão se não injetado. */
+  simulateCrmEvent?: (
+    req: import("@persia/shared/ai-agent").TesterSimulateEventRequest,
+  ) => Promise<import("@persia/shared/ai-agent").TesterLiveResponse>;
 
   // PR-FLOW-PIVOT (mai/2026): getStageActionCatalogs + updateStageActionConfig
   // removidos. Catálogos viram parte do FlowEditor (PR 3) que vai injetar

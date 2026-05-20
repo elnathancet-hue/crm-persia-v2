@@ -11,8 +11,11 @@ import {
   PauseCircle,
   RefreshCcw,
   Send,
+  TrendingUp,
+  Users,
   Wand2,
   X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -26,6 +29,13 @@ import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
 import { Switch } from "@persia/ui/switch";
 import {
   Sheet,
@@ -36,6 +46,7 @@ import {
   SheetTitle,
 } from "@persia/ui/sheet";
 import { useAgentActions } from "../context";
+import { EMPTY_FLOW_CATALOGS, type FlowCatalogs } from "./flow/catalog-types";
 
 // PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): Tester com 2 modos.
 //   Modo "Conversa fiel" (default ON quando testAgentLive existe):
@@ -86,13 +97,34 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
   const actions = useAgentActions();
   const hasLive = typeof actions.testAgentLive === "function";
   const hasReset = typeof actions.resetTesterConversation === "function";
+  const hasSimulate = typeof actions.simulateCrmEvent === "function";
 
   const [message, setMessage] = React.useState("");
   const [turns, setTurns] = React.useState<Turn[]>([]);
   const [isPending, startTransition] = React.useTransition();
   const [faithfulMode, setFaithfulMode] = React.useState(hasLive);
   const [expediteDebounce, setExpediteDebounce] = React.useState(true);
+  const [simulatePanelOpen, setSimulatePanelOpen] = React.useState(false);
+  const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Carrega catalogs (stages + segments) lazy quando painel simular abre.
+  // FlowCatalogs já existe via actions.getFlowCatalogs do PR 4.
+  React.useEffect(() => {
+    if (!simulatePanelOpen || !actions.getFlowCatalogs) return;
+    let cancelled = false;
+    actions
+      .getFlowCatalogs(configId)
+      .then((c) => {
+        if (!cancelled) setCatalogs(c);
+      })
+      .catch(() => {
+        // Falha em carregar catálogos não bloqueia — pickers ficam vazios.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [simulatePanelOpen, configId, actions]);
   // PR-TESTER-CANCEL (mai/2026): UX escape pra runs gpt-5* longos.
   // Server action nao aceita AbortSignal nativamente, entao usamos um
   // flag mutavel: cancel marca cancelledRef.current=true; a continuation
@@ -214,6 +246,44 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
     }
   };
 
+  // PR-FLOW-PIVOT PR 16 (mai/2026): simula evento CRM (stage/segment
+  // entry) — roda o flow do entry node com inbound vazio, igual ao
+  // runtime real faria.
+  const handleSimulate = (
+    triggerType: "pipeline_stage_entered" | "segment_entered",
+    targetId: string,
+    targetLabel: string,
+  ) => {
+    if (!hasSimulate) return;
+    cancelledRef.current = false;
+    setTurns((prev) => [
+      ...prev,
+      {
+        kind: "system",
+        icon: "info",
+        text:
+          triggerType === "pipeline_stage_entered"
+            ? `🎯 Simulando: lead entrou na etapa "${targetLabel}"`
+            : `🎯 Simulando: lead entrou na segmentação "${targetLabel}"`,
+      },
+    ]);
+    setSimulatePanelOpen(false);
+    startTransition(async () => {
+      try {
+        const res = await actions.simulateCrmEvent!({
+          config_id: configId,
+          trigger_type: triggerType,
+          target_id: targetId,
+        });
+        if (cancelledRef.current) return;
+        appendFaithfulTurns(setTurns, res);
+      } catch (err) {
+        if (cancelledRef.current) return;
+        toast.error(err instanceof Error ? err.message : "Falha ao simular");
+      }
+    });
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-xl flex flex-col">
@@ -264,6 +334,17 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
                 de flushar. Util pra reproduzir bug de timing.
               </p>
             ) : null}
+
+            {/* PR 16 (mai/2026): painel pra simular eventos CRM. */}
+            {hasSimulate && (
+              <SimulateEventPanel
+                open={simulatePanelOpen}
+                onToggle={() => setSimulatePanelOpen((v) => !v)}
+                catalogs={catalogs}
+                onSimulate={handleSimulate}
+                disabled={isPending}
+              />
+            )}
           </div>
         </SheetHeader>
 
@@ -618,3 +699,143 @@ function formatDelay(ms: number): string {
 
 // PR-FLOW-PIVOT (mai/2026): findStageDescriptor removido — labels de
 // node virão do FlowConfig carregado pela aba Fluxo (PR 3).
+
+// ============================================================================
+// PR-FLOW-PIVOT PR 16 (mai/2026): SimulateEventPanel
+// ============================================================================
+
+function SimulateEventPanel({
+  open,
+  onToggle,
+  catalogs,
+  onSimulate,
+  disabled,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  catalogs: FlowCatalogs;
+  onSimulate: (
+    triggerType: "pipeline_stage_entered" | "segment_entered",
+    targetId: string,
+    targetLabel: string,
+  ) => void;
+  disabled: boolean;
+}) {
+  const [triggerType, setTriggerType] = React.useState<
+    "pipeline_stage_entered" | "segment_entered"
+  >("pipeline_stage_entered");
+  const [targetId, setTargetId] = React.useState<string>("");
+
+  // Reset targetId quando troca o tipo (lista de candidatos muda).
+  React.useEffect(() => {
+    setTargetId("");
+  }, [triggerType]);
+
+  const candidates =
+    triggerType === "pipeline_stage_entered"
+      ? catalogs.pipeline_stages.map((s) => ({ id: s.id, label: s.name }))
+      : catalogs.segments.map((s) => ({ id: s.id, label: s.name }));
+
+  const selectedLabel =
+    candidates.find((c) => c.id === targetId)?.label ?? "";
+
+  return (
+    <div className="rounded-lg border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-xs font-medium hover:bg-muted/40 disabled:opacity-50"
+      >
+        <span className="flex items-center gap-1.5">
+          <Zap className="size-3.5 text-primary" />
+          Simular evento CRM
+          <span className="text-muted-foreground font-normal">
+            (entry triggers não-conversacionais)
+          </span>
+        </span>
+        <span className="text-muted-foreground">{open ? "−" : "+"}</span>
+      </button>
+
+      {open && (
+        <div className="space-y-2 border-t px-3 py-3">
+          <div className="space-y-1.5">
+            <Label className="text-[11px]">Tipo de evento</Label>
+            <Select
+              value={triggerType}
+              onValueChange={(v) =>
+                v && setTriggerType(v as typeof triggerType)
+              }
+              disabled={disabled}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pipeline_stage_entered">
+                  <span className="flex items-center gap-1.5">
+                    <TrendingUp className="size-3.5" />
+                    Lead entrou em etapa do funil
+                  </span>
+                </SelectItem>
+                <SelectItem value="segment_entered">
+                  <span className="flex items-center gap-1.5">
+                    <Users className="size-3.5" />
+                    Lead entrou em segmentação
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px]">
+              {triggerType === "pipeline_stage_entered"
+                ? "Etapa de destino"
+                : "Segmentação"}
+            </Label>
+            <Select
+              value={targetId}
+              onValueChange={(v) => v && setTargetId(v)}
+              disabled={disabled || candidates.length === 0}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue
+                  placeholder={
+                    candidates.length === 0
+                      ? "Nenhuma opção disponível"
+                      : "Selecione um alvo"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            className="w-full"
+            disabled={disabled || !targetId}
+            onClick={() => onSimulate(triggerType, targetId, selectedLabel)}
+          >
+            <Zap className="size-3.5" />
+            Disparar evento
+          </Button>
+
+          <p className="text-[10px] text-muted-foreground">
+            O alvo selecionado precisa casar com o que está configurado na
+            entrada do fluxo — senão o Tester avisa que em produção não
+            dispararia.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
