@@ -392,6 +392,80 @@ describe("flow-runner", () => {
     );
   });
 
+  it("AI node com inbound vazio skipa LLM e segue default (PR 11, mai/2026)", async () => {
+    // Quando flow é disparado por evento CRM (ex: stage_entered), não
+    // há msg do lead. AI node deve pular LLM call gracefully em vez de
+    // mandar pro OpenAI com user content="".
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: {
+              label: "Início",
+              trigger: "pipeline_stage_entered",
+              config: { stage_id: "stage-x" },
+            },
+          },
+          {
+            id: "ai-1",
+            type: "ai_agent",
+            position: { x: 200, y: 0 },
+            data: {
+              label: "IA",
+              system_prompt: "Cumprimente o lead",
+              instructions: [],
+            },
+          },
+          {
+            id: "next-action",
+            type: "action",
+            position: { x: 400, y: 0 },
+            data: {
+              label: "Stop",
+              action_type: "stop_agent",
+              config: {},
+            },
+          },
+        ],
+        edges: [
+          {
+            id: "e1",
+            source: "entry-1",
+            target: "ai-1",
+            sourceHandle: "default",
+          },
+          {
+            id: "e2",
+            source: "ai-1",
+            target: "next-action",
+            sourceHandle: "default",
+          },
+        ],
+      }),
+    );
+    const ctx = makeCtx(flow);
+    // Synthetic event-driven: inbound vazio (não tem msg do lead).
+    ctx.inboundMessage = { text: "", received_at: new Date().toISOString() };
+    const result = await runFlow(dbStub, ctx, null);
+
+    expect(result.fatal_error).toBeUndefined();
+    // Esperado: entry -> ai (skipped) -> next-action (stop_agent)
+    expect(result.ending_node_id).toBe("next-action");
+
+    const events = ctx.provider.getEvents();
+    const guardrail = events.find(
+      (e) =>
+        e.kind === "guardrail" &&
+        (e.payload as { reason?: string }).reason === "ai_node_skipped_no_inbound",
+    );
+    expect(guardrail).toBeDefined();
+    // LLM call não foi emitido (não bateu na OpenAI).
+    expect(events.some((e) => e.kind === "llm_call")).toBe(false);
+  });
+
   describe("shouldTriggerFlowFromInbound (PR 10, mai/2026)", () => {
     function makeEntry(
       trigger: FlowEntryNode["data"]["trigger"],

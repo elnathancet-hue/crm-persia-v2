@@ -97,7 +97,7 @@ const ENTRY_ITEMS: FlowSidebarItem[] = [
     category: "entrada",
     label: "Entrou em etapa do funil",
     description:
-      "Dispara quando o lead/deal vai pra uma etapa específica do Kanban. (Em breve — disponível visualmente, runtime na próxima atualização.)",
+      "Dispara quando o lead/deal entra numa etapa específica do Kanban — seja por drag manual ou por outro agente. Use ações proativas (Enviar mensagem WhatsApp) já que não há msg do lead pra IA reagir.",
     icon: TrendingUp,
     node_type: "entry",
     default_data: {

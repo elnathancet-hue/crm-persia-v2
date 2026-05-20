@@ -5,9 +5,14 @@
 // `normalizeFlowConfig` do shared, que descarta nodes/edges inválidos e
 // preenche defaults). Single-row-per-config (UNIQUE em agent_config_id),
 // então a função sempre retorna `null` ou exatamente 1 flow.
+//
+// PR-FLOW-PIVOT PR 11 (mai/2026): adiciona `loadFlowsByEntryTrigger`
+// pra runtime de eventos CRM (stage transition, segment entry) descobrir
+// quais flows escutam aquele tipo de gatilho. Usado por
+// triggerAgentFlowsForStageEntry pra disparar flows proativos.
 
-import type { FlowConfig } from "@persia/shared/ai-agent";
-import { normalizeFlowConfig } from "@persia/shared/ai-agent";
+import type { FlowConfig, FlowEntryTrigger } from "@persia/shared/ai-agent";
+import { findEntryNode, normalizeFlowConfig } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
 
 export interface LoadedFlow {
@@ -84,4 +89,78 @@ export async function loadFlowByConfigId(
       enabled_tools: row.enabled_tools,
     }),
   };
+}
+
+/**
+ * PR-FLOW-PIVOT PR 11 (mai/2026): carrega TODOS os flows da org cujo
+ * entry node tem `trigger === triggerType`. Usado por hooks de CRM
+ * (stage transition, segment entry) pra descobrir quais agents devem
+ * reagir ao evento.
+ *
+ * Performance: query única em agent_flows JOIN agent_configs (filtra
+ * `status='active'`). V1 carrega o JSONB inteiro de cada flow e filtra
+ * em JS após normalizeFlowConfig — orgs típicas têm ≤10 agents, custo
+ * é desprezível. V2 pode indexar `entry_trigger` num column gerado se
+ * necessário.
+ *
+ * Defensive: silencia falhas de table-missing (igual loadFlowByConfigId)
+ * pra evitar derrubar caminho legacy quando migration 054 não rodou.
+ */
+export async function loadFlowsByEntryTrigger(
+  db: AgentDb,
+  orgId: string,
+  triggerType: FlowEntryTrigger,
+): Promise<LoadedFlow[]> {
+  const { data, error } = await db
+    .from("agent_flows")
+    .select(
+      "id, agent_config_id, organization_id, nodes, edges, viewport, enabled_tools, version, agent_configs!inner(status)",
+    )
+    .eq("organization_id", orgId)
+    .eq("agent_configs.status", "active");
+
+  if (error) {
+    const msg = error.message ?? "";
+    if (
+      /relation .*agent_flows.* does not exist/i.test(msg) ||
+      /could not find the table/i.test(msg) ||
+      msg.includes("PGRST205")
+    ) {
+      return [];
+    }
+    throw new Error(`Falha ao carregar flows por trigger: ${msg}`);
+  }
+  if (!data) return [];
+
+  const rows = data as Array<{
+    id: string;
+    agent_config_id: string;
+    organization_id: string;
+    nodes: unknown;
+    edges: unknown;
+    viewport: unknown;
+    enabled_tools: unknown;
+    version: number;
+  }>;
+
+  const out: LoadedFlow[] = [];
+  for (const row of rows) {
+    const config = normalizeFlowConfig({
+      nodes: row.nodes,
+      edges: row.edges,
+      viewport: row.viewport,
+      enabled_tools: row.enabled_tools,
+    });
+    const entry = findEntryNode(config);
+    if (!entry) continue;
+    if (entry.data.trigger !== triggerType) continue;
+    out.push({
+      id: row.id,
+      agent_config_id: row.agent_config_id,
+      organization_id: row.organization_id,
+      version: row.version,
+      config,
+    });
+  }
+  return out;
 }

@@ -1,8 +1,8 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { moveLeadToStage as moveLeadToStageShared } from "@persia/shared/crm";
 import { onStageChanged } from "@/lib/flows/triggers";
+import { triggerAgentFlowsForStageEntry } from "../flow/triggers";
 import {
   failureResult,
   getHandlerDb,
@@ -194,9 +194,25 @@ export const movePipelineStageHandler: NativeHandler = async (context, input) =>
     );
   }
 
-  // 6. Side effects: onStageChanged + sync UAZAPI (fire-and-forget).
+  // 6. Side effects: onStageChanged (legacy flows) + sync UAZAPI +
+  // triggerAgentFlowsForStageEntry (PR 11 — agent_flows v2). Todos
+  // fire-and-forget pra não bloquear o resultado do tool call.
   void onStageChanged(context.organization_id, lead.id, stage.id).catch((err) => {
     console.error("[move-pipeline-stage] onStageChanged failed:", err);
+  });
+
+  // PR-FLOW-PIVOT PR 11 (mai/2026): hook do agent_flows v2 — dispara
+  // flows com entry pipeline_stage_entered casando com stage.id.
+  void triggerAgentFlowsForStageEntry(
+    db,
+    context.organization_id,
+    lead.id,
+    stage.id,
+  ).catch((err) => {
+    console.error(
+      "[move-pipeline-stage] triggerAgentFlowsForStageEntry failed:",
+      err,
+    );
   });
 
   // syncLeadToUazapi assincrono (modulo dinamico pra nao puxar pra bundle)
