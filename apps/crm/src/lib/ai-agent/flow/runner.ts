@@ -29,6 +29,7 @@ import {
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
 import { nativeHandlers } from "../tools/registry";
+import { evaluateCondition } from "./conditions";
 import type {
   FlowRunContext,
   FlowRunOptions,
@@ -144,9 +145,7 @@ async function executeNode(
     case "action":
       return executeActionNode(db, ctx, node, result);
     case "condition":
-      // V1 não suporta condicionais. PR 5 do plano implementa.
-      result.fatal_error = "condition_node_not_implemented_in_v1";
-      return null;
+      return executeConditionNode(db, ctx, node, result);
   }
 }
 
@@ -617,8 +616,46 @@ function followDefaultEdge(
   return null;
 }
 
-// Condition node placeholder — silencia "unused" warning enquanto V1 não
-// implementa. PR 5 do plano substitui.
-function _executeConditionNode(_node: FlowConditionNode): string | null {
+// ============================================================================
+// Condition node — avalia regra contra o lead e segue edge `yes` ou `no`
+// ============================================================================
+//
+// PR-FLOW-PIVOT PR 5 (mai/2026): runtime das 3 condicionais (has_tag,
+// lead_custom_field_equals, in_segment). Avaliação delegada pra
+// `flow/conditions.ts` que conhece schema do CRM. Resultado boolean
+// escolhe o handle:
+//   - `true`  → edge `yes`
+//   - `false` → edge `no`
+//
+// Se a edge alvo não existe (cliente conectou só um lado), flow
+// termina nesse node — semântica "ramo morto, encerra".
+
+async function executeConditionNode(
+  db: AgentDb,
+  ctx: FlowRunContext,
+  node: FlowConditionNode,
+  _result: FlowRunResult,
+): Promise<string | null> {
+  const passed = await evaluateCondition(db, ctx.organizationId, ctx.leadId, node);
+  const handle = passed ? "yes" : "no";
+
+  ctx.provider.emit({
+    kind: "guardrail",
+    payload: {
+      reason: "condition_evaluated",
+      node_id: node.id,
+      condition_type: node.data.condition_type,
+      result: passed ? "yes" : "no",
+    },
+  });
+
+  const edges = findOutgoingEdges(ctx.flowConfig, node.id, handle);
+  if (edges[0]) {
+    ctx.provider.emit({
+      kind: "edge_traversed",
+      payload: { from: node.id, to: edges[0].target, handle },
+    });
+    return edges[0].target;
+  }
   return null;
 }
