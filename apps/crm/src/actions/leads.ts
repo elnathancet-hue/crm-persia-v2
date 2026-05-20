@@ -36,9 +36,20 @@ import { phoneBROptional, emailOptional } from "@persia/shared/validation";
 // modulo de sync no bundle das paginas que so leem leads.
 function makeOnLeadChanged(orgId: string) {
   return (leadId: string) => {
+    // UAZAPI sync (legacy).
     import("@/lib/whatsapp/sync")
       .then(({ syncLeadToUazapi }) => syncLeadToUazapi(orgId, leadId))
       .catch((err) => console.error("[lead-action] sync error:", err));
+    // PR-FLOW-PIVOT PR 12 (mai/2026): avalia segments + dispara
+    // agent_flows com entry segment_entered. Import dinâmico pra não
+    // inflar bundle do server action.
+    import("@/lib/segments/lead-hook")
+      .then(({ dispatchSegmentMembershipHook }) =>
+        dispatchSegmentMembershipHook(orgId, leadId),
+      )
+      .catch((err) =>
+        console.error("[lead-action] segment evaluator error:", err),
+      );
   };
 }
 

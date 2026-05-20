@@ -83,7 +83,7 @@ const ENTRY_ITEMS: FlowSidebarItem[] = [
     category: "entrada",
     label: "Entrou em segmentação",
     description:
-      "Dispara quando o lead começa a fazer parte de uma segmentação salva no CRM. (Em breve — disponível visualmente, runtime na próxima atualização.)",
+      "Dispara quando o lead começa a casar com as regras de uma segmentação salva (após criar lead, mudar tags ou campos). Use ações proativas (Enviar mensagem WhatsApp) já que não há msg do lead pra IA reagir.",
     icon: Users,
     node_type: "entry",
     default_data: {
