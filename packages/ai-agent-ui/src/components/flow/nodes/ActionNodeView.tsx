@@ -124,9 +124,15 @@ interface Props {
   data: FlowActionNode["data"];
   selected?: boolean;
   onDelete?: () => void;
+  onDuplicate?: () => void;
 }
 
-export function ActionNodeView({ data, selected, onDelete }: Props) {
+export function ActionNodeView({
+  data,
+  selected,
+  onDelete,
+  onDuplicate,
+}: Props) {
   const Icon = ACTION_ICONS[data.action_type] ?? Power;
   const preview = configPreview(data.action_type, data.config);
   const incompleteReason = incompleteReasonFor(data.action_type, data.config);
@@ -147,6 +153,7 @@ export function ActionNodeView({ data, selected, onDelete }: Props) {
         incomplete={incompleteReason !== null}
         incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
+        onDuplicate={onDuplicate}
       >
         <div className="line-clamp-2">{preview}</div>
       </NodeShell>
