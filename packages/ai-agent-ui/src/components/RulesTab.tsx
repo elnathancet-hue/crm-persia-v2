@@ -345,10 +345,12 @@ export function RulesTab({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="prompt">Prompt base</Label>
+            <Label htmlFor="prompt">Prompt base (avançado)</Label>
             <p className="text-xs text-muted-foreground flex items-start gap-1.5">
               <Info className="size-3.5 shrink-0 mt-0.5" />
-              Este texto é o contexto geral. Cada etapa adiciona instruções específicas por cima.
+              Contexto geral que a IA segue em todas as conversas. Cada
+              tarefa do fluxo pode adicionar instruções específicas por cima.
+              Edite só se souber o que está fazendo.
             </p>
             <Textarea
               id="prompt"

@@ -19,6 +19,16 @@ import * as React from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { FlowNode } from "@persia/shared/ai-agent";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -63,6 +73,9 @@ export function NodeConfigSheet({
   // Local form state. Inicializa do node.data quando abre + reseta
   // sempre que troca de node.
   const [draft, setDraft] = React.useState<Record<string, unknown>>({});
+  // PR 17 UX (mai/2026): substitui confirm() nativo por AlertDialog
+  // do design system. Mais consistente com o resto da UI.
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (node) setDraft({ ...(node.data as Record<string, unknown>) });
@@ -74,6 +87,13 @@ export function NodeConfigSheet({
     onSave(node.id, draft);
     onOpenChange(false);
     toast.success("Configuração salva.");
+  };
+
+  const handleConfirmDelete = () => {
+    if (!onDelete) return;
+    onDelete(node.id);
+    setConfirmDeleteOpen(false);
+    onOpenChange(false);
   };
 
   return (
@@ -123,12 +143,7 @@ export function NodeConfigSheet({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => {
-                if (confirm("Remover este node do fluxo?")) {
-                  onDelete(node.id);
-                  onOpenChange(false);
-                }
-              }}
+              onClick={() => setConfirmDeleteOpen(true)}
               className="text-destructive hover:text-destructive"
             >
               <Trash2 className="size-3.5 mr-1" />
@@ -145,18 +160,43 @@ export function NodeConfigSheet({
           </div>
         </SheetFooter>
       </SheetContent>
+
+      {/* PR 17 UX (mai/2026): AlertDialog substitui confirm() nativo */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover esta tarefa do fluxo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A tarefa será apagada do canvas. Conexões com outras tarefas
+              também são removidas. Você pode adicionar novamente depois pela
+              lateral.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }
 
 function sheetTitle(node: FlowNode): string {
+  // PR 17 UX (mai/2026): linguagem natural sem jargão de runtime.
+  // "node de IA" → "atendimento com IA" / "ação automática" → "ação".
   switch (node.type) {
     case "entry":
-      return "ponto de entrada";
+      return "entrada do fluxo";
     case "ai_agent":
-      return "node de IA";
+      return "atendimento com IA";
     case "action":
-      return "ação automática";
+      return "ação";
     case "condition":
       return "verificação";
   }

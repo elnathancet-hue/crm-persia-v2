@@ -275,8 +275,11 @@ export function AgentCreationWizard({
 }
 
 function StepIndicator({ step }: { step: WizardStep }) {
+  // PR 17 UX (mai/2026): "Modelo" virou ambíguo (template VS LLM model).
+  // Step 1 agora é "Tipo de atendimento" — descreve melhor o que cliente
+  // está escolhendo (fluxo pré-montado pra cada caso de uso).
   const steps: Array<{ id: WizardStep; label: string }> = [
-    { id: 1, label: "Modelo" },
+    { id: 1, label: "Tipo de atendimento" },
     { id: 2, label: "Nome" },
     { id: 3, label: "IA" },
   ];
@@ -331,11 +334,12 @@ function Step1Template({
     <div className="space-y-3">
       <div>
         <h3 className="font-semibold tracking-tight">
-          Comece a partir de um modelo
+          Que tipo de atendimento o agente vai fazer?
         </h3>
         <p className="text-xs text-muted-foreground mt-1">
-          Escolha o cenário mais parecido com o seu. Cada modelo já vem com
-          etapas pré-configuradas pra acelerar o setup — você pode refinar tudo
+          Escolha o cenário mais parecido com o seu. Cada opção já vem com
+          um fluxo pré-montado pra acelerar o setup — você pode revisar e
+          refinar antes de ativar
           depois.
         </p>
       </div>
@@ -546,13 +550,13 @@ function Step3Model({
                 <span className="italic text-muted-foreground/60">vazio</span>
               )}
             </dd>
-            <dt className="text-muted-foreground">Modelo</dt>
+            <dt className="text-muted-foreground">Tipo de atendimento</dt>
             <dd className="font-medium text-foreground">{template.label}</dd>
-            <dt className="text-muted-foreground">Flow</dt>
+            <dt className="text-muted-foreground">Fluxo</dt>
             <dd className="font-medium text-foreground">
               {template.slug === "blank"
-                ? "Vazio (você criará no canvas)"
-                : "Pré-configurado"}
+                ? "Vazio — você monta no canvas"
+                : "Pré-montado — você revisa antes de ativar"}
             </dd>
             <dt className="text-muted-foreground">IA</dt>
             <dd className="font-medium text-foreground">

@@ -56,22 +56,10 @@ import { ConditionNodeView } from "./nodes/ConditionNodeView";
 // React Flow node bindings — mapeia type→component dos custom nodes
 // ============================================================================
 
-const nodeTypes: NodeTypes = {
-  // Componentes recebem `{data, selected, id, ...}`. Nossos views só
-  // consomem data + selected — wrapper inline injeta esses props com tipo.
-  entry: ({ data, selected }) => (
-    <EntryNodeView data={data as never} selected={selected} />
-  ),
-  ai_agent: ({ data, selected }) => (
-    <AIAgentNodeView data={data as never} selected={selected} />
-  ),
-  action: ({ data, selected }) => (
-    <ActionNodeView data={data as never} selected={selected} />
-  ),
-  condition: ({ data, selected }) => (
-    <ConditionNodeView data={data as never} selected={selected} />
-  ),
-};
+// PR 17 UX (mai/2026): nodeTypes movido pra dentro do componente
+// via useMemo([handleNodeDelete]) pra que o callback de delete
+// fique disponível dentro dos node views. Antes era const top-level
+// e sem acesso a state do parent.
 
 // ============================================================================
 // Conversões FlowConfig ↔ React Flow nodes/edges
@@ -175,7 +163,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         const raw = err instanceof Error ? err.message : String(err);
         console.error("[FlowCanvas] getFlow falhou:", err);
         const userMessage = raw.startsWith("An error occurred in the Server")
-          ? "Não consegui carregar o fluxo. Verifique se o banco está atualizado (migration 054)."
+          ? "Não consegui carregar o fluxo agora. Tente recarregar a página — se persistir, fale com o suporte."
           : raw;
         toast.error(userMessage);
       } finally {
@@ -267,13 +255,52 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // -- Sheet pediu remoção do node --
   const handleNodeDelete = React.useCallback(
     (nodeId: string) => {
+      // PR 17: descobre tipo pra impedir delete acidental do entry
+      // node (que é a porta única do flow — sem ele nada dispara).
+      const target = nodes.find((n) => n.id === nodeId);
+      if (target?.type === "entry") return;
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) =>
         eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
       );
       setDirty(true);
     },
-    [],
+    [nodes],
+  );
+
+  // PR 17 UX (mai/2026): nodeTypes memoizado com handleNodeDelete
+  // closure-capturado pra que cada node view possa receber onDelete.
+  // Entry node NÃO recebe onDelete (proteção dupla: aqui + dentro do
+  // handler). React Flow exige stable reference — useMemo evita
+  // re-render dos nodes.
+  const nodeTypes = React.useMemo<NodeTypes>(
+    () => ({
+      entry: ({ data, selected }) => (
+        <EntryNodeView data={data as never} selected={selected} />
+      ),
+      ai_agent: ({ data, selected, id }) => (
+        <AIAgentNodeView
+          data={data as never}
+          selected={selected}
+          onDelete={() => handleNodeDelete(id)}
+        />
+      ),
+      action: ({ data, selected, id }) => (
+        <ActionNodeView
+          data={data as never}
+          selected={selected}
+          onDelete={() => handleNodeDelete(id)}
+        />
+      ),
+      condition: ({ data, selected, id }) => (
+        <ConditionNodeView
+          data={data as never}
+          selected={selected}
+          onDelete={() => handleNodeDelete(id)}
+        />
+      ),
+    }),
+    [handleNodeDelete],
   );
 
   // Node atualmente selecionado pra renderizar no Sheet
@@ -297,18 +324,11 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     }
   }, []);
 
-  const onDrop = React.useCallback(
-    (e: React.DragEvent) => {
-      const taskKey = e.dataTransfer.getData(FLOW_DRAG_KEY);
-      if (!taskKey) return;
+  const instantiateNodeAt = React.useCallback(
+    (taskKey: string, screenPos: { x: number; y: number }) => {
       const item = findSidebarItem(taskKey);
       if (!item) return;
-      e.preventDefault();
-
-      const position = screenToFlowPosition({
-        x: e.clientX,
-        y: e.clientY,
-      });
+      const position = screenToFlowPosition(screenPos);
       const newNode: Node = {
         id: `node-${crypto.randomUUID()}`,
         type: item.node_type,
@@ -319,6 +339,39 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       setDirty(true);
     },
     [screenToFlowPosition],
+  );
+
+  const onDrop = React.useCallback(
+    (e: React.DragEvent) => {
+      const taskKey = e.dataTransfer.getData(FLOW_DRAG_KEY);
+      if (!taskKey) return;
+      e.preventDefault();
+      instantiateNodeAt(taskKey, { x: e.clientX, y: e.clientY });
+    },
+    [instantiateNodeAt],
+  );
+
+  // PR 17 UX (mai/2026): add por clique no botão + da sidebar. Em vez
+  // de exigir drag-and-drop (intimidador em desktop apertado e
+  // impossível em touch), aceita clique simples. Posição default
+  // = centro visível do canvas (offset randomizado em 80px pra
+  // múltiplos adds não empilharem).
+  const handleSidebarAdd = React.useCallback(
+    (taskKey: string) => {
+      // Centro aproximado da viewport do canvas — pega div container.
+      const container = document.querySelector<HTMLDivElement>(
+        '[data-persia-flow-container="true"]',
+      );
+      const rect = container?.getBoundingClientRect();
+      const screenPos = rect
+        ? {
+            x: rect.left + rect.width / 2 + (Math.random() - 0.5) * 80,
+            y: rect.top + rect.height / 2 + (Math.random() - 0.5) * 80,
+          }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+      instantiateNodeAt(taskKey, screenPos);
+    },
+    [instantiateNodeAt],
   );
 
   // -- Save (manual via botão + auto-save debounce) --
@@ -333,7 +386,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       const raw = err instanceof Error ? err.message : String(err);
       console.error("[FlowCanvas] saveFlow falhou:", err);
       const userMessage = raw.startsWith("An error occurred in the Server")
-        ? "Não consegui salvar o fluxo. Verifique se o banco está atualizado (migration 054)."
+        ? "Não consegui salvar o fluxo agora. Tente novamente — se persistir, fale com o suporte."
         : raw;
       toast.error(userMessage);
     } finally {
@@ -361,9 +414,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
 
   return (
     <div className="flex h-[calc(100vh-180px)] min-h-[600px] rounded-xl border border-border/60 overflow-hidden bg-background">
-      <FlowSidebar />
+      <FlowSidebar onAdd={handleSidebarAdd} />
       <div
         ref={containerRef}
+        data-persia-flow-container="true"
         className="flex-1 relative"
         onDragOver={onDragOver}
         onDrop={onDrop}

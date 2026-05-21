@@ -18,11 +18,18 @@ import { NodeShell } from "./node-shell";
 interface Props {
   data: FlowAIAgentNode["data"];
   selected?: boolean;
+  onDelete?: () => void;
 }
 
-export function AIAgentNodeView({ data, selected }: Props) {
+export function AIAgentNodeView({ data, selected, onDelete }: Props) {
   const promptPreview = (data.system_prompt ?? "").trim();
   const instructions = data.instructions ?? [];
+  // PR 17 UX (mai/2026): IA sem instruções de quando terminar é
+  // tecnicamente válida (segue handle default), mas geralmente é sinal
+  // de fluxo inacabado. Marcamos como incompleto pra cliente notar.
+  const incompleteReason = !promptPreview
+    ? "Falta o que a IA deve fazer aqui"
+    : null;
 
   // Layout dos handles à direita:
   //   - default (sempre presente, no centro)
@@ -42,9 +49,12 @@ export function AIAgentNodeView({ data, selected }: Props) {
       <NodeShell
         icon={BadgeCheck}
         label={data.label || "Conversar com IA"}
-        badge="IA"
+        badge="Atendimento com IA"
         variant="ai_agent"
         selected={selected}
+        incomplete={incompleteReason !== null}
+        incompleteReason={incompleteReason ?? undefined}
+        onDelete={onDelete}
       >
         {promptPreview ? (
           <div className="line-clamp-2">{promptPreview}</div>
@@ -56,16 +66,17 @@ export function AIAgentNodeView({ data, selected }: Props) {
         {instructions.length > 0 ? (
           <div className="mt-2 space-y-1 border-t border-border/40 pt-1.5">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Eventos de saída
+              Quando terminar
             </div>
-            {instructions.map((ins, idx) => (
+            {instructions.map((ins) => (
               <div
                 key={ins.id}
                 className="flex items-center gap-1.5 text-[10px] text-muted-foreground"
               >
                 <span className="size-1.5 rounded-full bg-primary/60 shrink-0" />
-                <span className="truncate font-mono">{ins.output_handle}</span>
-                {idx === 0 && instructions.length > 3 ? null : null}
+                <span className="truncate">
+                  {ins.description?.trim() || ins.output_handle}
+                </span>
               </div>
             ))}
           </div>
@@ -81,13 +92,16 @@ export function AIAgentNodeView({ data, selected }: Props) {
         className="!size-3 !bg-primary !border-2 !border-background"
       >
         <span className="absolute -right-12 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground">
-          padrão
+          continua
         </span>
       </Handle>
-      {/* Handles dinâmicos — 1 por instruction. ID == output_handle. */}
+      {/* Handles dinâmicos — 1 por instruction. ID == output_handle.
+          Label do handle mostra DESCRIÇÃO (legível) em vez de
+          output_handle (snake_case técnico). */}
       {instructions.map((ins, idx) => {
         const topPct =
           50 - (instructions.length * handleSpacing) / 2 + (idx + 1) * handleSpacing;
+        const labelText = ins.description?.trim() || ins.output_handle;
         return (
           <Handle
             key={ins.id}
@@ -97,8 +111,8 @@ export function AIAgentNodeView({ data, selected }: Props) {
             style={{ top: `${topPct}%` }}
             className="!size-3 !bg-success !border-2 !border-background"
           >
-            <span className="absolute -right-2 translate-x-full -translate-y-1/2 text-[9px] font-mono font-semibold text-success whitespace-nowrap">
-              {ins.output_handle}
+            <span className="absolute -right-2 translate-x-full -translate-y-1/2 text-[9px] font-semibold text-success whitespace-nowrap max-w-[140px] truncate">
+              {labelText.length > 24 ? `${labelText.slice(0, 22)}...` : labelText}
             </span>
           </Handle>
         );
