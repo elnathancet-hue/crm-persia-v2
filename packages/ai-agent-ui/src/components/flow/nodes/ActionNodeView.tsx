@@ -80,14 +80,56 @@ function configPreview(actionType: FlowActionType, config: Record<string, unknow
   }
 }
 
+// PR 17 UX (mai/2026): detecta se a ação está incompleta (sem
+// tag/template/agenda escolhida) pra borda âmbar visível + msg
+// curta "Falta X" no node.
+function incompleteReasonFor(
+  actionType: FlowActionType,
+  config: Record<string, unknown>,
+): string | null {
+  switch (actionType) {
+    case "add_tag":
+    case "remove_tag":
+      if (!(config.tag_name as string)?.trim()) return "Falta selecionar tag";
+      return null;
+    case "move_pipeline_stage":
+      if (!(config.stage_name as string)?.trim()) return "Falta etapa de destino";
+      return null;
+    case "trigger_notification":
+      if (!(config.template_name as string)?.trim()) return "Falta template";
+      return null;
+    case "send_media":
+      if (!(config.slug as string)?.trim()) return "Falta mídia";
+      return null;
+    case "transfer_to_user":
+      if (!(config.user as string)?.trim()) return "Falta atendente";
+      return null;
+    case "transfer_to_agent":
+      if (!(config.target_agent_name as string)?.trim())
+        return "Falta agente de destino";
+      return null;
+    case "set_lead_custom_field":
+      if (!(config.field_key as string)?.trim()) return "Falta campo";
+      return null;
+    case "send_whatsapp_message":
+      if (!(config.message as string)?.trim()) return "Falta mensagem";
+      return null;
+    // stop_agent / create_appointment / round_robin_user não exigem config inicial
+    default:
+      return null;
+  }
+}
+
 interface Props {
   data: FlowActionNode["data"];
   selected?: boolean;
+  onDelete?: () => void;
 }
 
-export function ActionNodeView({ data, selected }: Props) {
+export function ActionNodeView({ data, selected, onDelete }: Props) {
   const Icon = ACTION_ICONS[data.action_type] ?? Power;
   const preview = configPreview(data.action_type, data.config);
+  const incompleteReason = incompleteReasonFor(data.action_type, data.config);
   return (
     <>
       <Handle
@@ -99,9 +141,12 @@ export function ActionNodeView({ data, selected }: Props) {
       <NodeShell
         icon={Icon}
         label={data.label}
-        badge="Ação automática"
+        badge="Ação"
         variant="action"
         selected={selected}
+        incomplete={incompleteReason !== null}
+        incompleteReason={incompleteReason ?? undefined}
+        onDelete={onDelete}
       >
         <div className="line-clamp-2">{preview}</div>
       </NodeShell>

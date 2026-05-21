@@ -13,6 +13,7 @@ import { NodeShell } from "./node-shell";
 interface Props {
   data: FlowConditionNode["data"];
   selected?: boolean;
+  onDelete?: () => void;
 }
 
 function conditionPreview(
@@ -31,7 +32,31 @@ function conditionPreview(
   }
 }
 
-export function ConditionNodeView({ data, selected }: Props) {
+// PR 17 UX (mai/2026): detecta config incompleta na verificação.
+function conditionIncompleteReason(
+  type: FlowConditionNode["data"]["condition_type"],
+  config: Record<string, unknown>,
+): string | null {
+  switch (type) {
+    case "has_tag":
+      if (!(config.tag_name as string)?.trim()) return "Falta selecionar tag";
+      return null;
+    case "lead_custom_field_equals":
+      if (!(config.field_name as string)?.trim()) return "Falta o campo";
+      return null;
+    case "in_segment":
+      if (!(config.segment_id as string)?.trim()) return "Falta segmentação";
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function ConditionNodeView({ data, selected, onDelete }: Props) {
+  const incompleteReason = conditionIncompleteReason(
+    data.condition_type,
+    data.config,
+  );
   return (
     <>
       <Handle
@@ -46,6 +71,9 @@ export function ConditionNodeView({ data, selected }: Props) {
         badge="Verificação"
         variant="condition"
         selected={selected}
+        incomplete={incompleteReason !== null}
+        incompleteReason={incompleteReason ?? undefined}
+        onDelete={onDelete}
       >
         <div className="line-clamp-2">
           {conditionPreview(data.condition_type, data.config)}

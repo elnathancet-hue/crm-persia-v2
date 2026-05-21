@@ -2,7 +2,17 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Crown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Crown,
+  Loader2,
+  Plus,
+  PowerOff,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { AgentConfig } from "@persia/shared/ai-agent";
 import { getAgentTemplate } from "@persia/shared/ai-agent";
@@ -128,41 +138,47 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
     });
   };
 
+  // PR 17 UX (mai/2026): banner inteligente com 5 estados reais (em vez
+  // de só verde/vermelho baseado em nativeEnabled). Cliente vê de cara
+  // se o agente realmente está respondendo conversas.
+  const activeAgents = agents.filter((a) => a.status === "active");
+  const primaryActiveAgent = activeAgents.find((a) => a.is_primary);
+  const statusBanner = computeStatusBanner({
+    enabled,
+    agentsCount: agents.length,
+    activeCount: activeAgents.length,
+    hasPrimary: Boolean(primaryActiveAgent),
+  });
+
   return (
     <div className="space-y-4">
-      {!enabled ? (
-        <Card className="border-warning-ring bg-warning-soft/50">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertTriangle className="size-5 text-warning shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm">Agente nativo desativado</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Você pode configurar os agentes agora, mas eles só respondem mensagens quando o recurso é ativado pra organização.
-              </p>
-            </div>
+      <Card className={statusBanner.containerClass}>
+        <CardContent className="p-4 flex items-start gap-3">
+          <statusBanner.Icon className={`size-5 shrink-0 mt-0.5 ${statusBanner.iconClass}`} />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm">{statusBanner.title}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {statusBanner.description}
+            </p>
+          </div>
+          {statusBanner.showToggle ? (
             <Button
               size="sm"
-              variant="outline"
+              variant={enabled ? "ghost" : "outline"}
               onClick={handleToggleFlag}
               disabled={isPending}
             >
-              {isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Ativar"}
+              {isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : enabled ? (
+                "Desativar"
+              ) : (
+                "Ativar"
+              )}
             </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border-success-ring bg-success-soft/50">
-          <CardContent className="p-3 flex items-center gap-3">
-            <div className="size-2 rounded-full bg-success" aria-hidden />
-            <p className="text-sm flex-1">
-              Agente nativo ativo. Conversas novas seguem a configuração do agente com status <strong>Ativo</strong>.
-            </p>
-            <Button size="sm" variant="ghost" onClick={handleToggleFlag} disabled={isPending}>
-              {isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Desativar"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end">
         <Button onClick={() => setCreateOpen(true)}>
@@ -219,6 +235,91 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
   );
 }
 
+// PR 17 UX (mai/2026): banner inteligente. 5 estados em vez de só
+// verde/vermelho. Verde só quando REALMENTE pronto (enabled + agent
+// ativo + principal). Amarelo pra pendências. Cinza pra desativado
+// ou sem agentes.
+interface StatusBanner {
+  title: string;
+  description: string;
+  Icon: LucideIcon;
+  iconClass: string;
+  containerClass: string;
+  showToggle: boolean;
+}
+
+function computeStatusBanner(params: {
+  enabled: boolean;
+  agentsCount: number;
+  activeCount: number;
+  hasPrimary: boolean;
+}): StatusBanner {
+  const { enabled, agentsCount, activeCount, hasPrimary } = params;
+
+  // 1. Recurso desligado pela org
+  if (!enabled) {
+    return {
+      title: "Agente IA desativado",
+      description:
+        "Você pode configurar agentes agora, mas eles só respondem mensagens quando o recurso é ativado pra organização.",
+      Icon: PowerOff,
+      iconClass: "text-muted-foreground",
+      containerClass: "border-border bg-muted/30",
+      showToggle: true,
+    };
+  }
+
+  // 2. Ativo mas sem agentes
+  if (agentsCount === 0) {
+    return {
+      title: "Pronto pra criar seu primeiro agente",
+      description:
+        "Recurso ativo na organização. Falta criar um agente — ele só responde leads quando estiver ativo + marcado como principal.",
+      Icon: Sparkles,
+      iconClass: "text-muted-foreground",
+      containerClass: "border-border bg-card",
+      showToggle: true,
+    };
+  }
+
+  // 3. Tem agente(s) mas nenhum ativo
+  if (activeCount === 0) {
+    return {
+      title: "Nenhum agente ativo",
+      description:
+        "Você tem agentes em rascunho. Ative um deles + defina como principal pra começar a responder conversas.",
+      Icon: AlertTriangle,
+      iconClass: "text-warning",
+      containerClass: "border-warning-ring bg-warning-soft/50",
+      showToggle: true,
+    };
+  }
+
+  // 4. Tem ativo mas nenhum principal
+  if (!hasPrimary) {
+    return {
+      title: "Defina o agente principal",
+      description:
+        "Você tem agente ativo, mas ainda não escolheu o principal — sem isso ninguém atende novas conversas. Clique em \"Definir como principal\" no card abaixo.",
+      Icon: AlertTriangle,
+      iconClass: "text-warning",
+      containerClass: "border-warning-ring bg-warning-soft/50",
+      showToggle: true,
+    };
+  }
+
+  // 5. Tudo pronto
+  return {
+    title: "Agente respondendo conversas",
+    description:
+      "Agente principal ativo. Novas conversas são atendidas automaticamente. Pause ou troque o principal pelos cards abaixo.",
+    Icon: CheckCircle2,
+    iconClass: "text-success",
+    containerClass: "border-success-ring bg-success-soft/50",
+    showToggle: true,
+  };
+}
+
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <Card className="border-dashed">
@@ -227,14 +328,18 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
           <Sparkles className="size-7 text-white" />
         </div>
         <div className="space-y-1 max-w-md">
-          <h2 className="font-semibold tracking-tight">Crie seu primeiro agente</h2>
+          <h2 className="font-semibold tracking-tight">
+            Crie um agente para responder o WhatsApp
+          </h2>
           <p className="text-sm text-muted-foreground">
-            Um agente responde conversas do WhatsApp automaticamente, seguindo o prompt e as etapas que você definir. Comece com um perfil simples — você refina depois.
+            Um agente conversa com seus leads no WhatsApp automaticamente.
+            Você pode revisar o fluxo, testar e ativar antes de publicar — o
+            agente só atende leads reais quando estiver pronto.
           </p>
         </div>
         <Button onClick={onCreate}>
           <Plus className="size-4" />
-          Criar primeiro agente
+          Criar agente
         </Button>
       </CardContent>
     </Card>
@@ -305,27 +410,37 @@ function AgentCard({
             <Trash2 className="size-4" />
           </Button>
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-          <span className="font-mono">{agent.model}</span>
-          <div className="flex items-center gap-3">
-            {!isPrimary ? (
-              <button
+        {/* PR 17 UX (mai/2026): CTAs explícitos em botões. Estado
+            operacional > detalhe técnico. "Definir como principal"
+            sai do meio escondido pra Button visível. Modelo IA fica
+            em font-mono pequena bem discreta. */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t">
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isPrimary && agent.status === "active" ? (
+              <Button
                 type="button"
+                size="sm"
+                variant="outline"
                 onClick={onSetPrimary}
                 disabled={isPending}
-                className="text-muted-foreground hover:text-foreground font-medium transition-colors disabled:opacity-50"
-                title="Definir como agente principal da organização"
               >
+                <Crown className="size-3.5" />
                 Definir como principal
-              </button>
+              </Button>
             ) : null}
             <Link
               href={`/automations/agents/${agent.id}`}
-              className="text-primary hover:underline font-medium"
+              className="text-primary hover:underline font-medium text-sm"
             >
               Configurar →
             </Link>
           </div>
+          <span
+            className="font-mono text-[10px] text-muted-foreground/70"
+            title="Modelo de IA usado"
+          >
+            {agent.model}
+          </span>
         </div>
       </CardContent>
     </Card>

@@ -79,14 +79,16 @@ function buildSidebarGroups(_opts: {
       id: "behavior",
       label: "Comportamento",
       items: [
-        { id: "rules", label: "Regras", icon: Settings2 },
+        // PR 17 UX (mai/2026): "Fluxo" sobe pra cima — paradigma principal
+        // agora. "Regras" virou "Configurações" e desce (config técnica
+        // secundária).
         {
-          // PR-FLOW-PIVOT PR 3 (mai/2026): "Etapas" → "Fluxo" (canvas visual).
           // ID `stages` mantido pra retrocompat do localStorage de aba ativa.
           id: "stages",
           label: "Fluxo",
           icon: ListOrdered,
         },
+        { id: "rules", label: "Configurações", icon: Settings2 },
       ],
     },
     {
@@ -164,7 +166,10 @@ export function AgentEditor({
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
-  const [activeSection, setActiveSection] = React.useState<AgentSectionId>("rules");
+  // PR 17 UX (mai/2026): agente novo/rascunho abre em "Fluxo" (id="stages"
+  // por compat). Paradigma visual é o ponto de entrada principal agora.
+  // "Regras" virou "Configurações" e ficou em hierarquia secundária.
+  const [activeSection, setActiveSection] = React.useState<AgentSectionId>("stages");
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   const refreshKnowledgeSources = React.useCallback(async () => {

@@ -11,7 +11,7 @@
 // e instancia o node via `findSidebarItem(taskKey)`.
 
 import * as React from "react";
-import { ChevronDown, Layers, Search } from "lucide-react";
+import { ChevronDown, Layers, Plus, Search } from "lucide-react";
 import { cn } from "@persia/ui/utils";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
@@ -26,9 +26,12 @@ interface FlowSidebarProps {
   /** Esconde a sidebar inteira (modo "fullscreen canvas"). */
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** PR 17 UX (mai/2026): callback de clique no botão + (alternativa ao
+   * drag-drop). Adiciona o item no centro visível do canvas. */
+  onAdd?: (taskKey: string) => void;
 }
 
-export function FlowSidebar({ collapsed }: FlowSidebarProps) {
+export function FlowSidebar({ collapsed, onAdd }: FlowSidebarProps) {
   const [search, setSearch] = React.useState("");
   const [openCats, setOpenCats] = React.useState<Set<string>>(
     () => new Set(FLOW_SIDEBAR_CATEGORIES.map((c) => c.id)),
@@ -63,10 +66,11 @@ export function FlowSidebar({ collapsed }: FlowSidebarProps) {
       <header className="p-3 border-b border-border/60 space-y-2">
         <div className="flex items-center gap-2">
           <Layers className="size-4 text-primary" />
-          <h2 className="text-sm font-semibold">Adicionar Tarefa</h2>
+          <h2 className="text-sm font-semibold">Adicionar ao fluxo</h2>
         </div>
         <p className="text-xs text-muted-foreground">
-          Arraste um card pro canvas pra adicionar a etapa.
+          Clique no <Plus className="inline size-3 align-middle" /> ou arraste
+          um card pro canvas.
         </p>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -103,7 +107,11 @@ export function FlowSidebar({ collapsed }: FlowSidebarProps) {
               {isOpen ? (
                 <div className="border-t border-border/40 p-1.5 space-y-1">
                   {cat.items.map((item) => (
-                    <DraggableCard key={item.task_key} item={item} />
+                    <DraggableCard
+                      key={item.task_key}
+                      item={item}
+                      onAdd={onAdd}
+                    />
                   ))}
                   {cat.items.length === 0 ? (
                     <div className="px-2 py-3 text-[11px] italic text-muted-foreground/70">
@@ -120,7 +128,13 @@ export function FlowSidebar({ collapsed }: FlowSidebarProps) {
   );
 }
 
-function DraggableCard({ item }: { item: FlowSidebarItem }) {
+function DraggableCard({
+  item,
+  onAdd,
+}: {
+  item: FlowSidebarItem;
+  onAdd?: (taskKey: string) => void;
+}) {
   const Icon = item.icon;
   return (
     <div
@@ -129,7 +143,7 @@ function DraggableCard({ item }: { item: FlowSidebarItem }) {
         e.dataTransfer.setData(FLOW_DRAG_KEY, item.task_key);
         e.dataTransfer.effectAllowed = "copy";
       }}
-      className="group flex items-start gap-2 px-2 py-2 rounded-md cursor-grab active:cursor-grabbing hover:bg-accent transition-colors"
+      className="group relative flex items-start gap-2 px-2 py-2 rounded-md cursor-grab active:cursor-grabbing hover:bg-accent transition-colors"
     >
       <div className="size-8 shrink-0 rounded-md bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary/20">
         <Icon className="size-3.5" />
@@ -142,6 +156,23 @@ function DraggableCard({ item }: { item: FlowSidebarItem }) {
           {item.description}
         </p>
       </div>
+      {/* PR 17 UX (mai/2026): botão + no hover pra adicionar via clique
+          (alternativa ao drag). */}
+      {onAdd ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Adicionar ${item.label} ao fluxo`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAdd(item.task_key);
+          }}
+          className="absolute right-1 top-1 !size-6 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Plus className="size-3.5" />
+        </Button>
+      ) : null}
     </div>
   );
 }
