@@ -403,7 +403,20 @@ async function executeSendMessage(
   await new Promise((resolve) => setTimeout(resolve, 1500));
 
   // Send the message
-  await provider.sendText({ phone: lead.phone, message });
+  // Cleanup (mai/2026): try/catch ao redor do sendText. Sem isso o
+  // throw do provider (UAZAPI/Meta jogam em non-2xx) propaga e mata
+  // a execução inteira do flow legacy — deixando flow_executions
+  // sem next_step registrado e bloqueando próximos ticks.
+  try {
+    await provider.sendText({ phone: lead.phone, message });
+  } catch (err) {
+    console.error("[FlowEngine] sendText failed", {
+      organization_id: orgId,
+      lead_id: lead.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return { action: "continue", handle: "default" };
+  }
 
   // Save message to DB
   const { data: conversation } = await supabase

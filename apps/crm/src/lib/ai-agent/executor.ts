@@ -578,7 +578,13 @@ export async function executeDebouncedBatch(input: {
         .maybeSingle(),
       db
         .from("whatsapp_connections")
-        .select("*")
+        // Cleanup (mai/2026): explicit field list em vez de `*`. Garante
+        // que createProvider() recebe os 7 campos esperados mesmo se
+        // schema diverge em org legacy (memory regra "selects devem
+        // listar campos explicitos").
+        .select(
+          "provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token",
+        )
         .eq("organization_id", orgId)
         .eq("status", "connected")
         .order("created_at", { ascending: false })

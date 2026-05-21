@@ -100,14 +100,25 @@ async function dispatch(
     return { sent: false, reason: "whatsapp_unavailable" };
   }
 
-  const result = await provider.sendText({
-    phone: lead.phone,
-    message: buildMessage(lead),
-  });
-  if (!result.success) {
+  // Bug G fix (mai/2026): docstring na linha 77 promete "Throw NUNCA"
+  // mas o código não respeitava — providers (UAZAPI + Meta) ambos
+  // throwam em non-2xx. Caller `submitPublicBooking` em /agendar usava
+  // fire-and-forget assumindo essa promessa; sem o try/catch, qualquer
+  // 401/429/timeout do WhatsApp matava o request inteiro mesmo o lead +
+  // appointment já estando gravados no DB.
+  try {
+    const result = await provider.sendText({
+      phone: lead.phone,
+      message: buildMessage(lead),
+    });
+    if (!result.success) {
+      return { sent: false, reason: "send_failed" };
+    }
+    return { sent: true, messageId: result.messageId };
+  } catch (err) {
+    console.error("[agenda-notify] provider.sendText threw:", err);
     return { sent: false, reason: "send_failed" };
   }
-  return { sent: true, messageId: result.messageId };
 }
 
 /**

@@ -97,7 +97,12 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     .maybeSingle();
 
   if (!lead) {
-    const { data: newLead } = await supabase
+    // Bug E fix (mai/2026): mesma race do Bug C, em leads. 2 msgs do mesmo
+    // phone chegando em <100ms via webhook UAZAPI passam o SELECT vazio e
+    // tentam INSERT. UNIQUE partial (migration 010, org+phone WHERE phone
+    // NOT NULL) dispara 23505 no perdedor. Sem try-catch, .single() joga,
+    // lead vira null e a mensagem é silenciosamente perdida.
+    const { data: newLead, error: leadErr } = await supabase
       .from("leads")
       .insert({
         organization_id: orgId,
@@ -109,10 +114,30 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       })
       .select("id")
       .single();
-    lead = newLead;
-    isNewLead = true;
+    if (leadErr && leadErr.code === "23505") {
+      // Race lost — re-SELECT o lead que o vencedor criou.
+      const { data: existingLead } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("phone", normalizedPhone)
+        .maybeSingle();
+      lead = existingLead;
+      // isNewLead fica false — outro processo já disparou os triggers
+      // de novo-lead. Evitamos duplicar webhook lead.created + onNewLead.
+    } else if (leadErr) {
+      logError("incoming_pipeline_lead_create_failed", {
+        ...baseLogContext,
+        phone: normalizedPhone,
+        error: leadErr.message,
+        code: leadErr.code,
+      });
+    } else {
+      lead = newLead;
+      isNewLead = true;
+    }
 
-    if (lead) {
+    if (lead && isNewLead) {
       await supabase.from("lead_activities").insert({
         organization_id: orgId,
         lead_id: lead.id,
@@ -237,6 +262,12 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     .eq("id", conversation.id);
 
   // 6) Save incoming message
+  //
+  // Cleanup (mai/2026): `status: "delivered"` explícito pra alinhar com
+  // o caminho do executor.ts (AI Agent nativo). Mesma msg via dois
+  // caminhos vinha com status divergente — dashboards/contadores
+  // mostravam números diferentes. Inbound já chegou no servidor por
+  // definição, então "delivered" é correto invariante-wise.
   await supabase.from("messages").insert({
     organization_id: orgId,
     conversation_id: conversation.id,
@@ -247,6 +278,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     whatsapp_msg_id: msg.messageId,
     media_url: msg.mediaUrl || null,
     media_type: msg.mediaMimeType || null,
+    status: "delivered",
   });
 
   dispatchWebhook(orgId, "message.received", {
@@ -389,8 +421,16 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
             }));
           }
         }
-      } catch {
-        /* best-effort */
+      } catch (err: unknown) {
+        // Cleanup (mai/2026): catch mudo apagava erros silenciosos no load
+        // do contexto de pipeline/stages. Org com schema corrompido
+        // mandava payload n8n vazio sem trace. Mantemos best-effort
+        // (não interrompe) mas com log pra Sentry/observability.
+        logError("incoming_pipeline_context_load_failed", {
+          ...baseLogContext,
+          lead_id: lead.id,
+          error: errorMessage(err),
+        });
       }
 
       const aiContext = (orgSettings.ai_context || {}) as Record<string, string>;

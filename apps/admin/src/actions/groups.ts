@@ -29,8 +29,12 @@ export async function syncGroups() {
 
   const { data: connection } = await admin
     .from("whatsapp_connections")
-    .select("provider, instance_url, instance_token")
+    // Cleanup (mai/2026): explicit field list completa. Org multi-conn
+    // (uazapi + meta_cloud) com limit(1) sem filtro de provider podia
+    // pegar a meta_cloud → listGroups() throw "method not supported".
+    .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
     .eq("organization_id", orgId)
+    .eq("provider", "uazapi")
     .eq("status", "connected")
     .limit(1)
     .single();
@@ -71,8 +75,12 @@ async function getProvider() {
   const { admin, orgId } = await requireSuperadminForOrg();
   const { data: connection } = await admin
     .from("whatsapp_connections")
-    .select("provider, instance_url, instance_token")
+    // Cleanup (mai/2026): explicit field list completa. Org multi-conn
+    // (uazapi + meta_cloud) com limit(1) sem filtro de provider podia
+    // pegar a meta_cloud → listGroups() throw "method not supported".
+    .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
     .eq("organization_id", orgId)
+    .eq("provider", "uazapi")
     .eq("status", "connected")
     .limit(1)
     .single();
