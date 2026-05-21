@@ -109,7 +109,7 @@ export function Sidebar() {
                     "flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-xl w-[60px] transition-colors duration-150",
                     isActive
                       ? "text-primary"
-                      : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                      : "text-sidebar-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   )}
                 >
                   <Icon className="size-5" />
@@ -123,7 +123,7 @@ export function Sidebar() {
                     "relative flex flex-col items-center justify-center gap-0.5 py-2 px-1 rounded-xl w-[60px] transition-colors duration-150",
                     isActive
                       ? "text-primary"
-                      : "text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                      : "text-sidebar-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   )}
                 >
                   <Icon className="size-5" />
