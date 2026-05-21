@@ -11,6 +11,8 @@ import { Handle, Position } from "@xyflow/react";
 import { Hash, MessageSquare, TrendingUp, Users } from "lucide-react";
 import type { FlowEntryNode, FlowEntryTrigger } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
+import { InlineFormPanel } from "../InlineFormPanel";
+import type { FlowCatalogs } from "../catalog-types";
 
 const TRIGGER_ICONS: Record<FlowEntryTrigger, typeof MessageSquare> = {
   conversation_started: MessageSquare,
@@ -47,11 +49,30 @@ function triggerPreview(
 interface Props {
   data: FlowEntryNode["data"];
   selected?: boolean;
+  onPatch?: (data: Record<string, unknown>) => void;
+  catalogs?: FlowCatalogs;
+  catalogsLoading?: boolean;
 }
 
-export function EntryNodeView({ data, selected }: Props) {
+export function EntryNodeView({
+  data,
+  selected,
+  onPatch,
+  catalogs,
+  catalogsLoading,
+}: Props) {
   const Icon = TRIGGER_ICONS[data.trigger] ?? MessageSquare;
   const preview = triggerPreview(data.trigger, data.config);
+  const expandedContent =
+    selected && onPatch && catalogs ? (
+      <InlineFormPanel
+        nodeType="entry"
+        data={data as unknown as Record<string, unknown>}
+        onPatch={onPatch}
+        catalogs={catalogs}
+        catalogsLoading={catalogsLoading}
+      />
+    ) : null;
   return (
     <>
       <NodeShell
@@ -60,6 +81,7 @@ export function EntryNodeView({ data, selected }: Props) {
         badge="Entrada"
         variant="entry"
         selected={selected}
+        expandedContent={expandedContent}
       >
         {preview}
       </NodeShell>

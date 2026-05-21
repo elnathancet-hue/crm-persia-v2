@@ -9,12 +9,17 @@ import { Handle, Position } from "@xyflow/react";
 import { Filter } from "lucide-react";
 import type { FlowConditionNode } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
+import { InlineFormPanel } from "../InlineFormPanel";
+import type { FlowCatalogs } from "../catalog-types";
 
 interface Props {
   data: FlowConditionNode["data"];
   selected?: boolean;
   onDelete?: () => void;
   onDuplicate?: () => void;
+  onPatch?: (data: Record<string, unknown>) => void;
+  catalogs?: FlowCatalogs;
+  catalogsLoading?: boolean;
 }
 
 function conditionPreview(
@@ -58,11 +63,24 @@ export function ConditionNodeView({
   selected,
   onDelete,
   onDuplicate,
+  onPatch,
+  catalogs,
+  catalogsLoading,
 }: Props) {
   const incompleteReason = conditionIncompleteReason(
     data.condition_type,
     data.config,
   );
+  const expandedContent =
+    selected && onPatch && catalogs ? (
+      <InlineFormPanel
+        nodeType="condition"
+        data={data as unknown as Record<string, unknown>}
+        onPatch={onPatch}
+        catalogs={catalogs}
+        catalogsLoading={catalogsLoading}
+      />
+    ) : null;
   return (
     <>
       <Handle
@@ -81,6 +99,7 @@ export function ConditionNodeView({
         incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
+        expandedContent={expandedContent}
       >
         <div className="line-clamp-2">
           {conditionPreview(data.condition_type, data.config)}

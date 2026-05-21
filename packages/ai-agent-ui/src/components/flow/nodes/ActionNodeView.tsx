@@ -26,6 +26,8 @@ import type {
   FlowActionType,
 } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
+import { InlineFormPanel } from "../InlineFormPanel";
+import type { FlowCatalogs } from "../catalog-types";
 
 const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   add_tag: TagIcon,
@@ -125,6 +127,12 @@ interface Props {
   selected?: boolean;
   onDelete?: () => void;
   onDuplicate?: () => void;
+  /** PR 21 (mai/2026): callback pra patchar `data` do node quando
+   * cliente edita inline. Recebe o novo data completo (não diff). */
+  onPatch?: (data: Record<string, unknown>) => void;
+  /** PR 21: catálogos pra pickers do form inline. */
+  catalogs?: FlowCatalogs;
+  catalogsLoading?: boolean;
 }
 
 export function ActionNodeView({
@@ -132,10 +140,25 @@ export function ActionNodeView({
   selected,
   onDelete,
   onDuplicate,
+  onPatch,
+  catalogs,
+  catalogsLoading,
 }: Props) {
   const Icon = ACTION_ICONS[data.action_type] ?? Power;
   const preview = configPreview(data.action_type, data.config);
   const incompleteReason = incompleteReasonFor(data.action_type, data.config);
+  // PR 21: form inline aparece quando node está selecionado + callback
+  // de patch disponível + catálogos carregados.
+  const expandedContent =
+    selected && onPatch && catalogs ? (
+      <InlineFormPanel
+        nodeType="action"
+        data={data as unknown as Record<string, unknown>}
+        onPatch={onPatch}
+        catalogs={catalogs}
+        catalogsLoading={catalogsLoading}
+      />
+    ) : null;
   return (
     <>
       <Handle
@@ -154,6 +177,7 @@ export function ActionNodeView({
         incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
+        expandedContent={expandedContent}
       >
         <div className="line-clamp-2">{preview}</div>
       </NodeShell>
