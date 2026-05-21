@@ -7,8 +7,10 @@ import {
   CheckCircle2,
   Crown,
   Loader2,
+  MoreHorizontal,
   Plus,
   PowerOff,
+  Settings,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -28,6 +30,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@persia/ui/dropdown-menu";
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import {
   AgentCreationWizard,
@@ -400,41 +409,63 @@ function AgentCard({
               )}
             </div>
           </div>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-10"
-            onClick={onDelete}
-            aria-label={`Remover agente ${agent.name}`}
-          >
-            <Trash2 className="size-4" />
-          </Button>
+          {/* PR 38 (mai/2026): lixeira solta virou DropdownMenu com 3
+              opções (Configurar / Definir como principal quando
+              aplicável / Excluir destrutivo). Reduz risco de click
+              acidental no delete + agrupa ações secundárias num
+              único affordance. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex items-center justify-center size-9 shrink-0 rounded-md text-foreground hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              aria-label={`Ações do agente ${agent.name}`}
+            >
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem
+                onClick={() => {
+                  // base-ui não suporta asChild — navego via router.
+                  window.location.href = `/automations/agents/${agent.id}`;
+                }}
+              >
+                <Settings className="size-3.5" />
+                Configurar
+              </DropdownMenuItem>
+              {!isPrimary && agent.status === "active" ? (
+                <DropdownMenuItem
+                  onClick={onSetPrimary}
+                  disabled={isPending}
+                >
+                  <Crown className="size-3.5" />
+                  Definir como principal
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="size-3.5" />
+                Excluir agente
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         {/* PR 17 UX (mai/2026): CTAs explícitos em botões. Estado
             operacional > detalhe técnico. "Definir como principal"
             sai do meio escondido pra Button visível. Modelo IA fica
-            em font-mono pequena bem discreta. */}
+            em font-mono pequena bem discreta.
+            PR 38 (mai/2026): "Definir como principal" + "Excluir"
+            saíram do bottom pra dentro do DropdownMenu acima.
+            Bottom agora foca em CTA primário "Configurar" + modelo. */}
         <div className="flex items-center justify-between gap-2 pt-2 border-t">
-          <div className="flex items-center gap-2 flex-wrap">
-            {!isPrimary && agent.status === "active" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onSetPrimary}
-                disabled={isPending}
-              >
-                <Crown className="size-3.5" />
-                Definir como principal
-              </Button>
-            ) : null}
-            <Link
-              href={`/automations/agents/${agent.id}`}
-              className="text-primary hover:underline font-medium text-sm"
-            >
-              Configurar →
-            </Link>
-          </div>
+          <Link
+            href={`/automations/agents/${agent.id}`}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors h-8 px-3 text-xs font-medium"
+          >
+            <Settings className="size-3.5" />
+            Configurar
+          </Link>
           <span
             className="font-mono text-[10px] text-muted-foreground/70"
             title="Modelo de IA usado"
