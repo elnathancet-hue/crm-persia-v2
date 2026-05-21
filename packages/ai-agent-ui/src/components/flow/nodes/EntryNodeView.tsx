@@ -52,6 +52,12 @@ interface Props {
   selected?: boolean;
   /** PR 28: id pra consultar highlight do Tester. */
   id: string;
+  /** PR 29 fix (mai/2026): cliente reportou que entry não podia ser
+   * deletado — antes era intencional ("entry é único"), mas com PR 10
+   * múltiplos triggers convivem no flow, então faz sentido permitir.
+   * FlowCanvas pede confirmação via AlertDialog ao receber esse callback
+   * pra evitar delete acidental do único entry. */
+  onDelete?: () => void;
   onPatch?: (data: Record<string, unknown>) => void;
   catalogs?: FlowCatalogs;
   catalogsLoading?: boolean;
@@ -61,6 +67,7 @@ export function EntryNodeView({
   data,
   selected,
   id,
+  onDelete,
   onPatch,
   catalogs,
   catalogsLoading,
@@ -86,6 +93,7 @@ export function EntryNodeView({
         badge="Entrada"
         variant="entry"
         selected={selected}
+        onDelete={onDelete}
         expandedContent={expandedContent}
         recentlyExecuted={recentlyExecuted}
       >

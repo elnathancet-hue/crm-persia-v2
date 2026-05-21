@@ -41,6 +41,16 @@ import type {
   FlowNode as PersiaFlowNode,
 } from "@persia/shared/ai-agent";
 import { normalizeFlowConfig } from "@persia/shared/ai-agent";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
 import { Button } from "@persia/ui/button";
 import { useAgentActions } from "../../context";
 import type { FlowCatalogs } from "./catalog-types";
@@ -326,13 +336,19 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     [snapshotBeforeMutation],
   );
 
-  // -- Sheet pediu remoção do node --
-  const handleNodeDelete = React.useCallback(
+  // PR 29 fix (mai/2026): state pra confirm dialog do delete de entry.
+  // Cliente reportou que entry não podia ser deletado — era intencional
+  // ("entry é único"), mas com PR 10 múltiplos triggers convivem no flow
+  // (conversation_started + keyword_match + segment_entered + ...), então
+  // faz sentido permitir. Confirmação previne delete acidental.
+  const [pendingDeleteEntryId, setPendingDeleteEntryId] = React.useState<
+    string | null
+  >(null);
+
+  // Executa o delete sem perguntar. Usado direto pra non-entry, e via
+  // AlertDialog action pro entry.
+  const executeNodeDelete = React.useCallback(
     (nodeId: string) => {
-      // PR 17: descobre tipo pra impedir delete acidental do entry
-      // node (que é a porta única do flow — sem ele nada dispara).
-      const target = nodes.find((n) => n.id === nodeId);
-      if (target?.type === "entry") return;
       snapshotBeforeMutation();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) =>
@@ -342,7 +358,23 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
       setDirty(true);
     },
-    [nodes, selectedNodeId, snapshotBeforeMutation],
+    [selectedNodeId, snapshotBeforeMutation],
+  );
+
+  // -- Sheet pediu remoção do node --
+  const handleNodeDelete = React.useCallback(
+    (nodeId: string) => {
+      const target = nodes.find((n) => n.id === nodeId);
+      if (!target) return;
+      // PR 29 fix: entry node pede confirmação em vez de deletar direto.
+      // Atalho Del também passa por aqui — comportamento uniforme.
+      if (target.type === "entry") {
+        setPendingDeleteEntryId(nodeId);
+        return;
+      }
+      executeNodeDelete(nodeId);
+    },
+    [nodes, executeNodeDelete],
   );
 
   // PR 20 UX (mai/2026): clonar node. Cria cópia com novo UUID, mesma
@@ -393,11 +425,14 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       // PR 28 (mai/2026): `id` repassado às views pra que consultem
       // useFlowTesterHighlight(id) e mostrem pulse animation quando
       // o Tester acabou de passar por aqui.
+      // PR 29 fix (mai/2026): entry recebe onDelete agora — confirm
+      // dialog em handleNodeDelete previne delete acidental.
       entry: ({ data, selected, id }) => (
         <EntryNodeView
           data={data as never}
           selected={selected}
           id={id}
+          onDelete={() => handleNodeDelete(id)}
           onPatch={(newData) => handleNodePatch(id, newData)}
           catalogs={catalogs}
           catalogsLoading={catalogsLoading}
@@ -832,6 +867,46 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         dirty={dirty}
         message="Você fez mudanças no fluxo que ainda não foram salvas. Se sair agora, vai perder o que editou."
       />
+
+      {/* PR 29 fix (mai/2026): confirm dialog antes de deletar entry.
+          Cliente reportou bug "não consigo deletar entry". Era
+          intencional, mas com múltiplos triggers (PR 10) permitir
+          delete faz sentido. Confirmação previne erro acidental
+          (sem entrada o fluxo não dispara — undo continua disponível
+          via Ctrl+Z). */}
+      <AlertDialog
+        open={pendingDeleteEntryId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteEntryId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover esta entrada?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sem nenhuma entrada, o fluxo não vai disparar quando
+              chegar uma mensagem ou um evento. Você pode adicionar
+              outra entrada depois, ou desfazer com Ctrl+Z.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setPendingDeleteEntryId(null)}
+            >
+              Manter
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDeleteEntryId) {
+                  executeNodeDelete(pendingDeleteEntryId);
+                }
+                setPendingDeleteEntryId(null);
+              }}
+            >
+              Remover entrada
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <FlowSidebar onAdd={handleSidebarAdd} />
       <div
         ref={containerRef}
