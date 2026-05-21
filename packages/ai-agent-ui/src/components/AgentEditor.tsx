@@ -83,16 +83,17 @@ function buildSidebarGroups(_opts: {
       id: "behavior",
       label: "Comportamento",
       items: [
-        // PR 17 UX (mai/2026): "Fluxo" sobe pra cima — paradigma principal
-        // agora. "Regras" virou "Configurações" e desce (config técnica
-        // secundária).
+        // PR 22 UX (mai/2026): "Configurações" volta pra cima — cliente
+        // precisa configurar o agente (quem ele é, regras, modelo) antes
+        // de desenhar o fluxo. "Fluxo" desce e fica como passo seguinte.
+        // Reverte a inversão do PR 17.
+        { id: "rules", label: "Configurações", icon: Settings2 },
         {
           // ID `stages` mantido pra retrocompat do localStorage de aba ativa.
           id: "stages",
           label: "Fluxo",
           icon: ListOrdered,
         },
-        { id: "rules", label: "Configurações", icon: Settings2 },
       ],
     },
     {
@@ -170,10 +171,11 @@ export function AgentEditor({
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
-  // PR 17 UX (mai/2026): agente novo/rascunho abre em "Fluxo" (id="stages"
-  // por compat). Paradigma visual é o ponto de entrada principal agora.
-  // "Regras" virou "Configurações" e ficou em hierarquia secundária.
-  const [activeSection, setActiveSection] = React.useState<AgentSectionId>("stages");
+  // PR 22 UX (mai/2026): agente abre em "Configurações" — cliente
+  // precisa definir quem é o agente, regras de conduta, modelo, etc
+  // ANTES de desenhar o fluxo visual. Reverte o PR 17 que abria em
+  // "stages" (Fluxo). Sem prompt configurado, o fluxo não funciona.
+  const [activeSection, setActiveSection] = React.useState<AgentSectionId>("rules");
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   const refreshKnowledgeSources = React.useCallback(async () => {
