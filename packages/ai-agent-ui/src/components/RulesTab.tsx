@@ -13,9 +13,15 @@
 // Estado dos campos de handoff_notification_* foi mantido no agent
 // (DB) — só removemos a UI. Configuração existente em agentes legados
 // continua funcionando via Fluxo.
+//
+// PR 26 (mai/2026): auto-save substitui o botão "Salvar alterações".
+// useEffect detecta dirty fields, debounce 800ms (espera cliente parar
+// de digitar), dispara onChange. Indicator no header do AgentEditor
+// comunica saving/saved/error. Sem toast pra cada auto-save — UI
+// feedback é o indicator.
 
 import * as React from "react";
-import { CalendarCheck, ExternalLink, Save } from "lucide-react";
+import { CalendarCheck, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type {
@@ -53,7 +59,6 @@ import {
 import { EntryConditionsCard } from "./EntryConditionsCard";
 import { PromptBuilderSection } from "./PromptBuilderSection";
 import { useAgentActions } from "../context";
-import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
@@ -252,7 +257,11 @@ export function RulesTab({
     calendarConnectionDirty ||
     humanizationDirty;
 
-  const handleSave = () => {
+  // PR 26 (mai/2026): build do patch a partir do dirty state.
+  // Memoized pra que useEffect de auto-save abaixo reaja a mudanças
+  // de qualquer field sem re-bind do timer manualmente.
+  const dirtyPatch = React.useMemo<UpdateAgentInput | null>(() => {
+    if (!dirty) return null;
     const patch: UpdateAgentInput = {};
     if (promptDirty) patch.system_prompt = prompt;
     if (descriptionDirty) patch.description = description;
@@ -277,8 +286,47 @@ export function RulesTab({
         handoff_include_summary: initialHumanization.handoff_include_summary,
       };
     }
-    onChange(patch, "Configurações salvas");
-  };
+    return patch;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dirty,
+    promptDirty,
+    descriptionDirty,
+    modelDirty,
+    guardrailsDirty,
+    calendarConnectionDirty,
+    humanizationDirty,
+    prompt,
+    description,
+    model,
+    guardrails,
+    calendarConnectionId,
+    nextPauseKeywords,
+    nextResumeKeywords,
+    nextAutoPauseMinutes,
+    splitEnabled,
+    nextSplitThresholdChars,
+    nextSplitDelaySeconds,
+    businessHoursEnabled,
+    nextBusinessHours,
+    nextAfterHoursMessage,
+    initialHumanization.handoff_include_summary,
+  ]);
+
+  // PR 26 (mai/2026): auto-save com debounce 800ms. Cancela timer
+  // anterior em cada mudança — só dispara quando cliente parou de
+  // digitar por 800ms. Skip enquanto saving anterior em curso
+  // (isPending=true) pra evitar 2 PATCH concorrentes; quando saving
+  // completa, este effect roda de novo e dispara o próximo se ainda
+  // houver dirtyPatch.
+  React.useEffect(() => {
+    if (!dirtyPatch) return;
+    if (isPending) return; // dropa este tick — vai re-rodar quando isPending virar false
+    const timer = setTimeout(() => {
+      onChange(dirtyPatch);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [dirtyPatch, isPending, onChange]);
 
   return (
     <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
@@ -655,14 +703,11 @@ export function RulesTab({
           </CardContent>
         </Card>
 
-        <Button
-          onClick={handleSave}
-          disabled={!dirty || isPending}
-          className="w-full"
-        >
-          <Save className="size-4" />
-          Salvar alterações
-        </Button>
+        {/* PR 26 (mai/2026): botão "Salvar alterações" removido —
+            auto-save com debounce 800ms cuida disso transparente.
+            Indicator no header do AgentEditor comunica saving/saved.
+            Sem botão = sem ambiguidade "será que salvou?" + menos
+            cliques pra cliente. */}
       </div>
     </div>
   );

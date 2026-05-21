@@ -14,7 +14,6 @@ import {
   History,
   Library,
   ListOrdered,
-  Loader2,
   Menu,
   PlayCircle,
   Settings2,
@@ -49,6 +48,8 @@ import {
 import { AgentSidebar, type AgentSidebarGroup } from "./AgentSidebar";
 import { AgentStatusBadge } from "./AgentStatusBadge";
 import { RulesTab } from "./RulesTab";
+import { SaveStatusIndicator } from "./SaveStatusIndicator";
+import { useSaveStatus } from "./use-save-status";
 // PR-FLOW-PIVOT PR 3 (mai/2026): aba "Fluxo" agora é o canvas visual.
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { PlaceholderTab } from "./PlaceholderTab";
@@ -263,20 +264,45 @@ export function AgentEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // PR 26 (mai/2026): save status compartilhado entre header
+  // (indicador) e formulários (RulesTab auto-save). Substitui o
+  // toast.success/error individual de cada save — agora indicator
+  // persistente é a fonte da verdade.
+  const saveStatus = useSaveStatus();
+  // Track do último patch ok pra botão "Tentar de novo" do indicator.
+  const lastFailedPatchRef = React.useRef<{
+    patch: Parameters<AgentActions["updateAgent"]>[1];
+    successMsg?: string;
+  } | null>(null);
+
   const persistAgent = React.useCallback(
     (patch: Parameters<AgentActions["updateAgent"]>[1], successMsg?: string) => {
+      saveStatus.markSaving();
       startTransition(async () => {
         try {
           const updated = await updateAgent(agent.id, patch);
           setAgent(updated);
+          saveStatus.markSaved();
+          lastFailedPatchRef.current = null;
+          // Manter toast.success só pra mudanças explícitas (ex:
+          // troca de status/nome) — campos auto-saved não geram toast
+          // pra não spammar (indicator já comunica).
           if (successMsg) toast.success(successMsg);
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Falha ao salvar");
+          const message = err instanceof Error ? err.message : "Falha ao salvar";
+          saveStatus.markError(message);
+          lastFailedPatchRef.current = { patch, successMsg };
         }
       });
     },
-    [agent.id, updateAgent],
+    [agent.id, updateAgent, saveStatus],
   );
+
+  const handleRetrySave = React.useCallback(() => {
+    const pending = lastFailedPatchRef.current;
+    if (!pending) return;
+    persistAgent(pending.patch, pending.successMsg);
+  }, [persistAgent]);
 
   const handleNameBlur = () => {
     const trimmed = nameDraft.trim();
@@ -358,9 +384,15 @@ export function AgentEditor({
                   aria-label="Nome do agente"
                 />
                 <AgentStatusBadge status={agent.status} />
-                {isPending ? (
-                  <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
-                ) : null}
+                {/* PR 26 (mai/2026): SaveStatusIndicator substitui o
+                    spinner isolado — agora mostra "Salvando…" /
+                    "Salvo há Xm" / "Erro ao salvar" com retry. */}
+                <SaveStatusIndicator
+                  status={saveStatus.status}
+                  lastSavedAt={saveStatus.lastSavedAt}
+                  errorMessage={saveStatus.errorMessage}
+                  onRetry={handleRetrySave}
+                />
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 Configure regras, etapas e ferramentas. Teste a qualquer
