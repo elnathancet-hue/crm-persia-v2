@@ -29,6 +29,7 @@ import {
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
 import { nativeHandlers } from "../tools/registry";
+import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import { evaluateCondition } from "./conditions";
 import type {
   FlowRunContext,
@@ -269,6 +270,22 @@ async function executeAIAgentNode(
       `EVENTS TO EMIT (call emit_event with the matching handle when the condition is met):\n${list}`,
     );
   }
+  // Bug D fix (mai/2026): warning explícito pra evitar vazamento de
+  // tool call como texto. Modelos novos (gpt-5*, gpt-4o*) às vezes
+  // retornam `tool_calls` E `content` no mesmo turno — o content
+  // "pensa em voz alta" e a IA escreve `emit_event("foo")` como
+  // texto literal. Visto em prod com gpt-5-mini. Tool-call-sanitizer
+  // strippa em camada 3 (defensa em depth), mas reforçar no prompt
+  // reduz frequência.
+  systemParts.push(
+    [
+      "IMPORTANT — TOOL USAGE RULES:",
+      "- NEVER write tool names (emit_event, add_tag, move_pipeline_stage, etc) as literal text in your reply to the user.",
+      "- NEVER write handle names like coletou_idade or dados_completos in plain text.",
+      "- Tool calls are SILENT — they use the function_call mechanism, not the message body.",
+      "- If you need to call a tool, just call it. The user must NEVER see the tool name in the chat.",
+    ].join("\n"),
+  );
 
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemParts.join("\n\n") },
@@ -344,7 +361,22 @@ async function executeAIAgentNode(
 
     // Caso 1: LLM emitiu texto final (sem tool call). Send + segue edge default.
     if (choice.finish_reason !== "tool_calls") {
-      const text = (choice.message.content ?? "").trim();
+      const rawText = (choice.message.content ?? "").trim();
+      // Bug D fix (mai/2026): strippa tool calls escritas como texto
+      // (emit_event(...), add_tag(...), etc) antes de enviar pro user.
+      // Loga em guardrail event pra medir frequência da alucinação.
+      const { cleaned: text, leakedPatterns } = stripToolCallLeaks(rawText);
+      if (leakedPatterns.length > 0) {
+        ctx.provider.emit({
+          kind: "guardrail",
+          payload: {
+            reason: "tool_call_leak_stripped",
+            count: leakedPatterns.length,
+            patterns: leakedPatterns,
+            node_id: node.id,
+          },
+        });
+      }
       if (text) {
         result.assistant_reply += result.assistant_reply ? "\n" + text : text;
         ctx.provider.emit({
