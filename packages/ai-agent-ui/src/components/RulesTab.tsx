@@ -617,7 +617,21 @@ export function RulesTab({
                 ) : null}
 
                 <div className="space-y-1.5 pt-2 border-t border-border/60">
-                  <Label htmlFor="pause_keywords">Palavras pra pausar</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="pause_keywords">Palavras pra pausar</Label>
+                    <HelpTooltip>
+                      Quando o lead digita SOMENTE uma dessas palavras (sem
+                      outras), a IA para. Útil pra quem quer pausar mas
+                      esqueceu a palavra exata. Defaults cobrem o básico
+                      ("pausar", "humano", "stop ia").
+                    </HelpTooltip>
+                    {arraysEqualIgnoreOrder(
+                      nextPauseKeywords,
+                      PAUSE_KEYWORDS_DEFAULT,
+                    ) ? (
+                      <DefaultBadge />
+                    ) : null}
+                  </div>
                   <Textarea
                     id="pause_keywords"
                     value={pauseKeywordsText}
@@ -634,7 +648,22 @@ export function RulesTab({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="resume_keywords">Palavras pra reativar</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="resume_keywords">
+                      Palavras pra reativar
+                    </Label>
+                    <HelpTooltip>
+                      Mesma lógica das palavras pra pausar, mas o oposto:
+                      faz o agente voltar a responder. Defaults:
+                      "ativar", "ia on", "voltar ia".
+                    </HelpTooltip>
+                    {arraysEqualIgnoreOrder(
+                      nextResumeKeywords,
+                      RESUME_KEYWORDS_DEFAULT,
+                    ) ? (
+                      <DefaultBadge />
+                    ) : null}
+                  </div>
                   <Textarea
                     id="resume_keywords"
                     value={resumeKeywordsText}
@@ -726,9 +755,21 @@ export function RulesTab({
 
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor="split_delay_seconds">
-                          Pausa entre mensagens
-                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="split_delay_seconds">
+                            Pausa entre mensagens
+                          </Label>
+                          <HelpTooltip>
+                            Tempo simulando "digitando" entre cada mensagem
+                            picotada. Padrão{" "}
+                            {SPLIT_DELAY_SECONDS_DEFAULT}s — natural pro
+                            ritmo de WhatsApp. Aumentar passa de "humano
+                            digitando" pra "humano enrolando".
+                          </HelpTooltip>
+                          {splitDelaySeconds === SPLIT_DELAY_SECONDS_DEFAULT ? (
+                            <DefaultBadge />
+                          ) : null}
+                        </div>
                         <span className="text-xs text-muted-foreground tabular-nums">
                           {splitDelaySeconds}s
                         </span>
@@ -896,6 +937,23 @@ export function RulesTab({
 }
 
 // ============================================================================
+// PR 37 (mai/2026): helper de comparação pra DefaultBadge dos keywords
+// ============================================================================
+//
+// Compara dois arrays string ignorando ordem (já sanitizados). Útil pra
+// detectar se as palavras-chave estão no estado default — mesmo que o
+// cliente tenha reordenado, se o conteúdo é idêntico, mostra "padrão".
+function arraysEqualIgnoreOrder(
+  a: ReadonlyArray<string>,
+  b: ReadonlyArray<string>,
+): boolean {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((v, i) => v === sortedB[i]);
+}
+
+// ============================================================================
 // PR 35 (mai/2026): helpers do dirty marker + jump links
 // ============================================================================
 
@@ -1037,9 +1095,21 @@ function BusinessHoursInline({
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <Label htmlFor="business_hours_enabled" className="cursor-pointer">
-              Respeitar horário comercial
-            </Label>
+            <div className="flex items-center gap-2">
+              <Label
+                htmlFor="business_hours_enabled"
+                className="cursor-pointer"
+              >
+                Respeitar horário comercial
+              </Label>
+              <HelpTooltip>
+                Quando ligado, a IA só responde nos dias/horários
+                marcados abaixo. Fora disso manda a mensagem padrão
+                (1x por janela de 6h) e deixa o lead aguardando humano.
+                Fuso fixo: América/São Paulo.
+              </HelpTooltip>
+              {!enabled ? <DefaultBadge /> : null}
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               Quando desligado, o agente responde 24/7. Fuso fixo:
               América/São Paulo.
@@ -1111,9 +1181,19 @@ function BusinessHoursInline({
 
             <div className="space-y-1.5 pt-2 border-t">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="after_hours_message">
-                  Mensagem fora do horário
-                </Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="after_hours_message">
+                    Mensagem fora do horário
+                  </Label>
+                  <HelpTooltip>
+                    Enviada UMA vez por janela de 6h pra evitar spammar
+                    leads que mandam várias mensagens fora do horário. Use
+                    pra setar expectativa ("Voltamos às 8h").
+                  </HelpTooltip>
+                  {afterHoursMessage.trim() === AFTER_HOURS_MESSAGE_DEFAULT ? (
+                    <DefaultBadge />
+                  ) : null}
+                </div>
                 <span
                   className={`text-xs tabular-nums ${
                     messageTooLong ? "text-destructive" : "text-muted-foreground"
