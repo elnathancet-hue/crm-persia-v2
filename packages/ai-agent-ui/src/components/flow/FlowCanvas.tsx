@@ -168,6 +168,17 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // renderizada. Forms inline dentro de cada node card.
   const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const [catalogsLoading, setCatalogsLoading] = React.useState(false);
+  // PR 31 (mai/2026): visual feedback do drag-to-connect e drag-from-sidebar.
+  //   - isConnecting: true enquanto cliente segura mouse num handle source
+  //     e arrasta procurando target. CSS aplica pulse em todos handles
+  //     target visíveis pra deixar claro "solta aqui".
+  //   - isDraggingFromSidebar: true quando cliente arrasta card de
+  //     "Adicionar ao fluxo" sobre o canvas. Overlay dashed mostra
+  //     "Solte aqui pra adicionar".
+  // States separados pq são UX paths diferentes (handle drag vs HTML5 drag).
+  const [isConnecting, setIsConnecting] = React.useState(false);
+  const [isDraggingFromSidebar, setIsDraggingFromSidebar] =
+    React.useState(false);
 
   // PR 24 (mai/2026): undo/redo stack. Cap em 30 snapshots —
   // ~30 ações ≈ 5min de edição típica (Jakob Nielsen heuristic).
@@ -260,6 +271,20 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     },
     [snapshotBeforeMutation],
   );
+
+  // PR 31 (mai/2026): handlers de drag-to-connect. React Flow chama
+  // onConnectStart quando cliente segura mouse num handle, onConnectEnd
+  // quando solta (em outro handle válido OU em espaço vazio). Marca
+  // isConnecting=true durante o drag — CSS aplica pulse nos handles
+  // target pra deixar "onde posso soltar" óbvio. Conexões inválidas
+  // (mesmo node, handle errado) continuam sendo rejeitadas nativamente
+  // pelo React Flow — feedback visual é só pra UX.
+  const handleConnectStart = React.useCallback(() => {
+    setIsConnecting(true);
+  }, []);
+  const handleConnectEnd = React.useCallback(() => {
+    setIsConnecting(false);
+  }, []);
 
   // -- Lazy load dos catálogos quando o usuário abre o primeiro node --
   const ensureCatalogsLoaded = React.useCallback(async () => {
@@ -496,10 +521,26 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   }, [nodes, selectedNodeId]);
 
   // -- Drag-drop do sidebar --
+  // PR 31 (mai/2026): também marca isDraggingFromSidebar=true quando
+  // payload é do tipo correto. Overlay visual (borda dashed primary +
+  // hint "Solte aqui pra adicionar") aparece pra orientar o cliente.
+  // dragover dispara N vezes durante o drag — setter ignora updates
+  // redundantes (React bails out).
   const onDragOver = React.useCallback((e: React.DragEvent) => {
     if (e.dataTransfer.types.includes(FLOW_DRAG_KEY)) {
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
+      setIsDraggingFromSidebar(true);
+    }
+  }, []);
+
+  // PR 31: limpa overlay quando drag sai do canvas (cancelado pelo user).
+  // dragleave dispara mesmo quando cursor cruza sobre filho do container,
+  // então comparamos com relatedTarget pra detectar saída real.
+  const onDragLeave = React.useCallback((e: React.DragEvent) => {
+    const related = e.relatedTarget as HTMLElement | null;
+    if (!related || !e.currentTarget.contains(related)) {
+      setIsDraggingFromSidebar(false);
     }
   }, []);
 
@@ -569,6 +610,8 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       const taskKey = e.dataTransfer.getData(FLOW_DRAG_KEY);
       if (!taskKey) return;
       e.preventDefault();
+      // PR 31: limpa overlay no drop bem-sucedido.
+      setIsDraggingFromSidebar(false);
       instantiateNodeAt(taskKey, { x: e.clientX, y: e.clientY });
     },
     [instantiateNodeAt],
@@ -899,10 +942,40 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       <div
         ref={containerRef}
         data-persia-flow-container="true"
+        /* PR 31 (mai/2026): data attrs alimentam CSS scoped abaixo
+           (style tag) — pulse nos handles target quando connecting,
+           sem precisar editar globals.css. */
+        data-connecting={isConnecting ? "true" : undefined}
+        data-drag-source={isDraggingFromSidebar ? "sidebar" : undefined}
         className="flex-1 relative"
         onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
+        {/* PR 31 (mai/2026): CSS scoped pro pulse dos handles. Ataca
+            só descendentes do container atual via [data-connecting=true]
+            seletor. Sem global CSS = menor blast radius se React Flow
+            atualizar class names. Animação pulse usa keyframes do
+            Tailwind (animate-pulse) que já existem no projeto. */}
+        <style>{`
+          [data-persia-flow-container][data-connecting="true"] .react-flow__handle--target {
+            animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            box-shadow: 0 0 0 4px hsl(var(--primary) / 0.25);
+          }
+        `}</style>
+
+        {/* PR 31 (mai/2026): overlay visual quando cliente arrasta card
+            da sidebar. Borda dashed primary + hint text "Solte aqui pra
+            adicionar". pointer-events: none pra não interferir com
+            drop event que segue pro container. */}
+        {isDraggingFromSidebar ? (
+          <div className="absolute inset-3 z-20 rounded-xl border-2 border-dashed border-primary/60 bg-primary/5 flex items-center justify-center pointer-events-none">
+            <div className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-medium shadow-lg">
+              Solte aqui pra adicionar ao fluxo
+            </div>
+          </div>
+        ) : null}
+
         {/* Toolbar */}
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
           {/* PR 24 (mai/2026): botões undo/redo na toolbar — também
@@ -987,6 +1060,8 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectStart={handleConnectStart}
+          onConnectEnd={handleConnectEnd}
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
