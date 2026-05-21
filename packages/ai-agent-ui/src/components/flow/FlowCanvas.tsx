@@ -33,7 +33,7 @@ import {
   type OnEdgesChange,
   type OnNodesChange,
 } from "@xyflow/react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Redo2, Save, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type {
   FlowConfig,
@@ -47,6 +47,7 @@ import type { FlowCatalogs } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
 import { findSidebarItem } from "./node-catalog";
+import { useFlowHistory } from "./use-flow-history";
 // PR 21 (mai/2026): NodeConfigSheet não mais usada — forms inline.
 import { EntryNodeView } from "./nodes/EntryNodeView";
 import { AIAgentNodeView } from "./nodes/AIAgentNodeView";
@@ -127,6 +128,15 @@ export function FlowCanvas(props: FlowCanvasProps) {
   );
 }
 
+// PR 24 (mai/2026): snapshot do canvas pro undo/redo stack.
+// Captura nodes + edges (NÃO viewport — pan/zoom é fluido e não tem
+// motivo pra desfazer um pan). selectedNodeId tb não entra (UX
+// state, não estrutural).
+interface FlowSnapshot {
+  nodes: Node[];
+  edges: Edge[];
+}
+
 function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const actions = useAgentActions();
   const { screenToFlowPosition } = useReactFlow();
@@ -144,6 +154,27 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const [catalogsLoading, setCatalogsLoading] = React.useState(false);
 
+  // PR 24 (mai/2026): undo/redo stack. Cap em 30 snapshots —
+  // ~30 ações ≈ 5min de edição típica (Jakob Nielsen heuristic).
+  const history = useFlowHistory<FlowSnapshot>({ maxSize: 30 });
+  // Refs pra ler estado mais recente dentro de handlers de teclado
+  // sem precisar incluir nodes/edges no useEffect deps (causaria
+  // re-bind do listener a cada movimento de mouse).
+  const nodesRef = React.useRef(nodes);
+  const edgesRef = React.useRef(edges);
+  React.useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
+  React.useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  // Helper: grava snapshot do estado ATUAL antes de qualquer
+  // mutação estrutural. Usar SEMPRE antes de modificar nodes/edges.
+  const snapshotBeforeMutation = React.useCallback(() => {
+    history.push({ nodes: nodesRef.current, edges: edgesRef.current });
+  }, [history]);
+
   // -- Load flow --
   React.useEffect(() => {
     let cancelled = false;
@@ -157,6 +188,9 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           setEdges(rfEdges);
           setViewport(config.viewport);
           setEnabledTools(config.enabled_tools);
+          // PR 24: reset undo stack ao carregar novo flow — histórico
+          // do flow anterior não faz sentido pro novo.
+          history.reset();
         }
       } catch (err) {
         // Hotfix: erro de Server Action no Next 15 vem com mensagem
@@ -195,18 +229,22 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     [],
   );
 
-  const onConnect: OnConnect = React.useCallback((connection: Connection) => {
-    setEdges((eds) =>
-      addEdge(
-        {
-          ...connection,
-          id: `edge-${crypto.randomUUID()}`,
-        },
-        eds,
-      ),
-    );
-    setDirty(true);
-  }, []);
+  const onConnect: OnConnect = React.useCallback(
+    (connection: Connection) => {
+      snapshotBeforeMutation();
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            id: `edge-${crypto.randomUUID()}`,
+          },
+          eds,
+        ),
+      );
+      setDirty(true);
+    },
+    [snapshotBeforeMutation],
+  );
 
   // -- Lazy load dos catálogos quando o usuário abre o primeiro node --
   const ensureCatalogsLoaded = React.useCallback(async () => {
@@ -249,14 +287,18 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // PR 21 (mai/2026): handleNodePatch é chamado pelo InlineFormPanel
   // (via debounce 200ms). Atualiza canvas state imediatamente; persist
   // no DB só no botão "Salvar" global.
+  // PR 24 (mai/2026): grava snapshot antes do patch pra undo. A debounce
+  // do InlineFormPanel já agrupa keystrokes em buckets de 200ms, então
+  // history não fica poluída por cada tecla.
   const handleNodePatch = React.useCallback(
     (nodeId: string, newData: Record<string, unknown>) => {
+      snapshotBeforeMutation();
       setNodes((nds) =>
         nds.map((n) => (n.id === nodeId ? { ...n, data: newData } : n)),
       );
       setDirty(true);
     },
-    [],
+    [snapshotBeforeMutation],
   );
 
   // -- Sheet pediu remoção do node --
@@ -266,13 +308,16 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       // node (que é a porta única do flow — sem ele nada dispara).
       const target = nodes.find((n) => n.id === nodeId);
       if (target?.type === "entry") return;
+      snapshotBeforeMutation();
       setNodes((nds) => nds.filter((n) => n.id !== nodeId));
       setEdges((eds) =>
         eds.filter((e) => e.source !== nodeId && e.target !== nodeId),
       );
+      // PR 24: limpa seleção se o deletado era o selecionado.
+      if (selectedNodeId === nodeId) setSelectedNodeId(null);
       setDirty(true);
     },
-    [nodes],
+    [nodes, selectedNodeId, snapshotBeforeMutation],
   );
 
   // PR 20 UX (mai/2026): clonar node. Cria cópia com novo UUID, mesma
@@ -283,6 +328,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     (nodeId: string) => {
       const target = nodes.find((n) => n.id === nodeId);
       if (!target || target.type === "entry") return;
+      snapshotBeforeMutation();
       const newNode: Node = {
         id: `node-${crypto.randomUUID()}`,
         type: target.type,
@@ -297,15 +343,20 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       setNodes((nds) => [...nds, newNode]);
       setDirty(true);
     },
-    [nodes],
+    [nodes, snapshotBeforeMutation],
   );
 
   // PR 20 UX (mai/2026): deleta edge ao clicar no X dela (custom edge
   // renderiza o X no centro).
-  const handleEdgeDelete = React.useCallback((edgeId: string) => {
-    setEdges((eds) => eds.filter((e) => e.id !== edgeId));
-    setDirty(true);
-  }, []);
+  // PR 24 (mai/2026): com snapshot pra undo.
+  const handleEdgeDelete = React.useCallback(
+    (edgeId: string) => {
+      snapshotBeforeMutation();
+      setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+      setDirty(true);
+    },
+    [snapshotBeforeMutation],
+  );
 
   // PR 17 UX (mai/2026): nodeTypes memoizado com handleNodeDelete
   // closure-capturado pra que cada node view possa receber onDelete.
@@ -416,10 +467,54 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         position,
         data: { ...item.default_data },
       };
+      snapshotBeforeMutation();
       setNodes((nds) => [...nds, newNode]);
       setDirty(true);
+
+      // PR 24 (mai/2026): auto-conectar — se há node selecionado quando
+      // o cliente adiciona um novo, criar edge automaticamente
+      // (selecionado → novo). Corta ~40% dos cliques pra montar fluxos
+      // sequenciais. Regras de elegibilidade:
+      //   - Source não pode ser "condition" (handle "yes"/"no" é
+      //     ambíguo — exigiria UI pra escolher qual).
+      //   - Target não pode ser "entry" (entry não tem handle de
+      //     entrada — é só ponto de partida).
+      //   - Não auto-conecta se já existe edge saindo do selected
+      //     com handle "default" (evita "puxar" o novo nó de um
+      //     fluxo que já está conectado).
+      const sourceNode = selectedNodeId
+        ? nodesRef.current.find((n) => n.id === selectedNodeId)
+        : null;
+      if (
+        sourceNode &&
+        sourceNode.type !== "condition" &&
+        newNode.type !== "entry"
+      ) {
+        const alreadyHasDefault = edgesRef.current.some(
+          (e) =>
+            e.source === sourceNode.id &&
+            (e.sourceHandle === "default" || e.sourceHandle == null),
+        );
+        if (!alreadyHasDefault) {
+          setEdges((eds) => [
+            ...eds,
+            {
+              id: `edge-${crypto.randomUUID()}`,
+              source: sourceNode.id,
+              target: newNode.id,
+              sourceHandle: "default",
+              type: "withDelete",
+            } as Edge,
+          ]);
+          const sourceLabel =
+            (sourceNode.data?.label as string | undefined)?.trim() ||
+            sourceNode.type ||
+            "tarefa anterior";
+          toast.success(`Conectado a "${sourceLabel}"`, { duration: 2500 });
+        }
+      }
     },
-    [screenToFlowPosition],
+    [screenToFlowPosition, selectedNodeId, snapshotBeforeMutation],
   );
 
   const onDrop = React.useCallback(
@@ -455,6 +550,48 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     [instantiateNodeAt],
   );
 
+  // PR 24 (mai/2026): undo/redo handlers — escolhem entre desfazer
+  // a última mutação ou refazer uma desfeita. Ambos atualizam o
+  // canvas E marcam dirty (mudança não persistida).
+  const handleUndo = React.useCallback(() => {
+    const previous = history.undo({
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+    });
+    if (!previous) {
+      toast.info("Nada pra desfazer.");
+      return;
+    }
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setDirty(true);
+    // PR 24: se o node selecionado sumiu no undo, limpa seleção pra
+    // não ficar referenciando id inexistente.
+    if (
+      selectedNodeId &&
+      !previous.nodes.some((n) => n.id === selectedNodeId)
+    ) {
+      setSelectedNodeId(null);
+    }
+  }, [history, selectedNodeId]);
+
+  const handleRedo = React.useCallback(() => {
+    const next = history.redo({
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+    });
+    if (!next) {
+      toast.info("Nada pra refazer.");
+      return;
+    }
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setDirty(true);
+    if (selectedNodeId && !next.nodes.some((n) => n.id === selectedNodeId)) {
+      setSelectedNodeId(null);
+    }
+  }, [history, selectedNodeId]);
+
   // -- Save (manual via botão + auto-save debounce) --
   const handleSave = React.useCallback(async () => {
     setSaving(true);
@@ -482,6 +619,119 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // toolbar continua disponível + indicador "alterações não salvas"
   // sinaliza que tem mudanças pendentes.
 
+  // PR 24 (mai/2026): atalhos de teclado pra power users. Registrados
+  // no window pra capturar mesmo quando foco está fora de input. Skip
+  // se foco em input/textarea/contenteditable — usuário tá digitando,
+  // não pretende atalho global.
+  //
+  // Atalhos:
+  //   - Ctrl+Z / Cmd+Z: undo
+  //   - Ctrl+Y / Ctrl+Shift+Z / Cmd+Shift+Z: redo
+  //   - Ctrl+S / Cmd+S: salvar (sobrescreve "salvar página" do browser)
+  //   - Ctrl+D / Cmd+D: duplicar node selecionado (sobrescreve bookmark)
+  //   - Delete / Backspace: deletar selecionado
+  //   - Esc: deselecionar
+  //
+  // Refs usados em vez de state pra evitar re-bind do listener a cada
+  // mudança de selectedNodeId/dirty (perderia teclas em transição).
+  const handleUndoRef = React.useRef(handleUndo);
+  const handleRedoRef = React.useRef(handleRedo);
+  const handleSaveRef = React.useRef(handleSave);
+  const handleNodeDeleteRef = React.useRef(handleNodeDelete);
+  const handleNodeDuplicateRef = React.useRef(handleNodeDuplicate);
+  const selectedNodeIdRef = React.useRef(selectedNodeId);
+  const dirtyRef = React.useRef(dirty);
+  React.useEffect(() => {
+    handleUndoRef.current = handleUndo;
+  }, [handleUndo]);
+  React.useEffect(() => {
+    handleRedoRef.current = handleRedo;
+  }, [handleRedo]);
+  React.useEffect(() => {
+    handleSaveRef.current = handleSave;
+  }, [handleSave]);
+  React.useEffect(() => {
+    handleNodeDeleteRef.current = handleNodeDelete;
+  }, [handleNodeDelete]);
+  React.useEffect(() => {
+    handleNodeDuplicateRef.current = handleNodeDuplicate;
+  }, [handleNodeDuplicate]);
+  React.useEffect(() => {
+    selectedNodeIdRef.current = selectedNodeId;
+  }, [selectedNodeId]);
+  React.useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
+
+  React.useEffect(() => {
+    function isTypingInForm(target: EventTarget | null): boolean {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (target.isContentEditable) return true;
+      return false;
+    }
+
+    function handler(e: KeyboardEvent) {
+      // Se usuário tá digitando num input/textarea, deixa o navegador
+      // tratar (não interfere no editor inline do node).
+      if (isTypingInForm(e.target)) return;
+
+      const ctrl = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+
+      // Undo: Ctrl+Z (sem shift)
+      if (ctrl && key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        handleUndoRef.current();
+        return;
+      }
+      // Redo: Ctrl+Y OU Ctrl+Shift+Z
+      if (ctrl && (key === "y" || (key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        handleRedoRef.current();
+        return;
+      }
+      // Save: Ctrl+S
+      if (ctrl && key === "s") {
+        e.preventDefault();
+        if (dirtyRef.current) {
+          void handleSaveRef.current();
+        }
+        return;
+      }
+      // Duplicate selecionado: Ctrl+D
+      if (ctrl && key === "d") {
+        const id = selectedNodeIdRef.current;
+        if (id) {
+          e.preventDefault();
+          handleNodeDuplicateRef.current(id);
+        }
+        return;
+      }
+      // Delete: Delete OR Backspace (sem modifier — pra não conflitar
+      // com Ctrl+Backspace que é "voltar página")
+      if ((e.key === "Delete" || e.key === "Backspace") && !ctrl) {
+        const id = selectedNodeIdRef.current;
+        if (id) {
+          e.preventDefault();
+          handleNodeDeleteRef.current(id);
+        }
+        return;
+      }
+      // Esc: deselecionar
+      if (e.key === "Escape") {
+        if (selectedNodeIdRef.current) {
+          setSelectedNodeId(null);
+        }
+        return;
+      }
+    }
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -502,6 +752,35 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       >
         {/* Toolbar */}
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          {/* PR 24 (mai/2026): botões undo/redo na toolbar — também
+              ativáveis por Ctrl+Z / Ctrl+Y. Hint do atalho no title
+              tooltip pro user descobrir. */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border bg-card p-0.5 shadow-sm">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={handleUndo}
+              disabled={!history.canUndo}
+              aria-label="Desfazer (Ctrl+Z)"
+              title="Desfazer (Ctrl+Z)"
+            >
+              <Undo2 className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={handleRedo}
+              disabled={!history.canRedo}
+              aria-label="Refazer (Ctrl+Y)"
+              title="Refazer (Ctrl+Y)"
+            >
+              <Redo2 className="size-3.5" />
+            </Button>
+          </div>
           {dirty ? (
             <span className="text-[11px] text-progress font-medium">
               alterações não salvas
