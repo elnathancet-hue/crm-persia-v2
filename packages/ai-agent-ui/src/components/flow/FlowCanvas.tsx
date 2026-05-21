@@ -25,6 +25,7 @@ import {
   useReactFlow,
   type Connection,
   type Edge,
+  type EdgeTypes,
   type Node,
   type NodeMouseHandler,
   type NodeTypes,
@@ -51,6 +52,7 @@ import { EntryNodeView } from "./nodes/EntryNodeView";
 import { AIAgentNodeView } from "./nodes/AIAgentNodeView";
 import { ActionNodeView } from "./nodes/ActionNodeView";
 import { ConditionNodeView } from "./nodes/ConditionNodeView";
+import { EdgeWithDelete } from "./edges/edge-with-delete";
 
 // ============================================================================
 // React Flow node bindings — mapeia type→component dos custom nodes
@@ -268,6 +270,38 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     [nodes],
   );
 
+  // PR 20 UX (mai/2026): clonar node. Cria cópia com novo UUID, mesma
+  // data, posição offsetada (+30,+30 pra não ficar em cima do original).
+  // Entry NÃO é duplicável (1 ponto de entrada por flow — proteção dupla
+  // aqui + ausência de onDuplicate na nodeTypes do entry).
+  const handleNodeDuplicate = React.useCallback(
+    (nodeId: string) => {
+      const target = nodes.find((n) => n.id === nodeId);
+      if (!target || target.type === "entry") return;
+      const newNode: Node = {
+        id: `node-${crypto.randomUUID()}`,
+        type: target.type,
+        position: {
+          x: target.position.x + 30,
+          y: target.position.y + 30,
+        },
+        // Deep-ish clone via JSON pra desacoplar references (config é
+        // POJO, JSON.parse(JSON.stringify) é safe e suficiente).
+        data: JSON.parse(JSON.stringify(target.data)),
+      };
+      setNodes((nds) => [...nds, newNode]);
+      setDirty(true);
+    },
+    [nodes],
+  );
+
+  // PR 20 UX (mai/2026): deleta edge ao clicar no X dela (custom edge
+  // renderiza o X no centro).
+  const handleEdgeDelete = React.useCallback((edgeId: string) => {
+    setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+    setDirty(true);
+  }, []);
+
   // PR 17 UX (mai/2026): nodeTypes memoizado com handleNodeDelete
   // closure-capturado pra que cada node view possa receber onDelete.
   // Entry node NÃO recebe onDelete (proteção dupla: aqui + dentro do
@@ -283,6 +317,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           onDelete={() => handleNodeDelete(id)}
+          onDuplicate={() => handleNodeDuplicate(id)}
         />
       ),
       action: ({ data, selected, id }) => (
@@ -290,6 +325,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           onDelete={() => handleNodeDelete(id)}
+          onDuplicate={() => handleNodeDuplicate(id)}
         />
       ),
       condition: ({ data, selected, id }) => (
@@ -297,10 +333,35 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           onDelete={() => handleNodeDelete(id)}
+          onDuplicate={() => handleNodeDuplicate(id)}
         />
       ),
     }),
-    [handleNodeDelete],
+    [handleNodeDelete, handleNodeDuplicate],
+  );
+
+  // PR 20 UX (mai/2026): edgeTypes com X no centro pra deletar
+  // conexão inline. Inspirado no Jordan/ManyChat. Custom edge é
+  // pluggable — caller (cada edge no state) passa `data.onDelete`
+  // via memoized edges below.
+  const edgeTypes = React.useMemo<EdgeTypes>(
+    () => ({
+      withDelete: EdgeWithDelete,
+    }),
+    [],
+  );
+
+  // PR 20: enriquece edges do state com onDelete callback no data.
+  // Não persiste no JSON salvo (callbacks são descartados pelo
+  // normalizer); rebindado a cada render.
+  const edgesWithDelete = React.useMemo(
+    () =>
+      edges.map((e) => ({
+        ...e,
+        type: "withDelete" as const,
+        data: { ...(e.data ?? {}), onDelete: handleEdgeDelete },
+      })),
+    [edges, handleEdgeDelete],
   );
 
   // Node atualmente selecionado pra renderizar no Sheet
@@ -394,15 +455,12 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     }
   }, [actions, configId, edges, enabledTools, nodes, viewport]);
 
-  // Auto-save debounce: 2s após última edição. Não fecha o loop de save
-  // — usuário pode salvar manualmente também via botão.
-  React.useEffect(() => {
-    if (!dirty) return;
-    const handle = window.setTimeout(() => {
-      void handleSave();
-    }, 2000);
-    return () => window.clearTimeout(handle);
-  }, [dirty, handleSave]);
+  // PR 20 UX (mai/2026): auto-save removido a pedido do cliente.
+  // Comportamento agora é igual ao Jordan/ManyChat — salva SÓ quando
+  // clica em "Salvar". Reduz writes desnecessárias no banco e evita
+  // surpresas de "salvou no meio do meu trabalho". Botão "Salvar" no
+  // toolbar continua disponível + indicador "alterações não salvas"
+  // sinaliza que tem mudanças pendentes.
 
   if (loading) {
     return (
@@ -445,16 +503,21 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         </div>
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={edgesWithDelete}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           defaultViewport={viewport}
           onMoveEnd={(_, v) => {
+            // PR 20 UX (mai/2026): pan/zoom NÃO marca dirty. Antes
+            // qualquer movimento de viewport fazia o botão "Salvar"
+            // piscar — confunde porque nada estrutural mudou.
+            // Viewport ainda é persistido junto com nodes/edges no
+            // próximo save manual.
             setViewport(v);
-            setDirty(true);
           }}
           fitView={nodes.length > 0}
           attributionPosition="bottom-left"

@@ -14,6 +14,7 @@ interface Props {
   data: FlowConditionNode["data"];
   selected?: boolean;
   onDelete?: () => void;
+  onDuplicate?: () => void;
 }
 
 function conditionPreview(
@@ -52,7 +53,12 @@ function conditionIncompleteReason(
   }
 }
 
-export function ConditionNodeView({ data, selected, onDelete }: Props) {
+export function ConditionNodeView({
+  data,
+  selected,
+  onDelete,
+  onDuplicate,
+}: Props) {
   const incompleteReason = conditionIncompleteReason(
     data.condition_type,
     data.config,
@@ -74,6 +80,7 @@ export function ConditionNodeView({ data, selected, onDelete }: Props) {
         incomplete={incompleteReason !== null}
         incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
+        onDuplicate={onDuplicate}
       >
         <div className="line-clamp-2">
           {conditionPreview(data.condition_type, data.config)}

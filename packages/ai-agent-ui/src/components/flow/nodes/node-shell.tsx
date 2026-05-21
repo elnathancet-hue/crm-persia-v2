@@ -10,11 +10,16 @@
 // PR 17 UX (mai/2026): novos props pra UX clara:
 //   - incomplete + incomplete_reason: borda amarela + ícone alerta +
 //     texto "Falta X" pra usuário ver que precisa configurar
-//   - onDelete: botão X no canto superior direito (hover/selected) —
-//     usuário não precisa abrir Sheet só pra remover
+//
+// PR 20 UX (mai/2026): toolbar vertical flutuante à direita (inspirado
+// no Jordan/ManyChat). Substitui o X único no canto por 3 ações:
+//   - Lixeira (delete)
+//   - Duplicar (clone)
+//   - Info (tooltip com label)
+// Aparece no hover/selected do node, alinhada verticalmente.
 
 import * as React from "react";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, Copy, Info, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@persia/ui/utils";
 
@@ -31,9 +36,12 @@ interface NodeShellProps {
   incomplete?: boolean;
   /** Mensagem mostrada quando incomplete (ex: "Falta selecionar tag"). */
   incompleteReason?: string;
-  /** PR 17 (mai/2026): callback de remover. Quando passado, mostra X
-   * no canto. Entry node NÃO passa pra impedir delete. */
+  /** PR 17 (mai/2026): callback de remover. Quando passado, mostra
+   * botão lixeira na toolbar. Entry node NÃO passa pra impedir delete. */
   onDelete?: () => void;
+  /** PR 20 (mai/2026): callback de duplicar. Quando passado, mostra
+   * botão copiar na toolbar. */
+  onDuplicate?: () => void;
   children?: React.ReactNode;
 }
 
@@ -72,9 +80,14 @@ export function NodeShell({
   incomplete,
   incompleteReason,
   onDelete,
+  onDuplicate,
   children,
 }: NodeShellProps) {
   const styles = VARIANT_STYLES[variant];
+  // PR 20 (mai/2026): tooltip do info icon (mostra label completo +
+  // descrição em hover). State simples pra ativar no hover do botão.
+  const [infoOpen, setInfoOpen] = React.useState(false);
+  const hasToolbar = Boolean(onDelete || onDuplicate);
   return (
     <div
       className={cn(
@@ -86,28 +99,62 @@ export function NodeShell({
           : "hover:shadow-md",
       )}
     >
-      {/* PR 17 (mai/2026): botão X no canto superior direito.
-          Aparece em hover/selected, só quando onDelete é injetado
-          (entry node não passa). Stop propagation pra clique no X
-          não disparar onClick do node. */}
-      {onDelete ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          aria-label="Remover esta tarefa"
+      {/* PR 20 (mai/2026): toolbar vertical flutuante à direita,
+          inspirada no Jordan/ManyChat. 3 botões empilhados: lixeira /
+          duplicar / info. Aparece em hover/selected. Stop propagation
+          pra não disparar onClick do node. */}
+      {hasToolbar ? (
+        <div
           className={cn(
-            "absolute -top-2 -right-2 z-10 size-5 rounded-full bg-destructive text-destructive-foreground",
-            "flex items-center justify-center shadow-md",
+            "absolute -right-9 top-0 z-10 flex flex-col gap-0.5 rounded-lg bg-primary p-0.5 shadow-md",
             "opacity-0 group-hover:opacity-100 transition-opacity",
             selected && "opacity-100",
-            "hover:scale-110 transition-transform",
           )}
         >
-          <X className="size-3" />
-        </button>
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              aria-label="Remover esta tarefa"
+              className="size-7 rounded-md flex items-center justify-center text-primary-foreground hover:bg-primary-foreground/15 transition-colors"
+              title="Remover"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          ) : null}
+          {onDuplicate ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDuplicate();
+              }}
+              aria-label="Duplicar esta tarefa"
+              className="size-7 rounded-md flex items-center justify-center text-primary-foreground hover:bg-primary-foreground/15 transition-colors"
+              title="Duplicar"
+            >
+              <Copy className="size-3.5" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={(e) => e.stopPropagation()}
+            onMouseEnter={() => setInfoOpen(true)}
+            onMouseLeave={() => setInfoOpen(false)}
+            aria-label="Informações"
+            className="relative size-7 rounded-md flex items-center justify-center text-primary-foreground hover:bg-primary-foreground/15 transition-colors"
+          >
+            <Info className="size-3.5" />
+            {infoOpen ? (
+              <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground shadow-md pointer-events-none">
+                {label}
+              </span>
+            ) : null}
+          </button>
+        </div>
       ) : null}
 
       <div className="flex items-start gap-2.5 p-3">

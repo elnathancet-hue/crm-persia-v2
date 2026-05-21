@@ -19,9 +19,15 @@ interface Props {
   data: FlowAIAgentNode["data"];
   selected?: boolean;
   onDelete?: () => void;
+  onDuplicate?: () => void;
 }
 
-export function AIAgentNodeView({ data, selected, onDelete }: Props) {
+export function AIAgentNodeView({
+  data,
+  selected,
+  onDelete,
+  onDuplicate,
+}: Props) {
   const promptPreview = (data.system_prompt ?? "").trim();
   const instructions = data.instructions ?? [];
   // PR 17 UX (mai/2026): IA sem instruções de quando terminar é
@@ -55,6 +61,7 @@ export function AIAgentNodeView({ data, selected, onDelete }: Props) {
         incomplete={incompleteReason !== null}
         incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
+        onDuplicate={onDuplicate}
       >
         {promptPreview ? (
           <div className="line-clamp-2">{promptPreview}</div>
