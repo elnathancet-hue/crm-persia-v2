@@ -5,7 +5,10 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Bot,
+  CheckCircle2,
+  Circle,
   Clock,
+  Crown,
   FlaskConical,
   HelpCircle,
   History,
@@ -13,6 +16,7 @@ import {
   ListOrdered,
   Loader2,
   Menu,
+  PlayCircle,
   Settings2,
   Wrench,
 } from "lucide-react";
@@ -348,6 +352,15 @@ export function AgentEditor({
         </div>
       </div>
 
+      {/* PR 18 UX (mai/2026): checklist de publicação. Mostra ao cliente
+          exatamente o que falta pra agente começar a responder leads. */}
+      <PublishingChecklist
+        agent={agent}
+        onActivate={() => handleStatusChange("active")}
+        onOpenFlow={() => handleSelect("stages")}
+        isPending={isPending}
+      />
+
       {/* Layout: sidebar fixa (lg+) + conteudo. Em <lg, sidebar so via
           drawer (hamburger). Bottom padding garante que o FAB nao tampe
           o ultimo content. */}
@@ -438,4 +451,140 @@ function statusLabel(status: AgentStatus): string {
     case "paused":
       return "Pausado";
   }
+}
+
+// ============================================================================
+// PR 18 UX (mai/2026): PublishingChecklist
+// ============================================================================
+//
+// Barra horizontal abaixo do header mostrando o que falta pro agente
+// responder leads reais. Cada item é um chip clicável (quando ação
+// faz sentido) ou estático.
+//
+// V1 cobre 3 itens (sem flow inspection pra evitar query extra):
+//   - Status ativo
+//   - Marcado como principal
+//   - Fluxo configurado (deep link pra aba)
+//
+// Quando todos verdes, mostra banner sucesso "Pronto pra publicar".
+
+function PublishingChecklist({
+  agent,
+  onActivate,
+  onOpenFlow,
+  isPending,
+}: {
+  agent: AgentConfig;
+  onActivate: () => void;
+  onOpenFlow: () => void;
+  isPending: boolean;
+}) {
+  const isActive = agent.status === "active";
+  const isPrimary = Boolean(agent.is_primary);
+  const allReady = isActive && isPrimary;
+
+  if (allReady) {
+    return (
+      <div className="-mx-6 px-6 py-2 bg-success-soft/40 border-b border-success-ring/30">
+        <div className="flex items-center gap-2 text-xs">
+          <CheckCircle2 className="size-4 text-success" />
+          <span className="font-medium text-foreground">
+            Pronto pra responder conversas.
+          </span>
+          <span className="text-muted-foreground">
+            Esse agente recebe novas mensagens automaticamente. Pra parar,
+            mude o status pra Pausado ou troque o agente principal.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="-mx-6 px-6 py-3 bg-muted/30 border-b border-border/60">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-semibold text-muted-foreground">
+          Pra publicar, falta:
+        </span>
+        <ChecklistChip
+          done={isActive}
+          icon={PlayCircle}
+          label={isActive ? "Agente ativo" : "Ativar agente"}
+          actionLabel={!isActive ? "Ativar" : undefined}
+          onAction={!isActive ? onActivate : undefined}
+          isPending={isPending}
+        />
+        <ChecklistChip
+          done={isPrimary}
+          icon={Crown}
+          label={
+            isPrimary
+              ? "Marcado como principal"
+              : isActive
+                ? "Marcar como principal"
+                : "Marcar como principal (após ativar)"
+          }
+          // Sem ação direta — usuário define como principal pela lista
+          // (link explícito em vez de duplicar a action aqui).
+        />
+        <ChecklistChip
+          done={false} // V1 não inspeciona flow — sempre mostra "Revisar"
+          icon={ListOrdered}
+          label="Revisar fluxo"
+          actionLabel="Abrir"
+          onAction={onOpenFlow}
+          isPending={isPending}
+          mode="info"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ChecklistChip({
+  done,
+  icon: Icon,
+  label,
+  actionLabel,
+  onAction,
+  isPending,
+  mode = "todo",
+}: {
+  done: boolean;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  isPending?: boolean;
+  /** "todo" = circle outline (pendente); "info" = mostra mesmo quando
+   * não exatamente "concluído" (caso do flow que não inspecionamos). */
+  mode?: "todo" | "info";
+}) {
+  const StateIcon = done ? CheckCircle2 : mode === "info" ? Icon : Circle;
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
+        done
+          ? "border-success/40 bg-success-soft/30 text-foreground"
+          : "border-border bg-card text-muted-foreground"
+      }`}
+    >
+      <StateIcon
+        className={`size-3.5 ${
+          done ? "text-success" : "text-muted-foreground"
+        }`}
+      />
+      <span className={done ? "font-medium text-foreground" : ""}>{label}</span>
+      {!done && actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={isPending}
+          className="ml-1 text-primary hover:underline font-medium disabled:opacity-50"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
 }

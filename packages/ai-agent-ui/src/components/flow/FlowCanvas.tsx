@@ -464,14 +464,43 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           {nodes.length > 5 ? <MiniMap pannable zoomable /> : null}
         </ReactFlow>
         {nodes.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center max-w-sm">
-              <p className="text-sm font-medium text-foreground">
-                Comece arrastando uma tarefa
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Use a sidebar à esquerda pra adicionar "Conversa iniciada" como
-                ponto de partida.
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <div className="text-center max-w-md space-y-4">
+              <div className="space-y-1">
+                <p className="text-base font-semibold text-foreground">
+                  Comece pelo primeiro passo do fluxo
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Use os botões abaixo OU arraste um card da lateral pra
+                  montar o atendimento.
+                </p>
+              </div>
+              {/* PR 18 UX (mai/2026): CTAs explícitos como alternativa ao
+                  drag (intimidador pra novos usuários). Adicionam node
+                  no centro do canvas via handleSidebarAdd. */}
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSidebarAdd("entry.conversation_started")}
+                >
+                  Adicionar entrada
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    // Sequência: entrada + IA conectados por edge default —
+                    // permite "começar a conversar" em 1 clique.
+                    handleSidebarAdd("entry.conversation_started");
+                    setTimeout(() => handleSidebarAdd("ai_agent.default"), 30);
+                  }}
+                >
+                  Adicionar atendimento com IA
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                Dica: o fluxo precisa de uma entrada e pelo menos uma ação
+                ou conversa com IA pra começar a responder leads.
               </p>
             </div>
           </div>
