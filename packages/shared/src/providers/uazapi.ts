@@ -264,6 +264,37 @@ export class UazapiAdapter implements WhatsAppProvider {
     return Object.values(result).some(v => v === true);
   }
 
+  /**
+   * Bug A fix (mai/2026): busca URL da foto de perfil via /chat/details.
+   * UAZAPI retorna ~60 campos no response — o de foto varia entre
+   * versões (`wa_profilePicURL`, `imagePreview`, `image`).
+   * Tentamos os 3 em ordem de prioridade e retornamos a primeira
+   * URL não-vazia encontrada.
+   * Retorna null em qualquer falha (não tem foto pública, contato
+   * fora do WhatsApp, rate limit, erro de rede) — caller no-op.
+   */
+  async getContactProfilePic(phone: string): Promise<string | null> {
+    try {
+      const details = await this.client.getChatDetails(phone, { preview: true });
+      // Procura URL em campos conhecidos (ordem de prioridade pela
+      // qualidade típica: profilePicURL > imagePreview > image).
+      const candidates = [
+        details.wa_profilePicURL,
+        details.wa_profilePicUrl,
+        details.imagePreview,
+        details.image,
+      ];
+      for (const candidate of candidates) {
+        if (typeof candidate === "string" && candidate.trim().length > 0) {
+          return candidate.trim();
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async syncLeadToWhatsApp(phone: string, data: LeadSyncData): Promise<void> {
     const chatId = phoneToJid(phone);
     const params: Record<string, unknown> = { id: chatId };

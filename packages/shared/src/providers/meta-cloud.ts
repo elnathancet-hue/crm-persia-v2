@@ -295,6 +295,18 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     return !!phone.replace(/\D/g, "");
   }
 
+  /**
+   * Bug A fix (mai/2026): Meta Cloud não expõe endpoint público pra
+   * profile pic do contato (Graph API só permite isso pra páginas e
+   * usuários autenticados via login Facebook). Stub que sempre retorna
+   * null. UI cai no fallback de iniciais.
+   * Futuro: pode usar a foto vinda no payload `messages.contacts[].profile`
+   * do webhook se aparecer (campo opcional, raro em mensagens regulares).
+   */
+  async getContactProfilePic(_phone: string): Promise<string | null> {
+    return null;
+  }
+
   async downloadMedia(
     messageId: string,
   ): Promise<{ fileURL?: string; mimetype?: string; transcription?: string }> {

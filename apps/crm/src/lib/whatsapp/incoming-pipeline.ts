@@ -119,6 +119,22 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         type: "lead_created",
         description: `Lead criado via WhatsApp (${msg.pushName || normalizedPhone})`,
       });
+      // Bug A fix (mai/2026): busca foto WhatsApp em background (legacy
+      // pipeline). Mesma lógica do executor.ts pra AI Agent nativo.
+      const newLeadId = lead.id;
+      void (async () => {
+        try {
+          const avatarUrl = await provider.getContactProfilePic(normalizedPhone);
+          if (avatarUrl) {
+            await supabase
+              .from("leads")
+              .update({ avatar_url: avatarUrl })
+              .eq("id", newLeadId);
+          }
+        } catch {
+          // Best-effort.
+        }
+      })();
     }
   }
 

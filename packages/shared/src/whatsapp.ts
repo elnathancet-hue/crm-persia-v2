@@ -235,6 +235,15 @@ export interface WhatsAppProvider {
   // Contacts
   checkNumber(phone: string): Promise<boolean>;
 
+  /**
+   * Bug A fix (mai/2026): retorna URL da foto de perfil WhatsApp do
+   * contato. Retorna null se contato não tem foto pública ou se o
+   * provider não suporta (Meta Cloud).
+   * Implementação esperada cacha por phone — caller deve chamar 1x
+   * (na criação do lead) e persistir em leads.avatar_url.
+   */
+  getContactProfilePic(phone: string): Promise<string | null>;
+
   // Media download
   downloadMedia(messageId: string, opts?: {
     transcribe?: boolean;

@@ -7,7 +7,7 @@ import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
 import { getMessages, resendMessage, resolveMessageMediaUrl, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
-import { Avatar, AvatarFallback } from "@persia/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import {
@@ -579,7 +579,18 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               <ArrowLeft className="size-4" />
             </Button>
           )}
+          {/* Bug A fix (mai/2026): tenta carregar foto do WhatsApp
+              (lead.avatar_url populado pelo pipeline via UAZAPI
+              /chat/details). Cai pro AvatarFallback com iniciais se
+              não houver foto, falhar ao carregar, ou provider Meta
+              Cloud (que não expõe profile pic). */}
           <Avatar size="default">
+            {lead?.avatar_url ? (
+              <AvatarImage
+                src={lead.avatar_url as string}
+                alt={lead?.name as string | undefined}
+              />
+            ) : null}
             <AvatarFallback>
               {getInitials(lead?.name as string | null)}
             </AvatarFallback>
