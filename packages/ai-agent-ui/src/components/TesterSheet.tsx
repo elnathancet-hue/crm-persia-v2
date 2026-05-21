@@ -47,6 +47,7 @@ import {
 } from "@persia/ui/sheet";
 import { useAgentActions } from "../context";
 import { EMPTY_FLOW_CATALOGS, type FlowCatalogs } from "./flow/catalog-types";
+import { useFlowTesterPublisher } from "./flow-tester-context";
 
 // PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): Tester com 2 modos.
 //   Modo "Conversa fiel" (default ON quando testAgentLive existe):
@@ -98,6 +99,10 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
   const hasLive = typeof actions.testAgentLive === "function";
   const hasReset = typeof actions.resetTesterConversation === "function";
   const hasSimulate = typeof actions.simulateCrmEvent === "function";
+  // PR 28 (mai/2026): publica o último node executado pro FlowTesterContext.
+  // FlowCanvas escuta e destaca o node com pulse animation por 5s.
+  // No-op quando fora do FlowTesterProvider (Tester continua standalone).
+  const publishReachedNode = useFlowTesterPublisher();
 
   const [message, setMessage] = React.useState("");
   const [turns, setTurns] = React.useState<Turn[]>([]);
@@ -164,6 +169,8 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
         });
         if (cancelledRef.current) return;
         appendFaithfulTurns(setTurns, res);
+        // PR 28: publica node onde o flow parou pra destacar no canvas.
+        publishReachedNode(res.next_node_id ?? null);
       } catch (err) {
         if (cancelledRef.current) return;
         toast.error(err instanceof Error ? err.message : "Falha ao testar");
@@ -189,6 +196,8 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
           dry_run: true,
         });
         if (cancelledRef.current) return;
+        // PR 28: publica node onde o flow parou pra destacar no canvas.
+        publishReachedNode(res.next_node_id ?? null);
         setTurns((prev) => [
           ...prev,
           {
@@ -232,6 +241,8 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
 
   const handleReset = () => {
     setTurns([]);
+    // PR 28: limpa highlight do canvas — reset = sessão nova.
+    publishReachedNode(null);
     if (hasReset && faithfulMode) {
       startTransition(async () => {
         try {
@@ -277,6 +288,8 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
         });
         if (cancelledRef.current) return;
         appendFaithfulTurns(setTurns, res);
+        // PR 28: também destaca o node ao simular evento CRM.
+        publishReachedNode(res.next_node_id ?? null);
       } catch (err) {
         if (cancelledRef.current) return;
         toast.error(err instanceof Error ? err.message : "Falha ao simular");
