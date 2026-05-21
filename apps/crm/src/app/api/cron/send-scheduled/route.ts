@@ -52,10 +52,14 @@ export async function GET(request: NextRequest) {
 
       const provider = createProvider(connection);
 
-      // Send the message
-      await provider.sendText({ phone, message: msg.content });
+      // Send the message (captura messageId pra webhook messages_update
+      // — Bug B — conseguir casar update de status delivered/read).
+      const result = await provider.sendText({ phone, message: msg.content });
 
-      // Save to messages table
+      // Bug F fix (mai/2026): persistir whatsapp_msg_id + status='sent'.
+      // Sem isso (a) webhook messages_update não casa → status nunca
+      // evolui pra delivered/read; (b) dedup de inbound futuro falha;
+      // (c) UI mostra mensagem com checkmark indefinido.
       await supabase.from("messages").insert({
         organization_id: orgId,
         conversation_id: msg.conversation_id,
@@ -64,6 +68,8 @@ export async function GET(request: NextRequest) {
         sender: "agent",
         sender_user_id: msg.created_by,
         type: msg.type || "text",
+        status: "sent",
+        whatsapp_msg_id: result.messageId ?? null,
       });
 
       // Mark as sent

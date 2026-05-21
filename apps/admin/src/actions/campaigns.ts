@@ -195,8 +195,11 @@ async function sendUazapiCampaign(
 
   const { data: connection } = await admin
     .from("whatsapp_connections")
-    .select("provider, instance_url, instance_token")
+    // Cleanup (mai/2026): explicit field list completa + filter por
+    // provider UAZAPI (createCampaign só existe em UazapiAdapter).
+    .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
     .eq("organization_id", orgId)
+    .eq("provider", "uazapi")
     .eq("status", "connected")
     .single();
   if (!connection) return { sent: 0, error: "WhatsApp nao conectado" };

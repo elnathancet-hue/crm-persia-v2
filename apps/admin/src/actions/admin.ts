@@ -140,7 +140,7 @@ export async function getOrganizationDetail(orgId: string) {
   const [leads, conversations, connections] = await Promise.all([
     admin.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
     admin.from("conversations").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
-    admin.from("whatsapp_connections").select("*").eq("organization_id", orgId).limit(1).single(),
+    admin.from("whatsapp_connections").select("provider, instance_url, instance_token, phone_number, status").eq("organization_id", orgId).limit(1).single(),
   ]);
 
   return {

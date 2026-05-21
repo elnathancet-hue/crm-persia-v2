@@ -161,7 +161,12 @@ export async function GET(req: NextRequest) {
           .update({ last_message_at: now, updated_at: now })
           .eq("id", conversationId);
       } else {
-        const { data: newConv } = await admin
+        // Bug E fix (mai/2026): UNIQUE partial index (migration 063,
+        // `WHERE status IN ('active','waiting_human')`) pode disparar
+        // 23505 se cron rodar em paralelo com webhook do mesmo lead.
+        // Detectamos e fazemos re-SELECT da conv ativa criada por outra
+        // request — assim o template envia + grava na conv certa.
+        const { data: newConv, error: convErr } = await admin
           .from("conversations")
           .insert({
             organization_id: row.organization_id,
@@ -173,7 +178,22 @@ export async function GET(req: NextRequest) {
           })
           .select("id")
           .single();
-        conversationId = newConv?.id ?? null;
+        if (convErr && convErr.code === "23505") {
+          const { data: raceWinner } = await admin
+            .from("conversations")
+            .select("id")
+            .eq("organization_id", row.organization_id)
+            .eq("lead_id", row.lead_id)
+            .in("status", ["active", "waiting_human"])
+            .order("last_message_at", { ascending: false, nullsFirst: false })
+            .limit(1)
+            .maybeSingle();
+          conversationId = raceWinner?.id ?? null;
+        } else if (convErr) {
+          throw new Error(`conv_create_failed: ${convErr.message}`);
+        } else {
+          conversationId = newConv?.id ?? null;
+        }
       }
 
       await admin.from("messages").insert({

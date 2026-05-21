@@ -190,108 +190,11 @@ export async function executeCampaign(job: CampaignJob): Promise<{
   }
 }
 
-/**
- * Envia follow-up individual para um lead
- */
-export async function sendFollowUp(
-  orgId: string,
-  leadId: string,
-  message: string
-): Promise<boolean> {
-  const supabase = getSupabase();
-  const { data: connection } = await supabase
-    .from("whatsapp_connections")
-    .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
-    .eq("organization_id", orgId)
-    .eq("status", "connected")
-    .single();
-
-  if (!connection) {
-    logError("followup_send_missing_connection", {
-      organization_id: orgId,
-      lead_id: leadId,
-      provider: "whatsapp",
-    });
-    return false;
-  }
-
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("phone, name")
-    .eq("id", leadId)
-    .single();
-
-  if (!lead?.phone) {
-    logInfo("followup_send_missing_phone", {
-      organization_id: orgId,
-      lead_id: leadId,
-    });
-    return false;
-  }
-
-  const provider = createProvider(connection);
-  const personalizedMsg = message
-    .replace(/\{nome\}/gi, lead.name || "")
-    .replace(/\{telefone\}/gi, lead.phone || "");
-
-  try {
-    await provider.sendText({ phone: lead.phone, message: personalizedMsg });
-
-    // Log activity
-    await supabase.from("lead_activities").insert({
-      organization_id: orgId,
-      lead_id: leadId,
-      type: "followup_sent",
-      description: `Follow-up enviado via WhatsApp`,
-    });
-
-    return true;
-  } catch (err: unknown) {
-    logError("followup_send_failed", {
-      organization_id: orgId,
-      lead_id: leadId,
-      provider: connection.provider,
-      error: errorMessage(err),
-    });
-    return false;
-  }
-}
-
-/**
- * Envia mensagem individual via WhatsApp (para uso no Chat Live)
- */
-export async function sendWhatsAppMessage(
-  orgId: string,
-  phone: string,
-  message: string
-): Promise<{ success: boolean; messageId?: string }> {
-  const supabase = getSupabase();
-  const { data: connection } = await supabase
-    .from("whatsapp_connections")
-    .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
-    .eq("organization_id", orgId)
-    .eq("status", "connected")
-    .single();
-
-  if (!connection) {
-    logError("whatsapp_direct_send_missing_connection", {
-      organization_id: orgId,
-      provider: "whatsapp",
-    });
-    return { success: false };
-  }
-
-  const provider = createProvider(connection);
-
-  try {
-    const result = await provider.sendText({ phone, message });
-    return { success: true, messageId: result.messageId };
-  } catch (err: unknown) {
-    logError("whatsapp_direct_send_failed", {
-      organization_id: orgId,
-      provider: connection.provider,
-      error: errorMessage(err),
-    });
-    return { success: false };
-  }
-}
+// Cleanup (mai/2026): funções `sendFollowUp`, `sendFollowupMessage`,
+// `sendWhatsAppMessage` removidas — eram dead exports (zero callers no
+// monorepo). Caminhos vivos hoje:
+//   - Chat Live: `apps/crm/src/actions/messages.ts` (sendMessage)
+//   - Admin chat: `apps/admin/src/actions/messages.ts` (sendMessage)
+//   - Campanha: `executeCampaign` neste arquivo (via UAZAPI native queue)
+//   - Follow-up IA: `apps/crm/src/lib/ai-agent/send-reply.ts`
+//   - Agenda: `apps/crm/src/lib/agenda/notifications/dispatch.ts`
