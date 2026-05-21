@@ -329,6 +329,10 @@ export function RulesTab({
   ]);
 
   return (
+    /* PR 34 (mai/2026): outer wrap pra acomodar sticky save bar no
+       rodapé. pb-20 reserva espaço pro bar ficar visível sem cobrir
+       o último accordion. */
+    <div className="space-y-4 pb-20">
     <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
       {/* PR 27 (mai/2026): guard pra "este projeto não foi salvo,
           deseja sair?" Combina beforeunload nativo (fechar aba/reload)
@@ -748,20 +752,40 @@ export function RulesTab({
           </AccordionItem>
         </Accordion>
 
-        {/* PR 27 (mai/2026): botão "Salvar alterações" voltou.
-            Cliente preferiu fluxo manual ao auto-save do PR 26 —
-            feedback mais previsível ("eu sei quando salva"). Pra
-            evitar perda acidental, useUnsavedChangesGuard avisa ao
-            tentar sair com mudanças pendentes. */}
-        <Button
-          onClick={handleSave}
-          disabled={!dirty || isPending}
-          className="w-full"
-        >
-          <Save className="size-4" />
-          Salvar alterações
-        </Button>
+        {/* PR 34 (mai/2026): botão "Salvar alterações" SAIU daqui —
+            agora vive numa sticky bar no rodapé do RulesTab. Sempre
+            visível, sem rolar pra achar. Mantém a lógica de PR 27
+            (manual, não auto-save) — só mudou de lugar. */}
       </div>
+    </div>
+
+    {/* ────────────────────────────────────────────────────────
+        PR 34 (mai/2026): Sticky save bar — botão Salvar +
+        indicador "alterações não salvas" fixos no rodapé do
+        RulesTab. Cliente pode salvar de qualquer scroll position
+        sem precisar rolar até o final dos accordions.
+        z-20 < z-40 do FAB Tester → FAB sobrepõe canto direito
+        da bar (esperado, FAB é menor).
+        ──────────────────────────────────────────────────────── */}
+    <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/95 backdrop-blur-sm border-t border-border flex items-center justify-end gap-3 z-20">
+      {dirty ? (
+        <span className="text-xs font-medium text-progress">
+          Alterações não salvas
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          Tudo salvo
+        </span>
+      )}
+      <Button
+        onClick={handleSave}
+        disabled={!dirty || isPending}
+        size="sm"
+      >
+        <Save className="size-3.5" />
+        Salvar alterações
+      </Button>
+    </div>
     </div>
   );
 }
