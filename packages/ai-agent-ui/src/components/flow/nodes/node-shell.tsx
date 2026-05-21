@@ -47,6 +47,13 @@ interface NodeShellProps {
    * quando node está `selected`. Usado pra config inline (form fields
    * dentro do próprio card, em vez de Sheet lateral). */
   expandedContent?: React.ReactNode;
+  /** PR 23 (mai/2026): layout do painel expandido.
+   *   - "compact" (default): 420px largura, max-h 480px com scroll.
+   *     Ações/condições/entries têm poucos campos — cabe inteiro.
+   *   - "wide": 560px largura, max-h 80vh. Pra IA, que tem muitos
+   *     campos (prompt local, instructions[], tools, modelo override)
+   *     e o cliente pediu pra "sustentar" todas opções sem recolher. */
+  expandedLayout?: "compact" | "wide";
 }
 
 const VARIANT_STYLES: Record<
@@ -87,6 +94,7 @@ export function NodeShell({
   onDuplicate,
   children,
   expandedContent,
+  expandedLayout = "compact",
 }: NodeShellProps) {
   const styles = VARIANT_STYLES[variant];
   // PR 20 (mai/2026): tooltip do info icon (mostra label completo +
@@ -97,12 +105,18 @@ export function NodeShell({
   // (fields inline). Sem expandedContent, mantém compacto mesmo se
   // selected (entry node, por ex).
   const isExpanded = Boolean(selected && expandedContent);
+  const isWide = isExpanded && expandedLayout === "wide";
   return (
     <div
       className={cn(
         "group rounded-xl border-2 shadow-sm transition-all relative",
-        // PR 21: largura cresce quando expandido (form inline)
-        isExpanded ? "w-[420px]" : "w-[260px]",
+        // PR 21 + PR 23: largura cresce quando expandido (form inline).
+        // wide layout (IA) ganha mais largura.
+        isWide
+          ? "w-[560px]"
+          : isExpanded
+            ? "w-[420px]"
+            : "w-[260px]",
         // PR 17: borda âmbar/failure se incompleto (override variant color)
         incomplete ? "border-failure/70 bg-card" : styles.container,
         selected
@@ -216,9 +230,16 @@ export function NodeShell({
       ) : null}
       {/* PR 21: form inline aparece quando selected + expandedContent
           definido. Renderiza dentro do próprio card em vez de Sheet
-          lateral. */}
+          lateral. PR 23: layout "wide" libera mais altura — IA tem
+          muitos campos e cliente pediu pra ver todos sem precisar
+          recolher seções. */}
       {isExpanded ? (
-        <div className="border-t border-border/60 px-3 py-3 bg-muted/20 max-h-[480px] overflow-y-auto">
+        <div
+          className={cn(
+            "border-t border-border/60 px-3 py-3 bg-muted/20 overflow-y-auto",
+            isWide ? "max-h-[80vh]" : "max-h-[480px]",
+          )}
+        >
           {expandedContent}
         </div>
       ) : null}

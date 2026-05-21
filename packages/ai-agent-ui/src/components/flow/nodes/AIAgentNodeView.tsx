@@ -36,14 +36,16 @@ export function AIAgentNodeView({
   catalogs,
   catalogsLoading,
 }: Props) {
-  const promptPreview = (data.system_prompt ?? "").trim();
   const instructions = data.instructions ?? [];
-  // PR 17 UX (mai/2026): IA sem instruções de quando terminar é
-  // tecnicamente válida (segue handle default), mas geralmente é sinal
-  // de fluxo inacabado. Marcamos como incompleto pra cliente notar.
-  const incompleteReason = !promptPreview
-    ? "Falta o que a IA deve fazer aqui"
-    : null;
+  // PR 23 (mai/2026): preview de prompt foi removido do card. Prompt
+  // base vive em Configurações do agente (RulesTab) — mostrá-lo aqui
+  // duplicava informação e confundia. Card agora mostra só label +
+  // lista de instructions[] (saídas nomeadas).
+  //
+  // incompleteReason também sumiu: IA sem prompt local cai no prompt
+  // global de Configurações; sem instructions cai no handle default.
+  // Ambos cenários são válidos — não tem motivo pra marcar âmbar.
+  //
   // PR 21 (mai/2026): form inline quando selected
   const expandedContent =
     selected && onPatch && catalogs ? (
@@ -77,21 +79,16 @@ export function AIAgentNodeView({
         badge="Atendimento com IA"
         variant="ai_agent"
         selected={selected}
-        incomplete={incompleteReason !== null}
-        incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
         expandedContent={expandedContent}
+        expandedLayout="wide"
       >
-        {promptPreview ? (
-          <div className="line-clamp-2">{promptPreview}</div>
-        ) : (
-          <div className="italic text-muted-foreground/70">
-            Sem instruções ainda — clique pra editar.
-          </div>
-        )}
+        {/* PR 23 (mai/2026): card mostra só lista de instructions
+            (saídas nomeadas). Texto do prompt sumiu — está em
+            Configurações do agente. */}
         {instructions.length > 0 ? (
-          <div className="mt-2 space-y-1 border-t border-border/40 pt-1.5">
+          <div className="space-y-1">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Quando terminar
             </div>
@@ -107,7 +104,11 @@ export function AIAgentNodeView({
               </div>
             ))}
           </div>
-        ) : null}
+        ) : (
+          <div className="italic text-muted-foreground/70">
+            Cai no caminho padrão quando responder.
+          </div>
+        )}
       </NodeShell>
       {/* Handle default — sempre presente. IA cai aqui quando responde
           texto sem chamar emit_event. */}

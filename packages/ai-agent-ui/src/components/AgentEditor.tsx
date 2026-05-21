@@ -32,6 +32,7 @@ import type {
 } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
+import { cn } from "@persia/ui/utils";
 import {
   Select,
   SelectContent,
@@ -177,6 +178,37 @@ export function AgentEditor({
   // "stages" (Fluxo). Sem prompt configurado, o fluxo não funciona.
   const [activeSection, setActiveSection] = React.useState<AgentSectionId>("rules");
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  // PR 23 UX (mai/2026): sidebar do editor pode ser recolhida pra abrir
+  // mais espaço — especialmente útil no canvas do Fluxo. Estado
+  // persiste em localStorage (key global, não por agente — preferência
+  // de UI vale pra qualquer agente que o user abrir). Lazy init evita
+  // SSR mismatch ao não tocar window no primeiro render — hidrata via
+  // useEffect abaixo.
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(
+        "persia.agent-editor-sidebar-collapsed",
+      );
+      if (stored === "1") setSidebarCollapsed(true);
+    } catch {
+      /* ignore (private mode etc) */
+    }
+  }, []);
+  const toggleSidebarCollapsed = React.useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(
+          "persia.agent-editor-sidebar-collapsed",
+          next ? "1" : "0",
+        );
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const refreshKnowledgeSources = React.useCallback(async () => {
     try {
@@ -365,13 +397,24 @@ export function AgentEditor({
 
       {/* Layout: sidebar fixa (lg+) + conteudo. Em <lg, sidebar so via
           drawer (hamburger). Bottom padding garante que o FAB nao tampe
-          o ultimo content. */}
-      <div className="grid gap-6 lg:grid-cols-[16rem_1fr] pb-24">
+          o ultimo content.
+          PR 23: grid-cols muda quando sidebar está collapsed — passa
+          de 16rem pra ~3.5rem, liberando largura pro canvas do Fluxo. */}
+      <div
+        className={cn(
+          "grid gap-6 pb-24",
+          sidebarCollapsed
+            ? "lg:grid-cols-[3.5rem_1fr]"
+            : "lg:grid-cols-[16rem_1fr]",
+        )}
+      >
         <aside className="hidden lg:block">
           <AgentSidebar
             groups={sidebarGroups}
             activeId={activeSection}
             onSelect={handleSelect}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={toggleSidebarCollapsed}
           />
         </aside>
 

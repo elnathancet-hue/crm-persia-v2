@@ -52,13 +52,22 @@ export function EdgeWithDelete({
         <EdgeLabelRenderer>
           <button
             type="button"
-            // React Flow exige `nodrag nopan` + pointer-events:all pra
+            // PR 23 fix (mai/2026): X estava com opacity-0 + group-hover
+            // do canvas — dependia de um `group/canvas` no parent que
+            // nem sempre era acertado, e quando aparecia, o `hover:scale-110`
+            // movia o visual sem mover a hitbox. Resultado: usuário via o X
+            // numa posição, clicava ali, e o clique caía fora. Fix:
+            //   - sempre visível (opacity-70, opacity-100 em hover)
+            //   - sem scale no hover (hitbox = visual)
+            //   - size 6 (vs 5) com ring pra contraste em qualquer fundo
+            //   - touch-friendly: hit area maior que ícone interno
+            // React Flow exige `nodrag nopan` + pointer-events:auto pra
             // o botão aceitar clique (o overlay do canvas é
             // pointer-events:none por padrão).
-            className="nodrag nopan absolute flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:scale-110 transition-transform opacity-0 hover:opacity-100 group-hover/canvas:opacity-100"
+            className="nodrag nopan absolute flex size-6 items-center justify-center rounded-full bg-background text-foreground shadow-md ring-1 ring-border opacity-70 hover:opacity-100 hover:bg-destructive hover:text-destructive-foreground hover:ring-destructive transition-colors"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: "all",
+              pointerEvents: "auto",
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -67,7 +76,7 @@ export function EdgeWithDelete({
             aria-label="Remover conexão"
             title="Remover conexão"
           >
-            <X className="size-3" />
+            <X className="size-3.5" strokeWidth={2.5} />
           </button>
         </EdgeLabelRenderer>
       ) : null}
