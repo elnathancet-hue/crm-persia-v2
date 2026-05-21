@@ -47,7 +47,7 @@ import type { FlowCatalogs } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
 import { findSidebarItem } from "./node-catalog";
-import { NodeConfigSheet } from "./NodeConfigSheet";
+// PR 21 (mai/2026): NodeConfigSheet não mais usada — forms inline.
 import { EntryNodeView } from "./nodes/EntryNodeView";
 import { AIAgentNodeView } from "./nodes/AIAgentNodeView";
 import { ActionNodeView } from "./nodes/ActionNodeView";
@@ -139,7 +139,8 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const [dirty, setDirty] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
-  const [configSheetOpen, setConfigSheetOpen] = React.useState(false);
+  // PR 21 (mai/2026): configSheetOpen removido — Sheet não é mais
+  // renderizada. Forms inline dentro de cada node card.
   const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const [catalogsLoading, setCatalogsLoading] = React.useState(false);
 
@@ -233,18 +234,22 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     }
   }, [actions, catalogs, catalogsLoading, configId]);
 
-  // -- Click em node abre Sheet de config --
+  // PR 21 UX (mai/2026): click em node SÓ seleciona (sem abrir Sheet).
+  // Forma inline aparece dentro do próprio card. Catálogos são
+  // carregados na primeira interação pra evitar fetch desnecessário
+  // em flows que não exigem edição.
   const onNodeClick: NodeMouseHandler = React.useCallback(
     (_, node) => {
       setSelectedNodeId(node.id);
-      setConfigSheetOpen(true);
       void ensureCatalogsLoaded();
     },
     [ensureCatalogsLoaded],
   );
 
-  // -- Sheet salvou → update node data --
-  const handleNodeSave = React.useCallback(
+  // PR 21 (mai/2026): handleNodePatch é chamado pelo InlineFormPanel
+  // (via debounce 200ms). Atualiza canvas state imediatamente; persist
+  // no DB só no botão "Salvar" global.
+  const handleNodePatch = React.useCallback(
     (nodeId: string, newData: Record<string, unknown>) => {
       setNodes((nds) =>
         nds.map((n) => (n.id === nodeId ? { ...n, data: newData } : n)),
@@ -309,8 +314,14 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // re-render dos nodes.
   const nodeTypes = React.useMemo<NodeTypes>(
     () => ({
-      entry: ({ data, selected }) => (
-        <EntryNodeView data={data as never} selected={selected} />
+      entry: ({ data, selected, id }) => (
+        <EntryNodeView
+          data={data as never}
+          selected={selected}
+          onPatch={(newData) => handleNodePatch(id, newData)}
+          catalogs={catalogs}
+          catalogsLoading={catalogsLoading}
+        />
       ),
       ai_agent: ({ data, selected, id }) => (
         <AIAgentNodeView
@@ -318,6 +329,9 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           selected={selected}
           onDelete={() => handleNodeDelete(id)}
           onDuplicate={() => handleNodeDuplicate(id)}
+          onPatch={(newData) => handleNodePatch(id, newData)}
+          catalogs={catalogs}
+          catalogsLoading={catalogsLoading}
         />
       ),
       action: ({ data, selected, id }) => (
@@ -326,6 +340,9 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           selected={selected}
           onDelete={() => handleNodeDelete(id)}
           onDuplicate={() => handleNodeDuplicate(id)}
+          onPatch={(newData) => handleNodePatch(id, newData)}
+          catalogs={catalogs}
+          catalogsLoading={catalogsLoading}
         />
       ),
       condition: ({ data, selected, id }) => (
@@ -334,10 +351,13 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           selected={selected}
           onDelete={() => handleNodeDelete(id)}
           onDuplicate={() => handleNodeDuplicate(id)}
+          onPatch={(newData) => handleNodePatch(id, newData)}
+          catalogs={catalogs}
+          catalogsLoading={catalogsLoading}
         />
       ),
     }),
-    [handleNodeDelete, handleNodeDuplicate],
+    [handleNodeDelete, handleNodeDuplicate, handleNodePatch, catalogs, catalogsLoading],
   );
 
   // PR 20 UX (mai/2026): edgeTypes com X no centro pra deletar
@@ -569,15 +589,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           </div>
         ) : null}
       </div>
-      <NodeConfigSheet
-        node={selectedNode}
-        open={configSheetOpen}
-        catalogs={catalogs}
-        catalogsLoading={catalogsLoading}
-        onOpenChange={setConfigSheetOpen}
-        onSave={handleNodeSave}
-        onDelete={handleNodeDelete}
-      />
+      {/* PR 21 (mai/2026): NodeConfigSheet removida do runtime —
+          config foi pra inline dentro de cada node (InlineFormPanel).
+          Componente Sheet continua exportando os forms, mas não é
+          mais renderizado aqui. */}
     </div>
   );
 }

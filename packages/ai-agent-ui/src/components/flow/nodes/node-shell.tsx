@@ -43,6 +43,10 @@ interface NodeShellProps {
    * botão copiar na toolbar. */
   onDuplicate?: () => void;
   children?: React.ReactNode;
+  /** PR 21 (mai/2026): conteúdo expandido renderizado abaixo do body
+   * quando node está `selected`. Usado pra config inline (form fields
+   * dentro do próprio card, em vez de Sheet lateral). */
+  expandedContent?: React.ReactNode;
 }
 
 const VARIANT_STYLES: Record<
@@ -82,16 +86,23 @@ export function NodeShell({
   onDelete,
   onDuplicate,
   children,
+  expandedContent,
 }: NodeShellProps) {
   const styles = VARIANT_STYLES[variant];
   // PR 20 (mai/2026): tooltip do info icon (mostra label completo +
   // descrição em hover). State simples pra ativar no hover do botão.
   const [infoOpen, setInfoOpen] = React.useState(false);
   const hasToolbar = Boolean(onDelete || onDuplicate);
+  // PR 21 (mai/2026): node cresce quando selected E tem expandedContent
+  // (fields inline). Sem expandedContent, mantém compacto mesmo se
+  // selected (entry node, por ex).
+  const isExpanded = Boolean(selected && expandedContent);
   return (
     <div
       className={cn(
-        "group rounded-xl border-2 shadow-sm transition-all w-[260px] relative",
+        "group rounded-xl border-2 shadow-sm transition-all relative",
+        // PR 21: largura cresce quando expandido (form inline)
+        isExpanded ? "w-[420px]" : "w-[260px]",
         // PR 17: borda âmbar/failure se incompleto (override variant color)
         incomplete ? "border-failure/70 bg-card" : styles.container,
         selected
@@ -201,6 +212,14 @@ export function NodeShell({
         <div className="border-t border-failure/30 px-3 py-1.5 text-[10px] font-medium text-failure flex items-center gap-1.5">
           <AlertTriangle className="size-3" />
           {incompleteReason}
+        </div>
+      ) : null}
+      {/* PR 21: form inline aparece quando selected + expandedContent
+          definido. Renderiza dentro do próprio card em vez de Sheet
+          lateral. */}
+      {isExpanded ? (
+        <div className="border-t border-border/60 px-3 py-3 bg-muted/20 max-h-[480px] overflow-y-auto">
+          {expandedContent}
         </div>
       ) : null}
     </div>

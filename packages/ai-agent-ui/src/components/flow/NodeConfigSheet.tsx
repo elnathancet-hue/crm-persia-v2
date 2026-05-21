@@ -206,17 +206,17 @@ function sheetTitle(node: FlowNode): string {
 // Forms por tipo
 // ============================================================================
 
-interface FormProps {
+export interface FormProps {
   draft: Record<string, unknown>;
   setDraft: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
 }
 
-interface CatalogFormProps extends FormProps {
+export interface CatalogFormProps extends FormProps {
   catalogs: FlowCatalogs;
   catalogsLoading?: boolean;
 }
 
-function EntryForm({
+export function EntryForm({
   draft,
   setDraft,
   catalogs,
@@ -432,7 +432,7 @@ function KeywordListField({
   );
 }
 
-function AIAgentForm({ draft, setDraft }: FormProps) {
+export function AIAgentForm({ draft, setDraft }: FormProps) {
   const instructions = (draft.instructions as Array<{
     id: string;
     description: string;
@@ -570,7 +570,7 @@ function AIAgentForm({ draft, setDraft }: FormProps) {
   );
 }
 
-function ActionForm({
+export function ActionForm({
   draft,
   setDraft,
   catalogs,
@@ -776,7 +776,7 @@ function ActionForm({
   );
 }
 
-function ConditionForm({
+export function ConditionForm({
   draft,
   setDraft,
   catalogs,

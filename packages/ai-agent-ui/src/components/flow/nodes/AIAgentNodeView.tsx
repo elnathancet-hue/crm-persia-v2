@@ -14,12 +14,17 @@ import { Handle, Position } from "@xyflow/react";
 import { BadgeCheck } from "lucide-react";
 import type { FlowAIAgentNode } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
+import { InlineFormPanel } from "../InlineFormPanel";
+import type { FlowCatalogs } from "../catalog-types";
 
 interface Props {
   data: FlowAIAgentNode["data"];
   selected?: boolean;
   onDelete?: () => void;
   onDuplicate?: () => void;
+  onPatch?: (data: Record<string, unknown>) => void;
+  catalogs?: FlowCatalogs;
+  catalogsLoading?: boolean;
 }
 
 export function AIAgentNodeView({
@@ -27,6 +32,9 @@ export function AIAgentNodeView({
   selected,
   onDelete,
   onDuplicate,
+  onPatch,
+  catalogs,
+  catalogsLoading,
 }: Props) {
   const promptPreview = (data.system_prompt ?? "").trim();
   const instructions = data.instructions ?? [];
@@ -36,6 +44,17 @@ export function AIAgentNodeView({
   const incompleteReason = !promptPreview
     ? "Falta o que a IA deve fazer aqui"
     : null;
+  // PR 21 (mai/2026): form inline quando selected
+  const expandedContent =
+    selected && onPatch && catalogs ? (
+      <InlineFormPanel
+        nodeType="ai_agent"
+        data={data as unknown as Record<string, unknown>}
+        onPatch={onPatch}
+        catalogs={catalogs}
+        catalogsLoading={catalogsLoading}
+      />
+    ) : null;
 
   // Layout dos handles à direita:
   //   - default (sempre presente, no centro)
@@ -62,6 +81,7 @@ export function AIAgentNodeView({
         incompleteReason={incompleteReason ?? undefined}
         onDelete={onDelete}
         onDuplicate={onDuplicate}
+        expandedContent={expandedContent}
       >
         {promptPreview ? (
           <div className="line-clamp-2">{promptPreview}</div>
