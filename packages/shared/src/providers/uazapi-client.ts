@@ -693,6 +693,29 @@ export class UazapiClient {
     return this.request("GET", "/user/contacts");
   }
 
+  /**
+   * Bug A fix (mai/2026): chat details inclui URL da foto do contato.
+   * Endpoint POST /chat/details — retorna ~60 campos do chat. O campo
+   * relevante pra avatar é `wa_profilePicURL` (com fallback pra
+   * `imagePreview` e `image` em variações de versão UAZAPI).
+   *
+   * `preview=true` é mais barato (skip cache resolution); usamos
+   * pra avatar onde a URL é o suficiente, não precisamos dos 60
+   * campos completos.
+   *
+   * UAZAPI tem rate limit em /chat/details — só chamar 1x por
+   * contato (idealmente na criação do lead, depois cachear).
+   */
+  async getChatDetails(
+    number: string,
+    options: { preview?: boolean } = {},
+  ): Promise<Record<string, unknown>> {
+    return this.request("POST", "/chat/details", {
+      number,
+      preview: options.preview ?? true,
+    });
+  }
+
   // ============ GROUPS ============
 
   async listGroups(): Promise<unknown[]> {

@@ -9,7 +9,7 @@ import {
 } from "@/actions/conversations";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { Input } from "@persia/ui/input";
-import { Avatar, AvatarFallback } from "@persia/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@persia/ui/tabs";
@@ -452,9 +452,17 @@ export function ConversationList({
                     isSelected && "bg-accent"
                   )}
                 >
-                  {/* Avatar */}
+                  {/* Avatar — Bug A fix (mai/2026): foto WhatsApp via
+                      lead.avatar_url (populado pelo pipeline UAZAPI).
+                      Fallback de iniciais permanece se não houver foto. */}
                   <div className="relative shrink-0">
                     <Avatar size="default">
+                      {lead?.avatar_url ? (
+                        <AvatarImage
+                          src={lead.avatar_url}
+                          alt={lead?.name ?? undefined}
+                        />
+                      ) : null}
                       <AvatarFallback className={cn(colorClass, "text-white")}>
                         {getInitials(lead?.name)}
                       </AvatarFallback>

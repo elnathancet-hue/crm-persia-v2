@@ -191,6 +191,24 @@ export async function tryEnqueueForNativeAgent(
         throw new Error(`lead_create_failed: ${leadErr?.message ?? "unknown"}`);
       }
       lead = newLead;
+      // Bug A fix (mai/2026): busca foto WhatsApp em background.
+      // Não bloqueia o pipeline — se UAZAPI falhar, lead fica sem
+      // avatar e UI cai no fallback de iniciais. Rodamos só uma vez
+      // (na criação do lead) pra evitar rate limit em /chat/details.
+      const newLeadId = newLead.id;
+      void (async () => {
+        try {
+          const avatarUrl = await input.provider.getContactProfilePic(phone);
+          if (avatarUrl) {
+            await db
+              .from("leads")
+              .update({ avatar_url: avatarUrl })
+              .eq("id", newLeadId);
+          }
+        } catch {
+          // Best-effort — falha não interrompe atendimento.
+        }
+      })();
     }
     const leadId = (lead as { id: string }).id;
 
