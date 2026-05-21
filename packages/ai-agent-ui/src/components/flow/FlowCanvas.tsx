@@ -49,6 +49,7 @@ import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
 import { findSidebarItem } from "./node-catalog";
 import { useFlowHistory } from "./use-flow-history";
 import { applyDagreLayout } from "./flow-layout";
+import { UnsavedChangesGuard } from "../use-unsaved-changes-guard";
 // PR 21 (mai/2026): NodeConfigSheet não mais usada — forms inline.
 import { EntryNodeView } from "./nodes/EntryNodeView";
 import { AIAgentNodeView } from "./nodes/AIAgentNodeView";
@@ -817,6 +818,13 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
 
   return (
     <div className="flex h-[calc(100vh-180px)] min-h-[600px] rounded-xl border border-border/60 overflow-hidden bg-background">
+      {/* PR 27 (mai/2026): avisa cliente ao sair com mudanças no fluxo
+          não salvas. Dialog "este projeto não foi salvo" + opções
+          "Continuar editando" / "Sair sem salvar". */}
+      <UnsavedChangesGuard
+        dirty={dirty}
+        message="Você fez mudanças no fluxo que ainda não foram salvas. Se sair agora, vai perder o que editou."
+      />
       <FlowSidebar onAdd={handleSidebarAdd} />
       <div
         ref={containerRef}

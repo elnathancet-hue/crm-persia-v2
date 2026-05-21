@@ -14,14 +14,14 @@
 // (DB) — só removemos a UI. Configuração existente em agentes legados
 // continua funcionando via Fluxo.
 //
-// PR 26 (mai/2026): auto-save substitui o botão "Salvar alterações".
-// useEffect detecta dirty fields, debounce 800ms (espera cliente parar
-// de digitar), dispara onChange. Indicator no header do AgentEditor
-// comunica saving/saved/error. Sem toast pra cada auto-save — UI
-// feedback é o indicator.
+// PR 26 (mai/2026): auto-save introduzido — reverted no PR 27.
+// PR 27 (mai/2026): botão "Salvar alterações" voltou. Cliente preferiu
+// fluxo manual — auto-save dá sensação de "perdi o controle" mesmo
+// com indicator visual. Em troca, useUnsavedChangesGuard avisa ao
+// tentar sair da tela com `dirty=true`, prevenindo perda acidental.
 
 import * as React from "react";
-import { CalendarCheck, ExternalLink } from "lucide-react";
+import { CalendarCheck, ExternalLink, Save } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type {
@@ -58,7 +58,9 @@ import {
 } from "@persia/shared/ai-agent";
 import { EntryConditionsCard } from "./EntryConditionsCard";
 import { PromptBuilderSection } from "./PromptBuilderSection";
+import { UnsavedChangesGuard } from "./use-unsaved-changes-guard";
 import { useAgentActions } from "../context";
+import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
@@ -257,11 +259,12 @@ export function RulesTab({
     calendarConnectionDirty ||
     humanizationDirty;
 
-  // PR 26 (mai/2026): build do patch a partir do dirty state.
-  // Memoized pra que useEffect de auto-save abaixo reaja a mudanças
-  // de qualquer field sem re-bind do timer manualmente.
-  const dirtyPatch = React.useMemo<UpdateAgentInput | null>(() => {
-    if (!dirty) return null;
+  // PR 27 (mai/2026): auto-save do PR 26 foi revertido. Cliente
+  // preferiu fluxo manual com botão "Salvar alterações" — feedback
+  // mais previsível ("eu sei quando salva"). Pra mitigar o risco
+  // de perder mudanças, useUnsavedChangesGuard abaixo avisa quando
+  // tenta sair com `dirty=true`.
+  const handleSave = React.useCallback(() => {
     const patch: UpdateAgentInput = {};
     if (promptDirty) patch.system_prompt = prompt;
     if (descriptionDirty) patch.description = description;
@@ -286,10 +289,8 @@ export function RulesTab({
         handoff_include_summary: initialHumanization.handoff_include_summary,
       };
     }
-    return patch;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    onChange(patch, "Configurações salvas");
   }, [
-    dirty,
     promptDirty,
     descriptionDirty,
     modelDirty,
@@ -311,25 +312,18 @@ export function RulesTab({
     nextBusinessHours,
     nextAfterHoursMessage,
     initialHumanization.handoff_include_summary,
+    onChange,
   ]);
-
-  // PR 26 (mai/2026): auto-save com debounce 800ms. Cancela timer
-  // anterior em cada mudança — só dispara quando cliente parou de
-  // digitar por 800ms. Skip enquanto saving anterior em curso
-  // (isPending=true) pra evitar 2 PATCH concorrentes; quando saving
-  // completa, este effect roda de novo e dispara o próximo se ainda
-  // houver dirtyPatch.
-  React.useEffect(() => {
-    if (!dirtyPatch) return;
-    if (isPending) return; // dropa este tick — vai re-rodar quando isPending virar false
-    const timer = setTimeout(() => {
-      onChange(dirtyPatch);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [dirtyPatch, isPending, onChange]);
 
   return (
     <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
+      {/* PR 27 (mai/2026): guard pra "este projeto não foi salvo,
+          deseja sair?" Combina beforeunload nativo (fechar aba/reload)
+          + intercept de Link clicks (navegação interna Next.js).
+          Renderiza AlertDialog customizado quando user clica em link
+          interno com dirty=true. */}
+      <UnsavedChangesGuard dirty={dirty} />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Instruções do agente</CardTitle>
@@ -703,11 +697,19 @@ export function RulesTab({
           </CardContent>
         </Card>
 
-        {/* PR 26 (mai/2026): botão "Salvar alterações" removido —
-            auto-save com debounce 800ms cuida disso transparente.
-            Indicator no header do AgentEditor comunica saving/saved.
-            Sem botão = sem ambiguidade "será que salvou?" + menos
-            cliques pra cliente. */}
+        {/* PR 27 (mai/2026): botão "Salvar alterações" voltou.
+            Cliente preferiu fluxo manual ao auto-save do PR 26 —
+            feedback mais previsível ("eu sei quando salva"). Pra
+            evitar perda acidental, useUnsavedChangesGuard avisa ao
+            tentar sair com mudanças pendentes. */}
+        <Button
+          onClick={handleSave}
+          disabled={!dirty || isPending}
+          className="w-full"
+        >
+          <Save className="size-4" />
+          Salvar alterações
+        </Button>
       </div>
     </div>
   );
