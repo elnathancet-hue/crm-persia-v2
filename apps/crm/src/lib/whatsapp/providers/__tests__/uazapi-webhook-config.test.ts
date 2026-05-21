@@ -9,7 +9,7 @@ describe("UAZAPI webhook config", () => {
     expect(buildUazapiWebhookConfig({ url: "https://crm.funilpersia.top/api/whatsapp/webhook" })).toEqual({
       enabled: true,
       url: "https://crm.funilpersia.top/api/whatsapp/webhook",
-      events: ["messages"],
+      events: ["messages", "messages_update"],
       excludeMessages: ["wasSentByApi"],
     });
   });
@@ -33,7 +33,7 @@ describe("UAZAPI webhook config", () => {
       body: JSON.stringify({
         enabled: true,
         url: "https://crm.funilpersia.top/api/whatsapp/webhook",
-        events: ["messages"],
+        events: ["messages", "messages_update"],
         excludeMessages: ["wasSentByApi"],
       }),
     });

@@ -4,6 +4,7 @@ import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/ob
 import { createProvider } from "@/lib/whatsapp/providers";
 import { tryEnqueueForNativeAgent } from "@/lib/ai-agent/executor";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
+import { mapUazapiStatus } from "@/lib/whatsapp/uazapi-status-mapper";
 import {
   extractUazapiOwnerPhone,
   extractUazapiWebhookToken,
@@ -108,6 +109,61 @@ export async function POST(request: NextRequest) {
       });
       // Return 200 to stop UAZAPI retries but do not echo owner back
       return NextResponse.json({ ok: true, skipped: "unknown instance" });
+    }
+
+    // Bug B fix (mai/2026): branch pro evento `messages_update`.
+    // UAZAPI envia callback quando uma msg outbound transita de status
+    // (sent → delivered → read). Precisa pra UI renderizar checkmarks
+    // corretos. Espelha lógica do webhook Meta (route Meta linha 212-228).
+    //
+    // Payload shape esperado (UAZAPI v2):
+    //   { EventType: "messages_update", owner: "...", message: {
+    //       messageid: "<wamid>", status: "DELIVERY_ACK" | "READ" | ...,
+    //       chatid: "...@s.whatsapp.net", ...
+    //     } }
+    //
+    // Defensive parse — se shape mudar entre versões UAZAPI, log+ignore.
+    if (body.EventType === "messages_update") {
+      const msgRaw = (body.message ?? {}) as Record<string, unknown>;
+      const messageId = typeof msgRaw.messageid === "string" ? msgRaw.messageid : null;
+      const dbStatus = mapUazapiStatus(msgRaw.status);
+      if (!messageId || !dbStatus) {
+        logInfo("uazapi_webhook_messages_update_skipped", {
+          organization_id: matchedConn.organization_id,
+          request_id: requestId,
+          provider: "uazapi",
+          route: "/api/whatsapp/webhook",
+          reason: !messageId ? "missing_messageid" : "unmapped_status",
+          raw_status: typeof msgRaw.status === "string" ? msgRaw.status : null,
+        });
+        return NextResponse.json({ ok: true, skipped: "messages_update_no_op" });
+      }
+      const { error: updateErr } = await supabase
+        .from("messages")
+        .update({ status: dbStatus })
+        .eq("organization_id", matchedConn.organization_id)
+        .eq("whatsapp_msg_id", messageId);
+      if (updateErr) {
+        logError("uazapi_webhook_messages_update_failed", {
+          organization_id: matchedConn.organization_id,
+          request_id: requestId,
+          provider: "uazapi",
+          route: "/api/whatsapp/webhook",
+          message_id: messageId,
+          db_status: dbStatus,
+          error: errorMessage(updateErr),
+        });
+        return NextResponse.json({ ok: false }, { status: 500 });
+      }
+      logInfo("uazapi_webhook_messages_update_ok", {
+        organization_id: matchedConn.organization_id,
+        request_id: requestId,
+        provider: "uazapi",
+        route: "/api/whatsapp/webhook",
+        message_id: messageId,
+        db_status: dbStatus,
+      });
+      return NextResponse.json({ ok: true, status: dbStatus });
     }
 
     // 2. Normalize payload.
