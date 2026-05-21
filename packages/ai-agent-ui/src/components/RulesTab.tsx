@@ -272,6 +272,32 @@ export function RulesTab({
     calendarConnectionDirty ||
     humanizationDirty;
 
+  // PR 35 (mai/2026): dirty flags por accordion. UI mostra bullet
+  // âmbar no header de cada accordion que tem mudança não salva,
+  // pra cliente saber onde mexeu sem precisar abrir tudo.
+  const decideDirty = modelDirty || guardrailsDirty;
+  const converseDirty = humanizationDirty;
+  const integrationsDirty = calendarConnectionDirty;
+
+  // PR 35 (mai/2026): accordion controlled — jump links abrem o
+  // accordion correspondente quando o cliente clica num chip. Antes
+  // era defaultValue (uncontrolled).
+  const [openAccordions, setOpenAccordions] = React.useState<string[]>([
+    "decide",
+  ]);
+
+  const jumpToAccordion = React.useCallback((id: string) => {
+    // Abre o accordion se ainda não estiver aberto.
+    setOpenAccordions((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    // setTimeout pra esperar o accordion expandir (animação ~200ms)
+    // antes de scrollar — sem isso, o scrollIntoView calcula bounds
+    // antes da expansão e fica errado.
+    setTimeout(() => {
+      const el = document.getElementById(`accordion-${id}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 220);
+  }, []);
+
   // PR 27 (mai/2026): auto-save do PR 26 foi revertido. Cliente
   // preferiu fluxo manual com botão "Salvar alterações" — feedback
   // mais previsível ("eu sei quando salva"). Pra mitigar o risco
@@ -388,20 +414,44 @@ export function RulesTab({
             pode abrir múltiplos via openMultiple do base-ui. Default
             só "decide" aberto (Modelo + Transferir são os mais
             essenciais). */}
+        {/* PR 35 (mai/2026): jump links — chips horizontais no topo
+            pra navegar rápido entre accordions. Click expande +
+            scrolla pra seção. Indicador dirty (bullet âmbar) no chip
+            espelha o do header do accordion. */}
+        <div className="flex flex-wrap gap-1.5">
+          <JumpChip
+            label="Decisões"
+            dirty={decideDirty}
+            onClick={() => jumpToAccordion("decide")}
+          />
+          <JumpChip
+            label="Conversa"
+            dirty={converseDirty}
+            onClick={() => jumpToAccordion("converse")}
+          />
+          <JumpChip
+            label="Integrações"
+            dirty={integrationsDirty}
+            onClick={() => jumpToAccordion("integrations")}
+          />
+        </div>
+
         <Accordion
           multiple
-          defaultValue={["decide"]}
+          value={openAccordions}
+          onValueChange={setOpenAccordions}
           className="rounded-xl border border-border bg-card divide-y divide-border"
         >
           {/* ────────────────────────────────────────────────────
               Grupo 1: Como o agente decide
               (Modelo + Transferir pra humano)
               ──────────────────────────────────────────────────── */}
-          <AccordionItem value="decide" className="px-4">
+          <AccordionItem value="decide" id="accordion-decide" className="px-4">
             <AccordionTrigger className="text-base">
               <span className="flex items-center gap-2">
                 <Brain className="size-4 text-primary" />
                 Como o agente decide
+                {decideDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pt-2">
@@ -460,11 +510,16 @@ export function RulesTab({
               Grupo 2: Como o agente conversa
               (Pausa + Dividir + Horário comercial)
               ──────────────────────────────────────────────────── */}
-          <AccordionItem value="converse" className="px-4">
+          <AccordionItem
+            value="converse"
+            id="accordion-converse"
+            className="px-4"
+          >
             <AccordionTrigger className="text-base">
               <span className="flex items-center gap-2">
                 <MessageSquare className="size-4 text-primary" />
                 Como o agente conversa
+                {converseDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pt-2">
@@ -678,11 +733,16 @@ export function RulesTab({
               agente agenda sem precisar de conexao externa. Google Calendar
               integration esta em desenvolvimento (handler schedule_event
               no enum mas sem TS handler). */}
-          <AccordionItem value="integrations" className="px-4">
+          <AccordionItem
+            value="integrations"
+            id="accordion-integrations"
+            className="px-4"
+          >
             <AccordionTrigger className="text-base">
               <span className="flex items-center gap-2">
                 <Plug className="size-4 text-primary" />
                 Integrações
+                {integrationsDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
             <AccordionContent className="space-y-3 pt-2">
@@ -787,6 +847,52 @@ export function RulesTab({
       </Button>
     </div>
     </div>
+  );
+}
+
+// ============================================================================
+// PR 35 (mai/2026): helpers do dirty marker + jump links
+// ============================================================================
+
+// Bullet pequeno cor progress que aparece no header dos accordions
+// (e nos chips de jump link) quando há mudança não salva na seção.
+// Cor progress (laranja/âmbar) é a mesma do "Alterações não salvas"
+// no sticky save bar — consistência visual.
+function DirtyDot() {
+  return (
+    <span
+      className="size-2 rounded-full bg-progress inline-block ml-1"
+      aria-label="Alterações não salvas"
+      title="Alterações não salvas"
+    />
+  );
+}
+
+// Chip clicável no topo da coluna direita — atalho pra rolar (+ abrir)
+// um accordion específico. Mostra bullet âmbar quando a seção tem
+// dirty fields, igual o header do próprio accordion.
+function JumpChip({
+  label,
+  dirty,
+  onClick,
+}: {
+  label: string;
+  dirty: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+        dirty
+          ? "border-progress/40 bg-progress/10 text-progress hover:bg-progress/20"
+          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+    >
+      {label}
+      {dirty ? <DirtyDot /> : null}
+    </button>
   );
 }
 
