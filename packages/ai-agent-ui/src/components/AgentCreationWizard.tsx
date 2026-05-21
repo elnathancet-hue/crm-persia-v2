@@ -98,6 +98,11 @@ const TEMPLATE_VISUALS: Record<
     accent: "from-primary/20 to-primary/5",
     iconColor: "bg-primary/20 text-primary",
   },
+  humana_saude_jordan: {
+    Icon: TrendingUp,
+    accent: "from-success/20 to-primary/5",
+    iconColor: "bg-success-soft text-success-soft-foreground",
+  },
 };
 
 type WizardStep = 1 | 2 | 3;

@@ -19,7 +19,11 @@ export type AgentTemplateSlug =
   | "pre_venda"
   | "pos_venda_cobranca"
   | "tira_duvidas_faq"
-  | "consultor_funil_completo";
+  | "consultor_funil_completo"
+  // PR 19 (mai/2026): topologia importada do flow.json do Jordan Moura
+  // (Humana Saúde). Cliente preenche tags/stages/segmento via pickers
+  // depois de criar — IDs originais do Jordan não fazem sentido aqui.
+  | "humana_saude_jordan";
 
 /** Tag seedada quando cliente cria agente do template. Idempotente — se
  * a tag ja existe na org com mesmo nome, reusa sem duplicar. */
@@ -249,6 +253,287 @@ Você NÃO precisa lembrar de nada além de chamar a tool — o flow garante o r
         description:
           "[USO INTERNO] Notifica a EQUIPE que o agente JÁ criou uma reunião via create_appointment. Disparada via auto-action do canvas após create_appointment sucesso.",
         body: "[Equipe] 📅 Nova reunião agendada com {{lead.name}}.\n\nAcesse a Agenda pra ver detalhes.",
+      },
+    ],
+  },
+
+  // PR 19 (mai/2026): Humana Saúde (Jordan Moura) — topologia importada
+  // do flow.json. 12 nodes / 12 edges. Cliente preenche
+  // tags/segments/stages via pickers do canvas após criar.
+  //
+  // Topologia:
+  //   Entrada → Verificar Segmentação?
+  //     ├─ yes → Verificar TAG (humanas)?
+  //     │         ├─ yes → Pausar Bot (já é humano)
+  //     │         └─ no  → IA
+  //     └─ no  → Adicionar TAG → Etapa inicial → IA
+  //   IA tem 4 saídas (handles nomeados):
+  //     ├─ "coletou_idade"      → Etapa "Coletou idade"
+  //     ├─ "dados_completos"    → Etapa "Dados completos"
+  //     ├─ "documentos_enviados"→ Etapa "Documentos" → Pausar Bot
+  //     └─ "ia_encerrou"        → Pausar Bot
+  humana_saude_jordan: {
+    slug: "humana_saude_jordan",
+    label: "Humana Saúde (Jordan)",
+    short_description:
+      "Funil completo de plano de saúde — segmenta, qualifica, coleta dados, muda etapa do funil e pausa pro humano.",
+    long_description:
+      "Topologia importada do fluxo do Jordan Moura (Humana Saúde). 12 etapas conectadas: verifica se lead já é contato humano, qualifica via IA, coleta dados pessoais + idade + documentos, move o lead pelas etapas do Kanban automaticamente e pausa quando precisar de humano. Após criar, abra cada etapa no canvas pra escolher a tag/segmentação/etapa do Kanban correta — os nomes não vêm preenchidos.",
+    system_prompt: `${COMMON_GUARDRAILS}
+
+Você é um consultor de plano de saúde. Sua função:
+1. Conversar com o lead pelo WhatsApp pra qualificá-lo.
+2. Coletar progressivamente: nome, idade, telefone, e-mail, documentos.
+3. Chamar emit_event nos momentos certos pra avançar o lead no funil:
+   - "coletou_idade": quando souber a idade do lead
+   - "dados_completos": quando tiver TODOS os dados (nome, idade, telefone, e-mail)
+   - "documentos_enviados": quando lead confirmar que enviou os documentos
+   - "ia_encerrou": quando você disser algo como "Certo, já já damos continuidade por aqui" pra encerrar
+4. Não invente preços nem prazos. Se não souber, fale que vai checar.`,
+    flow_config: {
+      nodes: [
+        // ---- Entry ----
+        {
+          id: "n_entry",
+          type: "entry",
+          position: { x: 50, y: 300 },
+          data: {
+            label: "Conversa iniciada",
+            trigger: "conversation_started",
+            config: {},
+          },
+        },
+        // ---- Verificar Segmentação ----
+        {
+          id: "n_check_segment",
+          type: "condition",
+          position: { x: 300, y: 300 },
+          data: {
+            label: "Verificar Segmentação",
+            condition_type: "in_segment",
+            config: { segment_id: "" },
+          },
+        },
+        // ---- Verificar TAG (caminho yes do segment) ----
+        {
+          id: "n_check_tag",
+          type: "condition",
+          position: { x: 600, y: 100 },
+          data: {
+            label: "Verificar TAG",
+            condition_type: "has_tag",
+            config: { tag_name: "" },
+          },
+        },
+        // ---- Pausar (já é humano) ----
+        {
+          id: "n_pause_humano",
+          type: "action",
+          position: { x: 900, y: 50 },
+          data: {
+            label: "Já atendido por humano",
+            action_type: "stop_agent",
+            config: {},
+          },
+        },
+        // ---- Add TAG (caminho no do segment) ----
+        {
+          id: "n_add_tag",
+          type: "action",
+          position: { x: 600, y: 500 },
+          data: {
+            label: "Adicionar TAG Novo Lead",
+            action_type: "add_tag",
+            config: { tag_name: "" },
+          },
+        },
+        // ---- Etapa inicial do funil ----
+        {
+          id: "n_stage_inicial",
+          type: "action",
+          position: { x: 900, y: 500 },
+          data: {
+            label: "Mover pra etapa inicial",
+            action_type: "move_pipeline_stage",
+            config: { stage_name: "" },
+          },
+        },
+        // ---- AI Agent (central) ----
+        {
+          id: "n_ai",
+          type: "ai_agent",
+          position: { x: 1200, y: 300 },
+          data: {
+            label: "Atendimento Humana Saúde",
+            system_prompt: "",
+            instructions: [
+              {
+                id: "ins_idade",
+                output_handle: "coletou_idade",
+                description: "Quando coletar a idade do lead",
+              },
+              {
+                id: "ins_dados",
+                output_handle: "dados_completos",
+                description:
+                  "Quando coletar todos os dados (nome, idade, telefone, email)",
+              },
+              {
+                id: "ins_docs",
+                output_handle: "documentos_enviados",
+                description: "Quando o lead confirmar que enviou os documentos",
+              },
+              {
+                id: "ins_encerrou",
+                output_handle: "ia_encerrou",
+                description:
+                  'Quando você disser "já já damos continuidade" pra encerrar',
+              },
+            ],
+          },
+        },
+        // ---- Etapas após cada coleta ----
+        {
+          id: "n_stage_idade",
+          type: "action",
+          position: { x: 1550, y: 100 },
+          data: {
+            label: "Coletou idade — avançar etapa",
+            action_type: "move_pipeline_stage",
+            config: { stage_name: "" },
+          },
+        },
+        {
+          id: "n_stage_dados",
+          type: "action",
+          position: { x: 1550, y: 280 },
+          data: {
+            label: "Dados completos — avançar etapa",
+            action_type: "move_pipeline_stage",
+            config: { stage_name: "" },
+          },
+        },
+        {
+          id: "n_stage_docs",
+          type: "action",
+          position: { x: 1550, y: 460 },
+          data: {
+            label: "Documentos — avançar etapa",
+            action_type: "move_pipeline_stage",
+            config: { stage_name: "" },
+          },
+        },
+        // ---- Pausar bot após documentos ----
+        {
+          id: "n_pause_after_docs",
+          type: "action",
+          position: { x: 1850, y: 460 },
+          data: {
+            label: "Pausar IA pós-documentos",
+            action_type: "stop_agent",
+            config: {},
+          },
+        },
+        // ---- Pausar bot (IA disse "já já damos continuidade") ----
+        {
+          id: "n_pause_ia_encerrou",
+          type: "action",
+          position: { x: 1550, y: 640 },
+          data: {
+            label: "Pausar IA — encerrou",
+            action_type: "stop_agent",
+            config: {},
+          },
+        },
+      ],
+      edges: [
+        // Entry → check_segment
+        {
+          id: "e_entry_check",
+          source: "n_entry",
+          target: "n_check_segment",
+          sourceHandle: "default",
+        },
+        // check_segment → yes/no branches
+        {
+          id: "e_seg_yes",
+          source: "n_check_segment",
+          target: "n_check_tag",
+          sourceHandle: "yes",
+        },
+        {
+          id: "e_seg_no",
+          source: "n_check_segment",
+          target: "n_add_tag",
+          sourceHandle: "no",
+        },
+        // check_tag → yes/no
+        {
+          id: "e_tag_yes",
+          source: "n_check_tag",
+          target: "n_pause_humano",
+          sourceHandle: "yes",
+        },
+        {
+          id: "e_tag_no",
+          source: "n_check_tag",
+          target: "n_ai",
+          sourceHandle: "no",
+        },
+        // add_tag → stage_inicial → ai
+        {
+          id: "e_addtag_stage",
+          source: "n_add_tag",
+          target: "n_stage_inicial",
+          sourceHandle: "default",
+        },
+        {
+          id: "e_stage_ai",
+          source: "n_stage_inicial",
+          target: "n_ai",
+          sourceHandle: "default",
+        },
+        // AI → 4 saídas nomeadas
+        {
+          id: "e_ai_idade",
+          source: "n_ai",
+          target: "n_stage_idade",
+          sourceHandle: "coletou_idade",
+        },
+        {
+          id: "e_ai_dados",
+          source: "n_ai",
+          target: "n_stage_dados",
+          sourceHandle: "dados_completos",
+        },
+        {
+          id: "e_ai_docs",
+          source: "n_ai",
+          target: "n_stage_docs",
+          sourceHandle: "documentos_enviados",
+        },
+        {
+          id: "e_ai_encerrou",
+          source: "n_ai",
+          target: "n_pause_ia_encerrou",
+          sourceHandle: "ia_encerrou",
+        },
+        // stage_docs → pause
+        {
+          id: "e_docs_pause",
+          source: "n_stage_docs",
+          target: "n_pause_after_docs",
+          sourceHandle: "default",
+        },
+      ],
+      viewport: { x: 0, y: 0, zoom: 0.7 },
+      enabled_tools: [],
+    },
+    seed_tags: [
+      {
+        name: "Novo Lead",
+        description: "Lead que ainda não foi qualificado pela IA.",
+        color: "#3B82F6",
       },
     ],
   },
