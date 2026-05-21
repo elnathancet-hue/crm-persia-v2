@@ -4,10 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { useClientStore } from "@/lib/stores/client-store";
 import { getWhatsAppStatus } from "@/actions/settings";
-import { connectWhatsAppAdmin, getQRCodeAdmin, resetAndGetQRAdmin, disconnectWhatsAppAdmin, autoProvisionWhatsApp } from "@/actions/whatsapp-manage";
+import { connectWhatsAppAdmin, getQRCodeAdmin, resetAndGetQRAdmin, disconnectWhatsAppAdmin, autoProvisionWhatsApp, resyncUazapiWebhook } from "@/actions/whatsapp-manage";
 import {
   Loader2, RefreshCw, CheckCircle, XCircle, X,
-  AlertTriangle, QrCode, Wifi, LogOut, Clock, Link2, Smartphone
+  AlertTriangle, QrCode, Wifi, LogOut, Clock, Link2, Smartphone, Cable
 } from "lucide-react";
 import { toast } from "sonner";
 import { NoContextFallback } from "@/components/no-context-fallback";
@@ -34,6 +34,7 @@ export default function WhatsAppPage() {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [resyncing, setResyncing] = useState(false);
   const [qrExpired, setQrExpired] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tab, setTab] = useState<ProviderTab>("uazapi");
@@ -166,6 +167,35 @@ export default function WhatsAppPage() {
     }
   }
 
+  /**
+   * Re-sincroniza a configuração de webhook no UAZAPI. Necessário quando
+   * o array UAZAPI_DEFAULT_WEBHOOK_EVENTS do código muda (ex: PR 323
+   * adicionou "messages_update" pra checkmarks delivered/read). UAZAPI
+   * guarda config por instância; novo evento só chega quando re-chama
+   * POST /webhook. Idempotente.
+   */
+  async function handleResyncWebhook() {
+    if (!isManagingClient) return;
+    setResyncing(true);
+    try {
+      const result = await resyncUazapiWebhook();
+      if (!result.ok) {
+        if (isContextError(result.error)) {
+          handleContextExpired();
+          setResyncing(false);
+          return;
+        }
+        toast.error(result.error || "Falha ao re-sincronizar webhook.");
+      } else {
+        const eventsLabel = result.events?.join(", ") || "configurado";
+        toast.success(`Webhook re-sincronizado: ${eventsLabel}`);
+      }
+    } catch {
+      toast.error("Erro ao re-sincronizar webhook. Tente novamente.");
+    }
+    setResyncing(false);
+  }
+
   async function handleDisconnect() {
     if (!isManagingClient) return;
     if (!confirm(`Desconectar o WhatsApp de ${activeOrgName}? A IA parara de funcionar.`)) return;
@@ -281,6 +311,21 @@ export default function WhatsAppPage() {
           {!isConnected && (
             <button onClick={handleConnect} disabled={connecting} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm disabled:opacity-50 transition-colors">
               {connecting ? <Loader2 className="size-4 animate-spin" /> : <Wifi className="size-4" />} {isUnreachable ? "Reconectar / Re-provisionar" : status?.status === "not_configured" ? "Conectar WhatsApp" : "Conectar"}
+            </button>
+          )}
+
+          {/* Re-sincronizar webhook — só quando conectado.
+              Útil após deploys que mudam UAZAPI_DEFAULT_WEBHOOK_EVENTS
+              (ex: PR 323 adicionou messages_update pra checkmarks
+              delivered/read). Idempotente: pode clicar várias vezes. */}
+          {isConnected && (
+            <button
+              onClick={handleResyncWebhook}
+              disabled={resyncing}
+              title="Re-envia a configuração de eventos pro UAZAPI. Use depois de atualizações do sistema que mexem com webhooks (ex: novos tipos de evento). Não interrompe conexão."
+              className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/30 disabled:opacity-50 transition-colors"
+            >
+              {resyncing ? <Loader2 className="size-4 animate-spin" /> : <Cable className="size-4" />} Re-sincronizar webhook
             </button>
           )}
 
