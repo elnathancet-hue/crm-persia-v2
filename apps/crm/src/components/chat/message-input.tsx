@@ -11,6 +11,12 @@ import {
   PopoverContent,
 } from "@persia/ui/popover";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@persia/ui/tooltip";
+import {
   Send,
   Paperclip,
   X,
@@ -215,6 +221,12 @@ export function MessageInput({
   };
 
   return (
+    /* PR 39 (mai/2026): TooltipProvider envolve o input inteiro pra
+       que cada ícone de ação (Sparkles, Paperclip, Template, Emoji)
+       tenha tooltip do design system em vez do title HTML nativo
+       (que era discreto demais e não aparecia consistente entre
+       browsers). delay 300ms pra não disparar em hover acidental. */
+    <TooltipProvider delay={300}>
     <div className="border-t bg-card p-3 md:px-8 lg:px-16">
       {/* 24h window banner (Meta Cloud apenas) */}
       {composerLocked && (
@@ -304,19 +316,31 @@ export function MessageInput({
 
         {/* AI Generate */}
         <Popover open={aiOpen} onOpenChange={setAiOpen}>
-          <PopoverTrigger>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={disabled}
-              className="shrink-0 size-8 rounded-lg"
-              title="Gerar resposta com IA"
-              aria-label="Gerar resposta com IA"
-            >
-              <Sparkles className="size-4" />
-            </Button>
-          </PopoverTrigger>
+          {/* PR 39 (mai/2026): Tooltip explícito explicando o que faz.
+              Antes só tinha title HTML nativo — pouco descobrível.
+              Sparkles é a feature mais poderosa do input mas a menos
+              óbvia visualmente. */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <PopoverTrigger>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={disabled}
+                    className="shrink-0 size-8 rounded-lg"
+                    aria-label="Gerar resposta com IA"
+                  >
+                    <Sparkles className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+              }
+            />
+            <TooltipContent>
+              Gerar resposta com IA
+            </TooltipContent>
+          </Tooltip>
           <PopoverContent side="top" align="start" className="w-80 p-3">
             <div className="space-y-3">
               <p className="text-xs font-medium text-muted-foreground">Assistente IA - Apoio ao agente</p>
@@ -381,50 +405,70 @@ export function MessageInput({
         </Popover>
 
         {/* Attach file */}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || sending}
-          className="shrink-0 size-8 rounded-lg"
-          title="Anexar arquivo"
-          aria-label="Anexar arquivo"
-        >
-          <Paperclip className="size-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || sending}
+                className="shrink-0 size-8 rounded-lg"
+                aria-label="Anexar arquivo"
+              >
+                <Paperclip className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent>Anexar imagem ou arquivo</TooltipContent>
+        </Tooltip>
 
         {/* Template (Meta Cloud) */}
         {showTemplates && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setTemplateOpen(true)}
-            disabled={disabled || sending}
-            className="shrink-0 size-8 rounded-lg"
-            title="Enviar template oficial"
-            aria-label="Enviar template oficial"
-          >
-            <FileText className="size-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setTemplateOpen(true)}
+                  disabled={disabled || sending}
+                  className="shrink-0 size-8 rounded-lg"
+                  aria-label="Enviar template oficial"
+                >
+                  <FileText className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent>
+              Enviar template oficial Meta (reabre janela 24h)
+            </TooltipContent>
+          </Tooltip>
         )}
 
         {/* Emoji Picker */}
         <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
-          <PopoverTrigger>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              disabled={disabled}
-              className="shrink-0 size-8 rounded-lg"
-              title="Emoji"
-              aria-label="Emoji"
-            >
-              <Smile className="size-4" />
-            </Button>
-          </PopoverTrigger>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <PopoverTrigger>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={disabled}
+                    className="shrink-0 size-8 rounded-lg"
+                    aria-label="Emoji"
+                  >
+                    <Smile className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+              }
+            />
+            <TooltipContent>Inserir emoji</TooltipContent>
+          </Tooltip>
           <PopoverContent side="top" align="center" className="w-auto p-0 border-0">
             <EmojiPicker
               onEmojiClick={(emojiData) => {
@@ -500,5 +544,6 @@ export function MessageInput({
         }}
       />
     </div>
+    </TooltipProvider>
   );
 }
