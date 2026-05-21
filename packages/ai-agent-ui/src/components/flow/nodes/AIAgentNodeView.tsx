@@ -16,10 +16,14 @@ import type { FlowAIAgentNode } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
 import { InlineFormPanel } from "../InlineFormPanel";
 import type { FlowCatalogs } from "../catalog-types";
+import { useFlowTesterHighlight } from "../../flow-tester-context";
 
 interface Props {
   data: FlowAIAgentNode["data"];
   selected?: boolean;
+  /** PR 28 (mai/2026): id do node passado pelo wrapper do nodeTypes
+   * pra consultar o highlight do Tester via context. */
+  id: string;
   onDelete?: () => void;
   onDuplicate?: () => void;
   onPatch?: (data: Record<string, unknown>) => void;
@@ -30,12 +34,14 @@ interface Props {
 export function AIAgentNodeView({
   data,
   selected,
+  id,
   onDelete,
   onDuplicate,
   onPatch,
   catalogs,
   catalogsLoading,
 }: Props) {
+  const recentlyExecuted = useFlowTesterHighlight(id);
   const instructions = data.instructions ?? [];
   // PR 23 (mai/2026): preview de prompt foi removido do card. Prompt
   // base vive em Configurações do agente (RulesTab) — mostrá-lo aqui
@@ -83,6 +89,7 @@ export function AIAgentNodeView({
         onDuplicate={onDuplicate}
         expandedContent={expandedContent}
         expandedLayout="wide"
+        recentlyExecuted={recentlyExecuted}
       >
         {/* PR 23 (mai/2026): card mostra só lista de instructions
             (saídas nomeadas). Texto do prompt sumiu — está em

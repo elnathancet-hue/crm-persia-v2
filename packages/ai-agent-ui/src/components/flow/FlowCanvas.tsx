@@ -390,10 +390,14 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // re-render dos nodes.
   const nodeTypes = React.useMemo<NodeTypes>(
     () => ({
+      // PR 28 (mai/2026): `id` repassado às views pra que consultem
+      // useFlowTesterHighlight(id) e mostrem pulse animation quando
+      // o Tester acabou de passar por aqui.
       entry: ({ data, selected, id }) => (
         <EntryNodeView
           data={data as never}
           selected={selected}
+          id={id}
           onPatch={(newData) => handleNodePatch(id, newData)}
           catalogs={catalogs}
           catalogsLoading={catalogsLoading}
@@ -403,6 +407,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         <AIAgentNodeView
           data={data as never}
           selected={selected}
+          id={id}
           onDelete={() => handleNodeDelete(id)}
           onDuplicate={() => handleNodeDuplicate(id)}
           onPatch={(newData) => handleNodePatch(id, newData)}
@@ -414,6 +419,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         <ActionNodeView
           data={data as never}
           selected={selected}
+          id={id}
           onDelete={() => handleNodeDelete(id)}
           onDuplicate={() => handleNodeDuplicate(id)}
           onPatch={(newData) => handleNodePatch(id, newData)}
@@ -425,6 +431,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         <ConditionNodeView
           data={data as never}
           selected={selected}
+          id={id}
           onDelete={() => handleNodeDelete(id)}
           onDuplicate={() => handleNodeDuplicate(id)}
           onPatch={(newData) => handleNodePatch(id, newData)}

@@ -54,6 +54,10 @@ interface NodeShellProps {
    *     campos (prompt local, instructions[], tools, modelo override)
    *     e o cliente pediu pra "sustentar" todas opções sem recolher. */
   expandedLayout?: "compact" | "wide";
+  /** PR 28 (mai/2026): quando true, mostra pulse animation por 5s
+   * pra indicar que o Tester acabou de "passar" por aqui. Self-clears
+   * via context — caller só precisa ler o highlight do hook. */
+  recentlyExecuted?: boolean;
 }
 
 const VARIANT_STYLES: Record<
@@ -95,6 +99,7 @@ export function NodeShell({
   children,
   expandedContent,
   expandedLayout = "compact",
+  recentlyExecuted,
 }: NodeShellProps) {
   const styles = VARIANT_STYLES[variant];
   // PR 20 (mai/2026): tooltip do info icon (mostra label completo +
@@ -122,6 +127,12 @@ export function NodeShell({
         selected
           ? "ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
           : "hover:shadow-md",
+        // PR 28 (mai/2026): pulse animation quando o Tester acabou de
+        // executar este node. Tailwind animate-pulse + ring primary
+        // dão efeito "destaque por 5s" visível no canvas. Override do
+        // hover:shadow-md acima (transition-all garante interpolação).
+        recentlyExecuted &&
+          "animate-pulse ring-4 ring-primary/60 ring-offset-2 ring-offset-background shadow-lg",
       )}
     >
       {/* PR 20 (mai/2026): toolbar vertical flutuante à direita,

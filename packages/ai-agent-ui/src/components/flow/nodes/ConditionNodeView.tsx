@@ -11,10 +11,13 @@ import type { FlowConditionNode } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
 import { InlineFormPanel } from "../InlineFormPanel";
 import type { FlowCatalogs } from "../catalog-types";
+import { useFlowTesterHighlight } from "../../flow-tester-context";
 
 interface Props {
   data: FlowConditionNode["data"];
   selected?: boolean;
+  /** PR 28: id pra consultar highlight do Tester. */
+  id: string;
   onDelete?: () => void;
   onDuplicate?: () => void;
   onPatch?: (data: Record<string, unknown>) => void;
@@ -61,12 +64,14 @@ function conditionIncompleteReason(
 export function ConditionNodeView({
   data,
   selected,
+  id,
   onDelete,
   onDuplicate,
   onPatch,
   catalogs,
   catalogsLoading,
 }: Props) {
+  const recentlyExecuted = useFlowTesterHighlight(id);
   const incompleteReason = conditionIncompleteReason(
     data.condition_type,
     data.config,
@@ -100,6 +105,7 @@ export function ConditionNodeView({
         onDelete={onDelete}
         onDuplicate={onDuplicate}
         expandedContent={expandedContent}
+        recentlyExecuted={recentlyExecuted}
       >
         <div className="line-clamp-2">
           {conditionPreview(data.condition_type, data.config)}

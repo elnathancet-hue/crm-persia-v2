@@ -50,6 +50,7 @@ import { AgentStatusBadge } from "./AgentStatusBadge";
 import { RulesTab } from "./RulesTab";
 import { SaveStatusIndicator } from "./SaveStatusIndicator";
 import { useSaveStatus } from "./use-save-status";
+import { FlowTesterProvider } from "./flow-tester-context";
 // PR-FLOW-PIVOT PR 3 (mai/2026): aba "Fluxo" agora é o canvas visual.
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { PlaceholderTab } from "./PlaceholderTab";
@@ -329,6 +330,12 @@ export function AgentEditor({
   }, []);
 
   return (
+    /* PR 28 (mai/2026): FlowTesterProvider envolve o editor inteiro
+       pra que TesterSheet (publisher) e FlowCanvas/NodeViews
+       (consumers) compartilhem o último node executado via context.
+       Highlight pulsing aparece no node onde o flow parou após cada
+       run do Tester. */
+    <FlowTesterProvider>
     <div className="space-y-6">
       {/* Header sticky — sem tabs (movido pra sidebar), sem botao "Testar
           agente" (vira FAB fixo). Hamburger no mobile abre sidebar via
@@ -516,6 +523,7 @@ export function AgentEditor({
         onOpenChange={setTesterOpen}
       />
     </div>
+    </FlowTesterProvider>
   );
 }
 

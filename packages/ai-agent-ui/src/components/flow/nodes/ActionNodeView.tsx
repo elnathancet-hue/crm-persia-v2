@@ -28,6 +28,7 @@ import type {
 import { NodeShell } from "./node-shell";
 import { InlineFormPanel } from "../InlineFormPanel";
 import type { FlowCatalogs } from "../catalog-types";
+import { useFlowTesterHighlight } from "../../flow-tester-context";
 
 const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   add_tag: TagIcon,
@@ -125,6 +126,8 @@ function incompleteReasonFor(
 interface Props {
   data: FlowActionNode["data"];
   selected?: boolean;
+  /** PR 28: id pra consultar highlight do Tester. */
+  id: string;
   onDelete?: () => void;
   onDuplicate?: () => void;
   /** PR 21 (mai/2026): callback pra patchar `data` do node quando
@@ -138,12 +141,14 @@ interface Props {
 export function ActionNodeView({
   data,
   selected,
+  id,
   onDelete,
   onDuplicate,
   onPatch,
   catalogs,
   catalogsLoading,
 }: Props) {
+  const recentlyExecuted = useFlowTesterHighlight(id);
   const Icon = ACTION_ICONS[data.action_type] ?? Power;
   const preview = configPreview(data.action_type, data.config);
   const incompleteReason = incompleteReasonFor(data.action_type, data.config);
@@ -178,6 +183,7 @@ export function ActionNodeView({
         onDelete={onDelete}
         onDuplicate={onDuplicate}
         expandedContent={expandedContent}
+        recentlyExecuted={recentlyExecuted}
       >
         <div className="line-clamp-2">{preview}</div>
       </NodeShell>

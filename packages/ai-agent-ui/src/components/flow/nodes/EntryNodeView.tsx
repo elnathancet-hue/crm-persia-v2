@@ -13,6 +13,7 @@ import type { FlowEntryNode, FlowEntryTrigger } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
 import { InlineFormPanel } from "../InlineFormPanel";
 import type { FlowCatalogs } from "../catalog-types";
+import { useFlowTesterHighlight } from "../../flow-tester-context";
 
 const TRIGGER_ICONS: Record<FlowEntryTrigger, typeof MessageSquare> = {
   conversation_started: MessageSquare,
@@ -49,6 +50,8 @@ function triggerPreview(
 interface Props {
   data: FlowEntryNode["data"];
   selected?: boolean;
+  /** PR 28: id pra consultar highlight do Tester. */
+  id: string;
   onPatch?: (data: Record<string, unknown>) => void;
   catalogs?: FlowCatalogs;
   catalogsLoading?: boolean;
@@ -57,10 +60,12 @@ interface Props {
 export function EntryNodeView({
   data,
   selected,
+  id,
   onPatch,
   catalogs,
   catalogsLoading,
 }: Props) {
+  const recentlyExecuted = useFlowTesterHighlight(id);
   const Icon = TRIGGER_ICONS[data.trigger] ?? MessageSquare;
   const preview = triggerPreview(data.trigger, data.config);
   const expandedContent =
@@ -82,6 +87,7 @@ export function EntryNodeView({
         variant="entry"
         selected={selected}
         expandedContent={expandedContent}
+        recentlyExecuted={recentlyExecuted}
       >
         {preview}
       </NodeShell>
