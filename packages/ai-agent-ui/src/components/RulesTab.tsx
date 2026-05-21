@@ -21,7 +21,14 @@
 // tentar sair da tela com `dirty=true`, prevenindo perda acidental.
 
 import * as React from "react";
-import { CalendarCheck, ExternalLink, Save } from "lucide-react";
+import {
+  Brain,
+  CalendarCheck,
+  ExternalLink,
+  MessageSquare,
+  Plug,
+  Save,
+} from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type {
@@ -60,6 +67,12 @@ import { EntryConditionsCard } from "./EntryConditionsCard";
 import { PromptBuilderSection } from "./PromptBuilderSection";
 import { UnsavedChangesGuard } from "./use-unsaved-changes-guard";
 import { useAgentActions } from "../context";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@persia/ui/accordion";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Label } from "@persia/ui/label";
@@ -356,346 +369,384 @@ export function RulesTab({
             agentes secundarios (nao-principais). Cliente define
             conditions (tag/segment/mensagem/etapa/status) que ativam
             esse agente em vez do principal. Sem regras = nunca recebe
-            leads. */}
+            leads.
+            PR 33 (mai/2026): fica FORA dos accordions abaixo — é
+            condicional (só não-principais) e é específico/crítico
+            (decide se agente recebe leads ou não), então merece
+            destaque próprio. */}
         {agent.is_primary === false ? (
           <EntryConditionsCard configId={agent.id} />
         ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Modelo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Select value={model} onValueChange={(v) => v && setModel(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="gpt-5-mini">GPT-5 mini (padrão)</SelectItem>
-                <SelectItem value="gpt-4o-mini">GPT-4o mini</SelectItem>
-                <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                <SelectItem value="gpt-5">GPT-5</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
-
-        {/* PR-AGENT-INTEGRATION-1 (mai/2026): card "Comportamento" virou
-            "Transferir pra humano". O switch principal libera a IA usar
-            `stop_agent`; quando on, o HandoffNotificationCard abaixo
-            permite configurar notificacao + resumo da conversa. Antes
-            esses 2 cards estavam separados visualmente. */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Transferir pra humano</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <Label htmlFor="allow_human_handoff" className="cursor-pointer">
-                  Permitir transferir pra humano
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Deixa o agente passar a conversa pra um atendente quando
-                  detectar que está fora do escopo dele.
-                </p>
+        {/* PR 33 (mai/2026): 6 cards soltos viraram 3 accordions
+            agrupados por intenção. Reduz densidade visual ~70% e dá
+            hierarquia (decisão > conversação > integrações). Cliente
+            pode abrir múltiplos via openMultiple do base-ui. Default
+            só "decide" aberto (Modelo + Transferir são os mais
+            essenciais). */}
+        <Accordion
+          multiple
+          defaultValue={["decide"]}
+          className="rounded-xl border border-border bg-card divide-y divide-border"
+        >
+          {/* ────────────────────────────────────────────────────
+              Grupo 1: Como o agente decide
+              (Modelo + Transferir pra humano)
+              ──────────────────────────────────────────────────── */}
+          <AccordionItem value="decide" className="px-4">
+            <AccordionTrigger className="text-base">
+              <span className="flex items-center gap-2">
+                <Brain className="size-4 text-primary" />
+                Como o agente decide
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="model">Modelo</Label>
+                <Select
+                  value={model}
+                  onValueChange={(v) => v && setModel(v)}
+                >
+                  <SelectTrigger id="model">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gpt-5-mini">
+                      GPT-5 mini (padrão)
+                    </SelectItem>
+                    <SelectItem value="gpt-4o-mini">GPT-4o mini</SelectItem>
+                    <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                    <SelectItem value="gpt-5">GPT-5</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Switch
-                id="allow_human_handoff"
-                checked={guardrails.allow_human_handoff}
-                onCheckedChange={(v) =>
-                  setGuardrails((g) => ({ ...g, allow_human_handoff: Boolean(v) }))
-                }
-              />
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* PR 22 (mai/2026): HandoffNotificationCard e QuickToolsCard
-            removidos daqui. Notificações de handoff são configuradas
-            no Fluxo (Action node trigger_notification). Ferramentas
-            do agente são habilitadas dentro do node de IA do Fluxo. */}
-
-        {/* PR-AI-AGENT-HUMAN-A: card de humanizacao (pausa/ativa). Toggle
-            do auto_pause_minutes serve de master switch: off = pausa
-            permanente quando humano responde ou keyword (so resume manual
-            reativa). on = pausa por X min e auto-reativa proxima msg do
-            lead. */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Pausa e ativação</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              O lead pode digitar palavras pra pausar ou reativar o agente. Se
-              um atendente humano responder pelo chat, o agente também pausa
-              automaticamente.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <Label htmlFor="auto_pause_enabled" className="cursor-pointer">
-                  Auto-pausa quando humano responde
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Quando um atendente responde, o agente fica em silêncio por
-                  um tempo. Próxima mensagem do lead reativa automaticamente.
-                </p>
-              </div>
-              <Switch
-                id="auto_pause_enabled"
-                checked={humanizationEnabled}
-                onCheckedChange={(v) => setHumanizationEnabled(Boolean(v))}
-              />
-            </div>
-
-            {humanizationEnabled ? (
-              <div className="space-y-1.5 pl-0">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="auto_pause_minutes">
-                    Tempo de pausa após humano responder
+              {/* PR-AGENT-INTEGRATION-1 (mai/2026): switch que libera
+                  a IA usar `stop_agent` (transferir pra humano).
+                  Notificação detalhada é configurada no Fluxo (Action
+                  node trigger_notification) — não aqui. */}
+              <div className="flex items-start justify-between gap-3 pt-2 border-t border-border/60">
+                <div className="flex-1 min-w-0">
+                  <Label
+                    htmlFor="allow_human_handoff"
+                    className="cursor-pointer"
+                  >
+                    Permitir transferir pra humano
                   </Label>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {autoPauseMinutes} min
-                  </span>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Deixa o agente passar a conversa pra um atendente
+                    quando detectar que está fora do escopo dele.
+                  </p>
                 </div>
-                <Input
-                  id="auto_pause_minutes"
-                  type="number"
-                  min={1}
-                  max={AUTO_PAUSE_MINUTES_MAX}
-                  step={5}
-                  value={autoPauseMinutes}
-                  onChange={(e) =>
-                    setAutoPauseMinutes(clampAutoPauseMinutes(Number(e.target.value)))
+                <Switch
+                  id="allow_human_handoff"
+                  checked={guardrails.allow_human_handoff}
+                  onCheckedChange={(v) =>
+                    setGuardrails((g) => ({
+                      ...g,
+                      allow_human_handoff: Boolean(v),
+                    }))
                   }
                 />
-                <p className="text-xs text-muted-foreground">
-                  Tempo recomendado: 30 minutos. Máximo 1440 (24h).
-                </p>
               </div>
-            ) : null}
+            </AccordionContent>
+          </AccordionItem>
 
-            <div className="space-y-1.5 pt-2 border-t">
-              <Label htmlFor="pause_keywords">Palavras pra pausar</Label>
-              <Textarea
-                id="pause_keywords"
-                value={pauseKeywordsText}
-                onChange={(e) => setPauseKeywordsText(e.target.value)}
-                placeholder={PAUSE_KEYWORDS_DEFAULT.join("\n")}
-                rows={3}
-                className="font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Uma palavra por linha. Quando o lead digitar uma delas (sem
-                outras palavras), o agente para de responder. Não diferencia
-                maiúscula/minúscula.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="resume_keywords">Palavras pra reativar</Label>
-              <Textarea
-                id="resume_keywords"
-                value={resumeKeywordsText}
-                onChange={(e) => setResumeKeywordsText(e.target.value)}
-                placeholder={RESUME_KEYWORDS_DEFAULT.join("\n")}
-                rows={3}
-                className="font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Uma palavra por linha. Faz o agente voltar a responder se
-                estiver pausado.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* PR-AI-AGENT-HUMAN-B: card de split de mensagens. Conservador
-            por default (off) pra evitar custo extra de GPT call e
-            mudancas de UX inesperadas. Toggle on libera 2 inputs. */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Dividir respostas longas</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Quando o agente escrever uma resposta grande, divide
-              automaticamente em várias mensagens curtas no WhatsApp — parece
-              mais humano.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <Label htmlFor="split_enabled" className="cursor-pointer">
-                  Ligar divisão de mensagens
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Respostas longas viram 2-3 mensagens curtas com pausa
-                  entre elas. Respostas curtas continuam indo inteiras.
-                </p>
-              </div>
-              <Switch
-                id="split_enabled"
-                checked={splitEnabled}
-                onCheckedChange={(v) => setSplitEnabled(Boolean(v))}
-              />
-            </div>
-
-            {splitEnabled ? (
-              <>
-                <div className="space-y-1.5 pt-2 border-t">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="split_threshold_chars">
-                      Dividir quando a resposta passar de
+          {/* ────────────────────────────────────────────────────
+              Grupo 2: Como o agente conversa
+              (Pausa + Dividir + Horário comercial)
+              ──────────────────────────────────────────────────── */}
+          <AccordionItem value="converse" className="px-4">
+            <AccordionTrigger className="text-base">
+              <span className="flex items-center gap-2">
+                <MessageSquare className="size-4 text-primary" />
+                Como o agente conversa
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pt-2">
+              {/* Subgrupo 2A — Pausa e ativação */}
+              <section className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold">Pausa e ativação</h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    O lead pode digitar palavras pra pausar ou reativar o
+                    agente. Se um atendente humano responder pelo chat, o
+                    agente também pausa automaticamente.
+                  </p>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <Label
+                      htmlFor="auto_pause_enabled"
+                      className="cursor-pointer"
+                    >
+                      Auto-pausa quando humano responde
                     </Label>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {splitThresholdChars} caracteres
-                    </span>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Quando um atendente responde, o agente fica em silêncio
+                      por um tempo. Próxima mensagem do lead reativa
+                      automaticamente.
+                    </p>
                   </div>
-                  <Input
-                    id="split_threshold_chars"
-                    type="number"
-                    min={SPLIT_THRESHOLD_CHARS_MIN}
-                    max={SPLIT_THRESHOLD_CHARS_MAX}
-                    step={10}
-                    value={splitThresholdChars}
-                    onChange={(e) =>
-                      setSplitThresholdChars(
-                        clampSplitThresholdChars(Number(e.target.value)),
-                      )
+                  <Switch
+                    id="auto_pause_enabled"
+                    checked={humanizationEnabled}
+                    onCheckedChange={(v) =>
+                      setHumanizationEnabled(Boolean(v))
                     }
                   />
+                </div>
+
+                {humanizationEnabled ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="auto_pause_minutes">
+                        Tempo de pausa após humano responder
+                      </Label>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {autoPauseMinutes} min
+                      </span>
+                    </div>
+                    <Input
+                      id="auto_pause_minutes"
+                      type="number"
+                      min={1}
+                      max={AUTO_PAUSE_MINUTES_MAX}
+                      step={5}
+                      value={autoPauseMinutes}
+                      onChange={(e) =>
+                        setAutoPauseMinutes(
+                          clampAutoPauseMinutes(Number(e.target.value)),
+                        )
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Tempo recomendado: 30 minutos. Máximo 1440 (24h).
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="space-y-1.5 pt-2 border-t border-border/60">
+                  <Label htmlFor="pause_keywords">Palavras pra pausar</Label>
+                  <Textarea
+                    id="pause_keywords"
+                    value={pauseKeywordsText}
+                    onChange={(e) => setPauseKeywordsText(e.target.value)}
+                    placeholder={PAUSE_KEYWORDS_DEFAULT.join("\n")}
+                    rows={3}
+                    className="font-mono text-xs"
+                  />
                   <p className="text-xs text-muted-foreground">
-                    Padrão: {SPLIT_THRESHOLD_CHARS_DEFAULT} caracteres
-                    (~3 linhas). Valores entre {SPLIT_THRESHOLD_CHARS_MIN}{" "}
-                    e {SPLIT_THRESHOLD_CHARS_MAX}.
+                    Uma palavra por linha. Quando o lead digitar uma delas
+                    (sem outras palavras), o agente para de responder. Não
+                    diferencia maiúscula/minúscula.
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="split_delay_seconds">
-                      Pausa entre mensagens
-                    </Label>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {splitDelaySeconds}s
-                    </span>
-                  </div>
-                  <Input
-                    id="split_delay_seconds"
-                    type="number"
-                    min={SPLIT_DELAY_SECONDS_MIN}
-                    max={SPLIT_DELAY_SECONDS_MAX}
-                    step={1}
-                    value={splitDelaySeconds}
-                    onChange={(e) =>
-                      setSplitDelaySeconds(
-                        clampSplitDelaySeconds(Number(e.target.value)),
-                      )
-                    }
+                  <Label htmlFor="resume_keywords">Palavras pra reativar</Label>
+                  <Textarea
+                    id="resume_keywords"
+                    value={resumeKeywordsText}
+                    onChange={(e) => setResumeKeywordsText(e.target.value)}
+                    placeholder={RESUME_KEYWORDS_DEFAULT.join("\n")}
+                    rows={3}
+                    className="font-mono text-xs"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Tempo de digitação simulado entre cada mensagem.
-                    Padrão: {SPLIT_DELAY_SECONDS_DEFAULT}s.
+                    Uma palavra por linha. Faz o agente voltar a responder
+                    se estiver pausado.
                   </p>
                 </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
+              </section>
 
-        <BusinessHoursCard
-          enabled={businessHoursEnabled}
-          hours={businessHours}
-          afterHoursMessage={afterHoursMessage}
-          onEnabledChange={setBusinessHoursEnabled}
-          onHoursChange={setBusinessHours}
-          onAfterHoursMessageChange={setAfterHoursMessage}
-        />
+              {/* Subgrupo 2B — Dividir respostas longas */}
+              <section className="space-y-4 pt-4 border-t border-border">
+                <div>
+                  <h4 className="text-sm font-semibold">
+                    Dividir respostas longas
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Quando o agente escrever uma resposta grande, divide
+                    automaticamente em várias mensagens curtas no WhatsApp
+                    — parece mais humano.
+                  </p>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <Label htmlFor="split_enabled" className="cursor-pointer">
+                      Ligar divisão de mensagens
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Respostas longas viram 2-3 mensagens curtas com pausa
+                      entre elas. Respostas curtas continuam indo inteiras.
+                    </p>
+                  </div>
+                  <Switch
+                    id="split_enabled"
+                    checked={splitEnabled}
+                    onCheckedChange={(v) => setSplitEnabled(Boolean(v))}
+                  />
+                </div>
 
-        {/* PR-AGENT-INTEGRATION-1: card de calendario reorganizado.
-            Agenda interna (create_appointment via tools) ja funciona —
-            agente agenda sem precisar de conexao externa. Google Calendar
-            integration esta em desenvolvimento (handler schedule_event
-            no enum mas sem TS handler). */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <CalendarCheck className="size-4 text-primary" />
-              Calendário do agente
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* PR 22 (mai/2026): UI da agenda foi unificada — antes eram
-                2 cards visuais (Interna "ativa" + Google "em breve") +
-                um <details> escondido. Confundia: cliente via 2 agendas
-                e não sabia qual era a "real". Agora é 1 picker só com:
-                  - Agenda do CRM (padrão, sempre disponível)
-                  - N opções de Google Calendar conectado (PR 14a/b/c
-                    já entregou — não está mais "em breve")
-                  - Link contextual pra conectar se não houver conexão.
-                Quem agenda via chat continua usando a tool
-                create_appointment que respeita esse picker. */}
-            <Label htmlFor="calendar-connection" className="text-sm">
-              Onde o agente marca os compromissos
-            </Label>
-            <Select
-              value={calendarConnectionId ?? "_internal"}
-              onValueChange={(v) =>
-                setCalendarConnectionId(v && v !== "_internal" ? v : null)
-              }
-              disabled={isPending || calendarConnections === null}
-            >
-              <SelectTrigger id="calendar-connection">
-                <SelectValue>
+                {splitEnabled ? (
+                  <>
+                    <div className="space-y-1.5 pt-2 border-t border-border/60">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="split_threshold_chars">
+                          Dividir quando a resposta passar de
+                        </Label>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {splitThresholdChars} caracteres
+                        </span>
+                      </div>
+                      <Input
+                        id="split_threshold_chars"
+                        type="number"
+                        min={SPLIT_THRESHOLD_CHARS_MIN}
+                        max={SPLIT_THRESHOLD_CHARS_MAX}
+                        step={10}
+                        value={splitThresholdChars}
+                        onChange={(e) =>
+                          setSplitThresholdChars(
+                            clampSplitThresholdChars(Number(e.target.value)),
+                          )
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Padrão: {SPLIT_THRESHOLD_CHARS_DEFAULT} caracteres
+                        (~3 linhas). Valores entre {SPLIT_THRESHOLD_CHARS_MIN}
+                        {" e "}
+                        {SPLIT_THRESHOLD_CHARS_MAX}.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="split_delay_seconds">
+                          Pausa entre mensagens
+                        </Label>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {splitDelaySeconds}s
+                        </span>
+                      </div>
+                      <Input
+                        id="split_delay_seconds"
+                        type="number"
+                        min={SPLIT_DELAY_SECONDS_MIN}
+                        max={SPLIT_DELAY_SECONDS_MAX}
+                        step={1}
+                        value={splitDelaySeconds}
+                        onChange={(e) =>
+                          setSplitDelaySeconds(
+                            clampSplitDelaySeconds(Number(e.target.value)),
+                          )
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Tempo de digitação simulado entre cada mensagem.
+                        Padrão: {SPLIT_DELAY_SECONDS_DEFAULT}s.
+                      </p>
+                    </div>
+                  </>
+                ) : null}
+              </section>
+
+              {/* Subgrupo 2C — Horário comercial */}
+              <section className="pt-4 border-t border-border">
+                <BusinessHoursInline
+                  enabled={businessHoursEnabled}
+                  hours={businessHours}
+                  afterHoursMessage={afterHoursMessage}
+                  onEnabledChange={setBusinessHoursEnabled}
+                  onHoursChange={setBusinessHours}
+                  onAfterHoursMessageChange={setAfterHoursMessage}
+                />
+              </section>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* ────────────────────────────────────────────────────
+              Grupo 3: Integrações (Calendário)
+              ──────────────────────────────────────────────────── */}
+          {/* PR-AGENT-INTEGRATION-1: card de calendario reorganizado.
+              Agenda interna (create_appointment via tools) ja funciona —
+              agente agenda sem precisar de conexao externa. Google Calendar
+              integration esta em desenvolvimento (handler schedule_event
+              no enum mas sem TS handler). */}
+          <AccordionItem value="integrations" className="px-4">
+            <AccordionTrigger className="text-base">
+              <span className="flex items-center gap-2">
+                <Plug className="size-4 text-primary" />
+                Integrações
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3 pt-2">
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <CalendarCheck className="size-4 text-primary" />
+                  <h4 className="text-sm font-semibold">
+                    Calendário do agente
+                  </h4>
+                </div>
+                <Label htmlFor="calendar-connection" className="text-sm">
+                  Onde o agente marca os compromissos
+                </Label>
+                <Select
+                  value={calendarConnectionId ?? "_internal"}
+                  onValueChange={(v) =>
+                    setCalendarConnectionId(v && v !== "_internal" ? v : null)
+                  }
+                  disabled={isPending || calendarConnections === null}
+                >
+                  <SelectTrigger id="calendar-connection">
+                    <SelectValue>
+                      {calendarConnectionId === null
+                        ? "Agenda do CRM (padrão)"
+                        : calendarConnections?.find(
+                            (c) => c.id === calendarConnectionId,
+                          )?.display_name ?? "Carregando..."}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_internal">
+                      Agenda do CRM (padrão)
+                    </SelectItem>
+                    {calendarConnections?.map((conn) => (
+                      <SelectItem
+                        key={conn.id}
+                        value={conn.id}
+                        disabled={conn.status !== "active"}
+                      >
+                        {conn.display_name}
+                        {conn.status !== "active" ? (
+                          <span className="text-muted-foreground">
+                            {" "}
+                            ({conn.status})
+                          </span>
+                        ) : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
                   {calendarConnectionId === null
-                    ? "Agenda do CRM (padrão)"
-                    : calendarConnections?.find(
-                        (c) => c.id === calendarConnectionId,
-                      )?.display_name ?? "Carregando..."}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_internal">
-                  Agenda do CRM (padrão)
-                </SelectItem>
-                {calendarConnections?.map((conn) => (
-                  <SelectItem
-                    key={conn.id}
-                    value={conn.id}
-                    disabled={conn.status !== "active"}
+                    ? "Compromissos vão direto na sua Agenda do CRM. Ative a ferramenta \"Agendar reunião\" no Fluxo pra liberar."
+                    : "Compromissos vão pro Google Calendar conectado e aparecem também na sua Agenda do CRM."}
+                </p>
+                {calendarConnections && calendarConnections.length === 0 ? (
+                  <Link
+                    href="/settings/google-calendar"
+                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline pt-1"
                   >
-                    {conn.display_name}
-                    {conn.status !== "active" ? (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        ({conn.status})
-                      </span>
-                    ) : null}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <p className="text-xs text-muted-foreground">
-              {calendarConnectionId === null
-                ? "Compromissos vão direto na sua Agenda do CRM. Ative a ferramenta \"Agendar reunião\" no Fluxo pra liberar."
-                : "Compromissos vão pro Google Calendar conectado e aparecem também na sua Agenda do CRM."}
-            </p>
-
-            {/* Link pra conectar Google quando ainda não há nenhuma
-                conexão. Quando já tem, é só mais uma opção no Select
-                acima — não polui a UI com mais um botão. */}
-            {calendarConnections && calendarConnections.length === 0 ? (
-              <Link
-                href="/settings/google-calendar"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline pt-1"
-              >
-                <ExternalLink className="size-3" />
-                Conectar Google Calendar
-              </Link>
-            ) : null}
-          </CardContent>
-        </Card>
+                    <ExternalLink className="size-3" />
+                    Conectar Google Calendar
+                  </Link>
+                ) : null}
+              </section>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         {/* PR 27 (mai/2026): botão "Salvar alterações" voltou.
             Cliente preferiu fluxo manual ao auto-save do PR 26 —
@@ -729,7 +780,7 @@ const DAY_LABELS: Record<DayName, string> = {
   sunday: "Domingo",
 };
 
-interface BusinessHoursCardProps {
+interface BusinessHoursInlineProps {
   enabled: boolean;
   hours: BusinessHours;
   afterHoursMessage: string;
@@ -738,14 +789,18 @@ interface BusinessHoursCardProps {
   onAfterHoursMessageChange: (next: string) => void;
 }
 
-function BusinessHoursCard({
+// PR 33 (mai/2026): renomeado de BusinessHoursCard pra ...Inline.
+// Antes era um <Card> com CardHeader/CardContent — virou subgrupo
+// inline dentro de accordion "Como o agente conversa". Conteúdo
+// idêntico; só dropei o wrapper Card pra evitar nested cards.
+function BusinessHoursInline({
   enabled,
   hours,
   afterHoursMessage,
   onEnabledChange,
   onHoursChange,
   onAfterHoursMessageChange,
-}: BusinessHoursCardProps) {
+}: BusinessHoursInlineProps) {
   const setDayOpen = (day: DayName, open: boolean) => {
     onHoursChange({
       ...hours,
@@ -763,15 +818,15 @@ function BusinessHoursCard({
     afterHoursMessage.length > AFTER_HOURS_MESSAGE_MAX_LENGTH;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Horário comercial</CardTitle>
-        <p className="text-xs text-muted-foreground mt-1">
-          Limita os horários que o agente responde. Fora do horário, manda uma
-          mensagem padrão e deixa a conversa pra você responder depois.
+    <div className="space-y-4">
+      <div>
+        <h4 className="text-sm font-semibold">Horário comercial</h4>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Limita os horários que o agente responde. Fora do horário, manda
+          uma mensagem padrão e deixa a conversa pra você responder depois.
         </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+      <div className="space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <Label htmlFor="business_hours_enabled" className="cursor-pointer">
@@ -875,8 +930,8 @@ function BusinessHoursCard({
             </div>
           </>
         ) : null}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
