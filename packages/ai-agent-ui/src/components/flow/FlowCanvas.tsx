@@ -16,7 +16,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   addEdge,
@@ -76,28 +75,9 @@ import { EdgeWithDelete } from "./edges/edge-with-delete";
 // fique disponível dentro dos node views. Antes era const top-level
 // e sem acesso a state do parent.
 
-// PR 25 (mai/2026): cor do node no MiniMap espelhando VARIANT_STYLES
-// do node-shell. Usa cores HSL diretas (não tokens CSS) porque o
-// MiniMap renderiza via SVG fill que não resolve CSS custom property
-// em todos os browsers. Os valores seguem a paleta do tema (success
-// hsl(142 71% 45%), primary hsl(38 89% 53%), etc — ver globals.css).
-// Pra fluxo Black/dark a paleta é a mesma; pro light é levemente
-// diferente, mas como o MiniMap renderiza pequeno (60x60px), a
-// diferença visual é imperceptível.
-function miniMapNodeColor(node: Node): string {
-  switch (node.type) {
-    case "entry":
-      return "hsl(142, 71%, 45%)"; // success
-    case "ai_agent":
-      return "hsl(38, 89%, 53%)"; // primary (gold/blue)
-    case "action":
-      return "hsl(258, 80%, 60%)"; // progress (roxo)
-    case "condition":
-      return "hsl(43, 85%, 55%)"; // âmbar
-    default:
-      return "hsl(0, 0%, 60%)"; // gray fallback
-  }
-}
+// PR 25 (mai/2026): MiniMap colorido foi adicionado nesse PR; PR 30
+// removeu — cliente preferiu canvas mais limpo sem mapinha de
+// acompanhamento. Helper miniMapNodeColor removido junto.
 
 // ============================================================================
 // Conversões FlowConfig ↔ React Flow nodes/edges
@@ -859,7 +839,15 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   }
 
   return (
-    <div className="flex h-[calc(100vh-180px)] min-h-[600px] rounded-xl border border-border/60 overflow-hidden bg-background">
+    /* PR 30 (mai/2026): canvas root vira sticky pra que sidebar
+       "Adicionar ao fluxo" + toolbar (Salvar / undo-redo / layout)
+       fiquem fixos no viewport mesmo quando cliente rola a página.
+       Scroll vertical da página fica desabilitado dentro do canvas
+       (overflow-hidden), e o que rola é só o pan do React Flow.
+       top-32 (8rem = 128px) aproxima o offset do header sticky +
+       PublishingChecklist — pode precisar ajuste fino visual.
+       h-[calc(100vh-9rem)] = altura disponível abaixo do header. */
+    <div className="sticky top-32 flex h-[calc(100vh-9rem)] min-h-[600px] rounded-xl border border-border/60 overflow-hidden bg-background">
       {/* PR 27 (mai/2026): avisa cliente ao sair com mudanças no fluxo
           não salvas. Dialog "este projeto não foi salvo" + opções
           "Continuar editando" / "Sair sem salvar". */}
@@ -1016,29 +1004,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls position="bottom-right" showInteractive={false} />
-          {/* PR 25 (mai/2026): MiniMap sempre visível (antes era >5
-              nodes — mas pra navegar fluxos médios já ajuda). Cores
-              por tipo de node espelham VARIANT_STYLES do node-shell:
-                - entry: verde (success)
-                - ai_agent: primary
-                - action: roxo (progress)
-                - condition: âmbar
-              Ler tokens semânticos via CSS custom property garante
-              que respeita light/dark theme. */}
-          {nodes.length > 0 ? (
-            <MiniMap
-              pannable
-              zoomable
-              position="bottom-left"
-              nodeColor={miniMapNodeColor}
-              maskColor="hsl(var(--background) / 0.85)"
-              style={{
-                backgroundColor: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-              }}
-            />
-          ) : null}
+          {/* PR 30 (mai/2026): MiniMap removido a pedido do cliente —
+              canvas mais limpo, sem mapinha de acompanhamento. Pra
+              navegar use pan/zoom (mouse + Controls) ou Ctrl+Home
+              ("Centrar no início" da toolbar). */}
         </ReactFlow>
         {nodes.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center p-6">
