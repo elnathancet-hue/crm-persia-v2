@@ -13,6 +13,7 @@
 import type { WhatsAppProvider } from "@persia/shared/whatsapp";
 import type { HumanizationConfig } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
+import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import type { FlowProviderStub, TesterRunEvent } from "./types";
 
 export interface CreateRealtimeProviderOptions {
@@ -101,8 +102,27 @@ export function createRealtimeProvider(
       // em vez de propagar pro runner.
       if (event.kind === "send_text") {
         const payload = event.payload as { message?: string };
-        const message = payload.message ?? "";
-        if (!message) return;
+        const rawMessage = payload.message ?? "";
+        if (!rawMessage) return;
+        // Bug D fix (mai/2026): camada 2 de defesa. O runner.ts já
+        // sanitiza antes de emitir send_text, mas se uma feature
+        // futura emitir direto sem passar pelo runner (ex: handler
+        // de tool que envia confirmação), garantimos aqui. Loga em
+        // skipped event se houver leak — não bloqueia, só registra
+        // pra alarmar caso o sanitizer do runner falhe.
+        const { cleaned, leakedPatterns } = stripToolCallLeaks(rawMessage);
+        if (leakedPatterns.length > 0) {
+          record({
+            kind: "skipped",
+            payload: {
+              reason: "tool_call_leak_stripped_at_provider",
+              count: leakedPatterns.length,
+              patterns: leakedPatterns,
+            },
+          });
+        }
+        const message = cleaned;
+        if (!message) return; // tudo era tool call leak — não envia mensagem vazia
         void (async () => {
           // PR 6 (mai/2026): split de msg longa em chunks. Entre chunks,
           // setTyping(on) + delay configurável + setTyping(off) pra ritmo
