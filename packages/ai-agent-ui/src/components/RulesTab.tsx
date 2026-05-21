@@ -25,6 +25,7 @@ import {
   Brain,
   CalendarCheck,
   ExternalLink,
+  HelpCircle,
   MessageSquare,
   Plug,
   Save,
@@ -86,6 +87,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@persia/ui/tooltip";
 
 interface Props {
   agent: AgentConfig;
@@ -357,7 +364,11 @@ export function RulesTab({
   return (
     /* PR 34 (mai/2026): outer wrap pra acomodar sticky save bar no
        rodapé. pb-20 reserva espaço pro bar ficar visível sem cobrir
-       o último accordion. */
+       o último accordion.
+       PR 36 (mai/2026): TooltipProvider envolve tudo pra habilitar
+       help tooltips (ícone ?) em campos técnicos. delay=200ms pra
+       não disparar em hover acidental. */
+    <TooltipProvider delay={200}>
     <div className="space-y-4 pb-20">
     <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
       {/* PR 27 (mai/2026): guard pra "este projeto não foi salvo,
@@ -456,7 +467,16 @@ export function RulesTab({
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pt-2">
               <div className="space-y-1.5">
-                <Label htmlFor="model">Modelo</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="model">Modelo</Label>
+                  <HelpTooltip>
+                    <strong>GPT-5 mini</strong> é o padrão recomendado:
+                    rápido, barato, qualidade boa pra atendimento típico.
+                    Use <strong>GPT-5</strong> apenas se sentir que o
+                    agente está errando muito em casos complexos.
+                  </HelpTooltip>
+                  {model === "gpt-5-mini" ? <DefaultBadge /> : null}
+                </div>
                 <Select
                   value={model}
                   onValueChange={(v) => v && setModel(v)}
@@ -559,9 +579,20 @@ export function RulesTab({
                 {humanizationEnabled ? (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2">
-                      <Label htmlFor="auto_pause_minutes">
-                        Tempo de pausa após humano responder
-                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="auto_pause_minutes">
+                          Tempo de pausa após humano responder
+                        </Label>
+                        <HelpTooltip>
+                          Tempo que a IA fica calada depois que um atendente
+                          humano responde. <strong>30 minutos</strong> dá
+                          espaço pro humano conduzir sem a IA "atropelar".
+                          Máximo 24h (1440min).
+                        </HelpTooltip>
+                        {autoPauseMinutes === AUTO_PAUSE_MINUTES_DEFAULT ? (
+                          <DefaultBadge />
+                        ) : null}
+                      </div>
                       <span className="text-xs text-muted-foreground tabular-nums">
                         {autoPauseMinutes} min
                       </span>
@@ -652,9 +683,22 @@ export function RulesTab({
                   <>
                     <div className="space-y-1.5 pt-2 border-t border-border/60">
                       <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor="split_threshold_chars">
-                          Dividir quando a resposta passar de
-                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="split_threshold_chars">
+                            Dividir quando a resposta passar de
+                          </Label>
+                          <HelpTooltip>
+                            Respostas curtas (≤ esse valor) vão inteiras.
+                            Acima disso, a IA quebra em 2-3 mensagens
+                            menores com pausa entre elas. Padrão{" "}
+                            {SPLIT_THRESHOLD_CHARS_DEFAULT} ≈ 3 linhas de
+                            WhatsApp.
+                          </HelpTooltip>
+                          {splitThresholdChars ===
+                          SPLIT_THRESHOLD_CHARS_DEFAULT ? (
+                            <DefaultBadge />
+                          ) : null}
+                        </div>
                         <span className="text-xs text-muted-foreground tabular-nums">
                           {splitThresholdChars} caracteres
                         </span>
@@ -847,6 +891,7 @@ export function RulesTab({
       </Button>
     </div>
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -865,6 +910,39 @@ function DirtyDot() {
       aria-label="Alterações não salvas"
       title="Alterações não salvas"
     />
+  );
+}
+
+// PR 36 (mai/2026): ícone `?` ao lado de campos técnicos que cliente
+// leigo pode não entender ("o que é GPT-5-mini?", "30 minutos é
+// muito ou pouco?"). Tooltip mostra explicação curta no hover.
+// Reusa Tooltip do design system (base-ui).
+function HelpTooltip({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="inline-flex items-center text-muted-foreground hover:text-foreground transition-colors"
+        aria-label="Ajuda"
+      >
+        <HelpCircle className="size-3.5" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-xs">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// PR 36 (mai/2026): badge pequeno "padrão" mostrado quando o valor
+// do campo é igual ao default recomendado. Cliente percebe
+// visualmente que NÃO precisa mexer naquilo — reduz ansiedade de
+// configurar todos os campos. Some quando o cliente altera.
+function DefaultBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+      padrão
+    </span>
   );
 }
 
