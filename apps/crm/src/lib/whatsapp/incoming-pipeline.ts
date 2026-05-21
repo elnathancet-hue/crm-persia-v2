@@ -175,6 +175,13 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   }
 
   // 5) Find or create conversation
+  //
+  // Bug C fix (mai/2026): race entre 2 mensagens do mesmo lead chegando
+  // em <100ms via webhook pode fazer ambas verem `null` no SELECT e
+  // tentarem INSERT. UNIQUE partial index (migration 063) garante DB-level
+  // que só existe 1 conv (active|waiting_human) por (org, lead). Aqui
+  // detectamos o 23505 do perdedor da race e re-SELECT a conv que o
+  // vencedor acabou de criar.
   let { data: conversation } = await supabase
     .from("conversations")
     .select("id, assigned_to, status")
@@ -186,7 +193,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     .maybeSingle();
 
   if (!conversation) {
-    const { data: newConv } = await supabase
+    const { data: newConv, error: convErr } = await supabase
       .from("conversations")
       .insert({
         organization_id: orgId,
@@ -198,7 +205,28 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       })
       .select("id, assigned_to, status")
       .single();
-    conversation = newConv;
+    if (convErr && convErr.code === "23505") {
+      // Race lost — outra request criou a conv ativa antes. Re-SELECT.
+      const { data: existingConv } = await supabase
+        .from("conversations")
+        .select("id, assigned_to, status")
+        .eq("organization_id", orgId)
+        .eq("lead_id", lead.id)
+        .in("status", ["active", "waiting_human"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      conversation = existingConv;
+    } else if (convErr) {
+      logError("incoming_pipeline_conv_create_failed", {
+        ...baseLogContext,
+        lead_id: lead.id,
+        error: convErr.message,
+        code: convErr.code,
+      });
+    } else {
+      conversation = newConv;
+    }
   }
 
   if (!conversation) return { ok: false, error: "failed to create conversation" };

@@ -214,6 +214,13 @@ export async function tryEnqueueForNativeAgent(
 
     // 7. Find/create conversation com assigned_to=ai (sinaliza pro
     // chat-window que a IA está no controle).
+    //
+    // Bug C fix (mai/2026): race entre 2 mensagens do mesmo lead
+    // chegando em <100ms via webhook pode fazer ambas verem `null` no
+    // SELECT e tentarem INSERT. UNIQUE partial index (migration 063)
+    // garante DB-level que só existe 1 conv (active|waiting_human) por
+    // (org, lead). Aqui detectamos o 23505 do perdedor da race e
+    // re-SELECT a conv que o vencedor acabou de criar.
     let { data: conv } = await db
       .from("conversations")
       .select("id")
@@ -236,10 +243,34 @@ export async function tryEnqueueForNativeAgent(
         })
         .select("id")
         .single();
-      if (convErr || !newConv) {
-        throw new Error(`conv_create_failed: ${convErr?.message ?? "unknown"}`);
+      if (convErr) {
+        if (convErr.code === "23505") {
+          // Race lost — outra request criou a conv ativa antes de nós.
+          // Re-SELECT (mesmo filtro do passo anterior) pra pegar o id
+          // da conv vencedora e seguir o fluxo normal.
+          const { data: existingConv, error: refetchErr } = await db
+            .from("conversations")
+            .select("id")
+            .eq("organization_id", orgId)
+            .eq("lead_id", leadId)
+            .in("status", ["active", "waiting_human"])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (refetchErr || !existingConv) {
+            throw new Error(
+              `conv_race_refetch_failed: ${refetchErr?.message ?? "no_conv_after_23505"}`,
+            );
+          }
+          conv = existingConv;
+        } else {
+          throw new Error(`conv_create_failed: ${convErr.message}`);
+        }
+      } else if (!newConv) {
+        throw new Error("conv_create_failed: insert_returned_no_row");
+      } else {
+        conv = newConv;
       }
-      conv = newConv;
     } else {
       // Atualiza last_message_at + assigned_to (se humano voltou pra IA via
       // unpause, etc — V1 só seta active sem mexer em handoff).
