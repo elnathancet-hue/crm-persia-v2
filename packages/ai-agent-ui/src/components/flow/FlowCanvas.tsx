@@ -33,7 +33,7 @@ import {
   type OnEdgesChange,
   type OnNodesChange,
 } from "@xyflow/react";
-import { Loader2, Redo2, Save, Undo2 } from "lucide-react";
+import { Crosshair, LayoutGrid, Loader2, Redo2, Save, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type {
   FlowConfig,
@@ -48,6 +48,7 @@ import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
 import { findSidebarItem } from "./node-catalog";
 import { useFlowHistory } from "./use-flow-history";
+import { applyDagreLayout } from "./flow-layout";
 // PR 21 (mai/2026): NodeConfigSheet não mais usada — forms inline.
 import { EntryNodeView } from "./nodes/EntryNodeView";
 import { AIAgentNodeView } from "./nodes/AIAgentNodeView";
@@ -63,6 +64,29 @@ import { EdgeWithDelete } from "./edges/edge-with-delete";
 // via useMemo([handleNodeDelete]) pra que o callback de delete
 // fique disponível dentro dos node views. Antes era const top-level
 // e sem acesso a state do parent.
+
+// PR 25 (mai/2026): cor do node no MiniMap espelhando VARIANT_STYLES
+// do node-shell. Usa cores HSL diretas (não tokens CSS) porque o
+// MiniMap renderiza via SVG fill que não resolve CSS custom property
+// em todos os browsers. Os valores seguem a paleta do tema (success
+// hsl(142 71% 45%), primary hsl(38 89% 53%), etc — ver globals.css).
+// Pra fluxo Black/dark a paleta é a mesma; pro light é levemente
+// diferente, mas como o MiniMap renderiza pequeno (60x60px), a
+// diferença visual é imperceptível.
+function miniMapNodeColor(node: Node): string {
+  switch (node.type) {
+    case "entry":
+      return "hsl(142, 71%, 45%)"; // success
+    case "ai_agent":
+      return "hsl(38, 89%, 53%)"; // primary (gold/blue)
+    case "action":
+      return "hsl(258, 80%, 60%)"; // progress (roxo)
+    case "condition":
+      return "hsl(43, 85%, 55%)"; // âmbar
+    default:
+      return "hsl(0, 0%, 60%)"; // gray fallback
+  }
+}
 
 // ============================================================================
 // Conversões FlowConfig ↔ React Flow nodes/edges
@@ -139,7 +163,7 @@ interface FlowSnapshot {
 
 function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const actions = useAgentActions();
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const [nodes, setNodes] = React.useState<Node[]>([]);
   const [edges, setEdges] = React.useState<Edge[]>([]);
   const [viewport, setViewport] = React.useState({ x: 0, y: 0, zoom: 1 });
@@ -592,6 +616,45 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     }
   }, [history, selectedNodeId]);
 
+  // PR 25 (mai/2026): auto-layout via Dagre. Reposiciona todos os
+  // nodes em camadas LR (esquerda → direita), edges não cruzam,
+  // espaçamento uniforme. Grava snapshot pra permitir undo (PR 24).
+  // Após aplicar, anima fitView pra mostrar o novo layout inteiro.
+  const handleAutoLayout = React.useCallback(() => {
+    if (nodesRef.current.length === 0) {
+      toast.info("Nada pra organizar — adicione tarefas primeiro.");
+      return;
+    }
+    snapshotBeforeMutation();
+    const laidOut = applyDagreLayout(
+      nodesRef.current,
+      edgesRef.current,
+      "LR",
+    );
+    setNodes(laidOut);
+    setDirty(true);
+    // setTimeout pra deixar o React aplicar o setState antes do
+    // fitView calcular bounds das novas posições. 100ms é suficiente.
+    setTimeout(() => {
+      fitView({ duration: 600, padding: 0.2 });
+    }, 100);
+    toast.success("Fluxo organizado.");
+  }, [fitView, snapshotBeforeMutation]);
+
+  // PR 25 (mai/2026): centra o viewport no node de entrada. Atalho
+  // útil em fluxos grandes — Jordan tem 12 nodes e o entry fica à
+  // esquerda; cliente perde de vista após algumas edições. Usa
+  // fitView com filter de nodes em vez de setCenter direto pra
+  // respeitar zoom mínimo (não estoura zoom in num node só).
+  const handleCenterEntry = React.useCallback(() => {
+    const entry = nodesRef.current.find((n) => n.type === "entry");
+    if (!entry) {
+      toast.info("Nenhuma entrada no fluxo.");
+      return;
+    }
+    fitView({ nodes: [{ id: entry.id }], duration: 400, padding: 0.4 });
+  }, [fitView]);
+
   // -- Save (manual via botão + auto-save debounce) --
   const handleSave = React.useCallback(async () => {
     setSaving(true);
@@ -639,11 +702,15 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const handleSaveRef = React.useRef(handleSave);
   const handleNodeDeleteRef = React.useRef(handleNodeDelete);
   const handleNodeDuplicateRef = React.useRef(handleNodeDuplicate);
+  const handleCenterEntryRef = React.useRef(handleCenterEntry);
   const selectedNodeIdRef = React.useRef(selectedNodeId);
   const dirtyRef = React.useRef(dirty);
   React.useEffect(() => {
     handleUndoRef.current = handleUndo;
   }, [handleUndo]);
+  React.useEffect(() => {
+    handleCenterEntryRef.current = handleCenterEntry;
+  }, [handleCenterEntry]);
   React.useEffect(() => {
     handleRedoRef.current = handleRedo;
   }, [handleRedo]);
@@ -726,6 +793,14 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         }
         return;
       }
+      // PR 25 (mai/2026): Ctrl+Home centra no entry. Funciona mesmo
+      // sem node selecionado — útil pra cliente que perdeu o entry
+      // de vista após pan.
+      if (ctrl && e.key === "Home") {
+        e.preventDefault();
+        handleCenterEntryRef.current();
+        return;
+      }
     }
 
     window.addEventListener("keydown", handler);
@@ -781,6 +856,34 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
               <Redo2 className="size-3.5" />
             </Button>
           </div>
+          {/* PR 25 (mai/2026): group de ferramentas de layout. Separado
+              do undo/redo pra deixar a hierarquia visual clara —
+              undo é "voltar atrás" (rev temporal), layout é "rearranjar"
+              (re-spatial). */}
+          <div className="flex items-center gap-0.5 rounded-md border border-border bg-card p-0.5 shadow-sm">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={handleAutoLayout}
+              aria-label="Organizar automaticamente"
+              title="Organizar automaticamente"
+            >
+              <LayoutGrid className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={handleCenterEntry}
+              aria-label="Centrar no início (Ctrl+Home)"
+              title="Centrar no início (Ctrl+Home)"
+            >
+              <Crosshair className="size-3.5" />
+            </Button>
+          </div>
           {dirty ? (
             <span className="text-[11px] text-progress font-medium">
               alterações não salvas
@@ -823,7 +926,29 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
           <Controls position="bottom-right" showInteractive={false} />
-          {nodes.length > 5 ? <MiniMap pannable zoomable /> : null}
+          {/* PR 25 (mai/2026): MiniMap sempre visível (antes era >5
+              nodes — mas pra navegar fluxos médios já ajuda). Cores
+              por tipo de node espelham VARIANT_STYLES do node-shell:
+                - entry: verde (success)
+                - ai_agent: primary
+                - action: roxo (progress)
+                - condition: âmbar
+              Ler tokens semânticos via CSS custom property garante
+              que respeita light/dark theme. */}
+          {nodes.length > 0 ? (
+            <MiniMap
+              pannable
+              zoomable
+              position="bottom-left"
+              nodeColor={miniMapNodeColor}
+              maskColor="hsl(var(--background) / 0.85)"
+              style={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+              }}
+            />
+          ) : null}
         </ReactFlow>
         {nodes.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center p-6">
