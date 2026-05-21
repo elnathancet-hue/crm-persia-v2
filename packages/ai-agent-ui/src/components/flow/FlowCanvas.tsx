@@ -32,7 +32,16 @@ import {
   type OnEdgesChange,
   type OnNodesChange,
 } from "@xyflow/react";
-import { Crosshair, LayoutGrid, Loader2, Redo2, Save, Undo2 } from "lucide-react";
+import {
+  Crosshair,
+  LayoutGrid,
+  Loader2,
+  MessageSquare,
+  Redo2,
+  Save,
+  Sparkles,
+  Undo2,
+} from "lucide-react";
 import { toast } from "sonner";
 import type {
   FlowConfig,
@@ -1085,52 +1094,151 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
               ("Centrar no início" da toolbar). */}
         </ReactFlow>
         {nodes.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center p-6">
-            <div className="text-center max-w-md space-y-4">
-              <div className="space-y-1">
-                <p className="text-base font-semibold text-foreground">
-                  Comece pelo primeiro passo do fluxo
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Use os botões abaixo OU arraste um card da lateral pra
-                  montar o atendimento.
-                </p>
-              </div>
-              {/* PR 18 UX (mai/2026): CTAs explícitos como alternativa ao
-                  drag (intimidador pra novos usuários). Adicionam node
-                  no centro do canvas via handleSidebarAdd. */}
-              <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleSidebarAdd("entry.conversation_started")}
-                >
-                  Adicionar entrada
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    // Sequência: entrada + IA conectados por edge default —
-                    // permite "começar a conversar" em 1 clique.
-                    handleSidebarAdd("entry.conversation_started");
-                    setTimeout(() => handleSidebarAdd("ai_agent.default"), 30);
-                  }}
-                >
-                  Adicionar atendimento com IA
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground/70">
-                Dica: o fluxo precisa de uma entrada e pelo menos uma ação
-                ou conversa com IA pra começar a responder leads.
-              </p>
-            </div>
-          </div>
+          <EmptyCanvasState onAdd={handleSidebarAdd} />
+        ) : null}
+        {/* PR 32 (mai/2026): hint contextual quando há SÓ o Entry node
+            no canvas. Seta + dica orientam o cliente a conectar a
+            primeira ação. Some quando há >=2 nodes. */}
+        {nodes.length === 1 && nodes[0].type === "entry" ? (
+          <FirstActionHint
+            entryPosition={nodes[0].position}
+            viewport={viewport}
+          />
         ) : null}
       </div>
       {/* PR 21 (mai/2026): NodeConfigSheet removida do runtime —
           config foi pra inline dentro de cada node (InlineFormPanel).
           Componente Sheet continua exportando os forms, mas não é
           mais renderizado aqui. */}
+    </div>
+  );
+}
+
+// ============================================================================
+// EmptyCanvasState — PR 32 (mai/2026)
+// ============================================================================
+//
+// Substitui os 2 botões + texto do empty state antigo por cards visuais
+// com ícone grande + título + descrição curta. Padrão "starting point
+// picker" de editors modernos (Notion, Figma, ManyChat).
+//
+// 2 opções (sem importar JSON — cliente vetou explicitamente pra evitar
+// que copiem o fluxo deles):
+//   - "Conversa iniciada" → cria SÓ o Entry conversation_started.
+//     Pra cliente que quer montar passo-a-passo do zero.
+//   - "Conversa com IA pronta" → cria Entry + AI Agent conectados.
+//     Atalho pra começar a testar em 1 clique.
+
+function EmptyCanvasState({
+  onAdd,
+}: {
+  onAdd: (taskKey: string) => void;
+}) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-6 pointer-events-none">
+      <div className="text-center max-w-2xl space-y-5 pointer-events-auto">
+        <div className="space-y-1.5">
+          <h3 className="text-lg font-semibold text-foreground">
+            Comece pelo primeiro passo do fluxo
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Escolha um ponto de partida ou arraste cards da lateral esquerda
+            pra montar o atendimento.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          {/* Card 1 — Só Entry */}
+          <button
+            type="button"
+            onClick={() => onAdd("entry.conversation_started")}
+            className="group text-left rounded-xl border-2 border-border bg-card hover:border-primary/50 hover:shadow-md transition-all p-4 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <div className="size-10 rounded-lg bg-success-soft text-success-soft-foreground flex items-center justify-center group-hover:bg-success/20 transition-colors">
+              <MessageSquare className="size-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-sm font-semibold">Começar do zero</div>
+              <p className="text-xs text-muted-foreground">
+                Cria só a entrada "Conversa iniciada". Você monta o resto
+                arrastando cards da lateral.
+              </p>
+            </div>
+          </button>
+
+          {/* Card 2 — Entry + AI (atalho) */}
+          <button
+            type="button"
+            onClick={() => {
+              // Sequência: entry + AI conectados por edge default.
+              // Permite testar em 1 clique sem montar nada manual.
+              onAdd("entry.conversation_started");
+              setTimeout(() => onAdd("ai_agent.default"), 30);
+            }}
+            className="group text-left rounded-xl border-2 border-primary/40 bg-primary/5 hover:border-primary hover:shadow-md transition-all p-4 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <div className="size-10 rounded-lg bg-primary/20 text-primary flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+              <Sparkles className="size-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-sm font-semibold flex items-center gap-1.5">
+                Conversa com IA pronta
+                <span className="text-[10px] font-medium uppercase tracking-wide bg-primary text-primary-foreground rounded px-1.5 py-0.5">
+                  Recomendado
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cria entrada + IA já conectadas. Pronto pra testar
+                imediatamente no Tester.
+              </p>
+            </div>
+          </button>
+        </div>
+
+        <p className="text-[11px] text-muted-foreground/70">
+          O fluxo precisa de pelo menos uma entrada + uma ação ou IA pra
+          começar a responder leads.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// FirstActionHint — PR 32 (mai/2026)
+// ============================================================================
+//
+// Quando há SÓ o Entry node no canvas (recém-criado), mostra uma seta
+// + hint contextual sugerindo "conecte aqui sua primeira ação".
+// Posicionado à direita do Entry (offset da posição lógica, ajustado
+// pelo viewport zoom/pan).
+//
+// Some assim que o cliente adiciona o 2º node (qualquer tipo).
+
+function FirstActionHint({
+  entryPosition,
+  viewport,
+}: {
+  entryPosition: { x: number; y: number };
+  viewport: { x: number; y: number; zoom: number };
+}) {
+  // Transformação flow→screen: pos.x * zoom + viewport.x + offset_visual.
+  // Posicionamos o hint cerca de 280px à direita do Entry (largura padrão
+  // do node compact = 260px + 20px gap). Vertical alinha no meio do card
+  // (~50px do topo).
+  const screenX = entryPosition.x * viewport.zoom + viewport.x + 280;
+  const screenY = entryPosition.y * viewport.zoom + viewport.y + 50;
+  return (
+    <div
+      className="absolute pointer-events-none z-10"
+      style={{ left: screenX, top: screenY }}
+    >
+      <div className="flex items-center gap-2 animate-pulse">
+        <div className="text-2xl text-primary leading-none">→</div>
+        <div className="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium shadow-md whitespace-nowrap">
+          Conecte aqui sua primeira ação
+        </div>
+      </div>
     </div>
   );
 }
