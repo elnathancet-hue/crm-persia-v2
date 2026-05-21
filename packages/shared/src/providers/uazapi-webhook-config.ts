@@ -1,4 +1,15 @@
-export const UAZAPI_DEFAULT_WEBHOOK_EVENTS = ["messages"] as const;
+// Bug B fix (mai/2026): adicionado "messages_update" pra receber
+// callbacks de ack (sent/delivered/read). Antes só inscrevia em
+// "messages" (novas mensagens entrando) — confirmações de entrega
+// nunca chegavam, então UI mostrava só 1 check ad eternum.
+//
+// IMPORTANTE: instâncias existentes JÁ conectadas precisam ter o
+// webhook reconfigurado (re-chamar provider.setWebhook). Sem isso,
+// o evento novo não é entregue. Ver script `scripts/uazapi-resync-webhooks.ts`.
+export const UAZAPI_DEFAULT_WEBHOOK_EVENTS = [
+  "messages",
+  "messages_update",
+] as const;
 export const UAZAPI_DEFAULT_EXCLUDED_MESSAGES = ["wasSentByApi"] as const;
 
 export type UazapiWebhookEvent = (typeof UAZAPI_DEFAULT_WEBHOOK_EVENTS)[number] | "connection";

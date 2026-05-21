@@ -351,6 +351,79 @@ export async function disconnectWhatsAppAdmin(): Promise<{ error?: string }> {
 }
 
 /**
+ * Bug B fix (mai/2026): re-sincroniza a configuração de webhook em
+ * todas as instâncias UAZAPI conectadas da org. Necessário porque
+ * `UAZAPI_DEFAULT_WEBHOOK_EVENTS` foi expandido pra incluir
+ * "messages_update" — instâncias JÁ conectadas continuam recebendo
+ * só o evento antigo até re-chamar POST /webhook.
+ *
+ * Idempotente — re-chamar não causa efeito colateral. Pode ser
+ * disparado quantas vezes for necessário (ex: após cada deploy).
+ *
+ * UAZAPI: POST /webhook (token) com payload `{ enabled, url, events,
+ * excludeMessages }`.
+ *
+ * orgId vem do cookie admin assinado.
+ */
+export async function resyncUazapiWebhook(): Promise<{
+  ok: boolean;
+  events?: string[];
+  error?: string;
+}> {
+  try {
+    const ctx = await getConnection();
+    if (!ctx) return { ok: false, error: "Não configurado" };
+    if (ctx.connection.provider !== "uazapi") {
+      return { ok: false, error: "Conexão não é UAZAPI (Meta Cloud não precisa de re-sync)" };
+    }
+    if (!ctx.connection.instance_url || !ctx.connection.instance_token) {
+      return { ok: false, error: "instance_url/instance_token não configurados" };
+    }
+
+    const webhookUrl = getCrmWebhookUrl();
+    const response = await configureUazapiWebhook({
+      baseUrl: ctx.connection.instance_url,
+      token: ctx.connection.instance_token,
+      url: webhookUrl,
+      enabled: true,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      await auditFailure({
+        userId: ctx.userId,
+        orgId: ctx.orgId,
+        action: "whatsapp_resync_webhook",
+        entityType: "whatsapp",
+        error: new Error(`UAZAPI ${response.status}: ${errText}`),
+      });
+      return {
+        ok: false,
+        error: `UAZAPI rejeitou: ${response.status} ${errText.slice(0, 200)}`,
+      };
+    }
+
+    await auditLog({
+      userId: ctx.userId,
+      orgId: ctx.orgId,
+      action: "whatsapp_resync_webhook",
+      entityType: "whatsapp",
+    });
+
+    // Retorna lista de events configurada (espelha o default).
+    const { UAZAPI_DEFAULT_WEBHOOK_EVENTS } = await import(
+      "@persia/shared/providers/uazapi-webhook-config"
+    );
+    return { ok: true, events: [...UAZAPI_DEFAULT_WEBHOOK_EVENTS] };
+  } catch (e: unknown) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+/**
  * Connect WhatsApp via Meta Cloud API (official).
  *
  * Validates the access token with a probe call before persisting, generates a

@@ -932,6 +932,16 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
 
 // ---- Status Indicator (WhatsApp-style ticks) ----
 
+// Bug B fix (mai/2026): renderiza checkmarks ao estilo WhatsApp:
+//   sending  → loader spin
+//   sent     → 1 check cinza
+//   delivered → 2 checks cinza (sobrepostos, ✓✓)
+//   read      → 2 checks azuis (✓✓ azul)
+//   failed    → ícone alerta + retry
+//
+// Status `delivered` e `read` só ficam disponíveis depois do PR de
+// Bug B (webhook UAZAPI inscrito em "messages_update"). Antes, todas
+// as msgs travavam em "sent" pra sempre.
 function StatusIndicator({
   status,
   onRetry,
@@ -959,5 +969,33 @@ function StatusIndicator({
       </button>
     );
   }
+  if (status === "read") {
+    // 2 checks na cor primary (espelha WhatsApp ✓✓ azul; usa token
+    // semântico do DS pra respeitar tema do app).
+    return (
+      <span
+        className="inline-flex items-center text-primary"
+        aria-label="Lido pelo destinatário"
+        title="Lido"
+      >
+        <Check className="size-3" />
+        <Check className="size-3 -ml-1.5" />
+      </span>
+    );
+  }
+  if (status === "delivered") {
+    // 2 checks cinza sobrepostos
+    return (
+      <span
+        className="inline-flex items-center text-white/70"
+        aria-label="Entregue ao destinatário"
+        title="Entregue"
+      >
+        <Check className="size-3" />
+        <Check className="size-3 -ml-1.5" />
+      </span>
+    );
+  }
+  // Default = "sent" (1 check)
   return <Check className="size-3" aria-label="Enviado" />;
 }
