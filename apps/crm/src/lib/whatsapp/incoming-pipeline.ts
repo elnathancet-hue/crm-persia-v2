@@ -268,7 +268,13 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   // caminhos vinha com status divergente — dashboards/contadores
   // mostravam números diferentes. Inbound já chegou no servidor por
   // definição, então "delivered" é correto invariante-wise.
-  await supabase.from("messages").insert({
+  //
+  // Bug H fix (mai/2026): try-catch 23505 pra cobrir race do dedup.
+  // Webhook UAZAPI faz retry/replay — 2 chamadas paralelas passam
+  // o SELECT dedup vazio e tentam INSERT. UNIQUE(org, whatsapp_msg_id)
+  // da migration 064 catcha o segundo. Sem este try-catch, o throw
+  // do segundo INSERT mata o request e o usuário não recebe resposta.
+  const { error: msgInsertErr } = await supabase.from("messages").insert({
     organization_id: orgId,
     conversation_id: conversation.id,
     lead_id: lead.id,
@@ -280,6 +286,17 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     media_type: msg.mediaMimeType || null,
     status: "delivered",
   });
+  if (msgInsertErr && msgInsertErr.code !== "23505") {
+    // 23505 = race do dedup (já temos a msg, OK ignorar)
+    // Outros erros são reais (RLS, schema, etc) — propaga.
+    logError("incoming_pipeline_msg_insert_failed", {
+      ...baseLogContext,
+      lead_id: lead.id,
+      conversation_id: conversation.id,
+      error: msgInsertErr.message,
+      code: msgInsertErr.code,
+    });
+  }
 
   dispatchWebhook(orgId, "message.received", {
     conversationId: conversation.id,
