@@ -19,21 +19,38 @@ import { z } from "zod";
 //   "(11) 98765-4321"
 //   "+55 11 98765-4321"
 //   "5511987654321"
+//   "558699421406@s.whatsapp.net" (Bug I — strip de domínios @lid, @s.whatsapp.net)
 //
 // Saida: "+5511987654321" (E.164 sempre, sem espaco)
 //
 // Regra: se vier sem DDI 55 mas tiver 10-11 digitos, prepende 55.
 // Se vier com DDI diferente (ex: +1, +351), aceita E.164 raw.
+//
+// Bug I (mai/2026): replica a regra do DB trigger `normalize_lead_phone`
+// pra que app-layer e DB-layer concordem 100% (defense in depth). Se o
+// app calcular um phone com Zod e o DB receber um phone diferente,
+// ainda assim o trigger reescreve pra forma canônica.
 
 const PHONE_MIN_DIGITS = 10; // 10 = fixo (11 3322-4455), 11 = celular (11 98765-4321)
 const PHONE_MAX_DIGITS = 15; // E.164 max teorico
+
+/**
+ * Helper interno: extrai dígitos do phone, ignorando `@domain` (WhatsApp LID
+ * `xxx@lid` e UAZAPI `xxx@s.whatsapp.net`). Usado por phoneBR + phoneBROptional
+ * pra que a normalização Zod seja idêntica à do DB trigger (Bug I).
+ */
+function extractDigits(raw: string): string {
+  // Strip domínio WhatsApp/UAZAPI antes de tirar não-dígitos
+  const noDomain = raw.replace(/@[a-zA-Z0-9.]+$/, "");
+  return noDomain.replace(/\D/g, "");
+}
 
 export const phoneBR = z
   .string({ message: "Telefone obrigatório" })
   .trim()
   .min(1, "Telefone obrigatório")
   .transform((raw) => {
-    const digits = raw.replace(/\D/g, "");
+    const digits = extractDigits(raw);
     if (digits.length === 0) return "";
     // Ja vem com 55 DDI? mantem
     if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) {
@@ -61,7 +78,7 @@ export const phoneBROptional = z
   .optional()
   .transform((raw) => {
     if (!raw || raw.length === 0) return undefined;
-    const digits = raw.replace(/\D/g, "");
+    const digits = extractDigits(raw);
     if (digits.length === 0) return undefined;
     if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) {
       return `+${digits}`;

@@ -43,6 +43,20 @@ describe("phoneBR", () => {
   it("rejeita string vazia", () => {
     expect(() => phoneBR.parse("")).toThrow();
   });
+
+  // Bug I (mai/2026): strip de domínio WhatsApp/UAZAPI
+  it("strip @s.whatsapp.net (formato UAZAPI chatid)", () => {
+    expect(phoneBR.parse("558699421406@s.whatsapp.net")).toBe("+558699421406");
+  });
+
+  it("strip @lid (formato WhatsApp LID)", () => {
+    // LID number é diferente do PN — só strippamos o domínio aqui
+    expect(phoneBR.parse("96890335051817@lid")).toBe("+96890335051817");
+  });
+
+  it("normaliza phone formatado E.164 com espaços e traço", () => {
+    expect(phoneBR.parse("+55 86 9942-1406")).toBe("+558699421406");
+  });
 });
 
 describe("phoneBROptional", () => {
