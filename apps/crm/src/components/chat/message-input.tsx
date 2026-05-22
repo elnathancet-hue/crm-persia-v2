@@ -227,7 +227,10 @@ export function MessageInput({
        (que era discreto demais e não aparecia consistente entre
        browsers). delay 300ms pra não disparar em hover acidental. */
     <TooltipProvider delay={300}>
-    <div className="border-t bg-card p-3 md:px-8 lg:px-16">
+    <div
+      className="border-t border-[color:var(--chat-sidebar-divider)] p-3 md:px-8 lg:px-16"
+      style={{ background: "var(--chat-input-bar-bg)" }}
+    >
       {/* 24h window banner (Meta Cloud apenas) */}
       {composerLocked && (
         <div className="mb-3 flex items-center gap-3 rounded-xl border border-warning-ring bg-warning-soft p-3">
@@ -504,7 +507,11 @@ export function MessageInput({
           }
           disabled={disabled || composerLocked}
           rows={1}
-          className="max-h-24 min-h-[36px] flex-1 resize-none rounded-xl border bg-muted/50 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          className="max-h-24 min-h-[36px] flex-1 resize-none rounded-full border border-[color:var(--chat-sidebar-divider)] px-4 py-2 text-sm outline-none placeholder:text-[color:var(--chat-timestamp)] focus:ring-1 focus:ring-[color:var(--chat-checkmark-read)]"
+          style={{
+            background: "var(--chat-input-field-bg)",
+            color: "var(--chat-header-fg)",
+          }}
         />
 
         {/* Send button */}
@@ -516,7 +523,7 @@ export function MessageInput({
           disabled={(!content.trim() && !selectedFile) || sending || disabled || composerLocked}
           title={composerLocked ? "Fora da janela de 24h — use um template" : "Enviar"}
           aria-label="Enviar mensagem"
-          className="shrink-0 rounded-full"
+          className="shrink-0 rounded-full size-10"
         >
           {sending ? (
             <Loader2 className="size-4 animate-spin" />

@@ -210,6 +210,31 @@
   --sidebar-accent-foreground: hsl(0, 0%, 96%);
   --sidebar-border: hsl(0, 0%, 14%);
   --sidebar-ring: hsl(217, 91%, 60%);      /* azul (focus ring) */
+
+  /* ============================================
+     Chat ao Vivo — tokens WhatsApp-style (light)
+     Aplicados especificamente nos componentes do Chat (sidebar de
+     conversations, chat-window, message-input). Reproduzem o visual
+     do WhatsApp Web mantendo paridade com light/dark mode.
+     ============================================ */
+  --chat-bg:                hsl(45, 22%, 91%);    /* #EFEAE2 bege background */
+  --chat-pattern-color:     hsl(45, 15%, 80%);    /* pattern overlay subtle */
+  --chat-bubble-in:         hsl(0, 0%, 100%);     /* white — msg do lead */
+  --chat-bubble-in-text:    hsl(200, 10%, 10%);   /* #111B21 */
+  --chat-bubble-out:        hsl(105, 90%, 91%);   /* #D9FDD3 verde claro msg do agente/IA */
+  --chat-bubble-out-text:   hsl(200, 10%, 10%);
+  --chat-timestamp:         hsl(200, 8%, 47%);    /* #667781 */
+  --chat-checkmark-read:    hsl(199, 80%, 60%);   /* #53BDEB azul WhatsApp */
+  --chat-checkmark-default: hsl(200, 8%, 47%);    /* gray default */
+  --chat-header-bg:         hsl(195, 12%, 95%);   /* #F0F2F5 */
+  --chat-header-fg:         hsl(200, 10%, 10%);
+  --chat-sidebar-bg:        hsl(0, 0%, 100%);     /* white */
+  --chat-sidebar-active:    hsl(195, 12%, 95%);   /* selected conv */
+  --chat-sidebar-hover:     hsl(195, 12%, 97%);
+  --chat-sidebar-divider:   hsl(200, 10%, 90%);
+  --chat-input-bar-bg:      hsl(195, 12%, 95%);   /* footer area */
+  --chat-input-field-bg:    hsl(0, 0%, 100%);     /* input pill */
+  --chat-link:              hsl(195, 80%, 35%);   /* hyperlink dentro de bubbles */
 }
 
 .dark {
@@ -275,6 +300,30 @@
   --sidebar-accent-foreground: hsl(30, 25%, 96%);
   --sidebar-border: hsl(230, 35%, 12%);    /* navy border */
   --sidebar-ring: hsl(43, 54%, 54%);       /* gold */
+
+  /* ============================================
+     Chat ao Vivo — tokens WhatsApp-style (dark)
+     Espelha o dark mode do WhatsApp Web. Bolha out do agente fica
+     verde escuro #005C4B, bg em navy profundo #0B141A.
+     ============================================ */
+  --chat-bg:                hsl(200, 28%, 7%);    /* #0B141A */
+  --chat-pattern-color:     hsl(200, 25%, 14%);
+  --chat-bubble-in:         hsl(200, 17%, 16%);   /* #202C33 bolha do lead */
+  --chat-bubble-in-text:    hsl(200, 7%, 91%);    /* #E9EDEF */
+  --chat-bubble-out:        hsl(170, 100%, 19%);  /* #005C4B verde escuro */
+  --chat-bubble-out-text:   hsl(200, 7%, 91%);
+  --chat-timestamp:         hsl(200, 7%, 56%);    /* #8696A0 */
+  --chat-checkmark-read:    hsl(199, 80%, 60%);   /* #53BDEB mesmo azul */
+  --chat-checkmark-default: hsl(200, 7%, 56%);
+  --chat-header-bg:         hsl(200, 17%, 16%);   /* #202C33 */
+  --chat-header-fg:         hsl(200, 7%, 91%);
+  --chat-sidebar-bg:        hsl(200, 19%, 11%);   /* #111B21 */
+  --chat-sidebar-active:    hsl(200, 16%, 21%);   /* #2A3942 */
+  --chat-sidebar-hover:     hsl(200, 17%, 16%);   /* #202C33 */
+  --chat-sidebar-divider:   hsl(200, 16%, 18%);
+  --chat-input-bar-bg:      hsl(200, 17%, 16%);   /* #202C33 */
+  --chat-input-field-bg:    hsl(200, 16%, 21%);   /* #2A3942 */
+  --chat-link:              hsl(199, 80%, 65%);
 }
 
 @layer utilities {

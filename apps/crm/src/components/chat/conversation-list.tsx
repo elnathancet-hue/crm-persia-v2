@@ -255,9 +255,15 @@ export function ConversationList({
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div
+      className="flex h-full flex-col overflow-hidden"
+      style={{ background: "var(--chat-sidebar-bg)" }}
+    >
       {/* Header */}
-      <div className="shrink-0 flex h-14 items-center gap-2 border-b px-4">
+      <div
+        className="shrink-0 flex h-14 items-center gap-2 border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        style={{ background: "var(--chat-header-bg)" }}
+      >
         <MessageSquare className="size-5 text-primary" />
         <h2 className="text-sm font-semibold">Chat ao Vivo</h2>
         {/* Green pulsing dot = online */}
@@ -448,9 +454,24 @@ export function ConversationList({
                   key={conv.id}
                   onClick={() => onSelect(conv.id)}
                   className={cn(
-                    "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-accent/50",
-                    isSelected && "bg-accent"
+                    "flex w-full items-start gap-3 px-3 py-3 text-left cursor-pointer border-b border-[color:var(--chat-sidebar-divider)] transition-colors"
                   )}
+                  style={{
+                    background: isSelected
+                      ? "var(--chat-sidebar-active)"
+                      : "transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background =
+                        "var(--chat-sidebar-hover)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.background = "transparent";
+                    }
+                  }}
                 >
                   {/* Avatar — Bug A fix (mai/2026): foto WhatsApp via
                       lead.avatar_url (populado pelo pipeline UAZAPI).
