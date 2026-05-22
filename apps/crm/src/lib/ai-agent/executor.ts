@@ -283,7 +283,11 @@ export async function tryEnqueueForNativeAgent(
 
     // 8. Insert inbound message em `messages` (sender='lead'). Pegamos
     // o `id` retornado pra linkar em pending_messages.inbound_message_id.
-    const { data: msgRow, error: msgErr } = await db
+    //
+    // Bug H fix (mai/2026): try-catch 23505 pra cobrir race do dedup.
+    // UNIQUE(org, whatsapp_msg_id) da migration 064 catcha webhook retry.
+    // Se race: re-SELECT a msg vencedora pelo whatsapp_msg_id e continua.
+    let { data: msgRow, error: msgErr } = await db
       .from("messages")
       .insert({
         organization_id: orgId,
@@ -299,7 +303,20 @@ export async function tryEnqueueForNativeAgent(
       })
       .select("id")
       .single();
-    if (msgErr || !msgRow) {
+    if (msgErr?.code === "23505" && msg.messageId) {
+      // Race lost — outro processo já inseriu a msg. Re-SELECT pelo whatsapp_msg_id.
+      const { data: existingMsg } = await db
+        .from("messages")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("whatsapp_msg_id", msg.messageId)
+        .maybeSingle();
+      if (!existingMsg) {
+        throw new Error(`message_race_refetch_failed: whatsapp_msg_id=${msg.messageId}`);
+      }
+      msgRow = existingMsg;
+      msgErr = null;
+    } else if (msgErr || !msgRow) {
       throw new Error(`message_insert_failed: ${msgErr?.message ?? "unknown"}`);
     }
     const inboundMessageId = (msgRow as { id: string }).id;
