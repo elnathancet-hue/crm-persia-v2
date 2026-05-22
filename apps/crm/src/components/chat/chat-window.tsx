@@ -563,9 +563,18 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const leadId = lead?.id as string | undefined;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div
+      className="flex flex-col h-full overflow-hidden"
+      style={{ background: "var(--chat-bg)" }}
+    >
       {/* Header - WhatsApp style with action bar */}
-      <div className="shrink-0 flex h-16 items-center justify-between bg-card border-b px-4">
+      <div
+        className="shrink-0 flex h-16 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        style={{
+          background: "var(--chat-header-bg)",
+          color: "var(--chat-header-fg)",
+        }}
+      >
         <div className="flex items-center gap-3">
           {/* Back button for mobile */}
           {onBack && (
@@ -750,8 +759,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       <div
         className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-16"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234ade80' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          backgroundColor: "hsl(var(--background))",
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='currentColor' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundColor: "var(--chat-bg)",
+          color: "var(--chat-pattern-color)",
         }}
       >
         <div className="flex flex-col gap-3 py-4 max-w-3xl mx-auto">
@@ -784,25 +794,34 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 {/* Message bubble - Lead LEFT, IA+Agent RIGHT */}
                 <div
                   className={cn(
-                    "flex max-w-[75%] flex-col gap-0.5",
+                    "flex max-w-[65%] flex-col gap-0.5",
                     isLead ? "items-start" : "ml-auto items-end"
                   )}
                 >
                   {/* Sender label */}
                   {isAi && (
-                    <div className="flex items-center gap-1 text-[11px] text-primary">
+                    <div
+                      className="flex items-center gap-1 text-[11px] px-1"
+                      style={{ color: "var(--chat-checkmark-read)" }}
+                    >
                       <Bot className="size-3" />
                       <span className="font-medium">IA</span>
                     </div>
                   )}
                   {isAgent && (
-                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <div
+                      className="flex items-center gap-1 text-[11px] px-1"
+                      style={{ color: "var(--chat-timestamp)" }}
+                    >
                       <UserCheck className="size-3" />
                       <span className="font-medium">Você</span>
                     </div>
                   )}
                   {isLead && (
-                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <div
+                      className="flex items-center gap-1 text-[11px] px-1"
+                      style={{ color: "var(--chat-timestamp)" }}
+                    >
                       <User className="size-3" />
                       <span>
                         {(lead?.name as string) ||
@@ -815,15 +834,27 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   {/* Bubble - WhatsApp style */}
                   <div
                     className={cn(
-                      "rounded-2xl px-3.5 py-2.5 text-sm relative",
+                      "rounded-lg px-2.5 py-1.5 text-sm relative shadow-sm",
                       isAgent && msg.status === "failed"
-                        ? "rounded-br-md bg-failure/90 text-failure-foreground border border-failure"
-                        : isAgent && "rounded-br-md bg-primary text-primary-foreground",
-                      isAi &&
-                        "rounded-br-md bg-primary/15 text-foreground border border-primary/20",
-                      isLead && "rounded-bl-md bg-card text-foreground border border-border",
+                        ? "rounded-br-sm bg-failure/90 text-failure-foreground border border-failure"
+                        : isAgent && "rounded-br-sm",
+                      isAi && "rounded-br-sm",
+                      isLead && "rounded-bl-sm",
                       isAgent && msg.status === "sending" && "opacity-70"
                     )}
+                    style={
+                      isAgent && msg.status === "failed"
+                        ? undefined
+                        : isLead
+                          ? {
+                              background: "var(--chat-bubble-in)",
+                              color: "var(--chat-bubble-in-text)",
+                            }
+                          : {
+                              background: "var(--chat-bubble-out)",
+                              color: "var(--chat-bubble-out-text)",
+                            }
+                    }
                   >
                     {msg.media_url && msg.type === "image" && (
                       <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
@@ -862,12 +893,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                       </p>
                     )}
                     {/* Time + status inside bubble - WhatsApp style */}
-                    <span className={cn(
-                      "text-[10px] float-right ml-3 mt-1 inline-flex items-center gap-1",
-                      isAgent ? "text-white/70" : "text-muted-foreground"
-                    )}>
+                    <span
+                      className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-1"
+                      style={{ color: "var(--chat-timestamp)" }}
+                    >
                       {formatMessageTime(msg.created_at)}
-                      {isAgent && <StatusIndicator status={msg.status} onRetry={msg.status === "failed" ? () => handleRetry(msg.id) : undefined} isRetrying={retryingIds.has(msg.id)} />}
+                      {(isAgent || isAi) && <StatusIndicator status={msg.status} onRetry={msg.status === "failed" ? () => handleRetry(msg.id) : undefined} isRetrying={retryingIds.has(msg.id)} />}
                     </span>
                   </div>
                 </div>
@@ -981,11 +1012,11 @@ function StatusIndicator({
     );
   }
   if (status === "read") {
-    // 2 checks na cor primary (espelha WhatsApp ✓✓ azul; usa token
-    // semântico do DS pra respeitar tema do app).
+    // 2 checks azul WhatsApp (#53BDEB via --chat-checkmark-read).
     return (
       <span
-        className="inline-flex items-center text-primary"
+        className="inline-flex items-center"
+        style={{ color: "var(--chat-checkmark-read)" }}
         aria-label="Lido pelo destinatário"
         title="Lido"
       >
@@ -995,10 +1026,11 @@ function StatusIndicator({
     );
   }
   if (status === "delivered") {
-    // 2 checks cinza sobrepostos
+    // 2 checks cinza sobrepostos (cinza do WhatsApp)
     return (
       <span
-        className="inline-flex items-center text-white/70"
+        className="inline-flex items-center"
+        style={{ color: "var(--chat-checkmark-default)" }}
         aria-label="Entregue ao destinatário"
         title="Entregue"
       >
@@ -1008,5 +1040,11 @@ function StatusIndicator({
     );
   }
   // Default = "sent" (1 check)
-  return <Check className="size-3" aria-label="Enviado" />;
+  return (
+    <Check
+      className="size-3"
+      style={{ color: "var(--chat-checkmark-default)" }}
+      aria-label="Enviado"
+    />
+  );
 }
