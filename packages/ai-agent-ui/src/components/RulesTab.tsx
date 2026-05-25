@@ -46,6 +46,9 @@ import {
   AUTO_PAUSE_MINUTES_MAX,
   BUSINESS_HOURS_DEFAULT,
   DAY_NAMES,
+  DEBOUNCE_WINDOW_MS_DEFAULT,
+  DEBOUNCE_WINDOW_MS_MAX,
+  DEBOUNCE_WINDOW_MS_MIN,
   PAUSE_KEYWORDS_DEFAULT,
   RESUME_KEYWORDS_DEFAULT,
   SPLIT_DELAY_SECONDS_DEFAULT,
@@ -55,6 +58,7 @@ import {
   SPLIT_THRESHOLD_CHARS_MAX,
   SPLIT_THRESHOLD_CHARS_MIN,
   clampAutoPauseMinutes,
+  clampDebounceWindowMs,
   clampSplitDelaySeconds,
   clampSplitThresholdChars,
   normalizeHumanizationConfig,
@@ -170,6 +174,9 @@ export function RulesTab({
   const [afterHoursMessage, setAfterHoursMessage] = React.useState<string>(
     initialHumanization.after_hours_message,
   );
+  const [debounceWindowMs, setDebounceWindowMs] = React.useState<number>(
+    clampDebounceWindowMs(agent.debounce_window_ms),
+  );
 
   const { listCalendarConnections } = useAgentActions();
 
@@ -213,6 +220,7 @@ export function RulesTab({
     setBusinessHoursEnabled(next.business_hours_enabled);
     setBusinessHours(next.business_hours);
     setAfterHoursMessage(next.after_hours_message);
+    setDebounceWindowMs(clampDebounceWindowMs(agent.debounce_window_ms));
   }, [
     agent.id,
     agent.system_prompt,
@@ -220,6 +228,8 @@ export function RulesTab({
     agent.model,
     agent.guardrails,
     agent.calendar_connection_id,
+    agent.humanization_config,
+    agent.debounce_window_ms,
   ]);
 
   const promptDirty = prompt !== agent.system_prompt;
@@ -234,6 +244,9 @@ export function RulesTab({
     guardrails.allow_human_handoff !== agent.guardrails.allow_human_handoff;
   const calendarConnectionDirty =
     calendarConnectionId !== (agent.calendar_connection_id ?? null);
+  const nextDebounceWindowMs = clampDebounceWindowMs(debounceWindowMs);
+  const debounceDirty =
+    nextDebounceWindowMs !== clampDebounceWindowMs(agent.debounce_window_ms);
 
   // PR-AI-AGENT-HUMAN-A: humanization dirty + sanitized comparados com
   // a versao normalizada do servidor (que tambem passa pelo helper).
@@ -277,13 +290,14 @@ export function RulesTab({
     modelDirty ||
     guardrailsDirty ||
     calendarConnectionDirty ||
+    debounceDirty ||
     humanizationDirty;
 
   // PR 35 (mai/2026): dirty flags por accordion. UI mostra bullet
   // âmbar no header de cada accordion que tem mudança não salva,
   // pra cliente saber onde mexeu sem precisar abrir tudo.
   const decideDirty = modelDirty || guardrailsDirty;
-  const converseDirty = humanizationDirty;
+  const converseDirty = humanizationDirty || debounceDirty;
   const integrationsDirty = calendarConnectionDirty;
 
   // PR 35 (mai/2026): accordion controlled — jump links abrem o
@@ -319,6 +333,9 @@ export function RulesTab({
     if (calendarConnectionDirty) {
       patch.calendar_connection_id = calendarConnectionId;
     }
+    if (debounceDirty) {
+      patch.debounce_window_ms = nextDebounceWindowMs;
+    }
     if (humanizationDirty) {
       // PR 22: handoff_include_summary preservado do valor original
       // (sem UI) — agentes legados que tinham configurado mantêm.
@@ -348,6 +365,8 @@ export function RulesTab({
     model,
     guardrails,
     calendarConnectionId,
+    debounceDirty,
+    nextDebounceWindowMs,
     nextPauseKeywords,
     nextResumeKeywords,
     nextAutoPauseMinutes,
@@ -436,7 +455,7 @@ export function RulesTab({
             onClick={() => jumpToAccordion("decide")}
           />
           <JumpChip
-            label="Conversa"
+            label="Humanizacao"
             dirty={converseDirty}
             onClick={() => jumpToAccordion("converse")}
           />
@@ -538,13 +557,78 @@ export function RulesTab({
             <AccordionTrigger className="text-base">
               <span className="flex items-center gap-2">
                 <MessageSquare className="size-4 text-primary" />
-                Como o agente conversa
+                Atendimento humanizado
                 {converseDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
             <AccordionContent className="space-y-4 pt-2">
-              {/* Subgrupo 2A — Pausa e ativação */}
               <section className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-semibold">
+                    Receber mensagens como humano
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Controla como o agente escuta o lead antes de responder.
+                    Enviar midia, mover kanban e adicionar tags ficam no Fluxo.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="debounce_window_seconds">
+                        Unificar mensagens proximas
+                      </Label>
+                      <HelpTooltip>
+                        Espera alguns segundos para juntar mensagens enviadas em
+                        sequencia, como "oi" + "tenho uma duvida". Assim o
+                        agente responde uma vez, com mais contexto.
+                      </HelpTooltip>
+                      {nextDebounceWindowMs === DEBOUNCE_WINDOW_MS_DEFAULT ? (
+                        <DefaultBadge />
+                      ) : null}
+                    </div>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {Math.round(nextDebounceWindowMs / 1000)}s
+                    </span>
+                  </div>
+                  <Input
+                    id="debounce_window_seconds"
+                    type="number"
+                    min={DEBOUNCE_WINDOW_MS_MIN / 1000}
+                    max={DEBOUNCE_WINDOW_MS_MAX / 1000}
+                    step={1}
+                    value={Math.round(debounceWindowMs / 1000)}
+                    onChange={(e) =>
+                      setDebounceWindowMs(
+                        clampDebounceWindowMs(Number(e.target.value) * 1000),
+                      )
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Padrao: {DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s. Use 0s para
+                    responder cada mensagem imediatamente ou ate{" "}
+                    {DEBOUNCE_WINDOW_MS_MAX / 1000}s para leads que digitam em
+                    partes.
+                  </p>
+                </div>
+
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">Receber midia</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Fotos, audios, videos e documentos entram na conversa e
+                        no contexto como midia recebida. Para a IA enviar
+                        midia, use um node do Fluxo.
+                      </p>
+                    </div>
+                    <DefaultBadge />
+                  </div>
+                </div>
+              </section>
+              {/* Subgrupo 2A — Pausa e ativação */}
+              <section className="space-y-4 pt-4 border-t border-border">
                 <div>
                   <h4 className="text-sm font-semibold">Pausa e ativação</h4>
                   <p className="text-xs text-muted-foreground mt-0.5">
