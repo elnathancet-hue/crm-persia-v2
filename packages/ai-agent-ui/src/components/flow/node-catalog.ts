@@ -32,7 +32,11 @@ import {
   Users,
 } from "lucide-react";
 
-export type FlowSidebarCategory = "entrada" | "acoes" | "segmentacoes";
+export type FlowSidebarCategory =
+  | "entrada"
+  | "atendimento"
+  | "acoes"
+  | "segmentacoes";
 
 export interface FlowSidebarItem {
   task_key: string;
@@ -116,7 +120,7 @@ const ENTRY_ITEMS: FlowSidebarItem[] = [
 const ACTION_ITEMS: FlowSidebarItem[] = [
   {
     task_key: "ai_agent.default",
-    category: "acoes",
+    category: "atendimento",
     label: "Conversar com IA",
     description:
       "A IA conversa com o lead. Você define o que ela deve fazer aqui (qualificar, apresentar, agendar). Pode chamar ferramentas como criar agendamento, adicionar tag, etc.",
@@ -349,7 +353,16 @@ export const FLOW_SIDEBAR_CATEGORIES: ReadonlyArray<{
   items: ReadonlyArray<FlowSidebarItem>;
 }> = [
   { id: "entrada", label: "Entrada", items: ENTRY_ITEMS },
-  { id: "acoes", label: "Ações", items: ACTION_ITEMS },
+  {
+    id: "atendimento",
+    label: "Atendimento",
+    items: ACTION_ITEMS.filter((item) => item.category === "atendimento"),
+  },
+  {
+    id: "acoes",
+    label: "Ações",
+    items: ACTION_ITEMS.filter((item) => item.category === "acoes"),
+  },
   { id: "segmentacoes", label: "Segmentações", items: SEGMENTATION_ITEMS },
 ];
 
