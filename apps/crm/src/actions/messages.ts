@@ -66,16 +66,64 @@ async function autoPauseNativeAgent(
     if (humanization.auto_pause_minutes <= 0) return;
 
     const now = new Date().toISOString();
-    await supabase
+    const { data: agentConversations, error: loadError } = await supabase
       .from("agent_conversations")
-      .update({ human_handoff_at: now })
-      .eq("crm_conversation_id", conversationId)
-      .is("human_handoff_at", null);
+      .select("id, human_handoff_at, ai_control_epoch")
+      .eq("organization_id", orgId)
+      .eq("crm_conversation_id", conversationId);
+
+    if (loadError) throw loadError;
+
+    for (const row of agentConversations ?? []) {
+      if ((row as { human_handoff_at?: string | null }).human_handoff_at) {
+        continue;
+      }
+
+      const currentEpoch =
+        (row as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
+      await supabase
+        .from("agent_conversations")
+        .update({
+          human_handoff_at: now,
+          human_handoff_reason: "operator_reply",
+          ai_control_epoch: currentEpoch + 1,
+          updated_at: now,
+        })
+        .eq("organization_id", orgId)
+        .eq("id", (row as { id: string }).id);
+    }
   } catch (err: unknown) {
     logError("auto_pause_native_agent_failed", {
       organization_id: orgId,
       conversation_id: conversationId,
       error: errorMessage(err),
+    });
+  }
+}
+
+async function markConversationHumanOwnedAfterOperatorReply(
+  supabase: Awaited<ReturnType<typeof requireRole>>["supabase"],
+  orgId: string,
+  conversationId: string,
+  userId: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("conversations")
+    .update({
+      assigned_to: userId,
+      status: "waiting_human",
+      updated_at: now,
+    })
+    .eq("id", conversationId)
+    .eq("organization_id", orgId)
+    .eq("assigned_to", "ai");
+
+  if (error) {
+    logError("mark_conversation_human_owned_after_operator_reply_failed", {
+      organization_id: orgId,
+      conversation_id: conversationId,
+      error: errorMessage(error),
     });
   }
 }
@@ -184,6 +232,14 @@ export async function sendMessage(
     })
     .eq("id", conversationId);
 
+  await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
+  await markConversationHumanOwnedAfterOperatorReply(
+    supabase,
+    conversation.organization_id,
+    conversationId,
+    userId,
+  );
+
   return { data: message as Message, error: null };
 }
 
@@ -261,6 +317,12 @@ export async function sendMessageViaWhatsApp(
   // PR-AI-AGENT-HUMAN-A: humano respondeu via /chat → pausa agente
   // nativo (best-effort). Nao bloqueia envio se falhar.
   await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
+  await markConversationHumanOwnedAfterOperatorReply(
+    supabase,
+    conversation.organization_id,
+    conversationId,
+    userId,
+  );
 
   // 4. Send via WhatsApp, propagating errors to the UI
   if (phone && conversation.channel === "whatsapp") {
@@ -448,6 +510,12 @@ export async function sendMediaViaWhatsApp(
   // PR-AI-AGENT-HUMAN-A: humano enviou midia via /chat → pausa agente
   // nativo (best-effort). Paridade com sendMessageViaWhatsApp.
   await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
+  await markConversationHumanOwnedAfterOperatorReply(
+    supabase,
+    conversation.organization_id,
+    conversationId,
+    userId,
+  );
 
   // 4. Send via WhatsApp, propagating errors
   if (phone && conversation.channel === "whatsapp") {
