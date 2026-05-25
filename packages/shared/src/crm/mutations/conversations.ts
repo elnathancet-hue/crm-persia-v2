@@ -10,6 +10,7 @@
 //
 // Multi-tenant: confirma lead pertence ao org antes de tudo.
 
+import { OPEN_CONVERSATION_STATUSES } from "../conversation-status";
 import type { CrmQueryContext } from "../queries/context";
 
 export interface FindOrCreateConversationResult {
@@ -45,7 +46,7 @@ export async function findOrCreateConversationByLead(
     .select("id")
     .eq("organization_id", orgId)
     .eq("lead_id", leadId)
-    .in("status", ["active", "waiting_human"])
+    .in("status", [...OPEN_CONVERSATION_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

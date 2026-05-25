@@ -71,6 +71,11 @@ export type {
 } from "./queries";
 
 export {
+  OPEN_CONVERSATION_STATUSES,
+  type OpenConversationStatus,
+} from "./conversation-status";
+
+export {
   listLeads,
   fetchLead,
   fetchLeadActivities,

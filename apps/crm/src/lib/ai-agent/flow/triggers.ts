@@ -30,6 +30,7 @@
 //     "Qualificado", manda boas-vindas AGORA). Debounce de 10s atrasaria.
 
 import { createProvider } from "@persia/shared/providers";
+import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import { normalizeHumanizationConfig } from "@persia/shared/ai-agent";
 import { errorMessage, logError } from "@/lib/observability";
 import { asAgentDb, type AgentDb } from "../db";
@@ -315,7 +316,7 @@ async function executeFlowForLeadEvent(
     .select("id")
     .eq("organization_id", orgId)
     .eq("lead_id", leadId)
-    .in("status", ["active", "waiting_human"])
+    .in("status", [...OPEN_CONVERSATION_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -347,7 +348,7 @@ async function executeFlowForLeadEvent(
   // 3. Find or create agent_conversation.
   let { data: agentConvRow } = await db
     .from("agent_conversations")
-    .select("id")
+    .select("id, ai_control_epoch")
     .eq("organization_id", orgId)
     .eq("config_id", configId)
     .eq("lead_id", leadId)
@@ -367,7 +368,7 @@ async function executeFlowForLeadEvent(
         actions_executed: [],
         actions_executed_detail: {},
       })
-      .select("id")
+      .select("id, ai_control_epoch")
       .single();
     if (agentConvErr || !newAgentConv) {
       logError("trigger_agent_conv_create_failed", {
@@ -379,6 +380,8 @@ async function executeFlowForLeadEvent(
     agentConvRow = newAgentConv;
   }
   const agentConversationId = (agentConvRow as { id: string }).id;
+  const expectedControlEpoch =
+    (agentConvRow as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
 
   // 4. Build realtime provider + run context.
   const realtimeProvider = createRealtimeProvider({
@@ -389,6 +392,13 @@ async function executeFlowForLeadEvent(
     conversationId: crmConversationId,
     organizationId: orgId,
     humanization,
+    sendGuard: {
+      db,
+      organizationId: orgId,
+      conversationId: crmConversationId,
+      agentConversationId,
+      expectedControlEpoch,
+    },
   });
 
   const ctx: FlowRunContext = {

@@ -203,6 +203,9 @@ export interface AgentConversation {
   history_summary_token_count?: number;
   variables: Record<string, unknown>; // key/value extracted facts (nome, email, etc)
   tokens_used_total: number;      // cumulative, for org-level cost views
+  /** Incrementado quando o controle da conversa muda (IA <-> humano).
+   * Runs antigos capturam este valor e nao podem enviar se ele mudou. */
+  ai_control_epoch?: number;
   last_interaction_at: string | null;
   /** PR-FLOW-PIVOT: node_ids onde auto-actions já dispararam. Idempotência
    * por node. Substitui shape antigo (stage_ids). */

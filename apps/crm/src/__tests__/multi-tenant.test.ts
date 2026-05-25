@@ -260,6 +260,74 @@ describe("conversations — cross-org access is blocked", () => {
     expect(supabase.updates.conversations).toBeUndefined();
   });
 
+  it("assignConversation pauses native AI state and bumps control epoch on human takeover", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("conversations", {
+      data: { organization_id: ORG_A, lead_id: "lead-1", leads: null },
+      error: null,
+    });
+    supabase.queue("conversations", {
+      data: { id: "conv-1", assigned_to: "user-1", status: "waiting_human" },
+      error: null,
+    });
+    supabase.queue("agent_conversations", { data: null, error: null });
+    supabase.queue("agent_conversations", {
+      data: [{ id: "agent-conv-1", ai_control_epoch: 7 }],
+      error: null,
+    });
+    supabase.queue("agent_conversations", { data: null, error: null });
+
+    const res = await assignConversation("conv-1", "user-1");
+
+    expect(res.error).toBeNull();
+    expect(supabase.updates.conversations?.[0]).toMatchObject({
+      assigned_to: "user-1",
+      status: "waiting_human",
+    });
+    expect(supabase.updates.agent_conversations?.[0]).toMatchObject({
+      human_handoff_at: expect.any(String),
+      human_handoff_reason: "human_takeover",
+    });
+    expect(supabase.updates.agent_conversations?.[1]).toMatchObject({
+      ai_control_epoch: 8,
+    });
+  });
+
+  it("assignConversation clears native AI handoff and bumps control epoch when returning to AI", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("conversations", {
+      data: { organization_id: ORG_A, lead_id: "lead-1", leads: null },
+      error: null,
+    });
+    supabase.queue("conversations", {
+      data: { id: "conv-1", assigned_to: "ai", status: "active" },
+      error: null,
+    });
+    supabase.queue("agent_conversations", { data: null, error: null });
+    supabase.queue("agent_conversations", {
+      data: [{ id: "agent-conv-1", ai_control_epoch: 3 }],
+      error: null,
+    });
+    supabase.queue("agent_conversations", { data: null, error: null });
+
+    const res = await assignConversation("conv-1", "ai");
+
+    expect(res.error).toBeNull();
+    expect(supabase.updates.conversations?.[0]).toMatchObject({
+      assigned_to: "ai",
+      status: "active",
+    });
+    expect(supabase.updates.agent_conversations?.[0]).toMatchObject({
+      human_handoff_at: null,
+      human_handoff_reason: null,
+    });
+    expect(supabase.updates.agent_conversations?.[1]).toMatchObject({
+      ai_control_epoch: 4,
+    });
+  });
+
   it("markConversationAsRead scopes its UPDATE by organization_id", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);

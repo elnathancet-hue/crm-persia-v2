@@ -15,6 +15,7 @@ import type { HumanizationConfig } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
 import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import type { FlowProviderStub, TesterRunEvent } from "./types";
+import { canAiSendNow, type AiOutboundSendGuard } from "../send-guard";
 
 export interface CreateRealtimeProviderOptions {
   db: AgentDb;
@@ -32,6 +33,8 @@ export interface CreateRealtimeProviderOptions {
   humanization: HumanizationConfig;
   /** Optional clock pra tests deterministicos. */
   clock?: () => number;
+  /** Last-mile guard. Checked before every real WhatsApp send/chunk. */
+  sendGuard?: AiOutboundSendGuard;
 }
 
 // ============================================================================
@@ -94,6 +97,26 @@ export function createRealtimeProvider(
     return full;
   }
 
+  async function ensureCanSend(
+    chunkIndex: number,
+    sourceEventTs: number,
+  ): Promise<boolean> {
+    if (!opts.sendGuard) return true;
+    const result = await canAiSendNow(opts.sendGuard);
+    if (result.ok) return true;
+    await opts.provider.setTyping(opts.leadPhone, false).catch(() => {});
+    record({
+      kind: "skipped",
+      payload: {
+        reason: "ai_send_blocked",
+        block_reason: result.reason,
+        source_event_ts: sourceEventTs,
+        chunk_index: chunkIndex,
+      },
+    });
+    return false;
+  }
+
   return {
     emit(event) {
       const recorded = record(event);
@@ -140,6 +163,7 @@ export function createRealtimeProvider(
           for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i]!;
             try {
+              if (!(await ensureCanSend(i, recorded.ts))) return;
               const result = await opts.provider.sendText({
                 phone: opts.leadPhone,
                 message: chunk,
@@ -176,6 +200,7 @@ export function createRealtimeProvider(
 
             // Delay + setTyping entre chunks (não no último).
             if (i < chunks.length - 1 && delayMs > 0) {
+              if (!(await ensureCanSend(i, recorded.ts))) return;
               await opts.provider
                 .setTyping(opts.leadPhone, true)
                 .catch(() => {});

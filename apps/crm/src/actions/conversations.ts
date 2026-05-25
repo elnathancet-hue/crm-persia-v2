@@ -4,6 +4,65 @@ import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 
+type RoleSupabase = Awaited<ReturnType<typeof requireRole>>["supabase"];
+
+async function setNativeAgentHandoffForConversation(
+  supabase: RoleSupabase,
+  orgId: string,
+  conversationId: string,
+  paused: boolean,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const patch = paused
+    ? {
+        human_handoff_at: now,
+        human_handoff_reason: "human_takeover",
+        updated_at: now,
+      }
+    : {
+        human_handoff_at: null,
+        human_handoff_reason: null,
+        updated_at: now,
+      };
+
+  const { error } = await supabase
+    .from("agent_conversations")
+    .update(patch)
+    .eq("organization_id", orgId)
+    .eq("crm_conversation_id", conversationId);
+
+  if (error) {
+    console.error("[assignConversation] native handoff sync failed:", error);
+  }
+
+  const { data: rows, error: epochLoadError } = await supabase
+    .from("agent_conversations")
+    .select("id, ai_control_epoch")
+    .eq("organization_id", orgId)
+    .eq("crm_conversation_id", conversationId);
+
+  if (epochLoadError) {
+    console.error("[assignConversation] epoch load failed:", epochLoadError);
+    return;
+  }
+
+  for (const row of rows ?? []) {
+    const current = (row as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
+    const { error: epochUpdateError } = await supabase
+      .from("agent_conversations")
+      .update({
+        ai_control_epoch: current + 1,
+        updated_at: now,
+      })
+      .eq("organization_id", orgId)
+      .eq("id", (row as { id: string }).id);
+
+    if (epochUpdateError) {
+      console.error("[assignConversation] epoch bump failed:", epochUpdateError);
+    }
+  }
+}
+
 export type ConversationFilter = "all" | "ai" | "waiting_human";
 
 export type ConversationWithLead = {
@@ -210,7 +269,7 @@ export async function assignConversation(
     .from("conversations")
     .update({
       assigned_to: assignTo,
-      status: isAi ? "ai_handling" : "human_handling",
+      status: isAi ? "active" : "waiting_human",
       updated_at: new Date().toISOString(),
     })
     .eq("id", conversationId)
@@ -222,6 +281,13 @@ export async function assignConversation(
     console.error("Error assigning conversation:", error);
     return { data: null, error: error.message };
   }
+
+  await setNativeAgentHandoffForConversation(
+    supabase,
+    orgId,
+    conversationId,
+    !isAi,
+  );
 
   if (conv?.organization_id && (conv.leads as any)?.phone) {
     const phone = (conv.leads as any).phone as string;
