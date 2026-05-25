@@ -33,6 +33,7 @@ import {
   type OnNodesChange,
 } from "@xyflow/react";
 import {
+  AlertTriangle,
   Crosshair,
   LayoutGrid,
   Loader2,
@@ -47,8 +48,12 @@ import type {
   FlowConfig,
   FlowEdge,
   FlowNode as PersiaFlowNode,
+  FlowValidationIssue,
 } from "@persia/shared/ai-agent";
-import { normalizeFlowConfig } from "@persia/shared/ai-agent";
+import {
+  normalizeFlowConfig,
+  validateFlowConfig,
+} from "@persia/shared/ai-agent";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -251,7 +256,17 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const onNodesChange: OnNodesChange = React.useCallback(
     (changes) => {
       setNodes((nds) => applyNodeChanges(changes, nds));
-      if (changes.some((c) => c.type !== "select")) setDirty(true);
+      if (
+        changes.some(
+          (c) =>
+            c.type === "position" ||
+            c.type === "remove" ||
+            c.type === "add" ||
+            c.type === "replace",
+        )
+      ) {
+        setDirty(true);
+      }
     },
     [],
   );
@@ -280,6 +295,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     },
     [snapshotBeforeMutation],
   );
+
+  const handleNodeDragStart = React.useCallback(() => {
+    snapshotBeforeMutation();
+  }, [snapshotBeforeMutation]);
 
   // PR 31 (mai/2026): handlers de drag-to-connect. React Flow chama
   // onConnectStart quando cliente segura mouse num handle, onConnectEnd
@@ -516,6 +535,16 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     [edges, handleEdgeDelete],
   );
 
+  const validationIssues = React.useMemo(
+    () =>
+      nodes.length > 0
+        ? validateFlowConfig(
+            reactFlowToPersia(nodes, edges, viewport, enabledTools),
+          )
+        : [],
+    [edges, enabledTools, nodes, viewport],
+  );
+
   // Node atualmente selecionado pra renderizar no Sheet
   const selectedNode = React.useMemo(() => {
     if (!selectedNodeId) return null;
@@ -557,6 +586,15 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     (taskKey: string, screenPos: { x: number; y: number }) => {
       const item = findSidebarItem(taskKey);
       if (!item) return;
+      if (
+        item.node_type === "entry" &&
+        nodesRef.current.some((n) => n.type === "entry")
+      ) {
+        toast.info(
+          "Este fluxo ja tem uma entrada. Edite a entrada existente ou crie outro agente para outro gatilho.",
+        );
+        return;
+      }
       const position = screenToFlowPosition(screenPos);
       const newNode: Node = {
         id: `node-${crypto.randomUUID()}`,
@@ -566,6 +604,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       };
       snapshotBeforeMutation();
       setNodes((nds) => [...nds, newNode]);
+      setSelectedNodeId(newNode.id);
       setDirty(true);
 
       // PR 24 (mai/2026): auto-conectar — se há node selecionado quando
@@ -581,7 +620,11 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       //     fluxo que já está conectado).
       const sourceNode = selectedNodeId
         ? nodesRef.current.find((n) => n.id === selectedNodeId)
-        : null;
+        : nodesRef.current.length === 1 &&
+            nodesRef.current[0]?.type === "entry" &&
+            newNode.type !== "entry"
+          ? nodesRef.current[0]
+          : null;
       if (
         sourceNode &&
         sourceNode.type !== "condition" &&
@@ -631,6 +674,19 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // impossível em touch), aceita clique simples. Posição default
   // = centro visível do canvas (offset randomizado em 80px pra
   // múltiplos adds não empilharem).
+  const getCanvasCenterScreenPosition = React.useCallback(() => {
+    const container = document.querySelector<HTMLDivElement>(
+      '[data-persia-flow-container="true"]',
+    );
+    const rect = container?.getBoundingClientRect();
+    return rect
+      ? {
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        }
+      : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  }, []);
+
   const handleSidebarAdd = React.useCallback(
     (taskKey: string) => {
       // Centro aproximado da viewport do canvas — pega div container.
@@ -652,6 +708,57 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // PR 24 (mai/2026): undo/redo handlers — escolhem entre desfazer
   // a última mutação ou refazer uma desfeita. Ambos atualizam o
   // canvas E marcam dirty (mudança não persistida).
+  const handleAddReadyAIFlow = React.useCallback(() => {
+    if (nodesRef.current.length > 0) {
+      toast.info("Use os cards da lateral para continuar este fluxo.");
+      return;
+    }
+
+    const entryItem = findSidebarItem("entry.conversation_started");
+    const aiItem = findSidebarItem("ai_agent.default");
+    if (!entryItem || !aiItem) return;
+
+    const center = screenToFlowPosition(getCanvasCenterScreenPosition());
+    const entryId = `node-${crypto.randomUUID()}`;
+    const aiId = `node-${crypto.randomUUID()}`;
+    const entryNode: Node = {
+      id: entryId,
+      type: entryItem.node_type,
+      position: { x: center.x - 210, y: center.y - 60 },
+      data: { ...entryItem.default_data },
+    };
+    const aiNode: Node = {
+      id: aiId,
+      type: aiItem.node_type,
+      position: { x: center.x + 130, y: center.y - 60 },
+      data: { ...aiItem.default_data },
+    };
+
+    snapshotBeforeMutation();
+    setNodes([entryNode, aiNode]);
+    setEdges([
+      {
+        id: `edge-${crypto.randomUUID()}`,
+        source: entryId,
+        target: aiId,
+        sourceHandle: "default",
+        targetHandle: "in",
+        type: "withDelete",
+      } as Edge,
+    ]);
+    setSelectedNodeId(aiId);
+    setDirty(true);
+    setTimeout(() => {
+      fitView({ duration: 400, padding: 0.25 });
+    }, 100);
+    toast.success("Fluxo inicial criado e conectado.");
+  }, [
+    fitView,
+    getCanvasCenterScreenPosition,
+    screenToFlowPosition,
+    snapshotBeforeMutation,
+  ]);
+
   const handleUndo = React.useCallback(() => {
     const previous = history.undo({
       nodes: nodesRef.current,
@@ -985,6 +1092,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           </div>
         ) : null}
 
+        {validationIssues.length > 0 ? (
+          <FlowValidationPanel issues={validationIssues} />
+        ) : null}
+
         {/* Toolbar */}
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
           {/* PR 24 (mai/2026): botões undo/redo na toolbar — também
@@ -1072,6 +1183,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           onConnectStart={handleConnectStart}
           onConnectEnd={handleConnectEnd}
           onNodeClick={onNodeClick}
+          onNodeDragStart={handleNodeDragStart}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultViewport={viewport}
@@ -1094,7 +1206,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
               ("Centrar no início" da toolbar). */}
         </ReactFlow>
         {nodes.length === 0 ? (
-          <EmptyCanvasState onAdd={handleSidebarAdd} />
+          <EmptyCanvasState
+            onAdd={handleSidebarAdd}
+            onAddReadyAIFlow={handleAddReadyAIFlow}
+          />
         ) : null}
         {/* PR 32 (mai/2026): hint contextual quando há SÓ o Entry node
             no canvas. Seta + dica orientam o cliente a conectar a
@@ -1129,10 +1244,69 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
 //   - "Conversa com IA pronta" → cria Entry + AI Agent conectados.
 //     Atalho pra começar a testar em 1 clique.
 
+function FlowValidationPanel({
+  issues,
+}: {
+  issues: FlowValidationIssue[];
+}) {
+  const errorCount = issues.filter((issue) => issue.severity === "error").length;
+  const warningCount = issues.length - errorCount;
+  const visibleIssues = issues.slice(0, 3);
+
+  return (
+    <div className="absolute left-3 top-3 z-10 max-w-sm rounded-lg border border-progress/40 bg-card/95 p-3 shadow-sm backdrop-blur">
+      <div className="flex items-start gap-2">
+        <AlertTriangle
+          className={
+            errorCount
+              ? "mt-0.5 size-4 shrink-0 text-failure"
+              : "mt-0.5 size-4 shrink-0 text-progress"
+          }
+        />
+        <div className="min-w-0 space-y-1">
+          <div className="text-xs font-semibold text-foreground">
+            {errorCount ? "Revise antes de publicar" : "Avisos do fluxo"}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            {errorCount ? `${errorCount} erro(s)` : "Sem erros"}
+            {warningCount ? ` - ${warningCount} aviso(s)` : ""}
+          </div>
+          <ul className="space-y-1 pt-1">
+            {visibleIssues.map((issue, index) => (
+              <li
+                key={`${issue.code}-${issue.node_id ?? "flow"}-${index}`}
+                className="text-[11px] leading-snug text-muted-foreground"
+              >
+                <span
+                  className={
+                    issue.severity === "error"
+                      ? "font-semibold text-failure"
+                      : "font-semibold text-progress"
+                  }
+                >
+                  {issue.severity === "error" ? "Erro:" : "Aviso:"}
+                </span>{" "}
+                {issue.message}
+              </li>
+            ))}
+          </ul>
+          {issues.length > visibleIssues.length ? (
+            <div className="text-[11px] text-muted-foreground/70">
+              +{issues.length - visibleIssues.length} item(ns)
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyCanvasState({
   onAdd,
+  onAddReadyAIFlow,
 }: {
   onAdd: (taskKey: string) => void;
+  onAddReadyAIFlow: () => void;
 }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center p-6 pointer-events-none">
@@ -1172,8 +1346,7 @@ function EmptyCanvasState({
             onClick={() => {
               // Sequência: entry + AI conectados por edge default.
               // Permite testar em 1 clique sem montar nada manual.
-              onAdd("entry.conversation_started");
-              setTimeout(() => onAdd("ai_agent.default"), 30);
+              onAddReadyAIFlow();
             }}
             className="group text-left rounded-xl border-2 border-primary/40 bg-primary/5 hover:border-primary hover:shadow-md transition-all p-4 space-y-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
