@@ -24,10 +24,14 @@ import * as React from "react";
 import {
   Brain,
   CalendarCheck,
+  CheckCircle2,
+  Image,
   ExternalLink,
   HelpCircle,
   MessageSquare,
+  Minus,
   Plug,
+  Plus,
   Save,
 } from "lucide-react";
 import Link from "next/link";
@@ -84,6 +88,7 @@ import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
 import { Input } from "@persia/ui/input";
+import { Slider } from "@persia/ui/slider";
 import {
   Select,
   SelectContent,
@@ -109,6 +114,27 @@ interface Props {
   tools: AgentTool[];
   onToolsChange: (next: AgentTool[]) => void;
 }
+
+const DEBOUNCE_PRESETS = [
+  { label: "Agora", valueMs: 0 },
+  { label: "Natural", valueMs: 10_000 },
+  { label: "Paciente", valueMs: 20_000 },
+  { label: "Longo", valueMs: 40_000 },
+] as const;
+
+const AUTO_PAUSE_PRESETS = [
+  { label: "15m", value: 15 },
+  { label: "30m", value: 30 },
+  { label: "1h", value: 60 },
+  { label: "4h", value: 240 },
+  { label: "24h", value: 1440 },
+] as const;
+
+const SPLIT_THRESHOLD_PRESETS = [
+  { label: "Curta", value: 240 },
+  { label: "Padrao", value: SPLIT_THRESHOLD_CHARS_DEFAULT },
+  { label: "Longa", value: 520 },
+] as const;
 
 export function RulesTab({
   agent,
@@ -592,40 +618,40 @@ export function RulesTab({
                       {Math.round(nextDebounceWindowMs / 1000)}s
                     </span>
                   </div>
-                  <Input
+                  <PresetRail
+                    items={DEBOUNCE_PRESETS.map((preset) => ({
+                      label: preset.label,
+                      active: nextDebounceWindowMs === preset.valueMs,
+                      onClick: () =>
+                        setDebounceWindowMs(
+                          clampDebounceWindowMs(preset.valueMs),
+                        ),
+                    }))}
+                  />
+                  <Slider
                     id="debounce_window_seconds"
-                    type="number"
                     min={DEBOUNCE_WINDOW_MS_MIN / 1000}
                     max={DEBOUNCE_WINDOW_MS_MAX / 1000}
                     step={1}
-                    value={Math.round(debounceWindowMs / 1000)}
-                    onChange={(e) =>
+                    value={[Math.round(nextDebounceWindowMs / 1000)]}
+                    onValueChange={(value) =>
                       setDebounceWindowMs(
-                        clampDebounceWindowMs(Number(e.target.value) * 1000),
+                        clampDebounceWindowMs(sliderValue(value, 0) * 1000),
                       )
                     }
+                    aria-label="Unificar mensagens proximas"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Padrao: {DEBOUNCE_WINDOW_MS_DEFAULT / 1000}s. Use 0s para
-                    responder cada mensagem imediatamente ou ate{" "}
-                    {DEBOUNCE_WINDOW_MS_MAX / 1000}s para leads que digitam em
-                    partes.
-                  </p>
-                </div>
-
-                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Receber midia</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Fotos, audios, videos e documentos entram na conversa e
-                        no contexto como midia recebida. Para a IA enviar
-                        midia, use um node do Fluxo.
-                      </p>
-                    </div>
-                    <DefaultBadge />
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>0s: responde na hora</span>
+                    <span>{DEBOUNCE_WINDOW_MS_MAX / 1000}s: espera mais contexto</span>
                   </div>
                 </div>
+
+                <CapabilityRow
+                  icon={<Image className="size-4" />}
+                  title="Receber midia"
+                  description="Fotos, audios, videos e documentos entram na conversa e no contexto. Envio de midia fica no Fluxo."
+                />
               </section>
               {/* Subgrupo 2A — Pausa e ativação */}
               <section className="space-y-4 pt-4 border-t border-border">
@@ -681,16 +707,27 @@ export function RulesTab({
                         {autoPauseMinutes} min
                       </span>
                     </div>
-                    <Input
+                    <PresetRail
+                      items={AUTO_PAUSE_PRESETS.map((preset) => ({
+                        label: preset.label,
+                        active: autoPauseMinutes === preset.value,
+                        onClick: () =>
+                          setAutoPauseMinutes(
+                            clampAutoPauseMinutes(preset.value),
+                          ),
+                      }))}
+                    />
+                    <NumberStepper
                       id="auto_pause_minutes"
-                      type="number"
+                      label="Tempo de pausa"
+                      value={autoPauseMinutes}
                       min={1}
                       max={AUTO_PAUSE_MINUTES_MAX}
                       step={5}
-                      value={autoPauseMinutes}
-                      onChange={(e) =>
+                      suffix="min"
+                      onChange={(value) =>
                         setAutoPauseMinutes(
-                          clampAutoPauseMinutes(Number(e.target.value)),
+                          clampAutoPauseMinutes(value),
                         )
                       }
                     />
@@ -816,18 +853,30 @@ export function RulesTab({
                           {splitThresholdChars} caracteres
                         </span>
                       </div>
-                      <Input
+                      <PresetRail
+                        items={SPLIT_THRESHOLD_PRESETS.map((preset) => ({
+                          label: preset.label,
+                          active: splitThresholdChars === preset.value,
+                          onClick: () =>
+                            setSplitThresholdChars(
+                              clampSplitThresholdChars(preset.value),
+                            ),
+                        }))}
+                      />
+                      <Slider
                         id="split_threshold_chars"
-                        type="number"
                         min={SPLIT_THRESHOLD_CHARS_MIN}
                         max={SPLIT_THRESHOLD_CHARS_MAX}
                         step={10}
-                        value={splitThresholdChars}
-                        onChange={(e) =>
+                        value={[splitThresholdChars]}
+                        onValueChange={(value) =>
                           setSplitThresholdChars(
-                            clampSplitThresholdChars(Number(e.target.value)),
+                            clampSplitThresholdChars(
+                              sliderValue(value, splitThresholdChars),
+                            ),
                           )
                         }
+                        aria-label="Dividir respostas longas"
                       />
                       <p className="text-xs text-muted-foreground">
                         Padrão: {SPLIT_THRESHOLD_CHARS_DEFAULT} caracteres
@@ -858,16 +907,17 @@ export function RulesTab({
                           {splitDelaySeconds}s
                         </span>
                       </div>
-                      <Input
+                      <NumberStepper
                         id="split_delay_seconds"
-                        type="number"
+                        label="Pausa entre mensagens"
                         min={SPLIT_DELAY_SECONDS_MIN}
                         max={SPLIT_DELAY_SECONDS_MAX}
                         step={1}
                         value={splitDelaySeconds}
-                        onChange={(e) =>
+                        suffix="s"
+                        onChange={(value) =>
                           setSplitDelaySeconds(
-                            clampSplitDelaySeconds(Number(e.target.value)),
+                            clampSplitDelaySeconds(value),
                           )
                         }
                       />
@@ -1037,6 +1087,10 @@ function arraysEqualIgnoreOrder(
   return sortedA.every((v, i) => v === sortedB[i]);
 }
 
+function sliderValue(value: number | readonly number[], fallback: number) {
+  return Array.isArray(value) ? value[0] ?? fallback : value;
+}
+
 // ============================================================================
 // PR 35 (mai/2026): helpers do dirty marker + jump links
 // ============================================================================
@@ -1091,6 +1145,128 @@ function DefaultBadge() {
 // Chip clicável no topo da coluna direita — atalho pra rolar (+ abrir)
 // um accordion específico. Mostra bullet âmbar quando a seção tem
 // dirty fields, igual o header do próprio accordion.
+function PresetRail({
+  items,
+}: {
+  items: Array<{ label: string; active: boolean; onClick: () => void }>;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
+      {items.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          onClick={item.onClick}
+          className={`inline-flex min-h-8 items-center justify-center rounded-md border px-2.5 text-xs font-medium transition-colors ${
+            item.active
+              ? "border-primary/50 bg-primary/10 text-primary"
+              : "border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
+          }`}
+          aria-pressed={item.active}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NumberStepper({
+  id,
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix: string;
+  onChange: (value: number) => void;
+}) {
+  const clamp = (next: number) =>
+    Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : value;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="size-8 shrink-0"
+        onClick={() => onChange(clamp(value - step))}
+        aria-label={`Diminuir ${label}`}
+      >
+        <Minus className="size-3.5" />
+      </Button>
+      <div className="relative min-w-0 flex-1">
+        <Input
+          id={id}
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(clamp(Number(e.target.value)))}
+          className="h-8 pr-12 text-center tabular-nums"
+          aria-label={label}
+        />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+          {suffix}
+        </span>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="size-8 shrink-0"
+        onClick={() => onChange(clamp(value + step))}
+        aria-label={`Aumentar ${label}`}
+      >
+        <Plus className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+function CapabilityRow({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-md border border-border/70 bg-muted/25 px-3 py-2.5">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium">{title}</p>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-700">
+              <CheckCircle2 className="size-3" />
+              ativo
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {description}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function JumpChip({
   label,
   dirty,
