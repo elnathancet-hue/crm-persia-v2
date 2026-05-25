@@ -5,6 +5,7 @@ import { splitMessage } from "@/lib/ai/message-splitter";
 import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { errorMessage, logError } from "@/lib/observability";
 import { type AgentDb, nowIso } from "./db";
+import { canAiSendNow, type AiOutboundSendGuard } from "./send-guard";
 
 // PR-AI-AGENT-HUMAN-B (mai/2026): envia resposta do agente nativo
 // respeitando o split_enabled da humanization_config. Quando enabled e
@@ -37,21 +38,24 @@ export interface SendAssistantReplyParams {
     db: AgentDb;
     leadId: string;
   };
+  sendGuard?: AiOutboundSendGuard;
 }
 
 export async function sendAssistantReply(
   params: SendAssistantReplyParams,
-): Promise<void> {
-  const { provider, phone, text, humanization, persist } = params;
+): Promise<{ sent: boolean; blockedReason?: string }> {
+  const { provider, phone, text, humanization } = params;
 
   // Caminho rapido: split off ou texto curto = envia inteiro.
   if (
     !humanization.split_enabled ||
     text.length < humanization.split_threshold_chars
   ) {
+    const allowed = await checkSendGuard(params, 0);
+    if (!allowed.ok) return { sent: false, blockedReason: allowed.reason };
     const result = await provider.sendText({ phone, message: text });
     await persistAiMessage(params, text, result?.messageId ?? null);
-    return;
+    return { sent: true };
   }
 
   // splitMessage usa GPT pra decidir cortes naturais; retorna sempre
@@ -66,12 +70,15 @@ export async function sendAssistantReply(
   // GPT), evita o overhead de loop + setTyping.
   if (parts.length <= 1) {
     const onlyPart = parts[0] ?? text;
+    const allowed = await checkSendGuard(params, 0);
+    if (!allowed.ok) return { sent: false, blockedReason: allowed.reason };
     const result = await provider.sendText({ phone, message: onlyPart });
     await persistAiMessage(params, onlyPart, result?.messageId ?? null);
-    return;
+    return { sent: true };
   }
 
   const delayMs = Math.max(0, humanization.split_delay_seconds) * 1000;
+  let sentAny = false;
   for (let i = 0; i < parts.length; i++) {
     if (i > 0 && delayMs > 0) {
       // setTyping e cosmetico — ignora erro pra nao quebrar envio se
@@ -91,9 +98,15 @@ export async function sendAssistantReply(
     // Persistir DENTRO do loop: cada bolha enviada vira 1 row, espelhando
     // o que o cliente recebe no WhatsApp. Insert e fire-and-await por
     // parte — falha de insert em uma nao bloqueia as outras (log + segue).
+    const allowed = await checkSendGuard(params, i);
+    if (!allowed.ok) {
+      return { sent: sentAny, blockedReason: allowed.reason };
+    }
     const result = await provider.sendText({ phone, message: parts[i] });
     await persistAiMessage(params, parts[i], result?.messageId ?? null);
+    sentAny = true;
   }
+  return { sent: sentAny };
 }
 
 // PR1 #2: INSERT em `messages` quando caller pediu persistencia.
@@ -142,4 +155,23 @@ async function persistAiMessage(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function checkSendGuard(
+  params: SendAssistantReplyParams,
+  partIndex: number,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (!params.sendGuard) return { ok: true };
+  const result = await canAiSendNow(params.sendGuard);
+  if (!result.ok) {
+    logError("ai_agent_send_blocked", {
+      organization_id: params.orgId,
+      conversation_id: params.conversationId,
+      agent_conversation_id: params.sendGuard.agentConversationId,
+      expected_control_epoch: params.sendGuard.expectedControlEpoch,
+      part_index: partIndex,
+      reason: result.reason,
+    });
+  }
+  return result;
 }

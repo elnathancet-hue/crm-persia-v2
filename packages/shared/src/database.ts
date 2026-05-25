@@ -400,6 +400,7 @@ export type Database = {
         Row: {
           actions_executed: Json
           actions_executed_detail: Json
+          ai_control_epoch: number
           config_id: string
           created_at: string
           crm_conversation_id: string | null
@@ -424,6 +425,7 @@ export type Database = {
         Insert: {
           actions_executed?: Json
           actions_executed_detail?: Json
+          ai_control_epoch?: number
           config_id: string
           created_at?: string
           crm_conversation_id?: string | null
@@ -448,6 +450,7 @@ export type Database = {
         Update: {
           actions_executed?: Json
           actions_executed_detail?: Json
+          ai_control_epoch?: number
           config_id?: string
           created_at?: string
           crm_conversation_id?: string | null

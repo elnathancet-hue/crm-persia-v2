@@ -10,6 +10,7 @@ import "server-only";
 // metadata.is_test=true pra ficar escondido dos filtros de Kanban/Leads.
 
 import type { AgentDb } from "../db";
+import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 
 const TESTER_PHONE_PREFIX = "+5500000000";
 
@@ -102,7 +103,7 @@ export async function ensureTesterContext(
     .select("id")
     .eq("organization_id", orgId)
     .eq("lead_id", lead.id)
-    .in("status", ["active", "waiting_human"])
+    .in("status", [...OPEN_CONVERSATION_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

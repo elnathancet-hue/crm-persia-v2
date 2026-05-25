@@ -24,6 +24,7 @@ import { onKeyword, onNewLead } from "@/lib/flows/triggers";
 import { parseSplitConfig, splitMessage } from "@/lib/ai/message-splitter";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import { errorMessage, logError } from "@/lib/observability";
+import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import { phoneBR } from "@persia/shared/validation";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 
@@ -212,7 +213,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     .select("id, assigned_to, status")
     .eq("organization_id", orgId)
     .eq("lead_id", lead.id)
-    .in("status", ["active", "waiting_human"])
+    .in("status", [...OPEN_CONVERSATION_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -237,7 +238,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         .select("id, assigned_to, status")
         .eq("organization_id", orgId)
         .eq("lead_id", lead.id)
-        .in("status", ["active", "waiting_human"])
+        .in("status", [...OPEN_CONVERSATION_STATUSES])
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

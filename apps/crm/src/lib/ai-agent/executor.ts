@@ -28,6 +28,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@persia/shared";
+import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import type { IncomingMessage, WhatsAppProvider } from "@persia/shared/whatsapp";
 import { createProvider } from "@persia/shared/providers";
 import { phoneBR } from "@persia/shared/validation";
@@ -40,6 +41,7 @@ import {
   matchesPauseKeyword,
   matchesResumeKeyword,
   normalizeHumanizationConfig,
+  shouldSendAfterHoursMessage,
   shouldTriggerFlowFromInbound,
   type DebounceFlushBatch,
   type OrganizationSettings,
@@ -50,6 +52,7 @@ import { loadFlowByConfigId } from "./flow/loader";
 import { createRealtimeProvider } from "./flow/realtime-provider";
 import { runFlow } from "./flow/runner";
 import type { FlowRunContext } from "./flow/types";
+import { sendAssistantReply } from "./send-reply";
 
 // ============================================================================
 // Tipos públicos (mesmo shape do stub — compatíveis com webhook+debounce)
@@ -223,10 +226,10 @@ export async function tryEnqueueForNativeAgent(
     // re-SELECT a conv que o vencedor acabou de criar.
     let { data: conv } = await db
       .from("conversations")
-      .select("id")
+      .select("id, assigned_to, status")
       .eq("organization_id", orgId)
       .eq("lead_id", leadId)
-      .in("status", ["active", "waiting_human"])
+      .in("status", [...OPEN_CONVERSATION_STATUSES])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -241,7 +244,7 @@ export async function tryEnqueueForNativeAgent(
           assigned_to: "ai",
           last_message_at: new Date().toISOString(),
         })
-        .select("id")
+        .select("id, assigned_to, status")
         .single();
       if (convErr) {
         if (convErr.code === "23505") {
@@ -250,10 +253,10 @@ export async function tryEnqueueForNativeAgent(
           // da conv vencedora e seguir o fluxo normal.
           const { data: existingConv, error: refetchErr } = await db
             .from("conversations")
-            .select("id")
+            .select("id, assigned_to, status")
             .eq("organization_id", orgId)
             .eq("lead_id", leadId)
-            .in("status", ["active", "waiting_human"])
+            .in("status", [...OPEN_CONVERSATION_STATUSES])
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -279,7 +282,12 @@ export async function tryEnqueueForNativeAgent(
         .update({ last_message_at: new Date().toISOString() })
         .eq("id", (conv as { id: string }).id);
     }
-    const conversationId = (conv as { id: string }).id;
+    const conversation = conv as {
+      id: string;
+      assigned_to?: string | null;
+      status?: string | null;
+    };
+    const conversationId = conversation.id;
 
     // 8. Insert inbound message em `messages` (sender='lead'). Pegamos
     // o `id` retornado pra linkar em pending_messages.inbound_message_id.
@@ -321,12 +329,27 @@ export async function tryEnqueueForNativeAgent(
     }
     const inboundMessageId = (msgRow as { id: string }).id;
 
+    // Human takeover guard: keep the new lead message in the CRM history,
+    // but never spin up or resume the native AI runtime for human-owned chats.
+    if (conversation.assigned_to !== "ai" || conversation.status !== "active") {
+      return {
+        handled: true,
+        response: {
+          ok: true,
+          handledBy: "ai_native_flow",
+          leadId,
+          conversationId,
+          status: "human_owned_conversation",
+        },
+      };
+    }
+
     // 9. Ensure agent_conversation. Idempotente por (config_id, lead_id,
     // crm_conversation_id) — não temos UNIQUE constraint mas usamos
     // find-or-create.
     let { data: agentConv } = await db
       .from("agent_conversations")
-      .select("id, current_node_id, human_handoff_at")
+      .select("id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
       .eq("organization_id", orgId)
       .eq("config_id", agentConfigId)
       .eq("lead_id", leadId)
@@ -345,7 +368,7 @@ export async function tryEnqueueForNativeAgent(
           actions_executed: [],
           actions_executed_detail: {},
         })
-        .select("id, current_node_id")
+        .select("id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
         .single();
       if (agentConvErr || !newAgentConv) {
         throw new Error(
@@ -357,6 +380,11 @@ export async function tryEnqueueForNativeAgent(
     const agentConversationId = (agentConv as { id: string }).id;
     const humanHandoffAt = (agentConv as { human_handoff_at?: string | null })
       .human_handoff_at ?? null;
+    const afterHoursNotifiedAt = (agentConv as {
+      after_hours_notified_at?: string | null;
+    }).after_hours_notified_at ?? null;
+    const aiControlEpoch =
+      (agentConv as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
 
     // 9b. Humanization (PR 6, mai/2026): pause / resume keywords + auto-pause.
     //
@@ -424,9 +452,8 @@ export async function tryEnqueueForNativeAgent(
         .eq("id", agentConversationId);
     }
 
-    // 9c. Business hours: silencia fora do horário comercial. V1 simples —
-    // não envia after_hours_message (PR posterior adiciona, requer cooldown
-    // pra não spammar o lead).
+    // 9c. Business hours: fora do horario comercial nao roda o flow; envia
+    // after_hours_message no maximo 1x por cooldown pra nao spammar o lead.
     if (humanization.business_hours_enabled) {
       const inBusinessHours = isWithinBusinessHours(
         new Date(),
@@ -434,6 +461,43 @@ export async function tryEnqueueForNativeAgent(
         humanization.business_hours_timezone,
       );
       if (!inBusinessHours) {
+        if (shouldSendAfterHoursMessage(afterHoursNotifiedAt)) {
+          try {
+            const sendResult = await sendAssistantReply({
+              provider: input.provider,
+              phone,
+              text: humanization.after_hours_message,
+              humanization,
+              orgId,
+              conversationId,
+              persist: { db, leadId },
+              sendGuard: {
+                db,
+                organizationId: orgId,
+                conversationId,
+                agentConversationId,
+                expectedControlEpoch: aiControlEpoch,
+              },
+            });
+            if (sendResult.sent) {
+              await db
+                .from("agent_conversations")
+                .update({ after_hours_notified_at: new Date().toISOString() })
+                .eq("organization_id", orgId)
+                .eq("id", agentConversationId);
+            }
+          } catch (err: unknown) {
+            // Provider falhou, mas o webhook continua handled=true para nao
+            // cair no pipeline legado e responder fora do horario.
+            logError("ai_agent_after_hours_message_failed", {
+              ...logCtx,
+              lead_id: leadId,
+              conversation_id: conversationId,
+              agent_conversation_id: agentConversationId,
+              error: errorMessage(err),
+            });
+          }
+        }
         return {
           handled: true,
           response: {
@@ -553,7 +617,7 @@ export async function executeDebouncedBatch(input: {
     const { data: agentConvRow, error: agentConvErr } = await db
       .from("agent_conversations")
       .select(
-        "id, config_id, lead_id, crm_conversation_id, current_node_id, variables",
+        "id, config_id, lead_id, crm_conversation_id, current_node_id, variables, ai_control_epoch",
       )
       .eq("organization_id", orgId)
       .eq("id", batch.agent_conversation_id)
@@ -571,7 +635,9 @@ export async function executeDebouncedBatch(input: {
       lead_id: string | null;
       crm_conversation_id: string | null;
       current_node_id: string | null;
+      ai_control_epoch?: number | null;
     };
+    const expectedControlEpoch = agentConv.ai_control_epoch ?? 0;
 
     if (!agentConv.lead_id || !agentConv.crm_conversation_id) {
       return { runId: null, status: "skipped" };
@@ -674,6 +740,13 @@ export async function executeDebouncedBatch(input: {
       conversationId: agentConv.crm_conversation_id,
       organizationId: orgId,
       humanization,
+      sendGuard: {
+        db,
+        organizationId: orgId,
+        conversationId: agentConv.crm_conversation_id,
+        agentConversationId: agentConv.id,
+        expectedControlEpoch,
+      },
     });
 
     // 5. Build FlowRunContext + roda o flow.

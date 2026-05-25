@@ -19,6 +19,7 @@ import { parseSplitConfig, splitMessage } from "@/lib/ai/message-splitter";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
 import type { IncomingMessage, WhatsAppProvider } from "@/lib/whatsapp/provider";
+import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 
 function makeProvider(): WhatsAppProvider {
   const stub = vi.fn(async () => undefined);
@@ -213,6 +214,33 @@ describe("processIncomingMessage", () => {
 
     expect(result.handledBy).toBe("none");
     expect(provider.sendText).not.toHaveBeenCalled();
+  });
+
+  it("reuses legacy human_handling conversations instead of creating a second AI conversation", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("messages", { data: null, error: null });
+    supabase.queue("leads", { data: { id: "lead-legacy" }, error: null });
+    supabase.queue("conversations", {
+      data: { id: "conv-human", assigned_to: "user-42", status: "human_handling" },
+      error: null,
+    });
+
+    const provider = makeProvider();
+    const result = await processIncomingMessage({
+      supabase: supabase as never,
+      orgId: "org-1",
+      provider,
+      msg: baseMsg(),
+    });
+
+    expect(result.handledBy).toBe("none");
+    expect(result.conversationId).toBe("conv-human");
+    expect(provider.sendText).not.toHaveBeenCalled();
+    expect(supabase.inserts.conversations).toBeUndefined();
+    expect(supabase.filters.conversations.in).toContainEqual([
+      "status",
+      [...OPEN_CONVERSATION_STATUSES],
+    ]);
   });
 
   it("runs the n8n branch end-to-end, splits the response and sends each part", async () => {

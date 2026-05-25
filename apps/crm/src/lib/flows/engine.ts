@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import { createProvider } from "@/lib/whatsapp/providers";
 
 // Service-role client for background processing (bypasses RLS)
@@ -424,7 +425,7 @@ async function executeSendMessage(
     .select("id")
     .eq("organization_id", orgId)
     .eq("lead_id", lead.id)
-    .in("status", ["active", "waiting_human"])
+    .in("status", [...OPEN_CONVERSATION_STATUSES])
     .order("created_at", { ascending: false })
     .limit(1)
     .single();
@@ -538,7 +539,7 @@ async function executeAssignAgent(
     .update({ assigned_to: assignTo })
     .eq("organization_id", orgId)
     .eq("lead_id", lead.id)
-    .in("status", ["active", "waiting_human"]);
+    .in("status", [...OPEN_CONVERSATION_STATUSES]);
 
   return { action: "continue", handle: "default" };
 }
@@ -588,7 +589,7 @@ async function executeActivateAi(
     .update({ assigned_to: "ai", status: "active" })
     .eq("organization_id", orgId)
     .eq("lead_id", lead.id)
-    .in("status", ["active", "waiting_human"]);
+    .in("status", [...OPEN_CONVERSATION_STATUSES]);
 
   return { action: "continue", handle: "default" };
 }
