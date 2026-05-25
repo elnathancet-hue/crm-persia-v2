@@ -234,6 +234,8 @@
   --chat-sidebar-divider:   hsl(200, 10%, 90%);
   --chat-input-bar-bg:      hsl(195, 12%, 95%);   /* footer area */
   --chat-input-field-bg:    hsl(0, 0%, 100%);     /* input pill */
+  --chat-send-bg:           hsl(173, 95%, 26%);    /* #008069 WhatsApp action */
+  --chat-send-fg:           hsl(0, 0%, 100%);
   --chat-link:              hsl(195, 80%, 35%);   /* hyperlink dentro de bubbles */
 }
 
@@ -323,12 +325,35 @@
   --chat-sidebar-divider:   hsl(200, 16%, 18%);
   --chat-input-bar-bg:      hsl(200, 17%, 16%);   /* #202C33 */
   --chat-input-field-bg:    hsl(200, 16%, 21%);   /* #2A3942 */
+  --chat-send-bg:           hsl(173, 95%, 26%);    /* #008069 */
+  --chat-send-fg:           hsl(0, 0%, 100%);
   --chat-link:              hsl(199, 80%, 65%);
 }
 
 @layer utilities {
   .font-heading {
     font-family: var(--font-heading), "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .wa-chat-wallpaper {
+    position: relative;
+    background-color: var(--chat-bg);
+  }
+
+  .wa-chat-wallpaper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.34;
+    background-image: radial-gradient(circle at 12px 12px, var(--chat-pattern-color) 1px, transparent 1.4px),
+      radial-gradient(circle at 36px 28px, var(--chat-pattern-color) 1px, transparent 1.4px);
+    background-size: 48px 48px;
+  }
+
+  .wa-chat-wallpaper > * {
+    position: relative;
+    z-index: 1;
   }
 }
 
