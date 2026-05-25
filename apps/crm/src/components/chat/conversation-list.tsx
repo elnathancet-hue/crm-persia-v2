@@ -261,11 +261,11 @@ export function ConversationList({
     >
       {/* Header */}
       <div
-        className="shrink-0 flex h-14 items-center gap-2 border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
         style={{ background: "var(--chat-header-bg)" }}
       >
-        <MessageSquare className="size-5 text-primary" />
-        <h2 className="text-sm font-semibold">Chat ao Vivo</h2>
+        <MessageSquare className="size-5 text-[color:var(--chat-send-bg)]" />
+        <h2 className="text-base font-medium text-[color:var(--chat-header-fg)]">Conversas</h2>
         {/* Green pulsing dot = online */}
         <span className="relative ml-auto flex size-2.5">
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-success/70 opacity-75" />
@@ -274,14 +274,14 @@ export function ConversationList({
       </div>
 
       {/* Filter Tabs + Filter button */}
-      <div className="shrink-0 border-b px-3 py-2">
+      <div className="shrink-0 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2">
         <div className="flex items-center gap-2">
           <Tabs
             defaultValue="all"
             onValueChange={(val) => setFilter((val ?? "all") as ConversationFilter)}
             className="flex-1"
           >
-            <TabsList className="w-full">
+            <TabsList className="h-9 w-full rounded-lg bg-[color:var(--chat-input-field-bg)] p-1">
               <TabsTrigger value="all" className="flex-1 text-xs">
                 Todos
               </TabsTrigger>
@@ -415,14 +415,14 @@ export function ConversationList({
       )}
 
       {/* Search */}
-      <div className="shrink-0 border-b px-3 py-2">
+      <div className="shrink-0 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome ou telefone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 text-sm"
+            className="h-9 rounded-lg border-0 bg-[color:var(--chat-input-field-bg)] pl-8 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-[color:var(--chat-send-bg)]"
           />
         </div>
       </div>
@@ -454,7 +454,7 @@ export function ConversationList({
                   key={conv.id}
                   onClick={() => onSelect(conv.id)}
                   className={cn(
-                    "flex w-full items-start gap-3 px-3 py-3 text-left cursor-pointer border-b border-[color:var(--chat-sidebar-divider)] transition-colors"
+                    "flex min-h-[72px] w-full cursor-pointer items-start gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2.5 text-left transition-colors"
                   )}
                   style={{
                     background: isSelected
@@ -500,9 +500,9 @@ export function ConversationList({
                   </div>
 
                   {/* Content */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
+                      <span className="truncate text-[15px] font-medium leading-5 text-[color:var(--chat-header-fg)]">
                         {lead?.name || lead?.phone || "Sem nome"}
                       </span>
                       <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -512,7 +512,7 @@ export function ConversationList({
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-xs text-muted-foreground">
+                      <span className="truncate text-[13px] leading-5 text-muted-foreground">
                         {conv.last_message?.sender === "ai" && "IA: "}
                         {conv.last_message?.sender === "agent" && "Você: "}
                         {truncate(conv.last_message?.content, 50) ||

@@ -569,7 +569,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     >
       {/* Header - WhatsApp style with action bar */}
       <div
-        className="shrink-0 flex h-16 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        className="flex h-[59px] shrink-0 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4"
         style={{
           background: "var(--chat-header-bg)",
           color: "var(--chat-header-fg)",
@@ -604,9 +604,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               {getInitials(lead?.name as string | null)}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold">
+              <span className="truncate text-[15px] font-medium leading-5">
                 {(lead?.name as string) || "Sem nome"}
               </span>
               <Badge
@@ -616,9 +616,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 {conversation?.channel as string}
               </Badge>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-[13px] leading-5 text-muted-foreground">
               <Phone className="size-3" />
-              <span>{(lead?.phone as string) || "Sem telefone"}</span>
+              <span className="truncate">{(lead?.phone as string) || "Sem telefone"}</span>
             </div>
           </div>
         </div>
@@ -756,15 +756,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       </div>
 
       {/* Messages - WhatsApp style with subtle pattern background */}
-      <div
-        className="flex-1 overflow-y-auto px-4 md:px-8 lg:px-16"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='currentColor' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          backgroundColor: "var(--chat-bg)",
-          color: "var(--chat-pattern-color)",
-        }}
-      >
-        <div className="flex flex-col gap-3 py-4 max-w-3xl mx-auto">
+      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-3 sm:px-8 lg:px-12 xl:px-20">
+        <div className="mx-auto flex max-w-[920px] flex-col gap-1 py-4">
           {messages.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma mensagem ainda
@@ -784,8 +777,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               <div key={msg.id}>
                 {/* Date separator */}
                 {showDateSeparator && (
-                  <div className="flex items-center justify-center py-4">
-                    <span className="text-[11px] font-medium text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                  <div className="flex items-center justify-center py-3">
+                    <span className="rounded-lg bg-[color:var(--chat-header-bg)] px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-sm">
                       {formatDateSeparator(msg.created_at)}
                     </span>
                   </div>
@@ -794,7 +787,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 {/* Message bubble - Lead LEFT, IA+Agent RIGHT */}
                 <div
                   className={cn(
-                    "flex max-w-[65%] flex-col gap-0.5",
+                    "flex max-w-[86%] flex-col gap-0.5 sm:max-w-[72%] lg:max-w-[62%]",
                     isLead ? "items-start" : "ml-auto items-end"
                   )}
                 >
@@ -834,7 +827,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   {/* Bubble - WhatsApp style */}
                   <div
                     className={cn(
-                      "rounded-lg px-2.5 py-1.5 text-sm relative shadow-sm",
+                      "relative rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
                       isAgent && msg.status === "failed"
                         ? "rounded-br-sm bg-failure/90 text-failure-foreground border border-failure"
                         : isAgent && "rounded-br-sm",

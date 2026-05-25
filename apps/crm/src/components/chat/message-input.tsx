@@ -228,7 +228,7 @@ export function MessageInput({
        browsers). delay 300ms pra não disparar em hover acidental. */
     <TooltipProvider delay={300}>
     <div
-      className="border-t border-[color:var(--chat-sidebar-divider)] p-3 md:px-8 lg:px-16"
+      className="border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2 sm:px-5 lg:px-8 xl:px-12"
       style={{ background: "var(--chat-input-bar-bg)" }}
     >
       {/* 24h window banner (Meta Cloud apenas) */}
@@ -297,7 +297,7 @@ export function MessageInput({
 
       <div
         className={cn(
-          "flex items-center gap-2",
+          "mx-auto flex max-w-[920px] items-end gap-2",
           disabled && "opacity-50"
         )}
       >
@@ -332,7 +332,7 @@ export function MessageInput({
                     variant="ghost"
                     size="icon-sm"
                     disabled={disabled}
-                    className="shrink-0 size-8 rounded-lg"
+                    className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
                     aria-label="Gerar resposta com IA"
                   >
                     <Sparkles className="size-4" />
@@ -417,7 +417,7 @@ export function MessageInput({
                 size="icon-sm"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled || sending}
-                className="shrink-0 size-8 rounded-lg"
+                className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
                 aria-label="Anexar arquivo"
               >
                 <Paperclip className="size-4" />
@@ -438,7 +438,7 @@ export function MessageInput({
                   size="icon-sm"
                   onClick={() => setTemplateOpen(true)}
                   disabled={disabled || sending}
-                  className="shrink-0 size-8 rounded-lg"
+                  className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
                   aria-label="Enviar template oficial"
                 >
                   <FileText className="size-4" />
@@ -462,7 +462,7 @@ export function MessageInput({
                     variant="ghost"
                     size="icon-sm"
                     disabled={disabled}
-                    className="shrink-0 size-8 rounded-lg"
+                    className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
                     aria-label="Emoji"
                   >
                     <Smile className="size-4" />
@@ -507,7 +507,7 @@ export function MessageInput({
           }
           disabled={disabled || composerLocked}
           rows={1}
-          className="max-h-24 min-h-[36px] flex-1 resize-none rounded-full border border-[color:var(--chat-sidebar-divider)] px-4 py-2 text-sm outline-none placeholder:text-[color:var(--chat-timestamp)] focus:ring-1 focus:ring-[color:var(--chat-checkmark-read)]"
+          className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg border-0 px-4 py-[11px] text-[15px] leading-5 outline-none placeholder:text-[color:var(--chat-timestamp)] focus:ring-1 focus:ring-[color:var(--chat-send-bg)]"
           style={{
             background: "var(--chat-input-field-bg)",
             color: "var(--chat-header-fg)",
@@ -523,7 +523,11 @@ export function MessageInput({
           disabled={(!content.trim() && !selectedFile) || sending || disabled || composerLocked}
           title={composerLocked ? "Fora da janela de 24h — use um template" : "Enviar"}
           aria-label="Enviar mensagem"
-          className="shrink-0 rounded-full size-10"
+          className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-40"
+          style={{
+            background: "var(--chat-send-bg)",
+            color: "var(--chat-send-fg)",
+          }}
         >
           {sending ? (
             <Loader2 className="size-4 animate-spin" />

@@ -29,13 +29,13 @@ export function ChatPageClient() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-[color:var(--chat-bg)]">
       {/* Left panel: Conversation List */}
       <div
         className={
           selectedConversationId
-            ? "hidden w-80 shrink-0 h-full overflow-hidden md:flex md:flex-col border-r"
-            : "w-full shrink-0 h-full overflow-hidden md:flex md:flex-col md:w-80 border-r"
+            ? "hidden h-full shrink-0 overflow-hidden border-r border-[color:var(--chat-sidebar-divider)] md:flex md:w-[380px] md:flex-col xl:w-[420px]"
+            : "h-full w-full shrink-0 overflow-hidden border-r border-[color:var(--chat-sidebar-divider)] md:flex md:w-[380px] md:flex-col xl:w-[420px]"
         }
       >
         <ConversationList
