@@ -530,6 +530,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       return [...prev, message];
     });
     shouldAutoScroll.current = true;
+    if (conversationId && message.sender === "agent") {
+      getConversation(conversationId)
+        .then(({ data }) => {
+          if (data) setConversation(data);
+        })
+        .catch(() => {});
+    }
   };
 
   // Empty state
@@ -649,6 +656,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               onClick={handleResumeBot}
               disabled={assigning}
               className="size-8 rounded-lg"
+              title="Retomar IA"
               aria-label="Retomar bot"
             >
               {assigning ? (
