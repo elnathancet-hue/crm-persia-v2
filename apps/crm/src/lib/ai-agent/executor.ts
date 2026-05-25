@@ -81,6 +81,53 @@ export interface TryEnqueueInput {
   requestId: string;
 }
 
+function normalizeInboundMessageContent(msg: IncomingMessage): string | null {
+  const text = msg.text?.trim();
+  if (text) return text;
+  const caption = msg.caption?.trim();
+  if (caption) return caption;
+  return null;
+}
+
+function buildInboundTextForAgent(msg: IncomingMessage): string | null {
+  const content = normalizeInboundMessageContent(msg);
+  if (content) return content;
+  if (!msg.mediaUrl) return null;
+
+  switch (msg.type) {
+    case "image":
+      return "[imagem recebida] O lead enviou uma imagem.";
+    case "audio":
+      return "[audio recebido] O lead enviou um audio.";
+    case "video":
+      return "[video recebido] O lead enviou um video.";
+    case "document":
+      return "[documento recebido] O lead enviou um documento.";
+    case "location":
+      return "[localizacao recebida] O lead enviou uma localizacao.";
+    case "contact":
+      return "[contato recebido] O lead enviou um contato.";
+    case "sticker":
+      return "[figurinha recebida] O lead enviou uma figurinha.";
+    default:
+      return "[midia recebida] O lead enviou uma midia.";
+  }
+}
+
+function normalizePendingMessageType(msg: IncomingMessage): string {
+  if (
+    msg.type === "text" ||
+    msg.type === "image" ||
+    msg.type === "audio" ||
+    msg.type === "video" ||
+    msg.type === "document" ||
+    msg.type === "location"
+  ) {
+    return msg.type;
+  }
+  return "other";
+}
+
 // ============================================================================
 // tryEnqueueForNativeAgent — entry point do webhook
 // ============================================================================
@@ -135,13 +182,15 @@ export async function tryEnqueueForNativeAgent(
   const humanization = normalizeHumanizationConfig(
     (primaryRow as { humanization_config?: unknown }).humanization_config,
   );
+  const inboundText = buildInboundTextForAgent(msg);
+  const messageContent = normalizeInboundMessageContent(msg);
 
-  // 3. Skip mensagens sem texto (V1 — PR posterior aceita media via
-  // descrição automática).
-  if (!msg.text || !msg.text.trim()) {
+  // 3. Skip apenas payload realmente vazio. Midia-only entra com uma
+  // descricao curta no contexto do agente, mas continua persistindo a midia.
+  if (!inboundText) {
     return {
       handled: false,
-      response: { ok: false, skipped: "no_text" },
+      response: { ok: false, skipped: "empty_message" },
     };
   }
 
@@ -301,7 +350,7 @@ export async function tryEnqueueForNativeAgent(
         organization_id: orgId,
         conversation_id: conversationId,
         lead_id: leadId,
-        content: msg.text,
+        content: messageContent,
         sender: "lead",
         type: msg.type ?? "text",
         whatsapp_msg_id: msg.messageId ?? null,
@@ -402,8 +451,8 @@ export async function tryEnqueueForNativeAgent(
     // (essa rota só processa msgs do lead). Sem necessidade de detectar
     // "humano enviou msg" pra setar auto-pause — vai num PR futuro
     // (precisa hook em send-reply.ts).
-    const matchResume = matchesResumeKeyword(msg.text, humanization);
-    const matchPause = matchesPauseKeyword(msg.text, humanization);
+    const matchResume = matchesResumeKeyword(messageContent ?? "", humanization);
+    const matchPause = matchesPauseKeyword(messageContent ?? "", humanization);
 
     if (matchResume) {
       await db
@@ -526,7 +575,7 @@ export async function tryEnqueueForNativeAgent(
     try {
       const flow = await loadFlowByConfigId(db, orgId, agentConfigId);
       const entry = flow ? findEntryNode(flow.config) : null;
-      if (entry && !shouldTriggerFlowFromInbound(entry, msg.text)) {
+      if (entry && !shouldTriggerFlowFromInbound(entry, messageContent ?? "")) {
         return {
           handled: true,
           response: {
@@ -559,8 +608,8 @@ export async function tryEnqueueForNativeAgent(
       p_agent_conversation_id: agentConversationId,
       p_debounce_window_ms: debounceWindowMs,
       p_inbound_message_id: inboundMessageId,
-      p_text: msg.text,
-      p_message_type: msg.type ?? "text",
+      p_text: inboundText,
+      p_message_type: normalizePendingMessageType(msg),
       p_media_ref: msg.mediaUrl ?? null,
       p_received_at: new Date().toISOString(),
     });

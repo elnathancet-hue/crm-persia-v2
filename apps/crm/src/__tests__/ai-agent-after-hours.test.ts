@@ -150,6 +150,53 @@ describe("ai-agent business hours", () => {
     expect(supabase.rpcCalls).toHaveLength(0);
   });
 
+  it("handles media-only inbound messages in the native path", async () => {
+    const supabase = createSupabaseMock();
+    queueBaseRows(supabase, null);
+    supabase.queue("messages", { data: null, error: null });
+    supabase.queue("agent_conversations", { data: null, error: null });
+    const provider = makeProvider();
+
+    const result = await tryEnqueueForNativeAgent({
+      supabase: supabase as never,
+      orgId: "org-a",
+      provider: provider as never,
+      requestId: "req-media",
+      msg: {
+        messageId: "wa-in-media",
+        phone: "+5511999999999",
+        pushName: "Ana",
+        text: null,
+        type: "image",
+        mediaUrl: "https://cdn.example.com/exame.jpg",
+        mediaMimeType: "image/jpeg",
+        isGroup: false,
+        isFromMe: false,
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      response: { status: "after_hours", handledBy: "ai_native_flow" },
+    });
+    expect(supabase.inserts.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: null,
+          media_url: "https://cdn.example.com/exame.jpg",
+          media_type: "image/jpeg",
+          type: "image",
+        }),
+      ]),
+    );
+    expect(provider.sendText).toHaveBeenCalledWith({
+      phone: "+5511999999999",
+      message: "Estamos fora do horario. Ja te respondo no proximo periodo.",
+    });
+    expect(supabase.rpcCalls).toHaveLength(0);
+  });
+
   it("stores the lead message but does not enqueue AI when the conversation is human-owned", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("organizations", {
