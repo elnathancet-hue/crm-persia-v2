@@ -1,9 +1,5 @@
 "use client";
 
-// Action node — ação determinística (sem passar pela IA). Entrada à
-// esquerda, saída "default" à direita. Mostra config inline (tag,
-// stage, template, etc) baseado em action_type.
-
 import * as React from "react";
 import { Handle, Position } from "@xyflow/react";
 import {
@@ -45,34 +41,50 @@ const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   round_robin_user: Shuffle,
 };
 
-function configPreview(actionType: FlowActionType, config: Record<string, unknown>): string {
+function configPreview(
+  actionType: FlowActionType,
+  config: Record<string, unknown>,
+  catalogs?: FlowCatalogs,
+): string {
   switch (actionType) {
     case "add_tag":
     case "remove_tag":
       return (config.tag_name as string) || "Sem tag selecionada";
     case "move_pipeline_stage":
       return (config.stage_name as string) || "Sem etapa selecionada";
-    case "create_appointment":
-      return (config.type_slug as string) || "Tipo: a IA decide no momento";
+    case "create_appointment": {
+      const typeSlug = (config.type_slug as string) || "";
+      const service = catalogs?.agenda_services.find((s) => s.slug === typeSlug);
+      return service
+        ? `${service.name} (${service.duration_minutes}min)`
+        : "Tipo: a IA decide no momento";
+    }
     case "trigger_notification":
       return (config.template_name as string) || "Sem template selecionado";
     case "send_media":
       return (config.slug as string) || "Sem mídia selecionada";
-    case "transfer_to_user":
-      return (config.user as string) || "Sem usuário selecionado";
+    case "transfer_to_user": {
+      const user = (config.user as string) || "";
+      const member = catalogs?.members.find(
+        (m) => m.email === user || m.user_id === user,
+      );
+      return member
+        ? member.name + (member.email ? ` (${member.email})` : "")
+        : user || "Sem usuário selecionado";
+    }
     case "transfer_to_agent":
       return (config.target_agent_name as string) || "Sem agente alvo";
     case "stop_agent":
       return "Encerra a sessão da IA";
     case "set_lead_custom_field": {
-      const fieldKey = (config.field_key as string) || "campo";
+      const fieldKey = (config.field_key as string) || "";
+      const field = catalogs?.custom_fields.find((f) => f.field_key === fieldKey);
       const value = (config.value as string) || "(vazio)";
-      return `${fieldKey} = ${value}`;
+      return `${field?.name ?? (fieldKey || "campo")} = ${value}`;
     }
     case "send_whatsapp_message": {
       const message = (config.message as string) || "";
       if (!message.trim()) return "Sem mensagem configurada";
-      // Mostra preview da 1ª linha truncada — sidebar do canvas é apertado.
       const firstLine = message.split("\n")[0] ?? "";
       return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
     }
@@ -83,9 +95,6 @@ function configPreview(actionType: FlowActionType, config: Record<string, unknow
   }
 }
 
-// PR 17 UX (mai/2026): detecta se a ação está incompleta (sem
-// tag/template/agenda escolhida) pra borda âmbar visível + msg
-// curta "Falta X" no node.
 function incompleteReasonFor(
   actionType: FlowActionType,
   config: Record<string, unknown>,
@@ -117,7 +126,6 @@ function incompleteReasonFor(
     case "send_whatsapp_message":
       if (!(config.message as string)?.trim()) return "Falta mensagem";
       return null;
-    // stop_agent / create_appointment / round_robin_user não exigem config inicial
     default:
       return null;
   }
@@ -126,14 +134,10 @@ function incompleteReasonFor(
 interface Props {
   data: FlowActionNode["data"];
   selected?: boolean;
-  /** PR 28: id pra consultar highlight do Tester. */
   id: string;
   onDelete?: () => void;
   onDuplicate?: () => void;
-  /** PR 21 (mai/2026): callback pra patchar `data` do node quando
-   * cliente edita inline. Recebe o novo data completo (não diff). */
   onPatch?: (data: Record<string, unknown>) => void;
-  /** PR 21: catálogos pra pickers do form inline. */
   catalogs?: FlowCatalogs;
   catalogsLoading?: boolean;
 }
@@ -150,12 +154,10 @@ export function ActionNodeView({
 }: Props) {
   const recentlyExecuted = useFlowTesterHighlight(id);
   const Icon = ACTION_ICONS[data.action_type] ?? Power;
-  const preview = configPreview(data.action_type, data.config);
+  const preview = configPreview(data.action_type, data.config, catalogs);
   const incompleteReason = incompleteReasonFor(data.action_type, data.config);
-  // PR 21: form inline aparece quando node está selecionado + callback
-  // de patch disponível + catálogos carregados.
   const expandedContent =
-    selected && onPatch && catalogs ? (
+    onPatch && catalogs ? (
       <InlineFormPanel
         nodeType="action"
         data={data as unknown as Record<string, unknown>}
@@ -164,6 +166,7 @@ export function ActionNodeView({
         catalogsLoading={catalogsLoading}
       />
     ) : null;
+
   return (
     <>
       <Handle

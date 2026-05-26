@@ -182,6 +182,8 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // renderizada. Forms inline dentro de cada node card.
   const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const [catalogsLoading, setCatalogsLoading] = React.useState(false);
+  const [catalogsLoaded, setCatalogsLoaded] = React.useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
   // PR 31 (mai/2026): visual feedback do drag-to-connect e drag-from-sidebar.
   //   - isConnecting: true enquanto cliente segura mouse num handle source
   //     e arrasta procurando target. CSS aplica pulse em todos handles
@@ -314,16 +316,9 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     setIsConnecting(false);
   }, []);
 
-  // -- Lazy load dos catálogos quando o usuário abre o primeiro node --
+  // -- Carrega catálogos cedo para cards e selects mostrarem nomes, não IDs.
   const ensureCatalogsLoaded = React.useCallback(async () => {
-    if (catalogsLoading) return;
-    if (
-      catalogs.tags.length > 0 ||
-      catalogs.pipeline_stages.length > 0 ||
-      catalogs.notification_templates.length > 0
-    ) {
-      return; // já carregado
-    }
+    if (catalogsLoading || catalogsLoaded) return;
     setCatalogsLoading(true);
     try {
       const next = await actions.getFlowCatalogs(configId);
@@ -336,9 +331,14 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         : raw;
       toast.error(userMessage);
     } finally {
+      setCatalogsLoaded(true);
       setCatalogsLoading(false);
     }
-  }, [actions, catalogs, catalogsLoading, configId]);
+  }, [actions, catalogsLoaded, catalogsLoading, configId]);
+
+  React.useEffect(() => {
+    if (!loading) void ensureCatalogsLoaded();
+  }, [ensureCatalogsLoaded, loading]);
 
   // PR 21 UX (mai/2026): click em node SÓ seleciona (sem abrir Sheet).
   // Forma inline aparece dentro do próprio card. Catálogos são
@@ -1054,7 +1054,11 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <FlowSidebar onAdd={handleSidebarAdd} />
+      <FlowSidebar
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
+        onAdd={handleSidebarAdd}
+      />
       <div
         ref={containerRef}
         data-persia-flow-container="true"

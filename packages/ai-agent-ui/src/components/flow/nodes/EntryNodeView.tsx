@@ -1,11 +1,5 @@
 "use client";
 
-// Entry node — ponto de partida do flow. 1 saída ("default") à direita.
-//
-// PR-FLOW-PIVOT PR 10 (mai/2026): 4 tipos de trigger. Ícone + preview
-// mudam por tipo. Triggers segment/pipeline_stage são "em construção"
-// (placeholder visual — runtime na próxima atualização).
-
 import * as React from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Hash, MessageSquare, TrendingUp, Users } from "lucide-react";
@@ -25,6 +19,7 @@ const TRIGGER_ICONS: Record<FlowEntryTrigger, typeof MessageSquare> = {
 function triggerPreview(
   trigger: FlowEntryTrigger,
   config: Record<string, unknown> | undefined,
+  catalogs?: FlowCatalogs,
 ): string {
   switch (trigger) {
     case "conversation_started":
@@ -40,23 +35,27 @@ function triggerPreview(
       const more = keywords.length > 3 ? ` +${keywords.length - 3}` : "";
       return `Palavras: ${preview}${more}`;
     }
-    case "segment_entered":
-      return "Quando entrar na segmentação (em breve).";
-    case "pipeline_stage_entered":
-      return "Quando entrar na etapa (em breve).";
+    case "segment_entered": {
+      const segmentId = (config?.segment_id as string | undefined) ?? "";
+      const segment = catalogs?.segments.find((s) => s.id === segmentId);
+      return segment
+        ? `Quando entrar em "${segment.name}".`
+        : "Selecione a segmentação alvo.";
+    }
+    case "pipeline_stage_entered": {
+      const stageId = (config?.stage_id as string | undefined) ?? "";
+      const stage = catalogs?.pipeline_stages.find((s) => s.id === stageId);
+      return stage
+        ? `Quando entrar em "${stage.name}".`
+        : "Selecione a etapa alvo.";
+    }
   }
 }
 
 interface Props {
   data: FlowEntryNode["data"];
   selected?: boolean;
-  /** PR 28: id pra consultar highlight do Tester. */
   id: string;
-  /** PR 29 fix (mai/2026): cliente reportou que entry não podia ser
-   * deletado — antes era intencional ("entry é único"), mas com PR 10
-   * múltiplos triggers convivem no flow, então faz sentido permitir.
-   * FlowCanvas pede confirmação via AlertDialog ao receber esse callback
-   * pra evitar delete acidental do único entry. */
   onDelete?: () => void;
   onPatch?: (data: Record<string, unknown>) => void;
   catalogs?: FlowCatalogs;
@@ -74,9 +73,9 @@ export function EntryNodeView({
 }: Props) {
   const recentlyExecuted = useFlowTesterHighlight(id);
   const Icon = TRIGGER_ICONS[data.trigger] ?? MessageSquare;
-  const preview = triggerPreview(data.trigger, data.config);
+  const preview = triggerPreview(data.trigger, data.config, catalogs);
   const expandedContent =
-    selected && onPatch && catalogs ? (
+    onPatch && catalogs ? (
       <InlineFormPanel
         nodeType="entry"
         data={data as unknown as Record<string, unknown>}
@@ -85,6 +84,7 @@ export function EntryNodeView({
         catalogsLoading={catalogsLoading}
       />
     ) : null;
+
   return (
     <>
       <NodeShell
