@@ -263,4 +263,101 @@ describe("ai-agent business hours", () => {
     expect(supabase.rpcCalls).toHaveLength(0);
     expect(provider.sendText).not.toHaveBeenCalled();
   });
+
+  it("resume keyword restores AI ownership for a human-owned conversation", async () => {
+    const supabase = createSupabaseMock();
+    supabase.queue("organizations", {
+      data: { settings: { features: { [NATIVE_AGENT_FEATURE_FLAG]: true } } },
+      error: null,
+    });
+    supabase.queue("agent_configs", {
+      data: {
+        id: "agent-a",
+        debounce_window_ms: 10000,
+        humanization_config: {
+          business_hours_enabled: false,
+          split_enabled: false,
+          resume_keywords: ["ATIVAR"],
+        },
+      },
+      error: null,
+    });
+    supabase.queue("messages", { data: null, error: null });
+    supabase.queue("leads", { data: { id: "lead-a" }, error: null });
+    supabase.queue("agent_configs", { data: [], error: null });
+    supabase.queue("conversations", {
+      data: { id: "conv-human", assigned_to: "user-1", status: "waiting_human" },
+      error: null,
+    });
+    supabase.queue("conversations", { data: null, error: null });
+    supabase.queue("messages", { data: { id: "msg-resume" }, error: null });
+    supabase.queue("agent_conversations", {
+      data: {
+        id: "agent-conv-human",
+        config_id: "agent-a",
+        current_node_id: null,
+        human_handoff_at: "2026-05-26T10:00:00.000Z",
+        after_hours_notified_at: null,
+        ai_control_epoch: 7,
+      },
+      error: null,
+    });
+    supabase.queue("agent_configs", {
+      data: {
+        id: "agent-a",
+        debounce_window_ms: 10000,
+        humanization_config: {
+          business_hours_enabled: false,
+          split_enabled: false,
+          resume_keywords: ["ATIVAR"],
+        },
+        new_lead_stage_id: null,
+      },
+      error: null,
+    });
+    supabase.queue("agent_flows", { data: null, error: null });
+
+    const result = await tryEnqueueForNativeAgent({
+      supabase: supabase as never,
+      orgId: "org-a",
+      provider: makeProvider() as never,
+      requestId: "req-resume",
+      msg: {
+        messageId: "wa-resume",
+        phone: "+5511999999999",
+        pushName: "Ana",
+        text: "ATIVAR",
+        type: "text",
+        isGroup: false,
+        isFromMe: false,
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      response: { status: "enqueued", conversationId: "conv-human" },
+    });
+    expect(supabase.updates.agent_conversations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          human_handoff_at: null,
+          human_handoff_reason: null,
+          ai_control_epoch: 8,
+        }),
+      ]),
+    );
+    expect(supabase.updates.conversations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ assigned_to: "ai", status: "active" }),
+      ]),
+    );
+    expect(supabase.rpcCalls[0]).toMatchObject({
+      fn: "enqueue_pending_message",
+      args: {
+        p_agent_conversation_id: "agent-conv-human",
+        p_text: "ATIVAR",
+      },
+    });
+  });
 });
