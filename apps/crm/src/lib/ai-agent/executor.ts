@@ -392,7 +392,7 @@ export async function tryEnqueueForNativeAgent(
       leadId,
       messageContent ?? inboundText,
     );
-    const agentConfigId = selectedAgent.id;
+    let agentConfigId = selectedAgent.id;
     const debounceWindowMs =
       selectedAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
     const humanization = normalizeHumanizationConfig(
@@ -528,17 +528,32 @@ export async function tryEnqueueForNativeAgent(
       };
     }
 
-    // 9. Ensure agent_conversation. Idempotente por (config_id, lead_id,
+    // 9. Ensure agent_conversation. Idempotente por (lead_id,
     // crm_conversation_id) — não temos UNIQUE constraint mas usamos
     // find-or-create.
+    //
+    // Bug J fix (mai/2026): routing stickiness. O find NÃO filtra por
+    // config_id — busca QUALQUER agent_conversations pra (lead, conv).
+    // Se existe row (lead já está conversando com algum agente nessa
+    // conversation), força stickiness: usa o config_id daquele row em
+    // vez do que pickAgentForLead retornou. Evita o bug do PR #339 onde
+    // msg #1 ia pro agente A e msg #2 (que casa regra do B) criava 2ª
+    // row em agent_conversations -> lead falando com 2 agentes em
+    // paralelo. Mudança de agente só acontece em conversation NOVA.
     let { data: agentConv } = await db
       .from("agent_conversations")
-      .select("id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
+      .select("id, config_id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
       .eq("organization_id", orgId)
-      .eq("config_id", agentConfigId)
       .eq("lead_id", leadId)
       .eq("crm_conversation_id", conversationId)
       .maybeSingle();
+    if (agentConv) {
+      const existingConfigId = (agentConv as { config_id?: string | null }).config_id;
+      if (existingConfigId && existingConfigId !== agentConfigId) {
+        // Override pra manter stickiness com o agente que iniciou a conv
+        agentConfigId = existingConfigId;
+      }
+    }
     if (!agentConv) {
       const { data: newAgentConv, error: agentConvErr } = await db
         .from("agent_conversations")
@@ -590,11 +605,31 @@ export async function tryEnqueueForNativeAgent(
     const matchPause = matchesPauseKeyword(messageContent ?? "", humanization);
 
     if (matchResume) {
+      // Bug J fix (mai/2026): resume keyword agora devolve controle real
+      // pra IA. Antes só limpava human_handoff_at, mas se operador tinha
+      // assumido manualmente via chat (assigned_to=userId, status="waiting_human"
+      // — setado por markConversationHumanOwnedAfterOperatorReply em
+      // actions/messages.ts:104), o send-guard rejeitava com
+      // "conversation_not_owned_by_ai" e IA ficava travada pra sempre.
+      //
+      // Fix: além de limpar handoff, também bumpa ai_control_epoch pra
+      // invalidar runs stale do humano + restaura assigned_to=ai +
+      // status=active no conversation. Isso casa com o que o botão manual
+      // "Retomar IA" no chat-window faz, mantendo paridade.
       await db
         .from("agent_conversations")
-        .update({ human_handoff_at: null, human_handoff_reason: null })
+        .update({
+          human_handoff_at: null,
+          human_handoff_reason: null,
+          ai_control_epoch: aiControlEpoch + 1,
+        })
         .eq("organization_id", orgId)
         .eq("id", agentConversationId);
+      await db
+        .from("conversations")
+        .update({ assigned_to: "ai", status: "active" })
+        .eq("organization_id", orgId)
+        .eq("id", conversationId);
     } else if (matchPause) {
       await db
         .from("agent_conversations")
