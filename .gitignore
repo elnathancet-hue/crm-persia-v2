@@ -39,3 +39,11 @@ apps/*/supabase/.temp/
 
 # Claude local
 .claude/
+
+# Codex local (worktrees + caches)
+.worktrees/
+.codex-worktrees/
+.pnpm-store/
+
+# Standalone experimental projects (não fazem parte do monorepo)
+kanban-studio/
