@@ -70,6 +70,7 @@ export function normalizeAgentInput(input: CreateAgentInput): CreateAgentInput {
     handoff_notification_target_address: handoff.target_address,
     handoff_notification_template: handoff.template,
     calendar_connection_id: input.calendar_connection_id ?? null,
+    new_lead_stage_id: input.new_lead_stage_id ?? null,
     // PR-FLOW-PIVOT hotfix (mai/2026): default 'flow' (único aceito pelo
     // CHECK constraint da migration 054). Preserva template_slug pro
     // wizard onboarding materializar nodes/edges via applyTemplate.
@@ -134,6 +135,9 @@ export function normalizeAgentPatch(
   }
   if (input.calendar_connection_id !== undefined) {
     patch.calendar_connection_id = input.calendar_connection_id;
+  }
+  if (input.new_lead_stage_id !== undefined) {
+    patch.new_lead_stage_id = input.new_lead_stage_id || null;
   }
   if (input.status !== undefined) patch.status = input.status;
   return patch;

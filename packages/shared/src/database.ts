@@ -326,6 +326,7 @@ export type Database = {
           id: string
           model: string
           name: string
+          new_lead_stage_id: string | null
           organization_id: string
           scope_id: string | null
           scope_type: string
@@ -349,6 +350,7 @@ export type Database = {
           id?: string
           model: string
           name: string
+          new_lead_stage_id?: string | null
           organization_id: string
           scope_id?: string | null
           scope_type?: string
@@ -372,6 +374,7 @@ export type Database = {
           id?: string
           model?: string
           name?: string
+          new_lead_stage_id?: string | null
           organization_id?: string
           scope_id?: string | null
           scope_type?: string
@@ -392,6 +395,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_configs_new_lead_stage_id_fkey"
+            columns: ["new_lead_stage_id"]
+            isOneToOne: false
+            referencedRelation: "pipeline_stages"
             referencedColumns: ["id"]
           },
         ]

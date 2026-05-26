@@ -40,6 +40,7 @@ import type {
   AgentCalendarConnectionPublic,
   AgentConfig,
   AgentGuardrails,
+  AgentKnowledgeSource,
   AgentTool,
   UpdateAgentInput,
 } from "@persia/shared/ai-agent";
@@ -73,6 +74,7 @@ import {
   type DayName,
 } from "@persia/shared/ai-agent";
 import { EntryConditionsCard } from "./EntryConditionsCard";
+import { DocumentsTab } from "./DocumentsTab";
 import { PromptBuilderSection } from "./PromptBuilderSection";
 import { UnsavedChangesGuard } from "./use-unsaved-changes-guard";
 import { useAgentActions } from "../context";
@@ -102,6 +104,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@persia/ui/tooltip";
+import type { FlowCatalogs } from "./flow/catalog-types";
 
 interface Props {
   agent: AgentConfig;
@@ -113,6 +116,9 @@ interface Props {
   // no-op aqui pra não quebrar o caller. Próximo PR remove a prop.
   tools: AgentTool[];
   onToolsChange: (next: AgentTool[]) => void;
+  knowledgeSources: AgentKnowledgeSource[];
+  onKnowledgeSourcesChange: (next: AgentKnowledgeSource[]) => void;
+  onKnowledgeRefresh: () => Promise<void>;
 }
 
 const DEBOUNCE_PRESETS = [
@@ -144,7 +150,11 @@ export function RulesTab({
   tools: _tools,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onToolsChange: _onToolsChange,
+  knowledgeSources,
+  onKnowledgeSourcesChange,
+  onKnowledgeRefresh,
 }: Props) {
+  const [name, setName] = React.useState(agent.name);
   const [prompt, setPrompt] = React.useState(agent.system_prompt);
   const [description, setDescription] = React.useState(agent.description ?? "");
   const [model, setModel] = React.useState(agent.model);
@@ -203,8 +213,15 @@ export function RulesTab({
   const [debounceWindowMs, setDebounceWindowMs] = React.useState<number>(
     clampDebounceWindowMs(agent.debounce_window_ms),
   );
+  const [newLeadStageId, setNewLeadStageId] = React.useState<string | null>(
+    agent.new_lead_stage_id ?? null,
+  );
+  const [pipelineStages, setPipelineStages] = React.useState<
+    FlowCatalogs["pipeline_stages"]
+  >([]);
+  const [catalogsLoaded, setCatalogsLoaded] = React.useState(false);
 
-  const { listCalendarConnections } = useAgentActions();
+  const { listCalendarConnections, getFlowCatalogs } = useAgentActions();
 
   // Load connections once. Re-runs only if agent.id changes (não quando
   // o user salva, porque a lista vive em outro escopo).
@@ -228,6 +245,29 @@ export function RulesTab({
   }, [listCalendarConnections]);
 
   React.useEffect(() => {
+    let cancelled = false;
+    getFlowCatalogs(agent.id)
+      .then((catalogs) => {
+        if (cancelled) return;
+        setPipelineStages(catalogs.pipeline_stages);
+        setCatalogsLoaded(true);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error(
+            err instanceof Error ? err.message : "Falha ao carregar etapas do CRM",
+          );
+          setPipelineStages([]);
+          setCatalogsLoaded(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.id, getFlowCatalogs]);
+
+  React.useEffect(() => {
+    setName(agent.name);
     setPrompt(agent.system_prompt);
     setDescription(agent.description ?? "");
     setModel(agent.model);
@@ -247,8 +287,10 @@ export function RulesTab({
     setBusinessHours(next.business_hours);
     setAfterHoursMessage(next.after_hours_message);
     setDebounceWindowMs(clampDebounceWindowMs(agent.debounce_window_ms));
+    setNewLeadStageId(agent.new_lead_stage_id ?? null);
   }, [
     agent.id,
+    agent.name,
     agent.system_prompt,
     agent.description,
     agent.model,
@@ -256,8 +298,10 @@ export function RulesTab({
     agent.calendar_connection_id,
     agent.humanization_config,
     agent.debounce_window_ms,
+    agent.new_lead_stage_id,
   ]);
 
+  const nameDirty = name.trim().length > 0 && name.trim() !== agent.name;
   const promptDirty = prompt !== agent.system_prompt;
   const descriptionDirty = description !== (agent.description ?? "");
   const modelDirty = model !== agent.model;
@@ -270,6 +314,8 @@ export function RulesTab({
     guardrails.allow_human_handoff !== agent.guardrails.allow_human_handoff;
   const calendarConnectionDirty =
     calendarConnectionId !== (agent.calendar_connection_id ?? null);
+  const newLeadStageDirty =
+    newLeadStageId !== (agent.new_lead_stage_id ?? null);
   const nextDebounceWindowMs = clampDebounceWindowMs(debounceWindowMs);
   const debounceDirty =
     nextDebounceWindowMs !== clampDebounceWindowMs(agent.debounce_window_ms);
@@ -312,10 +358,12 @@ export function RulesTab({
 
   const dirty =
     promptDirty ||
+    nameDirty ||
     descriptionDirty ||
     modelDirty ||
     guardrailsDirty ||
     calendarConnectionDirty ||
+    newLeadStageDirty ||
     debounceDirty ||
     humanizationDirty;
 
@@ -324,7 +372,7 @@ export function RulesTab({
   // pra cliente saber onde mexeu sem precisar abrir tudo.
   const decideDirty = modelDirty || guardrailsDirty;
   const converseDirty = humanizationDirty || debounceDirty;
-  const integrationsDirty = calendarConnectionDirty;
+  const integrationsDirty = calendarConnectionDirty || newLeadStageDirty;
 
   // PR 35 (mai/2026): accordion controlled — jump links abrem o
   // accordion correspondente quando o cliente clica num chip. Antes
@@ -352,12 +400,16 @@ export function RulesTab({
   // tenta sair com `dirty=true`.
   const handleSave = React.useCallback(() => {
     const patch: UpdateAgentInput = {};
+    if (nameDirty) patch.name = name.trim();
     if (promptDirty) patch.system_prompt = prompt;
     if (descriptionDirty) patch.description = description;
     if (modelDirty) patch.model = model;
     if (guardrailsDirty) patch.guardrails = guardrails;
     if (calendarConnectionDirty) {
       patch.calendar_connection_id = calendarConnectionId;
+    }
+    if (newLeadStageDirty) {
+      patch.new_lead_stage_id = newLeadStageId;
     }
     if (debounceDirty) {
       patch.debounce_window_ms = nextDebounceWindowMs;
@@ -381,16 +433,20 @@ export function RulesTab({
     onChange(patch, "Configurações salvas");
   }, [
     promptDirty,
+    nameDirty,
     descriptionDirty,
     modelDirty,
     guardrailsDirty,
     calendarConnectionDirty,
+    newLeadStageDirty,
     humanizationDirty,
     prompt,
+    name,
     description,
     model,
     guardrails,
     calendarConnectionId,
+    newLeadStageId,
     debounceDirty,
     nextDebounceWindowMs,
     nextPauseKeywords,
@@ -425,17 +481,26 @@ export function RulesTab({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Instruções do agente</CardTitle>
+          <CardTitle className="text-base">Configuração do agente</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="agent_name">Nome</Label>
+            <Input
+              id="agent_name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nomeie seu agente"
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
-            <Textarea
+            <Input
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Qual o papel desse agente?"
-              rows={2}
+              placeholder="Adicione uma breve descrição sobre o que faz esse agente"
             />
           </div>
           {/* PR 22 (mai/2026): prompt agora tem 2 modos de edição
@@ -447,6 +512,58 @@ export function RulesTab({
             onChange={setPrompt}
             agentId={agent.id}
           />
+
+          <section className="space-y-2 pt-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="new_lead_stage_id">
+                CRM inicial para contato novo
+              </Label>
+              <HelpTooltip>
+                Quando o WhatsApp criar um lead novo por este agente, ele ja
+                entra nessa etapa do Kanban. Se deixar vazio, fica no
+                comportamento padrao atual.
+              </HelpTooltip>
+            </div>
+            <Select
+              value={newLeadStageId ?? "_none"}
+              onValueChange={(value) =>
+                setNewLeadStageId(value === "_none" ? null : value)
+              }
+              disabled={!catalogsLoaded}
+            >
+              <SelectTrigger id="new_lead_stage_id">
+                <SelectValue>
+                  {newLeadStageId
+                    ? pipelineStages.find((stage) => stage.id === newLeadStageId)
+                        ?.name ?? "Etapa selecionada"
+                    : "Sem etapa inicial"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Sem etapa inicial</SelectItem>
+                {pipelineStages.map((stage) => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </section>
+
+          <section className="space-y-3 pt-4 border-t border-border">
+            <div>
+              <h3 className="text-sm font-semibold">Conhecimento</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Arquivos que o agente pode consultar durante a conversa.
+              </p>
+            </div>
+            <DocumentsTab
+              configId={agent.id}
+              sources={knowledgeSources}
+              onChange={onKnowledgeSourcesChange}
+              onRefresh={onKnowledgeRefresh}
+            />
+          </section>
         </CardContent>
       </Card>
 

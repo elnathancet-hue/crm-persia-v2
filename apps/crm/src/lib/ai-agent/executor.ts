@@ -89,6 +89,29 @@ function normalizeInboundMessageContent(msg: IncomingMessage): string | null {
   return null;
 }
 
+async function resolveAgentNewLeadStage(
+  db: AgentDb,
+  orgId: string,
+  stageId: string | null | undefined,
+): Promise<{ id: string; pipeline_id: string } | null> {
+  if (!stageId) return null;
+  const { data, error } = await db
+    .from("pipeline_stages")
+    .select("id, pipeline_id")
+    .eq("organization_id", orgId)
+    .eq("id", stageId)
+    .maybeSingle();
+  if (error || !data) {
+    logError("ai_agent_new_lead_stage_resolve_failed", {
+      organization_id: orgId,
+      stage_id: stageId,
+      error: error?.message ?? "stage_not_found",
+    });
+    return null;
+  }
+  return data as { id: string; pipeline_id: string };
+}
+
 function buildInboundTextForAgent(msg: IncomingMessage): string | null {
   const content = normalizeInboundMessageContent(msg);
   if (content) return content;
@@ -164,7 +187,7 @@ export async function tryEnqueueForNativeAgent(
   // 2. Resolve agent primário da org. Sem primary → cai pra legacy.
   const { data: primaryRow } = await db
     .from("agent_configs")
-    .select("id, debounce_window_ms, humanization_config")
+    .select("id, debounce_window_ms, humanization_config, new_lead_stage_id")
     .eq("organization_id", orgId)
     .eq("is_primary", true)
     .eq("status", "active")
@@ -181,6 +204,11 @@ export async function tryEnqueueForNativeAgent(
     DEBOUNCE_WINDOW_MS_DEFAULT;
   const humanization = normalizeHumanizationConfig(
     (primaryRow as { humanization_config?: unknown }).humanization_config,
+  );
+  const newLeadStage = await resolveAgentNewLeadStage(
+    db,
+    orgId,
+    (primaryRow as { new_lead_stage_id?: string | null }).new_lead_stage_id,
   );
   const inboundText = buildInboundTextForAgent(msg);
   const messageContent = normalizeInboundMessageContent(msg);
@@ -236,6 +264,8 @@ export async function tryEnqueueForNativeAgent(
           source: "whatsapp",
           status: "new",
           channel: "whatsapp",
+          pipeline_id: newLeadStage?.pipeline_id ?? null,
+          stage_id: newLeadStage?.id ?? null,
         })
         .select("id")
         .single();
