@@ -71,6 +71,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
     orgId,
     normalized.new_lead_stage_id,
   );
+  const shouldBePrimary = await shouldCreateAsPrimary(db, orgId);
 
   const { data, error } = await db
     .from("agent_configs")
@@ -93,6 +94,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       handoff_notification_template: normalized.handoff_notification_template ?? null,
       calendar_connection_id: normalized.calendar_connection_id ?? null,
       new_lead_stage_id: newLeadStageId,
+      is_primary: shouldBePrimary,
       // PR-FLOW-PIVOT (mai/2026): único valor aceito pelo CHECK
       // constraint da migration 054 é 'flow'. Fallback explícito
       // pra default seguro caso normalizeAgentInput regredisse.
@@ -253,6 +255,17 @@ export async function updateAgent(
   if (error || !data) throw new Error(error?.message || "Erro ao atualizar agente");
   for (const path of agentPaths(configId)) revalidatePath(path);
   return data as AgentConfig;
+}
+
+async function shouldCreateAsPrimary(db: AgentDb, orgId: string): Promise<boolean> {
+  const { data, error } = await db
+    .from("agent_configs")
+    .select("id")
+    .eq("organization_id", orgId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return !data;
 }
 
 async function resolveNewLeadStageId(
