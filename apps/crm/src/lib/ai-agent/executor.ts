@@ -519,24 +519,9 @@ export async function tryEnqueueForNativeAgent(
     }
     const inboundMessageId = (msgRow as { id: string }).id;
 
-    // Human takeover guard: keep the new lead message in the CRM history,
-    // but never spin up or resume the native AI runtime for human-owned chats.
-    if (conversation.assigned_to !== "ai" || conversation.status !== "active") {
-      return {
-        handled: true,
-        response: {
-          ok: true,
-          handledBy: "ai_native_flow",
-          leadId,
-          conversationId,
-          status: "human_owned_conversation",
-        },
-      };
-    }
-
-    // 9. Ensure agent_conversation. Idempotente por (lead_id,
+    // 9. Resolve agent_conversation. Idempotente por (lead_id,
     // crm_conversation_id) — não temos UNIQUE constraint mas usamos
-    // find-or-create.
+    // find-or-create, mas só depois do guard de human-owned abaixo.
     //
     // Bug J fix (mai/2026): routing stickiness. O find NÃO filtra por
     // config_id — busca QUALQUER agent_conversations pra (lead, conv).
@@ -561,6 +546,40 @@ export async function tryEnqueueForNativeAgent(
       }
     }
     const existingAgentConversation = Boolean(agentConv);
+
+    if (existingAgentConversation) {
+      const stickyAgent = await loadRoutingAgentById(db, orgId, agentConfigId);
+      if (stickyAgent) {
+        finalAgent = stickyAgent;
+      }
+    }
+
+    const debounceWindowMs =
+      finalAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
+    const humanization = normalizeHumanizationConfig(
+      finalAgent.humanization_config,
+    );
+    const matchResume = matchesResumeKeyword(messageContent ?? "", humanization);
+
+    // Human takeover guard: keep the new lead message in the CRM history.
+    // A resume keyword is the one allowed exception: it must pass through so
+    // the block below can restore `assigned_to=ai` and enqueue the AI turn.
+    if (
+      (conversation.assigned_to !== "ai" || conversation.status !== "active") &&
+      !(existingAgentConversation && matchResume)
+    ) {
+      return {
+        handled: true,
+        response: {
+          ok: true,
+          handledBy: "ai_native_flow",
+          leadId,
+          conversationId,
+          status: "human_owned_conversation",
+        },
+      };
+    }
+
     if (!agentConv) {
       const { data: newAgentConv, error: agentConvErr } = await db
         .from("agent_conversations")
@@ -591,19 +610,6 @@ export async function tryEnqueueForNativeAgent(
     }).after_hours_notified_at ?? null;
     const aiControlEpoch =
       (agentConv as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
-
-    if (existingAgentConversation) {
-      const stickyAgent = await loadRoutingAgentById(db, orgId, agentConfigId);
-      if (stickyAgent) {
-        finalAgent = stickyAgent;
-      }
-    }
-
-    const debounceWindowMs =
-      finalAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
-    const humanization = normalizeHumanizationConfig(
-      finalAgent.humanization_config,
-    );
 
     if (createdLead) {
       const finalNewLeadStage = await resolveAgentNewLeadStage(
@@ -639,7 +645,6 @@ export async function tryEnqueueForNativeAgent(
     // (essa rota só processa msgs do lead). Sem necessidade de detectar
     // "humano enviou msg" pra setar auto-pause — vai num PR futuro
     // (precisa hook em send-reply.ts).
-    const matchResume = matchesResumeKeyword(messageContent ?? "", humanization);
     const matchPause = matchesPauseKeyword(messageContent ?? "", humanization);
 
     if (matchResume) {
