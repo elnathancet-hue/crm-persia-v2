@@ -1,9 +1,5 @@
 "use client";
 
-// Condition node — verificação Sim/Não. Entrada à esquerda; 2 saídas
-// nomeadas à direita (top=yes verde, bottom=no vermelho). V1 do runtime
-// não executa (placeholder visual — PR 5 implementa).
-
 import * as React from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Filter } from "lucide-react";
@@ -16,7 +12,6 @@ import { useFlowTesterHighlight } from "../../flow-tester-context";
 interface Props {
   data: FlowConditionNode["data"];
   selected?: boolean;
-  /** PR 28: id pra consultar highlight do Tester. */
   id: string;
   onDelete?: () => void;
   onDuplicate?: () => void;
@@ -28,20 +23,30 @@ interface Props {
 function conditionPreview(
   type: FlowConditionNode["data"]["condition_type"],
   config: Record<string, unknown>,
+  catalogs?: FlowCatalogs,
 ): string {
   switch (type) {
     case "has_tag":
       return (config.tag_name as string) || "Sem tag selecionada";
-    case "lead_custom_field_equals":
-      return `${config.field_name || "campo"} = ${config.value || "valor"}`;
-    case "in_segment":
-      return (config.segment_id as string) || "Sem segmentação";
+    case "lead_custom_field_equals": {
+      const fieldName = (config.field_name as string) || "";
+      const field = catalogs?.custom_fields.find(
+        (f) => f.name === fieldName || f.field_key === fieldName,
+      );
+      return `${field?.name ?? (fieldName || "campo")} = ${
+        config.value || "valor"
+      }`;
+    }
+    case "in_segment": {
+      const segmentId = (config.segment_id as string) || "";
+      const segment = catalogs?.segments.find((s) => s.id === segmentId);
+      return segment?.name ?? "Sem segmentação";
+    }
     default:
       return "";
   }
 }
 
-// PR 17 UX (mai/2026): detecta config incompleta na verificação.
 function conditionIncompleteReason(
   type: FlowConditionNode["data"]["condition_type"],
   config: Record<string, unknown>,
@@ -77,7 +82,7 @@ export function ConditionNodeView({
     data.config,
   );
   const expandedContent =
-    selected && onPatch && catalogs ? (
+    onPatch && catalogs ? (
       <InlineFormPanel
         nodeType="condition"
         data={data as unknown as Record<string, unknown>}
@@ -86,6 +91,7 @@ export function ConditionNodeView({
         catalogsLoading={catalogsLoading}
       />
     ) : null;
+
   return (
     <>
       <Handle
@@ -108,7 +114,7 @@ export function ConditionNodeView({
         recentlyExecuted={recentlyExecuted}
       >
         <div className="line-clamp-2">
-          {conditionPreview(data.condition_type, data.config)}
+          {conditionPreview(data.condition_type, data.config, catalogs)}
         </div>
       </NodeShell>
       <Handle

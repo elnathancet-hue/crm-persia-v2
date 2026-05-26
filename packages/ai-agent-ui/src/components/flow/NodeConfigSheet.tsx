@@ -51,6 +51,13 @@ import { Textarea } from "@persia/ui/textarea";
 import type { FlowCatalogs } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 
+const ENTRY_TRIGGER_LABELS: Record<string, string> = {
+  conversation_started: "Em qualquer mensagem do lead",
+  keyword_match: "Quando lead mandar palavra-chave",
+  segment_entered: "Quando lead entrar em segmentação (em breve)",
+  pipeline_stage_entered: "Quando lead entrar em etapa do funil (em breve)",
+};
+
 interface NodeConfigSheetProps {
   node: FlowNode | null;
   open: boolean;
@@ -263,7 +270,9 @@ export function EntryForm({
         <Label htmlFor="entry-trigger">Quando o fluxo deve disparar?</Label>
         <Select value={trigger} onValueChange={setTrigger}>
           <SelectTrigger id="entry-trigger">
-            <SelectValue placeholder="Selecione um gatilho" />
+            <SelectValue placeholder="Selecione um gatilho">
+              {ENTRY_TRIGGER_LABELS[trigger] ?? "Selecione um gatilho"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="conversation_started">
@@ -882,6 +891,8 @@ function CatalogSelect({
   emptyLabel,
   placeholder,
 }: CatalogSelectProps) {
+  const selectedLabel = options.find((opt) => opt.value === value)?.label;
+
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
@@ -897,7 +908,9 @@ function CatalogSelect({
           onValueChange={(v) => onChange(v ?? "")}
         >
           <SelectTrigger>
-            <SelectValue placeholder={placeholder} />
+            <SelectValue placeholder={placeholder}>
+              {selectedLabel ?? placeholder}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {options.map((opt) => (

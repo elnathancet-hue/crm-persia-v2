@@ -54,7 +54,7 @@ export function AIAgentNodeView({
   //
   // PR 21 (mai/2026): form inline quando selected
   const expandedContent =
-    selected && onPatch && catalogs ? (
+    onPatch && catalogs ? (
       <InlineFormPanel
         nodeType="ai_agent"
         data={data as unknown as Record<string, unknown>}

@@ -106,10 +106,9 @@ export function NodeShell({
   // descrição em hover). State simples pra ativar no hover do botão.
   const [infoOpen, setInfoOpen] = React.useState(false);
   const hasToolbar = Boolean(onDelete || onDuplicate);
-  // PR 21 (mai/2026): node cresce quando selected E tem expandedContent
-  // (fields inline). Sem expandedContent, mantém compacto mesmo se
-  // selected (entry node, por ex).
-  const isExpanded = Boolean(selected && expandedContent);
+  // UX mai/2026: os cards ficam sempre completos no canvas. A seleção
+  // continua destacando o card, mas não controla mais abrir/fechar form.
+  const isExpanded = Boolean(expandedContent);
   const isWide = isExpanded && expandedLayout === "wide";
   return (
     <div

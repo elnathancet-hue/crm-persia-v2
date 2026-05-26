@@ -11,7 +11,14 @@
 // e instancia o node via `findSidebarItem(taskKey)`.
 
 import * as React from "react";
-import { ChevronDown, Layers, Plus, Search } from "lucide-react";
+import {
+  ChevronDown,
+  Layers,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  Search,
+} from "lucide-react";
 import { cn } from "@persia/ui/utils";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
@@ -31,7 +38,11 @@ interface FlowSidebarProps {
   onAdd?: (taskKey: string) => void;
 }
 
-export function FlowSidebar({ collapsed, onAdd }: FlowSidebarProps) {
+export function FlowSidebar({
+  collapsed,
+  onToggleCollapse,
+  onAdd,
+}: FlowSidebarProps) {
   const [search, setSearch] = React.useState("");
   const [openCats, setOpenCats] = React.useState<Set<string>>(
     () => new Set(FLOW_SIDEBAR_CATEGORIES.map((c) => c.id)),
@@ -59,14 +70,45 @@ export function FlowSidebar({ collapsed, onAdd }: FlowSidebarProps) {
     })).filter((c) => c.items.length > 0);
   }, [search]);
 
-  if (collapsed) return null;
+  if (collapsed) {
+    return (
+      <aside className="w-12 shrink-0 border-r border-border/60 bg-background flex flex-col items-center py-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={onToggleCollapse}
+          aria-label="Abrir biblioteca do fluxo"
+          title="Adicionar ao fluxo"
+        >
+          <PanelLeftOpen className="size-4" />
+        </Button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="w-[280px] shrink-0 border-r border-border/60 bg-background flex flex-col">
       <header className="p-3 border-b border-border/60 space-y-2">
-        <div className="flex items-center gap-2">
-          <Layers className="size-4 text-primary" />
-          <h2 className="text-sm font-semibold">Adicionar ao fluxo</h2>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Layers className="size-4 shrink-0 text-primary" />
+            <h2 className="truncate text-sm font-semibold">
+              Adicionar ao fluxo
+            </h2>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            onClick={onToggleCollapse}
+            aria-label="Minimizar biblioteca do fluxo"
+            title="Minimizar"
+          >
+            <PanelLeftClose className="size-3.5" />
+          </Button>
         </div>
         <p className="text-xs text-muted-foreground">
           Clique no <Plus className="inline size-3 align-middle" /> ou arraste
