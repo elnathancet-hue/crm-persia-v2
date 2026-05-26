@@ -25,6 +25,14 @@ jobs:
           node-version: 20
 
       - name: Setup pnpm
+        # Bug CI fix (mai/2026): substituido pnpm/action-setup por
+        # corepack (built-in do Node) — elimina dependencia externa que
+        # ficou quebrada quando v4 do pnpm/action-setup foi force-pushed
+        # e o SHA cacheado (b906affc) foi GC'd do codeload.github.com.
+        # Esta abordagem (corepack) é mais robusta porque nao depende
+        # de SHA externo sujeito a force-push.
+        # Alternativa avaliada: pnpm/action-setup@<SHA full> v6.0.8.
+        # Optamos por corepack porque elimina o vetor de problema na raiz.
         run: |
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
