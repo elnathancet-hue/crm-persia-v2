@@ -19,24 +19,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        # Bug CI fix (mai/2026): @v4 resolveu pra SHA b906affc que foi
-        # GC'd no codeload.github.com — CI passou a falhar com 404 na
-        # "Set up job" step. Não foi mudança no nosso repo — os
-        # mantenedores do pnpm/action-setup force-pushed a tag v4 ou
-        # promoveram pra v6. Pinado pra v6.0.8 (SHA full
-        # d15e628ca66d93ee5f352c71671a7bc6a97af5c9) pra ficar imune a
-        # force-push futuro.
-        # Ref: https://github.com/pnpm/action-setup/releases/tag/v6.0.8
-        uses: pnpm/action-setup@d15e628ca66d93ee5f352c71671a7bc6a97af5c9 # v6.0.8
-        with:
-          version: 10.33.0
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+
+      - name: Setup pnpm
+        # Bug CI fix (mai/2026): substituido pnpm/action-setup por
+        # corepack (built-in do Node) — elimina dependencia externa que
+        # ficou quebrada quando v4 do pnpm/action-setup foi force-pushed
+        # e o SHA cacheado (b906affc) foi GC'd do codeload.github.com.
+        # Esta abordagem (corepack) é mais robusta porque nao depende
+        # de SHA externo sujeito a force-push.
+        # Alternativa avaliada: pnpm/action-setup@<SHA full> v6.0.8.
+        # Optamos por corepack porque elimina o vetor de problema na raiz.
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

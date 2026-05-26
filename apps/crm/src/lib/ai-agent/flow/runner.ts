@@ -252,13 +252,14 @@ async function executeAIAgentNode(
   const client = getOpenAIClient();
   const model = node.data.model ?? agentConfig.model;
 
-  // Montagem do system prompt: agent base + node-specific prompt +
-  // instructions textuais com handles nomeados (cliente cadastra no
-  // canvas). PR-FLOW-PIVOT PR 7 (mai/2026): listamos eventos como
+  // Montagem do system prompt: node-specific prompt + instructions +
+  // agent base. O prompt geral do agente vem por ultimo de proposito:
+  // ele e a fonte editavel em Configuracoes para persona/regras globais
+  // e deve prevalecer sobre prompts locais antigos gravados no Fluxo.
+  // PR-FLOW-PIVOT PR 7 (mai/2026): listamos eventos como
   // "EVENTS TO EMIT" pra IA saber EXATAMENTE quais handles usar com
   // a tool emit_event(handle_name).
   const systemParts: string[] = [];
-  if (agentConfig.system_prompt.trim()) systemParts.push(agentConfig.system_prompt.trim());
   if (node.data.system_prompt.trim()) systemParts.push(node.data.system_prompt.trim());
   if (node.data.instructions.length > 0) {
     const list = node.data.instructions
@@ -270,6 +271,7 @@ async function executeAIAgentNode(
       `EVENTS TO EMIT (call emit_event with the matching handle when the condition is met):\n${list}`,
     );
   }
+  if (agentConfig.system_prompt.trim()) systemParts.push(agentConfig.system_prompt.trim());
   // Bug D fix (mai/2026): warning explícito pra evitar vazamento de
   // tool call como texto. Modelos novos (gpt-5*, gpt-4o*) às vezes
   // retornam `tool_calls` E `content` no mesmo turno — o content
