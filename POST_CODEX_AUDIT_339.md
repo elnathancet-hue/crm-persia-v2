@@ -467,3 +467,5 @@ manutenção justificar.
 
 **Documento gerado em:** 22/mai/2026 — sessão Claude pós ciclo de
 hardening do PR #339.
+
+<!-- test commit (2026-05-23) — sanity check após CI 403. Remover na próxima limpeza. -->
