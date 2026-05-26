@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -55,6 +56,7 @@ interface Props {
 
 export function AgentsList({ initialAgents, nativeEnabled }: Props) {
   const { createAgent, deleteAgent, setNativeAgentEnabled, setPrimaryAgent } = useAgentActions();
+  const router = useRouter();
   const [agents, setAgents] = React.useState(initialAgents);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [deleteTarget, setDeleteTarget] = React.useState<AgentConfig | null>(null);
@@ -101,6 +103,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
             ? "Agente criado"
             : "Agente criado com flow pré-configurado",
         );
+        router.push(`/automations/agents/${created.id}`);
       } catch (err) {
         toast.error(
           err instanceof Error ? err.message : "Falha ao criar agente",
@@ -179,10 +182,9 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
             >
               {isPending ? (
                 <Loader2 className="size-3.5 animate-spin" />
-              ) : enabled ? (
-                "Desativar"
               ) : (
-                "Ativar"
+                statusBanner.toggleLabel ??
+                (enabled ? "Desativar recurso" : "Ativar recurso")
               )}
             </Button>
           ) : null}
@@ -255,6 +257,7 @@ interface StatusBanner {
   iconClass: string;
   containerClass: string;
   showToggle: boolean;
+  toggleLabel?: string;
 }
 
 function computeStatusBanner(params: {
@@ -265,70 +268,65 @@ function computeStatusBanner(params: {
 }): StatusBanner {
   const { enabled, agentsCount, activeCount, hasPrimary } = params;
 
-  // 1. Recurso desligado pela org
   if (!enabled) {
     return {
       title: "Agente IA desativado",
       description:
-        "Você pode configurar agentes agora, mas eles só respondem mensagens quando o recurso é ativado pra organização.",
+        "Você pode configurar agentes agora. Eles só respondem mensagens quando o recurso da organização estiver ativo.",
       Icon: PowerOff,
       iconClass: "text-muted-foreground",
       containerClass: "border-border bg-muted/30",
       showToggle: true,
+      toggleLabel: "Ativar recurso",
     };
   }
 
-  // 2. Ativo mas sem agentes
   if (agentsCount === 0) {
     return {
       title: "Pronto pra criar seu primeiro agente",
       description:
-        "Recurso ativo na organização. Falta criar um agente — ele só responde leads quando estiver ativo + marcado como principal.",
+        "Recurso ativo na organização. Crie um agente, revise e ative quando estiver pronto.",
       Icon: Sparkles,
       iconClass: "text-muted-foreground",
       containerClass: "border-border bg-card",
-      showToggle: true,
+      showToggle: false,
     };
   }
 
-  // 3. Tem agente(s) mas nenhum ativo
   if (activeCount === 0) {
     return {
       title: "Nenhum agente ativo",
       description:
-        "Você tem agentes em rascunho. Ative um deles + defina como principal pra começar a responder conversas.",
+        "Você tem agentes em rascunho. Abra a configuração de um deles e clique em Ativar agente para publicar.",
       Icon: AlertTriangle,
       iconClass: "text-warning",
       containerClass: "border-warning-ring bg-warning-soft/50",
-      showToggle: true,
+      showToggle: false,
     };
   }
 
-  // 4. Tem ativo mas nenhum principal
   if (!hasPrimary) {
     return {
       title: "Defina o agente principal",
       description:
-        "Você tem agente ativo, mas ainda não escolheu o principal — sem isso ninguém atende novas conversas. Clique em \"Definir como principal\" no card abaixo.",
+        "Você tem agente ativo, mas ainda não escolheu o principal. Use essa opção quando houver mais de um agente.",
       Icon: AlertTriangle,
       iconClass: "text-warning",
       containerClass: "border-warning-ring bg-warning-soft/50",
-      showToggle: true,
+      showToggle: false,
     };
   }
 
-  // 5. Tudo pronto
   return {
     title: "Agente respondendo conversas",
     description:
-      "Agente principal ativo. Novas conversas são atendidas automaticamente. Pause ou troque o principal pelos cards abaixo.",
+      "Agente principal ativo. Novas conversas são atendidas automaticamente.",
     Icon: CheckCircle2,
     iconClass: "text-success",
     containerClass: "border-success-ring bg-success-soft/50",
-    showToggle: true,
+    showToggle: false,
   };
 }
-
 function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <Card className="border-dashed">

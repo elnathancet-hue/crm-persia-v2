@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Circle,
   Clock,
-  Crown,
   FlaskConical,
   History,
   ListOrdered,
@@ -397,6 +396,9 @@ export function AgentEditor({
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-medium text-muted-foreground">
+              Status do agente
+            </span>
             <Select
               value={agent.status}
               onValueChange={(v) => v && handleStatusChange(v as AgentStatus)}
@@ -419,7 +421,6 @@ export function AgentEditor({
       <PublishingChecklist
         agent={agent}
         onActivate={() => handleStatusChange("active")}
-        onOpenFlow={() => handleSelect("stages")}
         isPending={isPending}
       />
 
@@ -532,29 +533,25 @@ function statusLabel(status: AgentStatus): string {
 function PublishingChecklist({
   agent,
   onActivate,
-  onOpenFlow,
   isPending,
 }: {
   agent: AgentConfig;
   onActivate: () => void;
-  onOpenFlow: () => void;
   isPending: boolean;
 }) {
   const isActive = agent.status === "active";
   const isPrimary = Boolean(agent.is_primary);
-  const allReady = isActive && isPrimary;
 
-  if (allReady) {
+  if (isActive) {
     return (
       <div className="-mx-6 px-6 py-2 bg-success-soft/40 border-b border-success-ring/30">
         <div className="flex items-center gap-2 text-xs">
           <CheckCircle2 className="size-4 text-success" />
-          <span className="font-medium text-foreground">
-            Pronto pra responder conversas.
-          </span>
+          <span className="font-medium text-foreground">Agente publicado.</span>
           <span className="text-muted-foreground">
-            Esse agente recebe novas mensagens automaticamente. Pra parar,
-            mude o status pra Pausado ou troque o agente principal.
+            {isPrimary
+              ? "Como principal, ele responde novas conversas automaticamente."
+              : "Como secundário, ele participa quando uma entrada configurada bater."}
           </span>
         </div>
       </div>
@@ -565,43 +562,23 @@ function PublishingChecklist({
     <div className="-mx-6 px-6 py-3 bg-muted/30 border-b border-border/60">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xs font-semibold text-muted-foreground">
-          Pra publicar, falta:
+          Para publicar:
         </span>
         <ChecklistChip
-          done={isActive}
+          done={false}
           icon={PlayCircle}
-          label={isActive ? "Agente ativo" : "Ativar agente"}
-          actionLabel={!isActive ? "Ativar" : undefined}
-          onAction={!isActive ? onActivate : undefined}
+          label="Ativar agente"
+          actionLabel="Ativar"
+          onAction={onActivate}
           isPending={isPending}
         />
-        <ChecklistChip
-          done={isPrimary}
-          icon={Crown}
-          label={
-            isPrimary
-              ? "Marcado como principal"
-              : isActive
-                ? "Marcar como principal"
-                : "Marcar como principal (após ativar)"
-          }
-          // Sem ação direta — usuário define como principal pela lista
-          // (link explícito em vez de duplicar a action aqui).
-        />
-        <ChecklistChip
-          done={false} // V1 não inspeciona flow — sempre mostra "Revisar"
-          icon={ListOrdered}
-          label="Revisar fluxo"
-          actionLabel="Abrir"
-          onAction={onOpenFlow}
-          isPending={isPending}
-          mode="info"
-        />
+        <span className="text-xs text-muted-foreground">
+          Fluxo e entradas podem ser ajustados depois.
+        </span>
       </div>
     </div>
   );
 }
-
 function ChecklistChip({
   done,
   icon: Icon,
