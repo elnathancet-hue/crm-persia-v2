@@ -506,7 +506,7 @@ export function RulesTab({
        help tooltips (ícone ?) em campos técnicos. delay=200ms pra
        não disparar em hover acidental. */
     <TooltipProvider delay={200}>
-    <div className="space-y-5 pb-20">
+    <div className="space-y-5 pb-6">
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
       {/* PR 27 (mai/2026): guard pra "este projeto não foi salvo,
           deseja sair?" Combina beforeunload nativo (fechar aba/reload)
@@ -516,10 +516,32 @@ export function RulesTab({
       <UnsavedChangesGuard dirty={dirty} />
 
       <Card className="shadow-sm">
-        <CardHeader>
+        <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base">Configuração do agente</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            {dirty ? (
+              <span className="text-xs font-medium text-progress">
+                Alterações não salvas
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">Tudo salvo</span>
+            )}
+            <Button
+              onClick={handleSave}
+              disabled={!dirty || isPending}
+              size="sm"
+            >
+              <Save className="size-3.5" />
+              Salvar
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <EntryConditionsCard
+            configId={agent.id}
+            isPrimary={agent.is_primary !== false}
+          />
+
           <div className="space-y-2">
             <Label htmlFor="agent_name">Nome</Label>
             <Input
@@ -550,11 +572,6 @@ export function RulesTab({
           />
 
           <section className="space-y-3 pt-2">
-            <EntryConditionsCard
-              configId={agent.id}
-              isPrimary={agent.is_primary !== false}
-            />
-
             <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
               <div className="flex items-center gap-2">
                 <Label htmlFor="new_lead_stage_id">
@@ -1245,10 +1262,6 @@ export function RulesTab({
           </AccordionItem>
         </Accordion>
 
-        {/* PR 34 (mai/2026): botão "Salvar alterações" SAIU daqui —
-            agora vive numa sticky bar no rodapé do RulesTab. Sempre
-            visível, sem rolar pra achar. Mantém a lógica de PR 27
-            (manual, não auto-save) — só mudou de lugar. */}
       </div>
     </div>
 
@@ -1260,25 +1273,6 @@ export function RulesTab({
         z-20 < z-40 do FAB Tester → FAB sobrepõe canto direito
         da bar (esperado, FAB é menor).
         ──────────────────────────────────────────────────────── */}
-    <div className="sticky bottom-0 -mx-6 px-6 py-3 bg-background/95 backdrop-blur-sm border-t border-border flex items-center justify-end gap-3 z-20">
-      {dirty ? (
-        <span className="text-xs font-medium text-progress">
-          Alterações não salvas
-        </span>
-      ) : (
-        <span className="text-xs text-muted-foreground">
-          Tudo salvo
-        </span>
-      )}
-      <Button
-        onClick={handleSave}
-        disabled={!dirty || isPending}
-        size="sm"
-      >
-        <Save className="size-3.5" />
-        Salvar alterações
-      </Button>
-    </div>
     </div>
     </TooltipProvider>
   );
