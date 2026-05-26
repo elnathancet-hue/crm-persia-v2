@@ -41,9 +41,12 @@ import {
   matchesPauseKeyword,
   matchesResumeKeyword,
   normalizeHumanizationConfig,
+  pickSecondaryAgent,
   shouldSendAfterHoursMessage,
   shouldTriggerFlowFromInbound,
+  type AgentEntryCondition,
   type DebounceFlushBatch,
+  type LeadStateForRouting,
   type OrganizationSettings,
 } from "@persia/shared/ai-agent";
 import { errorMessage, logError } from "@/lib/observability";
@@ -110,6 +113,101 @@ async function resolveAgentNewLeadStage(
     return null;
   }
   return data as { id: string; pipeline_id: string };
+}
+
+interface RoutingAgentRow {
+  id: string;
+  debounce_window_ms?: number | null;
+  humanization_config?: unknown;
+  new_lead_stage_id?: string | null;
+}
+
+async function loadLeadStateForRouting(
+  db: AgentDb,
+  orgId: string,
+  leadId: string,
+): Promise<LeadStateForRouting> {
+  const { data: leadRow } = await db
+    .from("leads")
+    .select("status, stage_id")
+    .eq("organization_id", orgId)
+    .eq("id", leadId)
+    .maybeSingle();
+
+  const { data: tagRows } = await db
+    .from("lead_tags")
+    .select("tags(name)")
+    .eq("organization_id", orgId)
+    .eq("lead_id", leadId);
+
+  const { data: segmentRows } = await (db as unknown as {
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          eq: (column: string, value: string) => Promise<{
+            data: Array<{ segment_id: string }> | null;
+          }>;
+        };
+      };
+    };
+  })
+    .from("segment_memberships")
+    .select("segment_id")
+    .eq("organization_id", orgId)
+    .eq("lead_id", leadId);
+
+  return {
+    tags: ((tagRows ?? []) as Array<{ tags?: { name?: string | null } | null }>)
+      .map((row) => row.tags?.name?.trim().toLowerCase())
+      .filter((tag): tag is string => Boolean(tag)),
+    segment_ids: (segmentRows ?? []).map((row) => row.segment_id),
+    pipeline_stage_id:
+      (leadRow as { stage_id?: string | null } | null)?.stage_id ?? null,
+    status: (leadRow as { status?: string | null } | null)?.status ?? null,
+  };
+}
+
+async function pickAgentForLead(
+  db: AgentDb,
+  orgId: string,
+  primary: RoutingAgentRow,
+  leadId: string,
+  messageText: string,
+): Promise<RoutingAgentRow> {
+  const { data: secondaryRows } = await db
+    .from("agent_configs")
+    .select("id, debounce_window_ms, humanization_config, new_lead_stage_id")
+    .eq("organization_id", orgId)
+    .eq("status", "active")
+    .eq("is_primary", false);
+
+  const secondaryAgents = (secondaryRows ?? []) as RoutingAgentRow[];
+  if (secondaryAgents.length === 0) return primary;
+
+  const { data: conditionRows } = await db
+    .from("agent_entry_conditions")
+    .select("agent_config_id, condition_type, condition_value, priority, created_at")
+    .eq("organization_id", orgId)
+    .in("agent_config_id", secondaryAgents.map((agent) => agent.id));
+
+  const conditionsByAgent = new Map<string, AgentEntryCondition[]>();
+  for (const row of (conditionRows ?? []) as AgentEntryCondition[]) {
+    const list = conditionsByAgent.get(row.agent_config_id) ?? [];
+    list.push(row);
+    conditionsByAgent.set(row.agent_config_id, list);
+  }
+
+  const leadState = await loadLeadStateForRouting(db, orgId, leadId);
+  const selected = pickSecondaryAgent(
+    secondaryAgents.map((agent) => ({
+      agent,
+      conditions: conditionsByAgent.get(agent.id) ?? [],
+    })),
+    leadState,
+    messageText,
+  );
+
+  return selected ?? primary;
 }
 
 function buildInboundTextForAgent(msg: IncomingMessage): string | null {
@@ -198,17 +296,11 @@ export async function tryEnqueueForNativeAgent(
       response: { ok: false, skipped: "no_primary_agent" },
     };
   }
-  const agentConfigId = (primaryRow as { id: string }).id;
-  const debounceWindowMs =
-    (primaryRow as { debounce_window_ms?: number | null }).debounce_window_ms ??
-    DEBOUNCE_WINDOW_MS_DEFAULT;
-  const humanization = normalizeHumanizationConfig(
-    (primaryRow as { humanization_config?: unknown }).humanization_config,
-  );
+  const primaryAgent = primaryRow as RoutingAgentRow;
   const newLeadStage = await resolveAgentNewLeadStage(
     db,
     orgId,
-    (primaryRow as { new_lead_stage_id?: string | null }).new_lead_stage_id,
+    primaryAgent.new_lead_stage_id,
   );
   const inboundText = buildInboundTextForAgent(msg);
   const messageContent = normalizeInboundMessageContent(msg);
@@ -293,6 +385,19 @@ export async function tryEnqueueForNativeAgent(
       })();
     }
     const leadId = (lead as { id: string }).id;
+    const selectedAgent = await pickAgentForLead(
+      db,
+      orgId,
+      primaryAgent,
+      leadId,
+      messageContent ?? inboundText,
+    );
+    const agentConfigId = selectedAgent.id;
+    const debounceWindowMs =
+      selectedAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
+    const humanization = normalizeHumanizationConfig(
+      selectedAgent.humanization_config,
+    );
 
     // 7. Find/create conversation com assigned_to=ai (sinaliza pro
     // chat-window que a IA está no controle).

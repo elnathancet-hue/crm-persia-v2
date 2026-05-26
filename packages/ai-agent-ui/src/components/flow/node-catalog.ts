@@ -352,7 +352,6 @@ export const FLOW_SIDEBAR_CATEGORIES: ReadonlyArray<{
   label: string;
   items: ReadonlyArray<FlowSidebarItem>;
 }> = [
-  { id: "entrada", label: "Entrada", items: ENTRY_ITEMS },
   {
     id: "atendimento",
     label: "Atendimento",
@@ -367,6 +366,8 @@ export const FLOW_SIDEBAR_CATEGORIES: ReadonlyArray<{
 ];
 
 export function findSidebarItem(taskKey: string): FlowSidebarItem | null {
+  const entry = ENTRY_ITEMS.find((i) => i.task_key === taskKey);
+  if (entry) return entry;
   for (const cat of FLOW_SIDEBAR_CATEGORIES) {
     const found = cat.items.find((i) => i.task_key === taskKey);
     if (found) return found;

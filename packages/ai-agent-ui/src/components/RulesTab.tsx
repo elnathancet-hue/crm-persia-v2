@@ -513,41 +513,48 @@ export function RulesTab({
             agentId={agent.id}
           />
 
-          <section className="space-y-2 pt-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="new_lead_stage_id">
-                CRM inicial para contato novo
-              </Label>
-              <HelpTooltip>
-                Quando o WhatsApp criar um lead novo por este agente, ele ja
-                entra nessa etapa do Kanban. Se deixar vazio, fica no
-                comportamento padrao atual.
-              </HelpTooltip>
+          <section className="space-y-3 pt-2">
+            <EntryConditionsCard
+              configId={agent.id}
+              isPrimary={agent.is_primary !== false}
+            />
+
+            <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="new_lead_stage_id">
+                  CRM inicial para contato novo
+                </Label>
+                <HelpTooltip>
+                  Quando o WhatsApp criar um lead novo por este agente, ele ja
+                  entra nessa etapa do Kanban. Se deixar vazio, fica no
+                  comportamento padrao atual.
+                </HelpTooltip>
+              </div>
+              <Select
+                value={newLeadStageId ?? "_none"}
+                onValueChange={(value) =>
+                  setNewLeadStageId(value === "_none" ? null : value)
+                }
+                disabled={!catalogsLoaded}
+              >
+                <SelectTrigger id="new_lead_stage_id">
+                  <SelectValue>
+                    {newLeadStageId
+                      ? pipelineStages.find((stage) => stage.id === newLeadStageId)
+                          ?.name ?? "Etapa selecionada"
+                      : "Sem etapa inicial"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">Sem etapa inicial</SelectItem>
+                  {pipelineStages.map((stage) => (
+                    <SelectItem key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select
-              value={newLeadStageId ?? "_none"}
-              onValueChange={(value) =>
-                setNewLeadStageId(value === "_none" ? null : value)
-              }
-              disabled={!catalogsLoaded}
-            >
-              <SelectTrigger id="new_lead_stage_id">
-                <SelectValue>
-                  {newLeadStageId
-                    ? pipelineStages.find((stage) => stage.id === newLeadStageId)
-                        ?.name ?? "Etapa selecionada"
-                    : "Sem etapa inicial"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">Sem etapa inicial</SelectItem>
-                {pipelineStages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    {stage.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </section>
 
           <section className="space-y-3 pt-4 border-t border-border">
@@ -577,10 +584,6 @@ export function RulesTab({
             condicional (só não-principais) e é específico/crítico
             (decide se agente recebe leads ou não), então merece
             destaque próprio. */}
-        {agent.is_primary === false ? (
-          <EntryConditionsCard configId={agent.id} />
-        ) : null}
-
         {/* PR 33 (mai/2026): 6 cards soltos viraram 3 accordions
             agrupados por intenção. Reduz densidade visual ~70% e dá
             hierarquia (decisão > conversação > integrações). Cliente
