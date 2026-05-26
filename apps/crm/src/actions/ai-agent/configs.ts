@@ -479,6 +479,9 @@ async function applyTemplate(
     }
   }
 
+  // Keep default AI node prompt empty: template.system_prompt is already
+  // stored in agent_configs.system_prompt. Duplicating it here makes later
+  // Configuracoes edits look ignored because the Flow node keeps a stale copy.
   const flowConfig = template.flow_config ?? {
     nodes: [
       {
@@ -496,7 +499,7 @@ async function applyTemplate(
         position: { x: 280, y: 0 },
         data: {
           label: template.label,
-          system_prompt: template.system_prompt,
+          system_prompt: "",
           instructions: [],
         },
       },

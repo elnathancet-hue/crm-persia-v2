@@ -13,8 +13,8 @@
 // pickers ficarem necessários.
 
 import { asAgentDb } from "@/lib/ai-agent/db";
-import { listTags, listStagesForOrg } from "@persia/shared/crm";
-import type { Stage, Tag } from "@persia/shared/crm";
+import { listPipelines, listTags, listStagesForOrg } from "@persia/shared/crm";
+import type { Pipeline, Stage, Tag } from "@persia/shared/crm";
 import type {
   FlowCatalogs,
   FlowCatalogAgent,
@@ -43,6 +43,7 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
   // não derruba os outros.
   const [
     tagsRes,
+    pipelinesRes,
     stagesRes,
     templatesRes,
     agendaRes,
@@ -52,6 +53,7 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
     customFieldsRes,
   ] = await Promise.allSettled([
     listTags(ctx, { orderBy: "name" }),
+    listPipelines(ctx),
     listStagesForOrg(ctx),
     db
       .from("agent_notification_templates")
@@ -88,6 +90,12 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
       .order("sort_order", { ascending: true }),
   ]);
 
+  const pipelinesById = new Map(
+    pipelinesRes.status === "fulfilled"
+      ? (pipelinesRes.value as Pipeline[]).map((p) => [p.id, p.name])
+      : [],
+  );
+
   return {
     tags:
       tagsRes.status === "fulfilled"
@@ -103,9 +111,7 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
             id: s.id,
             name: s.name,
             pipeline_id: s.pipeline_id,
-            // pipeline_name é resolvido client-side se necessário —
-            // V1 mostra só o nome da stage no select.
-            pipeline_name: "",
+            pipeline_name: pipelinesById.get(s.pipeline_id) ?? "",
           }))
         : [],
     notification_templates:

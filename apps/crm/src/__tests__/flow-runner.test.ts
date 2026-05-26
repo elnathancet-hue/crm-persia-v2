@@ -13,7 +13,7 @@
 // fica pra integration test posterior. Núcleo do dispatcher é coberto
 // indiretamente nos handlers nativos (ai-agent-*.test.ts).
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FlowConfig, FlowEntryNode } from "@persia/shared/ai-agent";
 import { shouldTriggerFlowFromInbound } from "@persia/shared/ai-agent";
 
@@ -21,6 +21,18 @@ import { shouldTriggerFlowFromInbound } from "@persia/shared/ai-agent";
 // (pause-agent, notifications). Stub global pra rodar em ambiente Node
 // puro — testamos só o runner, não os handlers (cobertos em outros tests).
 vi.mock("server-only", () => ({}));
+
+const openAiCreateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("openai", () => ({
+  default: vi.fn(() => ({
+    chat: {
+      completions: {
+        create: openAiCreateMock,
+      },
+    },
+  })),
+}));
 
 import { runFlow } from "@/lib/ai-agent/flow/runner";
 import { createTesterProvider } from "@/lib/ai-agent/flow/tester-provider";
@@ -82,6 +94,11 @@ const dbStub = {
 } as any;
 
 describe("flow-runner", () => {
+  beforeEach(() => {
+    openAiCreateMock.mockReset();
+    process.env.OPENAI_API_KEY = "test-key";
+  });
+
   it("retorna fatal_error quando flow não tem entry node", async () => {
     const flow = makeLoadedFlow(makeFlow());
     const ctx = makeCtx(flow);
@@ -464,6 +481,86 @@ describe("flow-runner", () => {
     expect(guardrail).toBeDefined();
     // LLM call não foi emitido (não bateu na OpenAI).
     expect(events.some((e) => e.kind === "llm_call")).toBe(false);
+  });
+
+  it("AI node concatena prompt local do fluxo antes do prompt geral do agente", async () => {
+    openAiCreateMock.mockResolvedValue({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: { content: "Resposta final." },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 3 },
+    });
+
+    const dbWithAgentPrompt = {
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data:
+                    table === "agent_configs"
+                      ? {
+                          model: "gpt-5-mini",
+                          system_prompt: "PROMPT GERAL CONFIGURADO",
+                        }
+                      : null,
+                  error: null,
+                }),
+            }),
+            in: () => Promise.resolve({ data: [], error: null }),
+          }),
+        }),
+      }),
+    } as any;
+
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Inicio", trigger: "conversation_started" },
+          },
+          {
+            id: "ai-1",
+            type: "ai_agent",
+            position: { x: 200, y: 0 },
+            data: {
+              label: "IA",
+              system_prompt: "PROMPT LOCAL DO FLUXO",
+              instructions: [],
+            },
+          },
+        ],
+        edges: [
+          {
+            id: "e1",
+            source: "entry-1",
+            target: "ai-1",
+            sourceHandle: "default",
+          },
+        ],
+      }),
+    );
+
+    const ctx = makeCtx(flow);
+    const result = await runFlow(dbWithAgentPrompt, ctx, null);
+
+    expect(result.fatal_error).toBeUndefined();
+    const call = openAiCreateMock.mock.calls[0]?.[0];
+    const systemMessage = call?.messages?.find(
+      (message: { role?: string }) => message.role === "system",
+    );
+    expect(systemMessage?.content).toContain("PROMPT GERAL CONFIGURADO");
+    expect(systemMessage?.content).toContain("PROMPT LOCAL DO FLUXO");
+    expect(systemMessage?.content.indexOf("PROMPT LOCAL DO FLUXO")).toBeLessThan(
+      systemMessage?.content.indexOf("PROMPT GERAL CONFIGURADO") ?? -1,
+    );
   });
 
   describe("shouldTriggerFlowFromInbound (PR 10, mai/2026)", () => {

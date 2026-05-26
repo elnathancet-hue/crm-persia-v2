@@ -216,6 +216,9 @@ export function RulesTab({
   const [newLeadStageId, setNewLeadStageId] = React.useState<string | null>(
     agent.new_lead_stage_id ?? null,
   );
+  const [selectedPipelineId, setSelectedPipelineId] = React.useState<string | null>(
+    null,
+  );
   const [pipelineStages, setPipelineStages] = React.useState<
     FlowCatalogs["pipeline_stages"]
   >([]);
@@ -288,6 +291,7 @@ export function RulesTab({
     setAfterHoursMessage(next.after_hours_message);
     setDebounceWindowMs(clampDebounceWindowMs(agent.debounce_window_ms));
     setNewLeadStageId(agent.new_lead_stage_id ?? null);
+    setSelectedPipelineId(null);
   }, [
     agent.id,
     agent.name,
@@ -300,6 +304,38 @@ export function RulesTab({
     agent.debounce_window_ms,
     agent.new_lead_stage_id,
   ]);
+
+  const pipelineOptions = React.useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const stage of pipelineStages) {
+      if (!byId.has(stage.pipeline_id)) {
+        byId.set(
+          stage.pipeline_id,
+          stage.pipeline_name || `Funil ${stage.pipeline_id.slice(0, 8)}`,
+        );
+      }
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name }));
+  }, [pipelineStages]);
+
+  const selectedNewLeadStage = React.useMemo(
+    () => pipelineStages.find((stage) => stage.id === newLeadStageId) ?? null,
+    [newLeadStageId, pipelineStages],
+  );
+
+  React.useEffect(() => {
+    if (selectedNewLeadStage) {
+      setSelectedPipelineId(selectedNewLeadStage.pipeline_id);
+    }
+  }, [selectedNewLeadStage]);
+
+  const stagesForSelectedPipeline = React.useMemo(
+    () =>
+      selectedPipelineId
+        ? pipelineStages.filter((stage) => stage.pipeline_id === selectedPipelineId)
+        : [],
+    [pipelineStages, selectedPipelineId],
+  );
 
   const nameDirty = name.trim().length > 0 && name.trim() !== agent.name;
   const promptDirty = prompt !== agent.system_prompt;
@@ -530,30 +566,76 @@ export function RulesTab({
                   comportamento padrao atual.
                 </HelpTooltip>
               </div>
-              <Select
-                value={newLeadStageId ?? "_none"}
-                onValueChange={(value) =>
-                  setNewLeadStageId(value === "_none" ? null : value)
-                }
-                disabled={!catalogsLoaded}
-              >
-                <SelectTrigger id="new_lead_stage_id">
-                  <SelectValue>
-                    {newLeadStageId
-                      ? pipelineStages.find((stage) => stage.id === newLeadStageId)
-                          ?.name ?? "Etapa selecionada"
-                      : "Sem etapa inicial"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Sem etapa inicial</SelectItem>
-                  {pipelineStages.map((stage) => (
-                    <SelectItem key={stage.id} value={stage.id}>
-                      {stage.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="new_lead_pipeline_id" className="text-xs">
+                    Funil
+                  </Label>
+                  <Select
+                    value={selectedPipelineId ?? "_none"}
+                    onValueChange={(value) => {
+                      if (value === "_none") {
+                        setSelectedPipelineId(null);
+                        setNewLeadStageId(null);
+                        return;
+                      }
+                      setSelectedPipelineId(value);
+                      if (selectedNewLeadStage?.pipeline_id !== value) {
+                        setNewLeadStageId(null);
+                      }
+                    }}
+                    disabled={!catalogsLoaded}
+                  >
+                    <SelectTrigger id="new_lead_pipeline_id">
+                      <SelectValue>
+                        {selectedPipelineId
+                          ? pipelineOptions.find((p) => p.id === selectedPipelineId)
+                              ?.name ?? "Funil selecionado"
+                          : "Sem etapa inicial"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Sem etapa inicial</SelectItem>
+                      {pipelineOptions.map((pipeline) => (
+                        <SelectItem key={pipeline.id} value={pipeline.id}>
+                          {pipeline.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="new_lead_stage_id" className="text-xs">
+                    Etapa inicial
+                  </Label>
+                  <Select
+                    value={newLeadStageId ?? "_none"}
+                    onValueChange={(value) =>
+                      setNewLeadStageId(value === "_none" ? null : value)
+                    }
+                    disabled={!catalogsLoaded || !selectedPipelineId}
+                  >
+                    <SelectTrigger id="new_lead_stage_id">
+                      <SelectValue>
+                        {newLeadStageId
+                          ? selectedNewLeadStage?.name ?? "Etapa selecionada"
+                          : selectedPipelineId
+                            ? "Selecione a etapa"
+                            : "Escolha um funil"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Sem etapa inicial</SelectItem>
+                      {stagesForSelectedPipeline.map((stage) => (
+                        <SelectItem key={stage.id} value={stage.id}>
+                          {stage.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -1385,7 +1467,7 @@ function CapabilityRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium">{title}</p>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-emerald-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-1.5 py-0.5 text-[10px] font-medium uppercase text-success">
               <CheckCircle2 className="size-3" />
               ativo
             </span>

@@ -22,28 +22,14 @@ function makeProvider() {
   };
 }
 
-// Bug J fix (mai/2026): routing stickiness.
-//
-// Cenario: lead inicia conversa com agente A (primary). Depois manda msg
-// que casaria com regra do agente B (secondary). Antes do fix: criava
-// 2a row em agent_conversations -> lead falando com 2 agentes em
-// paralelo na mesma conversation. Depois do fix: o lookup de
-// agent_conversations por (org, lead, crm_conversation_id) — SEM filtrar
-// por config_id — devolve a row do agente A, e o executor força
-// agentConfigId = A pra resto do processamento.
-
-describe("AI Agent routing stickiness (Bug J)", () => {
-  it("mantém o lead com o agente que iniciou a conversa, mesmo quando outra msg casa regra de agente secundário", async () => {
+describe("AI Agent routing stickiness", () => {
+  it("mantem o lead com o agente que iniciou a conversa e usa a config desse agente", async () => {
     const supabase = createSupabaseMock();
 
-    // 1. Feature flag ativo
     supabase.queue("organizations", {
       data: { settings: { features: { [NATIVE_AGENT_FEATURE_FLAG]: true } } },
       error: null,
     });
-
-    // 2. Primary agent (agente B) — pickAgentForLead retornaria ele
-    //    porque o mock vai ter regra que casa o texto da msg.
     supabase.queue("agent_configs", {
       data: {
         id: "agent-b-primary",
@@ -52,37 +38,19 @@ describe("AI Agent routing stickiness (Bug J)", () => {
       },
       error: null,
     });
-
-    // 3. Message dedup — vazio (msg nova)
     supabase.queue("messages", { data: null, error: null });
-
-    // 4. Lead existente (Lead que já tem conversa com agente A)
     supabase.queue("leads", { data: { id: "lead-sticky" }, error: null });
-
-    // 5. Secondary agents lookup (pickAgentForLead) — vazio pra simplificar
-    //    Como não tem agente secondary, pickAgentForLead retorna primary.
-    //    Mas o que importa é provar que mesmo se mudasse, stickiness ganha.
     supabase.queue("agent_configs", { data: [], error: null });
-
-    // 6. Conversation existente (já criada pelo primeiro contato)
     supabase.queue("conversations", {
       data: { id: "conv-sticky", assigned_to: "ai", status: "active" },
       error: null,
     });
-
-    // 7. UPDATE last_message_at (existing conv)
     supabase.queue("conversations", { data: null, error: null });
-
-    // 8. Insert inbound message
     supabase.queue("messages", { data: { id: "msg-in" }, error: null });
-
-    // 9. ⭐ Find agent_conversations SEM filtrar por config_id.
-    //    Retorna uma row do AGENTE A (não do primary B).
-    //    O Bug J fix vai detectar e forçar agentConfigId = "agent-a-other".
     supabase.queue("agent_conversations", {
       data: {
         id: "agent-conv-sticky",
-        config_id: "agent-a-other",   // ← diferente do primary
+        config_id: "agent-a-other",
         current_node_id: null,
         human_handoff_at: null,
         after_hours_notified_at: null,
@@ -90,28 +58,20 @@ describe("AI Agent routing stickiness (Bug J)", () => {
       },
       error: null,
     });
-
-    // 10. Conversation status check (send-guard early)
-    supabase.queue("conversations", {
-      data: { assigned_to: "ai", status: "active" },
+    supabase.queue("agent_configs", {
+      data: {
+        id: "agent-a-other",
+        debounce_window_ms: 42000,
+        humanization_config: { split_enabled: false, business_hours_enabled: false },
+        new_lead_stage_id: null,
+      },
       error: null,
     });
 
-    // 11. Final SELECT (após pause/resume keyword check)
-    supabase.queue("agent_conversations", {
-      data: { human_handoff_at: null, ai_control_epoch: 0 },
-      error: null,
-    });
-
-    // 12. Enqueue RPC + flush bump — ok com qualquer resposta
-    supabase.queue("messages", { data: null, error: null });
-    supabase.queue("agent_conversations", { data: null, error: null });
-
-    const provider = makeProvider();
     const result = await tryEnqueueForNativeAgent({
       supabase: supabase as never,
       orgId: "org-sticky",
-      provider: provider as never,
+      provider: makeProvider() as never,
       requestId: "req-sticky",
       msg: {
         messageId: "wa-sticky-2",
@@ -125,11 +85,84 @@ describe("AI Agent routing stickiness (Bug J)", () => {
       },
     });
 
-    // ✓ Stickiness mantida: handled = true (não criou nova agent_conversations)
     expect(result.handled).toBe(true);
+    expect(supabase.inserts.agent_conversations ?? []).toHaveLength(0);
+    expect(supabase.rpcCalls[0]).toMatchObject({
+      fn: "enqueue_pending_message",
+      args: {
+        p_agent_conversation_id: "agent-conv-sticky",
+        p_debounce_window_ms: 42000,
+      },
+    });
+  });
 
-    // ✓ Insert em agent_conversations não foi chamado (reutilizou existing)
-    const agentConvInserts = supabase.inserts.agent_conversations ?? [];
-    expect(agentConvInserts).toHaveLength(0);
+  it("continua conversa existente sem reaplicar o entry trigger keyword_match", async () => {
+    const supabase = createSupabaseMock();
+
+    supabase.queue("organizations", {
+      data: { settings: { features: { [NATIVE_AGENT_FEATURE_FLAG]: true } } },
+      error: null,
+    });
+    supabase.queue("agent_configs", {
+      data: {
+        id: "agent-keyword",
+        debounce_window_ms: 10000,
+        humanization_config: { split_enabled: false, business_hours_enabled: false },
+      },
+      error: null,
+    });
+    supabase.queue("messages", { data: null, error: null });
+    supabase.queue("leads", { data: { id: "lead-keyword" }, error: null });
+    supabase.queue("agent_configs", { data: [], error: null });
+    supabase.queue("conversations", {
+      data: { id: "conv-keyword", assigned_to: "ai", status: "active" },
+      error: null,
+    });
+    supabase.queue("conversations", { data: null, error: null });
+    supabase.queue("messages", { data: { id: "msg-keyword-2" }, error: null });
+    supabase.queue("agent_conversations", {
+      data: {
+        id: "agent-conv-keyword",
+        config_id: "agent-keyword",
+        current_node_id: "ai-collect-data",
+        human_handoff_at: null,
+        after_hours_notified_at: null,
+        ai_control_epoch: 0,
+      },
+      error: null,
+    });
+    supabase.queue("agent_configs", {
+      data: {
+        id: "agent-keyword",
+        debounce_window_ms: 10000,
+        humanization_config: { split_enabled: false, business_hours_enabled: false },
+        new_lead_stage_id: null,
+      },
+      error: null,
+    });
+
+    const result = await tryEnqueueForNativeAgent({
+      supabase: supabase as never,
+      orgId: "org-keyword",
+      provider: makeProvider() as never,
+      requestId: "req-keyword",
+      msg: {
+        messageId: "wa-keyword-2",
+        phone: "+5511999999999",
+        pushName: "Ana",
+        text: "meu nome e Ana",
+        type: "text",
+        isGroup: false,
+        isFromMe: false,
+        timestamp: Date.now(),
+      },
+    });
+
+    expect(result).toMatchObject({
+      handled: true,
+      response: { status: "enqueued" },
+    });
+    expect(supabase.selects.agent_flows).toBeUndefined();
+    expect(supabase.rpcCalls).toHaveLength(1);
   });
 });

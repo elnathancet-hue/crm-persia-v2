@@ -210,6 +210,21 @@ async function pickAgentForLead(
   return selected ?? primary;
 }
 
+async function loadRoutingAgentById(
+  db: AgentDb,
+  orgId: string,
+  agentId: string,
+): Promise<RoutingAgentRow | null> {
+  const { data } = await db
+    .from("agent_configs")
+    .select("id, debounce_window_ms, humanization_config, new_lead_stage_id")
+    .eq("organization_id", orgId)
+    .eq("id", agentId)
+    .maybeSingle();
+
+  return (data as RoutingAgentRow | null) ?? null;
+}
+
 function buildInboundTextForAgent(msg: IncomingMessage): string | null {
   const content = normalizeInboundMessageContent(msg);
   if (content) return content;
@@ -297,11 +312,6 @@ export async function tryEnqueueForNativeAgent(
     };
   }
   const primaryAgent = primaryRow as RoutingAgentRow;
-  const newLeadStage = await resolveAgentNewLeadStage(
-    db,
-    orgId,
-    primaryAgent.new_lead_stage_id,
-  );
   const inboundText = buildInboundTextForAgent(msg);
   const messageContent = normalizeInboundMessageContent(msg);
 
@@ -346,6 +356,7 @@ export async function tryEnqueueForNativeAgent(
       .eq("organization_id", orgId)
       .eq("phone", phone)
       .maybeSingle();
+    let createdLead = false;
     if (!lead) {
       const { data: newLead, error: leadErr } = await db
         .from("leads")
@@ -356,8 +367,6 @@ export async function tryEnqueueForNativeAgent(
           source: "whatsapp",
           status: "new",
           channel: "whatsapp",
-          pipeline_id: newLeadStage?.pipeline_id ?? null,
-          stage_id: newLeadStage?.id ?? null,
         })
         .select("id")
         .single();
@@ -365,6 +374,7 @@ export async function tryEnqueueForNativeAgent(
         throw new Error(`lead_create_failed: ${leadErr?.message ?? "unknown"}`);
       }
       lead = newLead;
+      createdLead = true;
       // Bug A fix (mai/2026): busca foto WhatsApp em background.
       // Não bloqueia o pipeline — se UAZAPI falhar, lead fica sem
       // avatar e UI cai no fallback de iniciais. Rodamos só uma vez
@@ -393,11 +403,7 @@ export async function tryEnqueueForNativeAgent(
       messageContent ?? inboundText,
     );
     let agentConfigId = selectedAgent.id;
-    const debounceWindowMs =
-      selectedAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
-    const humanization = normalizeHumanizationConfig(
-      selectedAgent.humanization_config,
-    );
+    let finalAgent = selectedAgent;
 
     // 7. Find/create conversation com assigned_to=ai (sinaliza pro
     // chat-window que a IA está no controle).
@@ -554,6 +560,7 @@ export async function tryEnqueueForNativeAgent(
         agentConfigId = existingConfigId;
       }
     }
+    const existingAgentConversation = Boolean(agentConv);
     if (!agentConv) {
       const { data: newAgentConv, error: agentConvErr } = await db
         .from("agent_conversations")
@@ -584,6 +591,37 @@ export async function tryEnqueueForNativeAgent(
     }).after_hours_notified_at ?? null;
     const aiControlEpoch =
       (agentConv as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
+
+    if (existingAgentConversation) {
+      const stickyAgent = await loadRoutingAgentById(db, orgId, agentConfigId);
+      if (stickyAgent) {
+        finalAgent = stickyAgent;
+      }
+    }
+
+    const debounceWindowMs =
+      finalAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
+    const humanization = normalizeHumanizationConfig(
+      finalAgent.humanization_config,
+    );
+
+    if (createdLead) {
+      const finalNewLeadStage = await resolveAgentNewLeadStage(
+        db,
+        orgId,
+        finalAgent.new_lead_stage_id,
+      );
+      if (finalNewLeadStage) {
+        await db
+          .from("leads")
+          .update({
+            pipeline_id: finalNewLeadStage.pipeline_id,
+            stage_id: finalNewLeadStage.id,
+          })
+          .eq("organization_id", orgId)
+          .eq("id", leadId);
+      }
+    }
 
     // 9b. Humanization (PR 6, mai/2026): pause / resume keywords + auto-pause.
     //
@@ -753,7 +791,11 @@ export async function tryEnqueueForNativeAgent(
     // como conversation_started (compat com agentes que ainda não
     // configuraram o canvas).
     try {
-      const flow = await loadFlowByConfigId(db, orgId, agentConfigId);
+      const shouldCheckEntryTrigger =
+        !(agentConv as { current_node_id?: string | null }).current_node_id;
+      const flow = shouldCheckEntryTrigger
+        ? await loadFlowByConfigId(db, orgId, agentConfigId)
+        : null;
       const entry = flow ? findEntryNode(flow.config) : null;
       if (entry && !shouldTriggerFlowFromInbound(entry, messageContent ?? "")) {
         return {
