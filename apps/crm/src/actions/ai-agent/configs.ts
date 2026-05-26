@@ -164,6 +164,13 @@ export async function updateAgent(
   if (patch.calendar_connection_id !== undefined) {
     updates.calendar_connection_id = patch.calendar_connection_id;
   }
+  if (patch.new_lead_stage_id !== undefined) {
+    updates.new_lead_stage_id = await resolveNewLeadStageId(
+      db,
+      orgId,
+      patch.new_lead_stage_id,
+    );
+  }
   if (patch.humanization_config !== undefined) {
     // PR-AI-AGENT-HUMAN-A: merge shallow com config existente normalizado.
     // Cliente pode mandar so pause_keywords (parcial) e mantemos
@@ -240,6 +247,23 @@ export async function updateAgent(
   if (error || !data) throw new Error(error?.message || "Erro ao atualizar agente");
   for (const path of agentPaths(configId)) revalidatePath(path);
   return data as AgentConfig;
+}
+
+async function resolveNewLeadStageId(
+  db: AgentDb,
+  orgId: string,
+  stageId: string | null | undefined,
+): Promise<string | null> {
+  if (!stageId) return null;
+  const { data, error } = await db
+    .from("pipeline_stages")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("id", stageId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Etapa inicial do CRM nao encontrada");
+  return stageId;
 }
 
 // PR-AGENT-INTEGRATION-3 (mai/2026): seta um agente como principal da

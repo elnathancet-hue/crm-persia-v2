@@ -148,6 +148,9 @@ export interface AgentConfig {
   // secundarios baseado em agent_entry_conditions. Default false na
   // migration 044.
   is_primary?: boolean;
+  // Optional CRM stage assigned when this agent creates a brand-new lead.
+  // NULL keeps the default lead creation behavior.
+  new_lead_stage_id?: string | null;
   // PR-FLOW-PIVOT (mai/2026): único valor aceito é 'flow' (canvas
   // visual via @xyflow/react). Substitui o modelo legado de
   // stages/actions. Coluna mantida pra futuro multi-modo.
@@ -461,6 +464,8 @@ export interface CreateAgentInput {
   // PR7.3: opcional. Server valida que connection_id pertence a mesma
   // org e esta active.
   calendar_connection_id?: string | null;
+  // Optional CRM stage for brand-new leads created by this agent.
+  new_lead_stage_id?: string | null;
   // PR-AI-AGENT-HUMAN-A: opcional. Runtime aplica defaults via
   // normalizeHumanizationConfig (humanization.ts). Server faz merge
   // shallow com o config existente.

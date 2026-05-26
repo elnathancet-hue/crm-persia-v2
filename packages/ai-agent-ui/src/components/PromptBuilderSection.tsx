@@ -217,7 +217,7 @@ export function PromptBuilderSection({ value, onChange, agentId }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <Label htmlFor="prompt-builder">Como o agente se comporta</Label>
+        <Label htmlFor="prompt-builder">Instruções</Label>
         <ModeToggle mode={mode} onChange={handleModeChange} />
       </div>
 

@@ -10,9 +10,7 @@ import {
   Clock,
   Crown,
   FlaskConical,
-  HelpCircle,
   History,
-  Library,
   ListOrdered,
   Menu,
   PlayCircle,
@@ -55,8 +53,6 @@ import { FlowTesterProvider } from "./flow-tester-context";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { AuditTab } from "./AuditTab";
-import { FAQTab } from "./FAQTab";
-import { DocumentsTab } from "./DocumentsTab";
 import { FollowupTab } from "./FollowupTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
@@ -72,8 +68,6 @@ import { useAgentActions } from "../context";
 type AgentSectionId =
   | "rules"
   | "stages"
-  | "faq"
-  | "docs"
   | "tools"
   | "followups"
   | "audit";
@@ -97,14 +91,6 @@ function buildSidebarGroups(_opts: {
           label: "Fluxo",
           icon: ListOrdered,
         },
-      ],
-    },
-    {
-      id: "knowledge",
-      label: "Conhecimento",
-      items: [
-        { id: "faq", label: "FAQ", icon: HelpCircle },
-        { id: "docs", label: "Documentos", icon: Library },
       ],
     },
     {
@@ -174,6 +160,9 @@ export function AgentEditor({
   const [testerOpen, setTesterOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
   const [nameDraft, setNameDraft] = React.useState(agent.name);
+  React.useEffect(() => {
+    setNameDraft(agent.name);
+  }, [agent.name]);
   // PR 22 UX (mai/2026): agente abre em "Configurações" — cliente
   // precisa definir quem é o agente, regras de conduta, modelo, etc
   // ANTES de desenhar o fluxo visual. Reverte o PR 17 que abria em
@@ -465,25 +454,12 @@ export function AgentEditor({
               isPending={isPending}
               tools={tools}
               onToolsChange={setTools}
+              knowledgeSources={knowledgeSources}
+              onKnowledgeSourcesChange={setKnowledgeSources}
+              onKnowledgeRefresh={refreshKnowledgeSources}
             />
           )}
           {activeSection === "stages" && <FlowCanvas configId={agent.id} />}
-          {activeSection === "faq" && (
-            <FAQTab
-              configId={agent.id}
-              sources={knowledgeSources}
-              onChange={setKnowledgeSources}
-              onRefresh={refreshKnowledgeSources}
-            />
-          )}
-          {activeSection === "docs" && (
-            <DocumentsTab
-              configId={agent.id}
-              sources={knowledgeSources}
-              onChange={setKnowledgeSources}
-              onRefresh={refreshKnowledgeSources}
-            />
-          )}
           {activeSection === "tools" && (
             <PlaceholderTab
               icon={Wrench}
