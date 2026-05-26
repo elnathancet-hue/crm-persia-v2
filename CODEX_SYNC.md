@@ -3039,3 +3039,214 @@ menos pode atrasar o lembrete pra alem do delay esperado.
 - UI de "ver historico de disparos" (audit) — fica pra futuro
 - Templates personalizados por canal (e-mail vs WhatsApp) — hoje so WhatsApp
   via `agent_notification_templates`
+
+---
+
+## 2026-05-22 — Claude — Catchup sync PRs #322-#339 (abril → maio)
+
+Append consolidado cobrindo o gap entre o ultimo registro (PR #62, 25/abr)
+e o estado atual em `origin/main` apos merge do PR #339. Periodo dominado
+por (1) ciclo de 4 bugs UAZAPI/WhatsApp reportados em campo (A/B/C/D) +
+4 derivados (E/F/G/H + I), (2) redesign visual do Chat estilo WhatsApp, e
+(3) pivot de runtime safety + entry routing pelo Codex.
+
+### Bugs UAZAPI/WhatsApp (PRs #322 a #330) — Claude lead
+
+Quatro bugs reportados pelo cliente no mesmo print do Chat ao Vivo:
+
+- **Bug A** (PR #325) — Foto do contato ausente. UAZAPI expoe foto em
+  `/chat/details`. Adicionado `getContactProfilePic(phone)` no
+  `WhatsAppProvider` interface + stub no Meta Cloud (retorna `null`).
+  Pipeline e executor populam `leads.avatar_url` em background fire-and-forget.
+  Componentes do chat usam `<AvatarImage>` antes do `<AvatarFallback>`.
+- **Bug B** (PR #322/#324) — Checkmarks de status nao evoluiam de
+  `sent`. Adicionado `messages_update` no webhook events do UAZAPI +
+  branch dedicado em `/api/whatsapp/webhook` que faz UPDATE em `messages`.
+  `mapUazapiStatus()` em `uazapi-status-mapper.ts` mapeia
+  sent/server_ack/delivery_ack/read/played pro DB enum. UI mostra 1/2/2
+  checks cinza/azul via `StatusIndicator`. Bonus: server action
+  `resyncUazapiWebhook()` no admin com botao "Re-sincronizar webhook" em
+  Settings → WhatsApp (PR #324).
+- **Bug C** (PR #326) — Conversations duplicadas pro mesmo lead. Race
+  SELECT-then-INSERT em `executor.ts` + `incoming-pipeline.ts` quando 2
+  webhooks chegam em <100ms (UAZAPI replay). Fix: migration 063 +
+  `CREATE UNIQUE INDEX conversations_org_lead_active_unique` partial
+  `WHERE status IN ('active','waiting_human')` + merge de duplicatas
+  existentes. Codigo agora detecta `23505` no insert e re-SELECT a conv
+  vencedora.
+- **Bug D** (PR antes) — Vazamento de `emit_event()` em msgs do
+  WhatsApp. 3 camadas defensivas: warning no system prompt + sanitizer
+  no runner + sanitizer no realtime-provider. Audit log mede frequencia.
+- **Bug E/F/G** (PR #327) — Race remanescente em leads INSERT (mesmo
+  padrao do C, em outra tabela) + status invariant em cron `send-scheduled`
+  (gravava sem `whatsapp_msg_id`, quebrando Bug B) + error propagation
+  em `agenda/notifications/dispatch.ts` (docstring prometia "Throw NUNCA"
+  mas codigo nao respeitava — `/agendar` retornava 500 se WhatsApp falhava).
+  Cleanup geral de `select("*")` em `whatsapp_connections` -> lista
+  explicita dos 7 campos.
+- **Bug H** (PR #328) — Phone normalization. UAZAPI manda em ~5
+  formatos no mesmo webhook (`chat.phone`, `wa_chatid`, `wa_chatlid`,
+  `message.chatid`, `sender_pn`). Codigo armazenava `558...` (sem `+`)
+  enquanto outro path normalizava pra `+558...` -> 2 leads diferentes,
+  UNIQUE nao pegava porque strings nao iguais. Migration 064 normaliza
+  existentes pra E.164 com `+` + `UNIQUE messages(org, whatsapp_msg_id)`
+  pra eliminar dedup race + try-catch `23505` no INSERT messages.
+- **Bug I** (PR #330) — Defense in depth no DB. Migration 065 adiciona
+  trigger `BEFORE INSERT/UPDATE OF phone ON leads` que forca formato
+  canonico `+digits` independente de qual codigo escreva (app, n8n
+  custom flow, Supabase Studio direto, scripts terceiros).
+
+Mapping de migracoes:
+- 063 — conversations_unique_active
+- 064 — phone_normalization_and_msg_dedup
+- 065 — lead_phone_normalize_trigger
+
+### Chat UI WhatsApp-style (PRs #329 + #331)
+
+PR #329 (Claude) — Tokens CSS `--chat-*` em `:root` e `.dark` no
+`apps/crm/src/app/globals.css`. Refator visual:
+- Fundo bege `#EFEAE2` (light) / navy `#0B141A` (dark)
+- Bolhas verdes `#D9FDD3` / `#005C4B` (out), brancas / `#202C33` (in)
+- Checkmarks azul WhatsApp `#53BDEB`
+- Header e sidebar `#F0F2F5` / `#202C33`
+- Send button circular verde
+- max-width 65% nas bolhas, `rounded-br-sm`/`bl-sm` pra "tail"
+
+PR #331 (Codex) — Polish incremental em cima:
+- Sidebar 380px desktop, 420px em telas grandes
+- Header h-15 (59px)
+- Lista de conversas 72px por linha
+- Espacamento mais fiel ao WhatsApp Web
+- Composer mais limpo (icones cinza, input arredondado, send `#008069`)
+
+Ambos coexistem: PR #329 adicionou os tokens, PR #331 ajustou geometria.
+
+### Runtime Safety + Flow Builder (PRs #332 + #333) — Codex lead
+
+**PR #332** — Hardening do handoff humano/IA.
+
+Sintoma: cliente clica "Assumir", lead manda nova msg, abre OUTRA aba
+de conversa, a anterior pausa. Causa: `assignConversation()` setava
+`status='human_handling'`, mas webhook so olhava `('active','waiting_human')`
+ao fazer find-or-create -> conversation duplicada.
+
+Tres mudancas que se reforcam:
+
+1. **`packages/shared/src/crm/conversation-status.ts`** — Define
+   `OPEN_CONVERSATION_STATUSES = ['active','waiting_human','assigned',
+   'human_handling','ai_handling']`. Lookup webhook agora encontra
+   conversation em qualquer status legacy, evitando duplicar.
+2. **Migration 066** — `conversation_handoff_status_unification`. Trata
+   `assigned_to` como dono canonico. So mantem `active` (IA dona) e
+   `waiting_human` (humano dono). Merge de duplicatas legacy antes de
+   recriar o partial unique index.
+3. **Migration 067 + `send-guard.ts`** — Adiciona
+   `agent_conversations.ai_control_epoch INTEGER NOT NULL DEFAULT 0`.
+   Runtime captura epoch no inicio do run + re-checa via `canAiSendNow()`
+   IMEDIATAMENTE antes de cada send WhatsApp. Se humano assumiu meio do
+   run, epoch nao bate -> bloqueia send com motivo
+   `stale_ai_control_epoch:N:M`. Tambem cobre `human_handoff_at IS NULL`
+   e `assigned_to === 'ai'`.
+
+Coverage de testes:
+- `apps/crm/src/__tests__/ai-agent-send-guard.test.ts` — cenarios de epoch
+- `apps/crm/src/__tests__/ai-agent-after-hours.test.ts` — cooldown +
+  business hours
+- `apps/crm/src/__tests__/multi-tenant.test.ts` — guard nao vaza entre orgs
+- Update no `incoming-pipeline.test.ts`
+
+**PR #333** — Flow builder validation polish.
+
+- `packages/shared/src/ai-agent/flow-validation.ts` — funcao
+  `validateFlow(config)` que detecta orphan nodes, missing edges, cycles,
+  multiple entry nodes, retorna array de errors + warnings tipados.
+- FlowCanvas exibe painel de erros/avisos + bloqueia "Publicar" se hard
+  errors.
+- node-catalog adiciona categoria "Atendimento" e flow inicial pronto
+  no empty state.
+
+### Iteracoes RulesTab + Humanizacao + Routing (PRs #334-#339) — Codex lead
+
+Sequencia rapida (mai/22) de polish + features:
+
+- **PR #334** — Expose controles humanizados (split_enabled, business
+  hours, pause keyword) na RulesTab + branch de `executor.ts` que envia
+  after-hours message com cooldown configuravel.
+- **PR #335** — `actions/messages.ts` atualiza `messages` quando
+  operador responde + chat-window mostra botao "retomar bot" no header
+  apos resposta humana (antes ficava grudado em `assigned_to=human`).
+- **PR #336** — Interactivity dos controles humanizados (toggles, slider,
+  preview inline).
+- **PR #337** — `simplify prompt setup`. Migration 068
+  (`new_lead_stage_id` em `agent_configs`) + `applyTemplate` em
+  `configs.ts` + `prompt builder` reescrito em `PromptBuilderSection`.
+  Permite ao cliente escolher em qual stage do Kanban o lead novo
+  entra (default = primeiro stage do funil ativo).
+- **PR #338** — Visual hierarchy do AgentEditor: cards reagrupados,
+  badges, headings mais consistentes.
+- **PR #339** — `EntryConditionsCard` reescrito pra config explicita
+  de routing: agente principal + condicoes (tags, segmentos,
+  pipeline_stage_id). `executor.ts:pickAgentForLead()` consulta
+  `agent_entry_conditions` pra escolher o agente certo. Permite
+  multi-agent setups (ex: 1 agente comercial pra novos leads, 1 agente
+  de suporte pra clientes ativos com tag `cliente`).
+
+Migracoes adicionadas no periodo:
+- 066 — conversation_handoff_status_unification (Codex)
+- 067 — ai_agent_send_guard_epoch (Codex)
+- 068 — agent_new_lead_stage (Codex)
+
+### Estado de saude em 2026-05-22
+
+- `pnpm -r typecheck` OK
+- `pnpm --filter @persia/crm test` -> 424 tests passed (cresceu de 412
+  pre-bugs)
+- `pnpm --filter @persia/crm build` OK
+- `pnpm --filter @persia/admin build` OK
+- Migracoes em prod: 063-068 todas aplicadas pelo user manualmente via
+  SQL Editor (varios desses tiveram split em blocos por causa de TEMP
+  TABLE quebrando entre transacoes)
+
+### Coordenacao Claude x Codex — protocolo informal estabelecido
+
+Durante o ciclo, ficou clara a divisao operacional:
+
+- **Claude** — bugs UAZAPI, migracoes de dados, DB-level constraints,
+  visual do chat, validacao Zod, defense in depth no banco.
+- **Codex** — runtime IA (executor, send-guard, epoch), flow builder
+  (validation, canvas, node-catalog), config UI (RulesTab,
+  EntryConditionsCard), business hours/humanizacao.
+
+Recomendacao: avisar a outra instancia ao subir PR (numero + 1 linha de
+escopo). Evita duplicar trabalho. Working tree LIMPO antes de comecar
+PR novo — usar `git stash` se houver mudancas em progresso de outra
+sessao.
+
+### Working tree health note
+
+Em 2026-05-22, working tree apresentava:
+- 3 untracked dirs (`kanban-studio/` — projeto AI Studio nao relacionado
+  ao CRM; `.pnpm-store/` — cache; `.worktrees/` 48MB de worktrees do
+  Codex)
+- 7 stashes acumuladas (varias de sessoes antigas, irrelevantes)
+
+`.gitignore` nao cobre essas paths. Sugestao: adicionar
+```
+kanban-studio/
+.pnpm-store/
+.worktrees/
+```
+e dropar stashes antigas com `git stash drop`. Nao bloqueia trabalho mas
+gera ruido em `git status`.
+
+### Code quality snapshot
+
+Audit de 22/mai: codebase LIMPO o suficiente pra prod.
+- 0 TODOs/FIXMEs ativos no source tree
+- 1 `console.log` (intencional, telemetria cron)
+- 0 `@ts-ignore` / `@ts-expect-error`
+- 15 `any` em 7 arquivos (justificavel — SDK OpenAI, Supabase loose
+  types)
+- Files >2k linhas: `KanbanBoard.tsx` (4109), `LeadInfoDrawer.tsx` (2737).
+  Smell mas nao bloqueante — candidatos a split em PR de refactor
+  futuro.
