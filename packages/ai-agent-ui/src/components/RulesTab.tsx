@@ -470,8 +470,8 @@ export function RulesTab({
        help tooltips (ícone ?) em campos técnicos. delay=200ms pra
        não disparar em hover acidental. */
     <TooltipProvider delay={200}>
-    <div className="space-y-4 pb-20">
-    <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
+    <div className="space-y-5 pb-20">
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
       {/* PR 27 (mai/2026): guard pra "este projeto não foi salvo,
           deseja sair?" Combina beforeunload nativo (fechar aba/reload)
           + intercept de Link clicks (navegação interna Next.js).
@@ -479,7 +479,7 @@ export function RulesTab({
           interno com dirty=true. */}
       <UnsavedChangesGuard dirty={dirty} />
 
-      <Card>
+      <Card className="shadow-sm">
         <CardHeader>
           <CardTitle className="text-base">Configuração do agente</CardTitle>
         </CardHeader>
@@ -567,7 +567,7 @@ export function RulesTab({
         </CardContent>
       </Card>
 
-      <div className="space-y-4">
+      <div className="space-y-3 xl:sticky xl:top-28">
         {/* PR-AGENT-INTEGRATION-3: card "Quando ativado" so aparece em
             agentes secundarios (nao-principais). Cliente define
             conditions (tag/segment/mensagem/etapa/status) que ativam
@@ -613,22 +613,22 @@ export function RulesTab({
           multiple
           value={openAccordions}
           onValueChange={setOpenAccordions}
-          className="rounded-xl border border-border bg-card divide-y divide-border"
+          className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
         >
           {/* ────────────────────────────────────────────────────
               Grupo 1: Como o agente decide
               (Modelo + Transferir pra humano)
               ──────────────────────────────────────────────────── */}
-          <AccordionItem value="decide" id="accordion-decide" className="px-4">
-            <AccordionTrigger className="text-base">
+          <AccordionItem value="decide" id="accordion-decide" className="border-b px-3 last:border-b-0">
+            <AccordionTrigger className="py-3 text-sm">
               <span className="flex items-center gap-2">
                 <Brain className="size-4 text-primary" />
                 Como o agente decide
                 {decideDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
-            <AccordionContent className="space-y-4 pt-2">
-              <div className="space-y-1.5">
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <div className="space-y-1.5 rounded-md border border-border/70 bg-muted/20 p-3">
                 <div className="flex items-center gap-2">
                   <Label htmlFor="model">Modelo</Label>
                   <HelpTooltip>
@@ -661,7 +661,7 @@ export function RulesTab({
                   a IA usar `stop_agent` (transferir pra humano).
                   Notificação detalhada é configurada no Fluxo (Action
                   node trigger_notification) — não aqui. */}
-              <div className="flex items-start justify-between gap-3 pt-2 border-t border-border/60">
+              <div className="flex items-start justify-between gap-3 rounded-md border border-border/70 bg-muted/20 p-3">
                 <div className="flex-1 min-w-0">
                   <Label
                     htmlFor="allow_human_handoff"
@@ -695,17 +695,17 @@ export function RulesTab({
           <AccordionItem
             value="converse"
             id="accordion-converse"
-            className="px-4"
+            className="border-b px-3 last:border-b-0"
           >
-            <AccordionTrigger className="text-base">
+            <AccordionTrigger className="py-3 text-sm">
               <span className="flex items-center gap-2">
                 <MessageSquare className="size-4 text-primary" />
                 Atendimento humanizado
                 {converseDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
-            <AccordionContent className="space-y-4 pt-2">
-              <section className="space-y-4">
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <section className="space-y-3 rounded-md border border-border/70 bg-muted/20 p-3">
                 <div>
                   <h4 className="text-sm font-semibold">
                     Receber mensagens como humano
@@ -771,7 +771,7 @@ export function RulesTab({
                 />
               </section>
               {/* Subgrupo 2A — Pausa e ativação */}
-              <section className="space-y-4 pt-4 border-t border-border">
+              <section className="space-y-3 rounded-md border border-border/70 bg-muted/20 p-3">
                 <div>
                   <h4 className="text-sm font-semibold">Pausa e ativação</h4>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -854,71 +854,83 @@ export function RulesTab({
                   </div>
                 ) : null}
 
-                <div className="space-y-1.5 pt-2 border-t border-border/60">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="pause_keywords">Palavras pra pausar</Label>
-                    <HelpTooltip>
-                      Quando o lead digita SOMENTE uma dessas palavras (sem
-                      outras), a IA para. Útil pra quem quer pausar mas
-                      esqueceu a palavra exata. Defaults cobrem o básico
-                      ("pausar", "humano", "stop ia").
-                    </HelpTooltip>
-                    {arraysEqualIgnoreOrder(
-                      nextPauseKeywords,
-                      PAUSE_KEYWORDS_DEFAULT,
-                    ) ? (
-                      <DefaultBadge />
-                    ) : null}
-                  </div>
-                  <Textarea
-                    id="pause_keywords"
-                    value={pauseKeywordsText}
-                    onChange={(e) => setPauseKeywordsText(e.target.value)}
-                    placeholder={PAUSE_KEYWORDS_DEFAULT.join("\n")}
-                    rows={3}
-                    className="font-mono text-xs"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Uma palavra por linha. Quando o lead digitar uma delas
-                    (sem outras palavras), o agente para de responder. Não
-                    diferencia maiúscula/minúscula.
-                  </p>
-                </div>
+                <details className="group rounded-md border border-border/70 bg-background/70">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
+                    Palavras de pausa e retorno
+                    <span className="text-xs font-normal text-muted-foreground group-open:hidden">
+                      Avancado
+                    </span>
+                  </summary>
+                  <div className="space-y-3 border-t border-border/60 p-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="pause_keywords">
+                          Palavras pra pausar
+                        </Label>
+                        <HelpTooltip>
+                          Quando o lead digita SOMENTE uma dessas palavras
+                          (sem outras), a IA para. Útil pra quem quer pausar
+                          mas esqueceu a palavra exata. Defaults cobrem o
+                          básico ("pausar", "humano", "stop ia").
+                        </HelpTooltip>
+                        {arraysEqualIgnoreOrder(
+                          nextPauseKeywords,
+                          PAUSE_KEYWORDS_DEFAULT,
+                        ) ? (
+                          <DefaultBadge />
+                        ) : null}
+                      </div>
+                      <Textarea
+                        id="pause_keywords"
+                        value={pauseKeywordsText}
+                        onChange={(e) => setPauseKeywordsText(e.target.value)}
+                        placeholder={PAUSE_KEYWORDS_DEFAULT.join("\n")}
+                        rows={3}
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Uma palavra por linha. Quando o lead digitar uma delas
+                        (sem outras palavras), o agente para de responder. Não
+                        diferencia maiúscula/minúscula.
+                      </p>
+                    </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="resume_keywords">
-                      Palavras pra reativar
-                    </Label>
-                    <HelpTooltip>
-                      Mesma lógica das palavras pra pausar, mas o oposto:
-                      faz o agente voltar a responder. Defaults:
-                      "ativar", "ia on", "voltar ia".
-                    </HelpTooltip>
-                    {arraysEqualIgnoreOrder(
-                      nextResumeKeywords,
-                      RESUME_KEYWORDS_DEFAULT,
-                    ) ? (
-                      <DefaultBadge />
-                    ) : null}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="resume_keywords">
+                          Palavras pra reativar
+                        </Label>
+                        <HelpTooltip>
+                          Mesma lógica das palavras pra pausar, mas o oposto:
+                          faz o agente voltar a responder. Defaults:
+                          "ativar", "ia on", "voltar ia".
+                        </HelpTooltip>
+                        {arraysEqualIgnoreOrder(
+                          nextResumeKeywords,
+                          RESUME_KEYWORDS_DEFAULT,
+                        ) ? (
+                          <DefaultBadge />
+                        ) : null}
+                      </div>
+                      <Textarea
+                        id="resume_keywords"
+                        value={resumeKeywordsText}
+                        onChange={(e) => setResumeKeywordsText(e.target.value)}
+                        placeholder={RESUME_KEYWORDS_DEFAULT.join("\n")}
+                        rows={3}
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Uma palavra por linha. Faz o agente voltar a responder
+                        se estiver pausado.
+                      </p>
+                    </div>
                   </div>
-                  <Textarea
-                    id="resume_keywords"
-                    value={resumeKeywordsText}
-                    onChange={(e) => setResumeKeywordsText(e.target.value)}
-                    placeholder={RESUME_KEYWORDS_DEFAULT.join("\n")}
-                    rows={3}
-                    className="font-mono text-xs"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Uma palavra por linha. Faz o agente voltar a responder
-                    se estiver pausado.
-                  </p>
-                </div>
+                </details>
               </section>
 
               {/* Subgrupo 2B — Dividir respostas longas */}
-              <section className="space-y-4 pt-4 border-t border-border">
+              <section className="space-y-3 rounded-md border border-border/70 bg-muted/20 p-3">
                 <div>
                   <h4 className="text-sm font-semibold">
                     Dividir respostas longas
@@ -1048,7 +1060,7 @@ export function RulesTab({
               </section>
 
               {/* Subgrupo 2C — Horário comercial */}
-              <section className="pt-4 border-t border-border">
+              <section className="rounded-md border border-border/70 bg-muted/20 p-3">
                 <BusinessHoursInline
                   enabled={businessHoursEnabled}
                   hours={businessHours}
@@ -1072,16 +1084,16 @@ export function RulesTab({
           <AccordionItem
             value="integrations"
             id="accordion-integrations"
-            className="px-4"
+            className="px-3"
           >
-            <AccordionTrigger className="text-base">
+            <AccordionTrigger className="py-3 text-sm">
               <span className="flex items-center gap-2">
                 <Plug className="size-4 text-primary" />
                 Integrações
                 {integrationsDirty ? <DirtyDot /> : null}
               </span>
             </AccordionTrigger>
-            <AccordionContent className="space-y-3 pt-2">
+            <AccordionContent className="space-y-3 pb-4 pt-1">
               <section className="space-y-3">
                 <div className="flex items-center gap-2">
                   <CalendarCheck className="size-4 text-primary" />
@@ -1311,7 +1323,7 @@ function NumberStepper({
     Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : value;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex max-w-44 items-center gap-1.5">
       <Button
         type="button"
         variant="outline"
@@ -1322,7 +1334,7 @@ function NumberStepper({
       >
         <Minus className="size-3.5" />
       </Button>
-      <div className="relative min-w-0 flex-1">
+      <div className="relative w-24">
         <Input
           id={id}
           type="number"
