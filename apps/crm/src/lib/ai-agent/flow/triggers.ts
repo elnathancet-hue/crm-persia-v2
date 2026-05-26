@@ -383,6 +383,20 @@ async function executeFlowForLeadEvent(
   const expectedControlEpoch =
     (agentConvRow as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
 
+  // Bug K fix (mai/2026): resetar current_node_id ANTES de runFlow.
+  // CRM events (stage_entered / segment_entered) são discretos —
+  // sempre começam do entry node. Se a `agent_conversations` foi
+  // reusada de uma inbound anterior + run quebrou antes do UPDATE
+  // final (linha 437), o `current_node_id` antigo persistiria no DB
+  // e poderia ser carregado por outro caminho (ex: próximo inbound
+  // do mesmo lead). Reset explícito antes do `runFlow` garante que
+  // ninguém lê estado órfão entre crashes.
+  await db
+    .from("agent_conversations")
+    .update({ current_node_id: null })
+    .eq("organization_id", orgId)
+    .eq("id", agentConversationId);
+
   // 4. Build realtime provider + run context.
   const realtimeProvider = createRealtimeProvider({
     db,
