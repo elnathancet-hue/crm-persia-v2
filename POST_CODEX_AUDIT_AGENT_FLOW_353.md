@@ -369,3 +369,160 @@ e o alvo imediato e `ai_agent`, ou auto-inserir/sugerir um action node
 3. Ajustar `move_pipeline_stage` para salvar `stage_id` com selecao por funil.
 4. Endurecer validacao de CRM event -> AI para evitar flow que termina sem
    falar com o lead.
+
+---
+
+# Quarta auditoria - navegacao por cada acao do canvas
+
+**Escopo refinado:** auditar cada card de acao em `FlowCanvas`, comparando:
+
+1. payload inicial do catalogo;
+2. formulario de configuracao;
+3. validacao de `FlowConfig`;
+4. execucao no `runner.ts`;
+5. handler nativo real.
+
+## Veredito da auditoria por acao
+
+O problema central nao esta em uma acao isolada: o `runner.ts` chama handlers
+nativos sem injetar o contexto enriquecido que eles esperam (`db`, `provider`,
+`config`, `agentConversation`, etc.).
+
+Referencias:
+
+- `apps/crm/src/lib/ai-agent/flow/runner.ts:603`
+- `apps/crm/src/lib/ai-agent/flow/runner.ts:793`
+- `apps/crm/src/lib/ai-agent/tools/shared.ts:11`
+- `apps/crm/src/lib/ai-agent/tools/shared.ts:20`
+- `apps/crm/src/lib/ai-agent/tools/shared.ts:26`
+- `apps/crm/src/lib/ai-agent/tools/shared.ts:30`
+
+Impacto: a maioria das actions que parecem configuradas no canvas falha em
+runtime com `database context missing`, `provider context missing` ou `agent
+config missing`. O unico card deterministico claramente funcional hoje e
+`send_whatsapp_message`, porque ele nao usa handler nativo: o proprio runner
+emite `send_text` para o provider do flow.
+
+## Matriz por acao
+
+| Acao no canvas | Status funcional | Motivo |
+| --- | --- | --- |
+| `send_whatsapp_message` | OK com ressalva | Special-case no runner; emite `send_text` e o realtime-provider envia/persiste. Ressalva: o runner marca sucesso antes de saber se o provider realmente entregou, porque o envio e fire-and-forget. |
+| `add_tag` | Quebrada no flow runner | Handler exige `db` via `getHandlerDb`; runner nao injeta. Mesmo corrigindo isso, o handler cria tag se nao existir, enquanto a UI sugere selecionar tag existente. |
+| `remove_tag` | Nao implementada | UI/catalogo/validacao aceitam, mas `directHandlers` nao mapeia. O runner emite guardrail e segue a edge default sem remover nada. |
+| `move_pipeline_stage` | Quebrada + UX divergente | Falha sem `db`. Alem disso, UI salva `stage_name` de uma lista global; handler resolve dentro do funil atual do lead. Pode selecionar uma etapa visualmente valida que o runtime rejeita. |
+| `create_appointment` | Inviavel como action deterministica atual | Handler exige `start_at` e `type_slug` ou `title`/`duration_minutes`. O formulario da action so permite `type_slug` opcional; nao ha campo para data/hora. Como tool da IA faz sentido; como card deterministico com `config: {}` tende a falhar por input invalido. |
+| `trigger_notification` | Quebrada no flow runner | Handler exige `db`, `config` e provider para dispatch. Runner nao injeta nenhum deles. |
+| `send_media` | Quebrada no flow runner | Handler exige `db` e `provider` real. Runner nao injeta; alem disso o formulario pede slug manual em vez de picker de midia. |
+| `transfer_to_user` | Quebrada no flow runner | Handler exige `db`; runner nao injeta. Depois de corrigido, a UI esta alinhada porque salva email/user id e o handler aceita `user`. |
+| `round_robin_user` | Quebrada no flow runner | Handler exige `db`; runner nao injeta. Depois de corrigido, tende a funcionar, mas nao tem filtros de departamento/fila. |
+| `transfer_to_agent` | Quebrada e possivelmente legado | Alem de faltar `db`, o handler usa `agent_stages` e `current_stage_id`, conceitos do modelo anterior. No flow pivot, a transferencia deveria provavelmente trocar `config_id` e reiniciar no entry/current_node_id do agente alvo. |
+| `stop_agent` | Quebrada no flow runner | Handler exige `db` para pausar. Para notificacao de handoff, tambem precisa `config`, `agentConversation`, provider e OpenAI client. Runner nao injeta. |
+| `set_lead_custom_field` | Quebrada no flow runner | Handler exige `db`; runner nao injeta. Alem disso, a UI promete variaveis tipo `{{lead.name}}`, mas o handler grava o valor literal sem interpolacao. |
+
+## Achados criticos por acao
+
+### Critica - Handlers nativos nao recebem `db` no flow runner
+
+Todos estes handlers chamam `getHandlerDb(context)` e falham sem `db`:
+
+- `add_tag`
+- `move_pipeline_stage`
+- `create_appointment`
+- `send_media`
+- `transfer_to_user`
+- `round_robin_user`
+- `transfer_to_agent`
+- `trigger_notification`
+- `stop_agent`
+- `set_lead_custom_field`
+
+No runner, tanto tool calls da IA quanto action nodes montam contexto apenas
+com IDs basicos (`organization_id`, `lead_id`, `crm_conversation_id`,
+`agent_conversation_id`, `run_id`, `dry_run`). O campo `db` nunca e passado.
+
+Impacto: o flow pode conversar, mas qualquer acao real do CRM tende a falhar.
+Isso compromete o objetivo principal do canvas: transformar garantias
+operacionais em nodes deterministas.
+
+Recomendacao: criar um helper unico de contexto nativo para o flow runner,
+exemplo `buildNativeHandlerContext(db, ctx, extras)`, usado por
+`dispatchToolCall` e `executeActionNode`.
+
+### Critica - `transfer_to_agent` ainda aponta para o modelo antigo de stages
+
+O handler de transferencia para outro agente busca `agent_stages` e grava
+`current_stage_id`. Esse modelo foi substituido pelo flow pivot, que persiste
+`current_node_id`.
+
+Impacto: mesmo depois de passar `db`, essa action pode falhar com "target agent
+config has no stages" ou transferir para um estado que o runner novo nao usa.
+
+Recomendacao: reescrever `transfer_to_agent` para o modelo flow:
+
+- resolver agente alvo ativo;
+- trocar `agent_conversations.config_id`;
+- limpar `current_node_id`;
+- deixar o proximo turno iniciar pelo entry do flow alvo;
+- preservar `history_summary` e `variables`.
+
+### Alta - `create_appointment` nao tem formulario suficiente para action node
+
+Como tool chamada pela IA, `create_appointment` faz sentido porque a IA coleta
+data/hora e passa `start_at`. Como action deterministica do canvas, o formulario
+nao coleta `start_at`, e o default do catalogo e `config: {}`.
+
+Impacto: cliente arrasta "Criar agendamento", salva, e na execucao a action
+falha por input invalido. O canvas da a entender que agendamento e uma acao
+configuravel, mas falta a origem dos dados.
+
+Recomendacao: uma destas opcoes:
+
+1. remover `create_appointment` das action nodes deterministicas e manter
+   apenas como tool da IA;
+2. transformar o card em "Criar agendamento a partir dos dados coletados",
+   com mapeamento explicito de variaveis (`start_at`, `type_slug`, email);
+3. exigir que ele venha depois de um AI node que emite payload estruturado.
+
+### Alta - `stop_agent`, `trigger_notification` e `send_media` precisam de provider/config
+
+Mesmo se o `db` for injetado, essas actions precisam de mais contexto:
+
+- `stop_agent`: `config`, `agentConversation`, provider e OpenAI client para
+  handoff notification com resumo.
+- `trigger_notification`: `config` e provider para carregar template do agente
+  e enviar WhatsApp.
+- `send_media`: provider real para enviar arquivo pelo WhatsApp.
+
+Impacto: corrigir apenas `db` resolve parte das actions, mas essas continuam
+parciais ou sem efeitos externos.
+
+Recomendacao: enriquecer `FlowRunContext` ou criar um `NativeRuntimeContext`
+com os recursos ja existentes no executor/realtime provider.
+
+### Media - UI promete interpolacao em `set_lead_custom_field`, mas handler grava literal
+
+O formulario diz que pode usar `{{lead.name}}`, mas o handler apenas grava a
+string recebida em `lead_custom_field_values`.
+
+Referencias:
+
+- `packages/ai-agent-ui/src/components/flow/NodeConfigSheet.tsx:720`
+- `apps/crm/src/lib/ai-agent/tools/set-lead-custom-field.ts:22`
+
+Impacto: se o cliente configurar `{{lead.name}}`, o campo pode receber o texto
+literal `{{lead.name}}`, nao o nome do lead.
+
+Recomendacao: implementar interpolacao compartilhada para action nodes ou
+remover a promessa da UI ate existir.
+
+## Ordem de ataque recomendada por acao
+
+1. Corrigir o contexto dos handlers no flow runner (`db` primeiro).
+2. Revalidar `add_tag`, `move_pipeline_stage`, `transfer_to_user`,
+   `round_robin_user` e `set_lead_custom_field` com testes de runner.
+3. Reescrever `transfer_to_agent` para `current_node_id`.
+4. Decidir o produto de `create_appointment` como action deterministica.
+5. Injetar provider/config para `stop_agent`, `trigger_notification` e
+   `send_media`.
+6. Remover ou implementar `remove_tag`.
