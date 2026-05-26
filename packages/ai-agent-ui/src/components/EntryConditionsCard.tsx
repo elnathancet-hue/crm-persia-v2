@@ -34,15 +34,11 @@ const CONDITION_LABELS: Record<EntryConditionType, string> = {
 
 const CONDITION_PLACEHOLDERS: Record<EntryConditionType, string> = {
   tag_match: "ex: VIP, qualificado",
-  segment_match: "ID do segmento (UUID)",
+  segment_match: "Selecione um segmento",
   message_contains: "ex: cotacao, suporte, cancelar",
-  pipeline_stage_match: "ID da etapa (UUID)",
+  pipeline_stage_match: "Selecione um funil e uma etapa",
   lead_status_match: "ex: new, qualified, lost",
 };
-
-// UI polish (mai/2026): segment_match e pipeline_stage_match usam Select
-// populado por getFlowCatalogs em vez de Input UUID cru. Elimina o risco
-// de typo no UUID → condição nunca casa, falha silenciosa.
 
 function getValueText(
   condition: AgentEntryCondition,
@@ -53,18 +49,17 @@ function getValueText(
     case "tag_match":
       return String(v.tag_name ?? "");
     case "segment_match": {
-      // UI polish: mostra nome do segmento em vez do UUID cru
       const id = String(v.segment_id ?? "");
       const found = catalogs.segments.find((s) => s.id === id);
-      return found ? found.name : id || "—";
+      return found ? found.name : id || "-";
     }
     case "message_contains":
       return String(v.keyword ?? "");
     case "pipeline_stage_match": {
-      // UI polish: mostra nome da etapa em vez do UUID cru
       const id = String(v.stage_id ?? "");
       const found = catalogs.pipeline_stages.find((s) => s.id === id);
-      return found ? found.name : id || "—";
+      if (!found) return id || "-";
+      return found.pipeline_name ? `${found.pipeline_name} > ${found.name}` : found.name;
     }
     case "lead_status_match":
       return String(v.status ?? "");
@@ -111,6 +106,7 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
 
   const [newType, setNewType] = React.useState<EntryConditionType>("tag_match");
   const [newValue, setNewValue] = React.useState("");
+  const [newPipelineId, setNewPipelineId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (isPrimary) {
@@ -140,12 +136,28 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
     };
   }, [configId, isPrimary, listEntryConditions, getFlowCatalogs]);
 
-  // UI polish (mai/2026 — achado #6): warning quando agente secundário
-  // não tem regras cadastradas. Sem regras, ele NUNCA recebe leads —
-  // fica órfão. pickSecondaryAgent() em entry-conditions.ts:178 só
-  // considera agentes que tem pelo menos 1 condition matching.
-  const isOrphanWarning =
-    !isPrimary && !loading && conditions.length === 0 && !adding;
+  const isOrphanWarning = !loading && conditions.length === 0 && !adding;
+
+  const pipelineOptions = React.useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const stage of catalogs.pipeline_stages) {
+      if (!byId.has(stage.pipeline_id)) {
+        byId.set(
+          stage.pipeline_id,
+          stage.pipeline_name || `Funil ${stage.pipeline_id.slice(0, 8)}`,
+        );
+      }
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name }));
+  }, [catalogs.pipeline_stages]);
+
+  const stagesForPipeline = React.useMemo(
+    () =>
+      newPipelineId
+        ? catalogs.pipeline_stages.filter((stage) => stage.pipeline_id === newPipelineId)
+        : [],
+    [catalogs.pipeline_stages, newPipelineId],
+  );
 
   async function handleAdd() {
     if (!newValue.trim()) {
@@ -165,6 +177,7 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
       });
       setConditions((prev) => [created, ...prev]);
       setNewValue("");
+      setNewPipelineId(null);
       setAdding(false);
       toast.success("Regra adicionada");
     } catch (err) {
@@ -187,50 +200,49 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
     }
   }
 
+  function resetDraft() {
+    setAdding(false);
+    setNewValue("");
+    setNewPipelineId(null);
+  }
+
+  if (isPrimary) return null;
+
   return (
-    <section className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
+    <section className="space-y-4 rounded-lg border border-border/70 bg-background p-4">
       <div>
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Workflow className="size-4 text-primary" />
           Entrada do agente
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          {isPrimary
-            ? "Este agente e o fallback principal: responde quando nenhum agente especifico casar com o lead."
-            : "Este agente responde quando alguma regra abaixo casar com o lead que esta chegando."}
+          Defina quando este agente secundario deve assumir uma conversa nova.
+          Se nenhuma regra bater, o agente principal responde.
         </p>
-        {!isPrimary ? (
-          <strong className="mt-1 block text-xs text-muted-foreground">
-            Basta uma regra acionar. Se nenhuma bater, o agente principal
-            responde normalmente.
-          </strong>
-        ) : null}
       </div>
 
-      {isPrimary ? null : (
-        <div className="space-y-3">
-          {loading ? (
-            <p className="text-xs italic text-muted-foreground">
-              Carregando...
-            </p>
-          ) : isOrphanWarning ? (
-            <div className="flex items-start gap-2 rounded-lg border border-warning-ring bg-warning-soft p-3">
-              <AlertTriangle className="size-4 shrink-0 text-warning" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-warning-soft-foreground">
-                  Agente órfão — não recebe leads
-                </p>
-                <p className="mt-0.5 text-xs text-warning-soft-foreground/80">
-                  Sem regras cadastradas, este agente nunca é acionado. Adicione
-                  pelo menos uma regra abaixo pra ele começar a receber leads.
-                </p>
-              </div>
+      <div className="space-y-3">
+        {loading ? (
+          <p className="text-xs italic text-muted-foreground">Carregando...</p>
+        ) : isOrphanWarning ? (
+          <div className="flex items-start gap-2 rounded-md border border-warning-ring bg-warning-soft p-3">
+            <AlertTriangle className="size-4 shrink-0 text-warning" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-warning-soft-foreground">
+                Agente sem entrada configurada
+              </p>
+              <p className="mt-0.5 text-xs text-warning-soft-foreground/80">
+                Sem uma regra, este agente nao recebe leads novos. Adicione uma
+                entrada para ele participar do roteamento.
+              </p>
             </div>
-          ) : (
-            conditions.map((condition) => (
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {conditions.map((condition) => (
               <div
                 key={condition.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/70 px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2"
               >
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-muted-foreground">
@@ -251,47 +263,46 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                   <Trash2 className="size-3.5" />
                 </Button>
               </div>
-            ))
-          )}
+            ))}
+          </div>
+        )}
 
-          {adding ? (
-            <div className="space-y-2 border-t border-border/60 pt-3">
+        {adding ? (
+          <div className="space-y-3 rounded-md border border-border/70 bg-muted/20 p-3">
+            <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
               <div className="space-y-1.5">
                 <Label htmlFor="new-condition-type" className="text-xs">
-                  Tipo
+                  Quando
                 </Label>
                 <Select
                   value={newType}
                   onValueChange={(value) => {
-                    if (value) {
-                      setNewType(value as EntryConditionType);
-                      // UI polish: reseta value ao trocar tipo (UUID de
-                      // segmento não faz sentido como nome de tag, etc).
-                      setNewValue("");
-                    }
+                    if (!value) return;
+                    setNewType(value as EntryConditionType);
+                    setNewValue("");
+                    setNewPipelineId(null);
                   }}
                 >
                   <SelectTrigger id="new-condition-type">
                     <SelectValue>{CONDITION_LABELS[newType]}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(CONDITION_LABELS) as EntryConditionType[])
-                      .map((type) => (
+                    {(Object.keys(CONDITION_LABELS) as EntryConditionType[]).map(
+                      (type) => (
                         <SelectItem key={type} value={type}>
                           {CONDITION_LABELS[type]}
                         </SelectItem>
-                      ))}
+                      ),
+                    )}
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="new-condition-value" className="text-xs">
-                  Valor
+                  Entrada
                 </Label>
                 {newType === "segment_match" ? (
-                  // UI polish: Select de segmentos em vez de Input UUID cru.
-                  // Antes: cliente leigo digitava UUID errado → condition
-                  // nunca casava, falha silenciosa.
                   <Select
                     value={newValue}
                     onValueChange={(value) => value && setNewValue(value)}
@@ -307,51 +318,69 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                     <SelectContent>
                       {catalogs.segments.length === 0 ? (
                         <div className="px-2 py-1.5 text-xs italic text-muted-foreground">
-                          Nenhum segmento criado. Crie em Configurações →
-                          Segmentos.
+                          Nenhum segmento criado.
                         </div>
                       ) : (
-                        catalogs.segments.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
+                        catalogs.segments.map((segment) => (
+                          <SelectItem key={segment.id} value={segment.id}>
+                            {segment.name}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
                 ) : newType === "pipeline_stage_match" ? (
-                  // UI polish: Select de etapas de funil em vez de Input UUID.
-                  <Select
-                    value={newValue}
-                    onValueChange={(value) => value && setNewValue(value)}
-                  >
-                    <SelectTrigger id="new-condition-value">
-                      <SelectValue placeholder="Selecione uma etapa">
-                        {newValue
-                          ? catalogs.pipeline_stages.find(
-                              (s) => s.id === newValue,
-                            )?.name ?? newValue
-                          : null}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {catalogs.pipeline_stages.length === 0 ? (
-                        <div className="px-2 py-1.5 text-xs italic text-muted-foreground">
-                          Nenhuma etapa de funil cadastrada.
-                        </div>
-                      ) : (
-                        catalogs.pipeline_stages.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.pipeline_name
-                              ? `${s.pipeline_name} → ${s.name}`
-                              : s.name}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Select
+                      value={newPipelineId ?? "_none"}
+                      onValueChange={(value) => {
+                        setNewPipelineId(value === "_none" ? null : value);
+                        setNewValue("");
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue>
+                          {newPipelineId
+                            ? pipelineOptions.find((p) => p.id === newPipelineId)
+                                ?.name ?? "Funil selecionado"
+                            : "Escolha o funil"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Escolha o funil</SelectItem>
+                        {pipelineOptions.map((pipeline) => (
+                          <SelectItem key={pipeline.id} value={pipeline.id}>
+                            {pipeline.name}
                           </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={newValue}
+                      onValueChange={(value) => value && setNewValue(value)}
+                      disabled={!newPipelineId}
+                    >
+                      <SelectTrigger id="new-condition-value">
+                        <SelectValue>
+                          {newValue
+                            ? catalogs.pipeline_stages.find(
+                                (stage) => stage.id === newValue,
+                              )?.name ?? "Etapa selecionada"
+                            : newPipelineId
+                              ? "Escolha a etapa"
+                              : "Depois a etapa"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {stagesForPipeline.map((stage) => (
+                          <SelectItem key={stage.id} value={stage.id}>
+                            {stage.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 ) : (
-                  // Input livre pra tag_match, message_contains, lead_status_match
                   <Input
                     id="new-condition-value"
                     value={newValue}
@@ -360,40 +389,38 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                   />
                 )}
               </div>
-              <div className="flex gap-2 pt-1">
-                <Button
-                  size="sm"
-                  onClick={handleAdd}
-                  disabled={pending || !newValue.trim()}
-                >
-                  Adicionar
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setAdding(false);
-                    setNewValue("");
-                  }}
-                  disabled={pending}
-                >
-                  Cancelar
-                </Button>
-              </div>
             </div>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setAdding(true)}
-              disabled={pending}
-            >
-              <Plus className="size-4" />
-              Adicionar regra
-            </Button>
-          )}
-        </div>
-      )}
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                size="sm"
+                onClick={handleAdd}
+                disabled={pending || !newValue.trim()}
+              >
+                Adicionar
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={resetDraft}
+                disabled={pending}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAdding(true)}
+            disabled={pending}
+          >
+            <Plus className="size-4" />
+            Adicionar entrada
+          </Button>
+        )}
+      </div>
     </section>
   );
 }
