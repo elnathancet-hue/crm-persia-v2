@@ -28,6 +28,7 @@ import {
   getNodeById,
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
+import { buildKnowledgeBlock } from "./knowledge-injector";
 import { nativeHandlers } from "../tools/registry";
 import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import { evaluateCondition } from "./conditions";
@@ -245,9 +246,23 @@ async function executeAIAgentNode(
     return followDefaultEdge(ctx, node);
   }
 
-  const [agentConfig, tools] = await Promise.all([
+  const [agentConfig, tools, knowledgeBlock] = await Promise.all([
     loadAgentConfig(db, ctx),
     loadEnabledTools(db, ctx),
+    // Knowledge inject (mai/2026): consulta a base de conhecimento do
+    // agente e devolve um bloco formatado pra incluir no system prompt.
+    // Retorna null se: agente sem docs anexados, retrieval falhou
+    // (Voyage/network), ou modo 'rag' sem hits acima do threshold.
+    // Modo default ('full') concatena todos chunks — funciona pra
+    // FAQs e proposta comercial (caso uso típico do cliente).
+    // Roda em paralelo com loadAgentConfig/loadEnabledTools pra não
+    // somar latência ao caminho crítico do AI node.
+    buildKnowledgeBlock(
+      db,
+      ctx.organizationId,
+      ctx.agentConfigId,
+      ctx.inboundMessage.text,
+    ),
   ]);
   const client = getOpenAIClient();
   const model = node.data.model ?? agentConfig.model;
@@ -272,6 +287,11 @@ async function executeAIAgentNode(
     );
   }
   if (agentConfig.system_prompt.trim()) systemParts.push(agentConfig.system_prompt.trim());
+  // Knowledge inject (mai/2026): bloco "BASE DE CONHECIMENTO" entra
+  // logo após o prompt-base do agente — assim a IA já leu persona +
+  // regras gerais e agora ganha contexto factual antes de pensar.
+  // Buildado em paralelo com agentConfig/tools acima.
+  if (knowledgeBlock) systemParts.push(knowledgeBlock);
   // Bug D fix (mai/2026): warning explícito pra evitar vazamento de
   // tool call como texto. Modelos novos (gpt-5*, gpt-4o*) às vezes
   // retornam `tool_calls` E `content` no mesmo turno — o content
