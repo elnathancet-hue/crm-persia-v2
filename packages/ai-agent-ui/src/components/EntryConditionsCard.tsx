@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Trash2, Workflow } from "lucide-react";
+import { AlertTriangle, Plus, Trash2, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import type {
   AgentEntryCondition,
@@ -19,6 +19,10 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import { useAgentActions } from "../context";
+import {
+  EMPTY_FLOW_CATALOGS,
+  type FlowCatalogs,
+} from "./flow/catalog-types";
 
 const CONDITION_LABELS: Record<EntryConditionType, string> = {
   tag_match: "Lead tem a tag",
@@ -36,17 +40,32 @@ const CONDITION_PLACEHOLDERS: Record<EntryConditionType, string> = {
   lead_status_match: "ex: new, qualified, lost",
 };
 
-function getValueText(condition: AgentEntryCondition): string {
+// UI polish (mai/2026): segment_match e pipeline_stage_match usam Select
+// populado por getFlowCatalogs em vez de Input UUID cru. Elimina o risco
+// de typo no UUID → condição nunca casa, falha silenciosa.
+
+function getValueText(
+  condition: AgentEntryCondition,
+  catalogs: FlowCatalogs,
+): string {
   const v = condition.condition_value as unknown as Record<string, unknown>;
   switch (condition.condition_type) {
     case "tag_match":
       return String(v.tag_name ?? "");
-    case "segment_match":
-      return String(v.segment_id ?? "");
+    case "segment_match": {
+      // UI polish: mostra nome do segmento em vez do UUID cru
+      const id = String(v.segment_id ?? "");
+      const found = catalogs.segments.find((s) => s.id === id);
+      return found ? found.name : id || "—";
+    }
     case "message_contains":
       return String(v.keyword ?? "");
-    case "pipeline_stage_match":
-      return String(v.stage_id ?? "");
+    case "pipeline_stage_match": {
+      // UI polish: mostra nome da etapa em vez do UUID cru
+      const id = String(v.stage_id ?? "");
+      const found = catalogs.pipeline_stages.find((s) => s.id === id);
+      return found ? found.name : id || "—";
+    }
     case "lead_status_match":
       return String(v.status ?? "");
   }
@@ -81,8 +100,11 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
     listEntryConditions,
     createEntryCondition,
     deleteEntryCondition,
+    getFlowCatalogs,
   } = useAgentActions();
   const [conditions, setConditions] = React.useState<AgentEntryCondition[]>([]);
+  const [catalogs, setCatalogs] =
+    React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const [loading, setLoading] = React.useState(true);
   const [adding, setAdding] = React.useState(false);
   const [pending, setPending] = React.useState(false);
@@ -97,10 +119,11 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
     }
 
     let cancelled = false;
-    listEntryConditions(configId)
-      .then((list) => {
+    Promise.all([listEntryConditions(configId), getFlowCatalogs(configId)])
+      .then(([list, cat]) => {
         if (!cancelled) {
           setConditions(list);
+          setCatalogs(cat);
           setLoading(false);
         }
       })
@@ -115,7 +138,14 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [configId, isPrimary, listEntryConditions]);
+  }, [configId, isPrimary, listEntryConditions, getFlowCatalogs]);
+
+  // UI polish (mai/2026 — achado #6): warning quando agente secundário
+  // não tem regras cadastradas. Sem regras, ele NUNCA recebe leads —
+  // fica órfão. pickSecondaryAgent() em entry-conditions.ts:178 só
+  // considera agentes que tem pelo menos 1 condition matching.
+  const isOrphanWarning =
+    !isPrimary && !loading && conditions.length === 0 && !adding;
 
   async function handleAdd() {
     if (!newValue.trim()) {
@@ -183,10 +213,19 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
             <p className="text-xs italic text-muted-foreground">
               Carregando...
             </p>
-          ) : conditions.length === 0 && !adding ? (
-            <p className="text-xs italic text-muted-foreground">
-              Nenhuma regra. Sem regras, este agente nunca recebe leads.
-            </p>
+          ) : isOrphanWarning ? (
+            <div className="flex items-start gap-2 rounded-lg border border-warning-ring bg-warning-soft p-3">
+              <AlertTriangle className="size-4 shrink-0 text-warning" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-warning-soft-foreground">
+                  Agente órfão — não recebe leads
+                </p>
+                <p className="mt-0.5 text-xs text-warning-soft-foreground/80">
+                  Sem regras cadastradas, este agente nunca é acionado. Adicione
+                  pelo menos uma regra abaixo pra ele começar a receber leads.
+                </p>
+              </div>
+            </div>
           ) : (
             conditions.map((condition) => (
               <div
@@ -198,7 +237,7 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                     {CONDITION_LABELS[condition.condition_type]}
                   </p>
                   <p className="truncate text-sm font-medium">
-                    {getValueText(condition)}
+                    {getValueText(condition, catalogs)}
                   </p>
                 </div>
                 <Button
@@ -223,9 +262,14 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                 </Label>
                 <Select
                   value={newType}
-                  onValueChange={(value) =>
-                    value && setNewType(value as EntryConditionType)
-                  }
+                  onValueChange={(value) => {
+                    if (value) {
+                      setNewType(value as EntryConditionType);
+                      // UI polish: reseta value ao trocar tipo (UUID de
+                      // segmento não faz sentido como nome de tag, etc).
+                      setNewValue("");
+                    }
+                  }}
                 >
                   <SelectTrigger id="new-condition-type">
                     <SelectValue>{CONDITION_LABELS[newType]}</SelectValue>
@@ -244,12 +288,77 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                 <Label htmlFor="new-condition-value" className="text-xs">
                   Valor
                 </Label>
-                <Input
-                  id="new-condition-value"
-                  value={newValue}
-                  onChange={(e) => setNewValue(e.target.value)}
-                  placeholder={CONDITION_PLACEHOLDERS[newType]}
-                />
+                {newType === "segment_match" ? (
+                  // UI polish: Select de segmentos em vez de Input UUID cru.
+                  // Antes: cliente leigo digitava UUID errado → condition
+                  // nunca casava, falha silenciosa.
+                  <Select
+                    value={newValue}
+                    onValueChange={(value) => value && setNewValue(value)}
+                  >
+                    <SelectTrigger id="new-condition-value">
+                      <SelectValue placeholder="Selecione um segmento">
+                        {newValue
+                          ? catalogs.segments.find((s) => s.id === newValue)
+                              ?.name ?? newValue
+                          : null}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {catalogs.segments.length === 0 ? (
+                        <div className="px-2 py-1.5 text-xs italic text-muted-foreground">
+                          Nenhum segmento criado. Crie em Configurações →
+                          Segmentos.
+                        </div>
+                      ) : (
+                        catalogs.segments.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : newType === "pipeline_stage_match" ? (
+                  // UI polish: Select de etapas de funil em vez de Input UUID.
+                  <Select
+                    value={newValue}
+                    onValueChange={(value) => value && setNewValue(value)}
+                  >
+                    <SelectTrigger id="new-condition-value">
+                      <SelectValue placeholder="Selecione uma etapa">
+                        {newValue
+                          ? catalogs.pipeline_stages.find(
+                              (s) => s.id === newValue,
+                            )?.name ?? newValue
+                          : null}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {catalogs.pipeline_stages.length === 0 ? (
+                        <div className="px-2 py-1.5 text-xs italic text-muted-foreground">
+                          Nenhuma etapa de funil cadastrada.
+                        </div>
+                      ) : (
+                        catalogs.pipeline_stages.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.pipeline_name
+                              ? `${s.pipeline_name} → ${s.name}`
+                              : s.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  // Input livre pra tag_match, message_contains, lead_status_match
+                  <Input
+                    id="new-condition-value"
+                    value={newValue}
+                    onChange={(e) => setNewValue(e.target.value)}
+                    placeholder={CONDITION_PLACEHOLDERS[newType]}
+                  />
+                )}
               </div>
               <div className="flex gap-2 pt-1">
                 <Button
