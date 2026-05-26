@@ -66,6 +66,11 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
   const { db, orgId } = await requireAgentRole("admin");
   const normalized = normalizeAgentInput(input);
   const guardrails = mergeGuardrails(DEFAULT_GUARDRAILS, normalized.guardrails);
+  const newLeadStageId = await resolveNewLeadStageId(
+    db,
+    orgId,
+    normalized.new_lead_stage_id,
+  );
 
   const { data, error } = await db
     .from("agent_configs")
@@ -87,6 +92,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       handoff_notification_target_address: normalized.handoff_notification_target_address ?? null,
       handoff_notification_template: normalized.handoff_notification_template ?? null,
       calendar_connection_id: normalized.calendar_connection_id ?? null,
+      new_lead_stage_id: newLeadStageId,
       // PR-FLOW-PIVOT (mai/2026): único valor aceito pelo CHECK
       // constraint da migration 054 é 'flow'. Fallback explícito
       // pra default seguro caso normalizeAgentInput regredisse.
