@@ -631,11 +631,21 @@ export async function tryEnqueueForNativeAgent(
         .eq("organization_id", orgId)
         .eq("id", conversationId);
     } else if (matchPause) {
+      // Bug K fix (mai/2026): bump ai_control_epoch igual ao Assumir manual.
+      // Hoje o send-guard rejeita via `human_handoff_at IS NOT NULL` (linha
+      // 73 do send-guard.ts), então funciona. Mas se um próximo PR mudar
+      // ordem das checagens ou remover early-return, runs em flight ainda
+      // conseguiriam enviar após pause. Inconsistente com:
+      //  - actions/conversations.ts:54 (Assumir manual bumpa epoch)
+      //  - actions/messages.ts:89 (operator reply bumpa epoch)
+      //  - executor.ts:matchResume (resume keyword bumpa epoch — Bug J)
+      // Esta mudança fecha o padrão: TODA transição de controle bump epoch.
       await db
         .from("agent_conversations")
         .update({
           human_handoff_at: new Date().toISOString(),
           human_handoff_reason: "pause_keyword",
+          ai_control_epoch: aiControlEpoch + 1,
         })
         .eq("organization_id", orgId)
         .eq("id", agentConversationId);
