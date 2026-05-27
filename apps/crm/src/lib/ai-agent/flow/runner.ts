@@ -21,6 +21,7 @@ import type {
   FlowConditionNode,
   FlowEntryNode,
   FlowNode,
+  ToolExecutionMode,
 } from "@persia/shared/ai-agent";
 import {
   calculateCostUsdCents,
@@ -208,7 +209,10 @@ interface LoadedToolRow {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
-  execution_mode: "native" | "n8n_webhook" | "mcp";
+  // Backlog #7 Auditoria (mai/2026): usa o tipo compartilhado em vez do
+  // literal local. Migration 062 ja garante que o DB so aceita esses 3
+  // valores via CHECK constraint.
+  execution_mode: ToolExecutionMode;
   native_handler: string | null;
   /** PR 15 (mai/2026): set quando execution_mode='mcp'. */
   mcp_server_id?: string | null;
