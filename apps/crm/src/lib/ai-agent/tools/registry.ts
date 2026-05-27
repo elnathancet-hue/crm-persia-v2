@@ -11,6 +11,7 @@ import { createAppointmentHandler } from "./create-appointment";
 import { emitEventHandler } from "./emit-event";
 import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
+import { removeTagHandler } from "./remove-tag";
 import { rescheduleAppointmentHandler } from "./reschedule-appointment";
 import { roundRobinUserHandler } from "./round-robin-user";
 import { sendMediaHandler } from "./send-media";
@@ -28,6 +29,8 @@ export const nativeHandlers: NativeHandlerRegistry = {
   transfer_to_user: transferToUserHandler,
   transfer_to_agent: transferToAgentHandler,
   add_tag: addTagHandler,
+  // PR-6 Auditoria (mai/2026): handler novo. Espelha add_tag mas DELETE.
+  remove_tag: removeTagHandler,
   trigger_notification: triggerNotificationHandler,
   move_pipeline_stage: movePipelineStageHandler,
   // PR-AGENDA-TOOLS (mai/2026): agendamento conversacional via WhatsApp

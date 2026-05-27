@@ -114,13 +114,21 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
   const { error: toolError } = await db.from("agent_tools").insert(defaultTool);
   if (toolError) throw new Error(toolError.message);
 
-  // Onboarding: se cliente escolheu um template (nao-blank), materializa
-  // as stages pre-definidas. Falha aqui NAO desfaz o agente — o cliente
-  // pode adicionar stages manualmente depois.
-  if (input.template_slug && isAgentTemplateSlug(input.template_slug)) {
-    const template = getAgentTemplate(input.template_slug);
-    await applyTemplate(db, orgId, config, template);
-  }
+  // Onboarding: aplica template do cliente OU cai pro `blank` (que tambem
+  // seeda flow minimo entry → AI).
+  //
+  // PR-6 Auditoria (mai/2026): endereca rodada 3 #1 do POST_CODEX_AUDIT.
+  // Antes, sem `template_slug`, applyTemplate nao era chamado e o agente
+  // ficava sem `agent_flows`. Cliente ativava o agente, webhook chegava,
+  // executor disparava `flow_executor_no_flow` e a IA nunca respondia.
+  // Agora `blank` e default — garante que TODO agente novo nasce com
+  // flow minimo (entry + AI) materializado, alem de tools nativas seed.
+  const templateSlug =
+    input.template_slug && isAgentTemplateSlug(input.template_slug)
+      ? input.template_slug
+      : "blank";
+  const template = getAgentTemplate(templateSlug);
+  await applyTemplate(db, orgId, config, template);
 
   for (const path of agentPaths()) revalidatePath(path);
   return config;
@@ -535,13 +543,36 @@ async function applyTemplate(
     enabled_tools: emitEventToolId ? [emitEventToolId] : [],
   };
 
+  // PR-6 Auditoria (mai/2026): endereca rodada 3 #2. Quando template
+  // traz `flow_config` proprio, o `enabled_tools` dele e usado direto e
+  // o `emit_event` (criado em DB acima como agent_tools row) NAO entra
+  // no allowlist do flow. Resultado: o canvas mostra 4 handles
+  // conectados, o prompt manda chamar emit_event, mas a tool nao
+  // chega ao modelo. Branches morrem silenciosamente.
+  //
+  // Fix: se ha qualquer AI node com instructions[].length > 0 no flow
+  // do template, garantir que emit_event esta no enabled_tools.
+  const aiNodesWithInstructions = (flowConfig.nodes ?? []).some((node) => {
+    if (node.type !== "ai_agent") return false;
+    const data = node.data as { instructions?: Array<unknown> } | undefined;
+    return (data?.instructions?.length ?? 0) > 0;
+  });
+  const enabledTools = [...(flowConfig.enabled_tools ?? [])];
+  if (
+    aiNodesWithInstructions &&
+    emitEventToolId &&
+    !enabledTools.includes(emitEventToolId)
+  ) {
+    enabledTools.push(emitEventToolId);
+  }
+
   const { error: flowError } = await db.from("agent_flows").insert({
     agent_config_id: config.id,
     organization_id: orgId,
     nodes: flowConfig.nodes,
     edges: flowConfig.edges,
     viewport: flowConfig.viewport,
-    enabled_tools: flowConfig.enabled_tools,
+    enabled_tools: enabledTools,
     version: 1,
   });
   if (flowError) {

@@ -649,18 +649,89 @@ export function ActionForm({
       )}
 
       {actionType === "create_appointment" && (
-        <CatalogSelect
-          label="Tipo de agendamento (opcional)"
-          loading={catalogsLoading}
-          value={(config.type_slug as string) ?? ""}
-          onChange={(v) => updateConfig({ type_slug: v })}
-          options={catalogs.agenda_services.map((s) => ({
-            value: s.slug,
-            label: `${s.name} (${s.duration_minutes}min)`,
-          }))}
-          emptyLabel="Nenhum tipo de agendamento. Configure em Agenda → Tipos."
-          placeholder="A IA decide no momento"
-        />
+        <>
+          {/*
+            PR-6 Auditoria (mai/2026): endereca decisao do plano da rodada 4
+            #alta — "completar form com start_at + type_slug + duration_minutes".
+            Antes, create_appointment como action node so tinha type_slug
+            opcional — handler exigia start_at e falhava em runtime quando
+            usado deterministicamente (Codex marcou como "inviavel como
+            action determinante atual"). Agora o admin define quando o
+            appointment e criado.
+
+            Campos:
+              - start_at (datetime-local + Z UTC): instante absoluto.
+                Tradeoff V1: timezone UTC assumido. Sem suporte a relative
+                offset ("+24h") ainda — exige modelo de variaveis no flow.
+              - type_slug (dropdown): herda duration/channel/location.
+              - duration_minutes: sobrescreve duracao do type_slug.
+          */}
+          <div className="space-y-1.5">
+            <Label htmlFor="action-appointment-start">Data e hora</Label>
+            <Input
+              id="action-appointment-start"
+              type="datetime-local"
+              value={
+                typeof config.start_at === "string"
+                  ? (config.start_at as string).replace(/(:\d{2})?\.\d{3}Z$/, "").slice(0, 16)
+                  : ""
+              }
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) {
+                  updateConfig({ start_at: undefined });
+                  return;
+                }
+                // datetime-local entrega "YYYY-MM-DDTHH:mm" sem timezone —
+                // anexamos ":00.000Z" pra virar ISO UTC valido (o handler
+                // usa z.string().datetime({offset:true})).
+                updateConfig({ start_at: `${raw}:00.000Z` });
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Em UTC. Para 14:00 em São Paulo, use 17:00 aqui.
+            </p>
+          </div>
+          <CatalogSelect
+            label="Tipo de agendamento (opcional)"
+            loading={catalogsLoading}
+            value={(config.type_slug as string) ?? ""}
+            onChange={(v) => updateConfig({ type_slug: v })}
+            options={catalogs.agenda_services.map((s) => ({
+              value: s.slug,
+              label: `${s.name} (${s.duration_minutes}min)`,
+            }))}
+            emptyLabel="Nenhum tipo de agendamento. Configure em Agenda → Tipos."
+            placeholder="A IA decide no momento"
+          />
+          <div className="space-y-1.5">
+            <Label htmlFor="action-appointment-duration">
+              Duração em minutos (opcional)
+            </Label>
+            <Input
+              id="action-appointment-duration"
+              type="number"
+              min={15}
+              max={480}
+              step={15}
+              value={
+                typeof config.duration_minutes === "number"
+                  ? config.duration_minutes
+                  : ""
+              }
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) {
+                  updateConfig({ duration_minutes: undefined });
+                  return;
+                }
+                const n = parseInt(raw, 10);
+                if (Number.isFinite(n)) updateConfig({ duration_minutes: n });
+              }}
+              placeholder="Sobrescreve duração do tipo selecionado"
+            />
+          </div>
+        </>
       )}
 
       {actionType === "send_media" && (

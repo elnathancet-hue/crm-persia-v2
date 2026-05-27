@@ -218,16 +218,50 @@ async function loadEnabledTools(
   ctx: FlowRunContext,
 ): Promise<LoadedToolRow[]> {
   const ids = ctx.flowConfig.enabled_tools;
-  if (ids.length === 0) return [];
-  const { data, error } = await db
-    .from("agent_tools")
-    .select(
-      "id, name, description, input_schema, execution_mode, native_handler, mcp_server_id, is_enabled",
-    )
-    .eq("organization_id", ctx.organizationId)
-    .in("id", ids);
-  if (error) throw new Error(`Falha ao carregar tools: ${error.message}`);
-  return ((data ?? []) as Array<LoadedToolRow & { is_enabled: boolean }>)
+  const ToolSelect =
+    "id, name, description, input_schema, execution_mode, native_handler, mcp_server_id, is_enabled";
+
+  let tools: Array<LoadedToolRow & { is_enabled: boolean }> = [];
+  if (ids.length > 0) {
+    const { data, error } = await db
+      .from("agent_tools")
+      .select(ToolSelect)
+      .eq("organization_id", ctx.organizationId)
+      .in("id", ids);
+    if (error) throw new Error(`Falha ao carregar tools: ${error.message}`);
+    tools = (data ?? []) as typeof tools;
+  }
+
+  // PR-6 Auditoria (mai/2026): defense-in-depth pro emit_event.
+  // Endereca rodada 3 #2 + #3 do POST_CODEX_AUDIT — flows com AI node
+  // que tem instructions[] (handles nomeados) dependem da tool emit_event
+  // estar no modelo. Se o cliente desenhou o canvas mas esqueceu de
+  // adicionar a tool a enabled_tools (ou a UI nao expoe esse toggle),
+  // o LLM nao recebe a tool e os branches morrem silenciosamente.
+  //
+  // Auto-incluir aqui (sem mexer no enabled_tools persistido) garante
+  // que qualquer AI node com instructions sempre consegue emitir handles.
+  // emit_event nao tem side effects — e seguro forcar.
+  const needsEmitEvent = ctx.flowConfig.nodes.some((node) => {
+    if (node.type !== "ai_agent") return false;
+    const data = node.data as { instructions?: Array<unknown> } | undefined;
+    return (data?.instructions?.length ?? 0) > 0;
+  });
+  const hasEmitEvent = tools.some((t) => t.native_handler === "emit_event");
+  if (needsEmitEvent && !hasEmitEvent) {
+    const { data, error } = await db
+      .from("agent_tools")
+      .select(ToolSelect)
+      .eq("organization_id", ctx.organizationId)
+      .eq("config_id", ctx.agentConfigId)
+      .eq("native_handler", "emit_event")
+      .maybeSingle();
+    if (!error && data) {
+      tools.push(data as LoadedToolRow & { is_enabled: boolean });
+    }
+  }
+
+  return tools
     .filter((t) => t.is_enabled !== false)
     .map(({ is_enabled: _ignore, ...rest }) => rest);
 }
@@ -833,10 +867,11 @@ async function executeActionNode(
   }
 
   // Mapeamento direto FlowActionType → NativeHandlerName quando possível.
-  // Action nodes "remove_tag" não tem handler nativo ainda (foi declarado
-  // no shared/flow.ts como tipo futuro). V1 marca como guardrail.
   const directHandlers: Partial<Record<typeof actionType, keyof typeof nativeHandlers>> = {
     add_tag: "add_tag",
+    // PR-6 Auditoria (mai/2026): remove_tag agora tem handler nativo
+    // (rodada 1 #3 + rodada 4 matriz). Antes era guardrail silencioso.
+    remove_tag: "remove_tag",
     move_pipeline_stage: "move_pipeline_stage",
     create_appointment: "create_appointment",
     trigger_notification: "trigger_notification",
