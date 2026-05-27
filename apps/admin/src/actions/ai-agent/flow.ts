@@ -22,6 +22,12 @@ import {
   requireAdminAgentOrg,
 } from "./utils";
 
+export interface FlowImpactPreview {
+  affected_conversations: number;
+  at_risk_node_ids: string[];
+  total_live_conversations: number;
+}
+
 export async function getFlow(
   orgId: string,
   configId: string,
@@ -190,4 +196,50 @@ export async function saveFlow(
     });
     throw error;
   }
+}
+
+/**
+ * Backlog #4 Auditoria (mai/2026): paridade com apps/crm/src/actions/ai-agent/flow.ts.
+ * Endereca rodada 9 #1 + #5 — admin precisa ver impacto antes de salvar
+ * flow que ja tem conversas vivas. Read-only, sem audit log porque nao
+ * altera estado (so reporta).
+ */
+export async function previewFlowImpact(
+  orgId: string,
+  configId: string,
+  config: FlowConfig,
+): Promise<FlowImpactPreview> {
+  const { db } = await requireAdminAgentOrg(orgId);
+  await assertConfigBelongsToOrg(db, orgId, configId);
+
+  const normalized = normalizeFlowConfig(config);
+  const nodeIdsInNewConfig = new Set(normalized.nodes.map((n) => n.id));
+
+  const { data: liveConvs, error: convError } = await fromAny(db, "agent_conversations")
+    .select("current_node_id")
+    .eq("organization_id", orgId)
+    .eq("config_id", configId)
+    .not("current_node_id", "is", null);
+
+  if (convError) {
+    throw new Error(`Falha ao analisar impacto: ${convError.message}`);
+  }
+
+  const rows = (liveConvs ?? []) as Array<{ current_node_id: string }>;
+  const atRiskSet = new Set<string>();
+  for (const row of rows) {
+    if (!nodeIdsInNewConfig.has(row.current_node_id)) {
+      atRiskSet.add(row.current_node_id);
+    }
+  }
+
+  const affectedCount = rows.filter(
+    (r) => !nodeIdsInNewConfig.has(r.current_node_id),
+  ).length;
+
+  return {
+    affected_conversations: affectedCount,
+    at_risk_node_ids: Array.from(atRiskSet),
+    total_live_conversations: rows.length,
+  };
 }

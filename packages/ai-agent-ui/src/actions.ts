@@ -97,6 +97,20 @@ export interface AgentActions {
         current_version: number;
       }
   >;
+  /** Backlog #4 Auditoria (mai/2026): preview de impacto antes do save.
+   * Retorna quantas conversas vivas tem current_node_id apontando pra
+   * nodes que sumiriam no save proposto. UI usa pra modal de confirmacao.
+   *
+   * Read-only — pode ser chamada sempre que o flow muda no canvas sem
+   * efeito colateral. */
+  previewFlowImpact: (
+    configId: string,
+    config: FlowConfig,
+  ) => Promise<{
+    affected_conversations: number;
+    at_risk_node_ids: string[];
+    total_live_conversations: number;
+  }>;
   /** Carrega catálogos pros pickers do NodeConfigSheet (tags, stages,
    * templates, agenda, membros, outros agentes). Single roundtrip. */
   getFlowCatalogs: (
