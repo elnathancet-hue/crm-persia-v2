@@ -136,11 +136,21 @@ export function validateFlowConfig(flow: FlowConfig): FlowValidationIssue[] {
       for (const edge of defaultEdges) {
         const target = nodesById.get(edge.target);
         if (target?.type === "ai_agent") {
+          // PR-4 Auditoria (mai/2026): elevado de warning pra error.
+          // Endereca rodada 3 #5 — entry de evento CRM (pipeline_stage_entered,
+          // segment_entered) gera inboundMessage.text vazio. AI node skipa
+          // a chamada ao modelo e segue edge default. Sem default edge ou
+          // sem action node, flow morre silenciosamente sem o lead receber
+          // nada. UX: cliente desenha "entrou na etapa -> IA", salva,
+          // ativa, e a IA nunca fala — bug confuso. Bloquear save aqui
+          // forca o cliente a inserir uma acao proativa entre o evento
+          // e a IA (ex: send_whatsapp_message "Oi, vi que voce mudou de
+          // etapa, posso ajudar?").
           issues.push({
             code: "crm_event_to_ai",
-            severity: "warning",
+            severity: "error",
             message:
-              "Eventos do CRM nao trazem mensagem do lead. Comece com uma acao proativa, como Enviar WhatsApp ou Avisar equipe.",
+              "Eventos do CRM nao trazem mensagem do lead. Comece com uma acao (ex: Enviar WhatsApp) antes da IA — senao a IA nao tem o que responder.",
             node_id: target.id,
             edge_id: edge.id,
           });

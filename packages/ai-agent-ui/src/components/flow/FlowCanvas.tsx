@@ -839,6 +839,24 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
 
   // -- Save (manual via botão + auto-save debounce) --
   const handleSave = React.useCallback(async () => {
+    // PR-4 Auditoria (mai/2026): endereca rodada 1 #2 (Codex) — antes,
+    // handleSave nao bloqueava `validationIssues` severity='error'.
+    // Cliente podia salvar flow sem entry, sem edge saindo do entry,
+    // com handles invalidos, etc. — e o agente ativava com flow quebrado,
+    // gerando runs com fatal_error em producao.
+    //
+    // Agora: erros bloqueiam o save imediato e mostram toast pedindo pra
+    // corrigir. Warnings nao bloqueiam (sao informativos, ex: AI node
+    // sem instructions). O painel `FlowValidationPanel` ja esta visivel
+    // na sidebar listando cada issue + node afetado.
+    const errors = validationIssues.filter((i) => i.severity === "error");
+    if (errors.length > 0) {
+      toast.error(
+        `Corrija ${errors.length} ${errors.length === 1 ? "erro" : "erros"} antes de salvar. Veja o painel "Problemas no fluxo".`,
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       const config = reactFlowToPersia(nodes, edges, viewport, enabledTools);
@@ -855,7 +873,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     } finally {
       setSaving(false);
     }
-  }, [actions, configId, edges, enabledTools, nodes, viewport]);
+  }, [actions, configId, edges, enabledTools, nodes, viewport, validationIssues]);
 
   // PR 20 UX (mai/2026): auto-save removido a pedido do cliente.
   // Comportamento agora é igual ao Jordan/ManyChat — salva SÓ quando

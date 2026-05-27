@@ -187,6 +187,65 @@ describe("sendMessageViaWhatsApp", () => {
     expect(createProvider).not.toHaveBeenCalled();
   });
 
+  it("PR-4: autoPauseNativeAgent carrega humanization do agente da conversa (multi-agent)", async () => {
+    // Endereca rodada 7 #alta #2. Antes, autoPauseNativeAgent carregava
+    // o "primeiro agent_config ativo da org" (ORDER BY created_at LIMIT 1).
+    // Em orgs com 2+ agentes ativos, o config errado dava o veredito de
+    // auto_pause — podia desligar a feature silenciosamente. Agora cada
+    // agent_conversations e avaliada com sua propria config via JOIN.
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("conversations", {
+      data: {
+        id: "conv-multi",
+        lead_id: "lead-multi",
+        organization_id: "org-1",
+        channel: "email",
+        leads: { id: "lead-multi", phone: "5511988880000" },
+      },
+      error: null,
+    });
+    supabase.queue("messages", {
+      data: { id: "msg-multi", sender: "agent" },
+      error: null,
+    });
+    // JOIN agent_conversations × agent_configs — 2 linhas com configs
+    // diferentes. config-old tem auto_pause=0 (desligado), config-new
+    // tem auto_pause=30 (ligado). So a linha de config-new deve ser
+    // pausada.
+    supabase.queue("agent_conversations", {
+      data: [
+        {
+          id: "agent-conv-old",
+          config_id: "config-old",
+          human_handoff_at: null,
+          ai_control_epoch: 0,
+          agent_configs: { humanization_config: { auto_pause_minutes: 0 } },
+        },
+        {
+          id: "agent-conv-new",
+          config_id: "config-new",
+          human_handoff_at: null,
+          ai_control_epoch: 5,
+          agent_configs: { humanization_config: { auto_pause_minutes: 30 } },
+        },
+      ],
+      error: null,
+    });
+
+    await sendMessageViaWhatsApp("conv-multi", "operador respondendo");
+
+    const updates = (supabase.updates.agent_conversations as Array<Record<string, unknown>>) ?? [];
+    // Apenas agent-conv-new foi pausada (config dela tem auto_pause_minutes>0).
+    // agent-conv-old NAO recebe UPDATE de pause.
+    const pauseUpdates = updates.filter((u) => u.human_handoff_at !== undefined && u.human_handoff_at !== null);
+    expect(pauseUpdates).toHaveLength(1);
+    expect(pauseUpdates[0]).toMatchObject({
+      human_handoff_reason: "operator_reply",
+      ai_control_epoch: 6, // bumped from 5
+    });
+  });
+
   it("marks the message as failed and surfaces the provider error", async () => {
     const supabase = createSupabaseMock();
     stubAuth(supabase);
