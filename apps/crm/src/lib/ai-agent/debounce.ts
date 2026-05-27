@@ -72,10 +72,26 @@ export async function flushReadyConversations(
   let runsCreated = 0;
   let errors = 0;
 
+  // PR-3 Auditoria (mai/2026): filtra candidatos com human_handoff_at ativo.
+  // Endereca rodada 7 #critica — pausa setada entre enqueue e flush nao
+  // abortava o flow. Operador pausava via chat-window, cron flush rodava
+  // todo o flow assim mesmo (LLM + tools com side effects), so o
+  // send_text final era bloqueado pelo send-guard last-mile.
+  //
+  // Com este filtro:
+  //   - handoff IS NULL → flush procede normalmente.
+  //   - handoff setado → conv fica pausada ate ser desbloqueada (nova msg
+  //     do lead expirando auto_pause; resume keyword; manual unpause).
+  //
+  // Expiry de auto_pause_minutes e re-avaliado no proximo webhook do
+  // lead (executor.ts:705-725 clear+enqueue). Lead em silencio com pause
+  // expirada nao auto-resume — operador da reply manual OU lead manda
+  // nova msg.
   const { data: candidateRows, error: candidateError } = await params.db
     .from("agent_conversations")
     .select("id, organization_id, next_flush_at")
     .lte("next_flush_at", now.toISOString())
+    .is("human_handoff_at", null)
     .order("next_flush_at", { ascending: true })
     .limit(maxConversations);
 

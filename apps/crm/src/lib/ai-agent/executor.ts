@@ -1002,10 +1002,14 @@ export async function executeDebouncedBatch(input: {
 
   try {
     // 1. Load agent_conversation pra resolver config_id, lead_id, current_node_id.
+    // PR-3 Auditoria (mai/2026): inclui human_handoff_at pra defense-in-depth
+    // contra race entre claim e pause. flushReadyConversations ja filtra
+    // por handoff IS NULL, mas operador pode pausar EXATAMENTE entre o
+    // SELECT do candidate e o claim atomic. Re-load aqui pega a foto pos-claim.
     const { data: agentConvRow, error: agentConvErr } = await db
       .from("agent_conversations")
       .select(
-        "id, config_id, lead_id, crm_conversation_id, current_node_id, variables, ai_control_epoch",
+        "id, config_id, lead_id, crm_conversation_id, current_node_id, variables, ai_control_epoch, human_handoff_at",
       )
       .eq("organization_id", orgId)
       .eq("id", batch.agent_conversation_id)
@@ -1024,10 +1028,24 @@ export async function executeDebouncedBatch(input: {
       crm_conversation_id: string | null;
       current_node_id: string | null;
       ai_control_epoch?: number | null;
+      human_handoff_at?: string | null;
     };
     const expectedControlEpoch = agentConv.ai_control_epoch ?? 0;
 
     if (!agentConv.lead_id || !agentConv.crm_conversation_id) {
+      return { runId: null, status: "skipped" };
+    }
+
+    // PR-3 Auditoria (mai/2026): defense-in-depth pos-claim. Race window
+    // entre flushReadyConversations SELECT e claim_agent_conversation_flush
+    // atomic permite operador pausar entre os dois. Skipa graciosamente
+    // sem chamar OpenAI nem rodar tools — pending_messages fica enfileirado
+    // ate o handoff ser limpo (proxima webhook do lead OU resume manual).
+    if (agentConv.human_handoff_at) {
+      logError("flow_executor_skipped_handoff", {
+        ...logCtx,
+        human_handoff_at: agentConv.human_handoff_at,
+      });
       return { runId: null, status: "skipped" };
     }
 
@@ -1161,6 +1179,16 @@ export async function executeDebouncedBatch(input: {
     // 4. Provider realtime que envia via WhatsApp + persiste outbound em
     // messages. Passa humanization pra ele aplicar split + delay entre
     // chunks.
+    // PR-3 Auditoria (mai/2026): sendGuard agora e compartilhado entre o
+    // realtime-provider (last-mile no send_text) E o runner (checa antes
+    // de cada AI/action node). Endereca rodada 7 #alta #3.
+    const sendGuard = {
+      db,
+      organizationId: orgId,
+      conversationId: agentConv.crm_conversation_id,
+      agentConversationId: agentConv.id,
+      expectedControlEpoch,
+    };
     const realtimeProvider = createRealtimeProvider({
       db,
       provider,
@@ -1169,13 +1197,7 @@ export async function executeDebouncedBatch(input: {
       conversationId: agentConv.crm_conversation_id,
       organizationId: orgId,
       humanization,
-      sendGuard: {
-        db,
-        organizationId: orgId,
-        conversationId: agentConv.crm_conversation_id,
-        agentConversationId: agentConv.id,
-        expectedControlEpoch,
-      },
+      sendGuard,
     });
 
     // 5. Build FlowRunContext + roda o flow.
@@ -1187,6 +1209,7 @@ export async function executeDebouncedBatch(input: {
       crmConversationId: agentConv.crm_conversation_id,
       agentConversationId: agentConv.id,
       leadId: agentConv.lead_id,
+      sendGuard,
       inboundMessage: {
         text: batch.concatenated_text,
         received_at: batch.latest_received_at,

@@ -33,6 +33,7 @@ import type { AgentDb } from "../db";
 import { GuardrailError } from "../guardrails";
 import { buildKnowledgeBlock } from "./knowledge-injector";
 import { nativeHandlers } from "../tools/registry";
+import { canAiSendNow } from "../send-guard";
 import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import { evaluateCondition } from "./conditions";
 import type {
@@ -156,6 +157,37 @@ async function executeNode(
   }
 }
 
+/**
+ * PR-3 Auditoria (mai/2026): guard de ownership/handoff antes de cada
+ * AI/action node. Endereca rodada 7 #alta #3 — tools rodavam mesmo com
+ * human_handoff_active, so o send_text final era bloqueado. Agora os
+ * nodes tambem abortam graciosamente.
+ *
+ * Skipa em dryRun (tester nao tem sendGuard) e quando sendGuard nao foi
+ * injetado (caminho de teste antigo). Retorna fatal_error pro runner
+ * encerrar o loop e o caller persistir como failed.
+ */
+async function assertCanAct(
+  ctx: FlowRunContext,
+  node: FlowNode,
+  result: FlowRunResult,
+): Promise<boolean> {
+  if (ctx.dryRun || !ctx.sendGuard) return true;
+  const verdict = await canAiSendNow(ctx.sendGuard);
+  if (verdict.ok) return true;
+  result.fatal_error = `human_handoff_active:${verdict.reason}`;
+  ctx.provider.emit({
+    kind: "guardrail",
+    payload: {
+      reason: "human_handoff_active",
+      block_reason: verdict.reason,
+      node_id: node.id,
+      node_type: node.type,
+    },
+  });
+  return false;
+}
+
 // ============================================================================
 // Entry node — segue edge "default"
 // ============================================================================
@@ -232,6 +264,11 @@ async function executeAIAgentNode(
   node: FlowAIAgentNode,
   result: FlowRunResult,
 ): Promise<string | null> {
+  // PR-3 Auditoria (mai/2026): bloqueia AI node se ownership mudou.
+  // Sem isso, LLM e tool calls rodavam mesmo com human_handoff_active —
+  // so o send_text final batia no last-mile guard.
+  if (!(await assertCanAct(ctx, node, result))) return null;
+
   // PR-FLOW-PIVOT PR 11 (mai/2026): se o flow foi disparado por evento
   // CRM (stage transition, segment entry), inboundMessage.text vem
   // vazio — não há msg do lead pra IA reagir. Skip LLM call gracioso +
@@ -779,6 +816,12 @@ async function executeActionNode(
   node: FlowActionNode,
   result: FlowRunResult,
 ): Promise<string | null> {
+  // PR-3 Auditoria (mai/2026): bloqueia action node se ownership mudou.
+  // Especialmente importante porque actions mutam DB (add_tag,
+  // move_pipeline_stage, etc) — operador em controle nao quer ver
+  // estado mudando "em nome da IA" depois que assumiu a conversa.
+  if (!(await assertCanAct(ctx, node, result))) return null;
+
   const actionType = node.data.action_type;
 
   // PR-FLOW-PIVOT PR 9 (mai/2026): action node standalone que envia

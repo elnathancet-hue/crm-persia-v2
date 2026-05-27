@@ -753,6 +753,185 @@ describe("flow-runner", () => {
     expect(callArgs.max_completion_tokens).toBeUndefined();
   });
 
+  it("PR-3: aborta AI node se sendGuard detecta human_handoff_active", async () => {
+    // Endereca rodada 7 #alta #3: tools rodavam mesmo com handoff ativo.
+    // Agora o runner checa canAiSendNow no inicio de cada AI/action node.
+    const dbWithHandoff = {
+      from: (table: string) => {
+        const chain: Record<string, unknown> = {};
+        ["select", "eq", "neq", "in", "order", "limit", "is", "lte", "gte"].forEach((m) => {
+          chain[m] = () => chain;
+        });
+        chain.maybeSingle = () => {
+          if (table === "conversations") {
+            return Promise.resolve({
+              data: { assigned_to: "ai", status: "active" },
+              error: null,
+            });
+          }
+          if (table === "agent_conversations") {
+            // handoff ATIVO — simula operador que pausou mid-flow
+            return Promise.resolve({
+              data: { human_handoff_at: "2026-05-26T12:00:00.000Z", ai_control_epoch: 0 },
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        chain.single = () => Promise.resolve({ data: null, error: null });
+        chain.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve);
+        return chain;
+      },
+    } as never;
+
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "ai-1",
+            type: "ai_agent",
+            position: { x: 200, y: 0 },
+            data: { label: "IA", system_prompt: "", instructions: [] },
+          },
+        ],
+        edges: [{ id: "e1", source: "entry-1", target: "ai-1", sourceHandle: "default" }],
+      }),
+    );
+
+    const ctx = makeCtx(flow);
+    // Modo producao + sendGuard injetado
+    ctx.dryRun = false;
+    ctx.sendGuard = {
+      db: dbWithHandoff,
+      organizationId: "org-1",
+      conversationId: "conv-1",
+      agentConversationId: "agent-conv-1",
+      expectedControlEpoch: 0,
+    };
+
+    const result = await runFlow(dbWithHandoff, ctx, null);
+
+    // Flow abortou ANTES de chamar OpenAI
+    expect(openAiCreateMock).not.toHaveBeenCalled();
+    expect(result.fatal_error).toBeDefined();
+    expect(result.fatal_error).toContain("human_handoff_active");
+    // Evento guardrail emitido pelo guard
+    const events = ctx.provider.getEvents();
+    const guardrails = events.filter((e) => e.kind === "guardrail");
+    expect(guardrails.length).toBeGreaterThan(0);
+    expect(guardrails[0]!.payload).toMatchObject({
+      reason: "human_handoff_active",
+      node_id: "ai-1",
+      node_type: "ai_agent",
+    });
+  });
+
+  it("PR-3: aborta action node se sendGuard detecta epoch stale", async () => {
+    // Cobre paridade pra action nodes. Epoch antigo (operador bumpou via
+    // chat-window) deve bloquear tools antes de qualquer mutacao no DB.
+    const dbWithStaleEpoch = {
+      from: (table: string) => {
+        const chain: Record<string, unknown> = {};
+        ["select", "eq", "neq", "in", "order", "limit", "is", "lte", "gte"].forEach((m) => {
+          chain[m] = () => chain;
+        });
+        chain.maybeSingle = () => {
+          if (table === "conversations") {
+            return Promise.resolve({
+              data: { assigned_to: "ai", status: "active" },
+              error: null,
+            });
+          }
+          if (table === "agent_conversations") {
+            // handoff null mas epoch diferente do esperado — operador
+            // assumiu + soltou recentemente (bumpou epoch).
+            return Promise.resolve({
+              data: { human_handoff_at: null, ai_control_epoch: 5 },
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        chain.single = () => Promise.resolve({ data: null, error: null });
+        chain.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve);
+        return chain;
+      },
+    } as never;
+
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "action-1",
+            type: "action",
+            position: { x: 200, y: 0 },
+            data: { label: "Tag", action_type: "add_tag", config: { tag_name: "novo" } },
+          },
+        ],
+        edges: [{ id: "e1", source: "entry-1", target: "action-1", sourceHandle: "default" }],
+      }),
+    );
+
+    const ctx = makeCtx(flow);
+    ctx.dryRun = false;
+    ctx.sendGuard = {
+      db: dbWithStaleEpoch,
+      organizationId: "org-1",
+      conversationId: "conv-1",
+      agentConversationId: "agent-conv-1",
+      expectedControlEpoch: 1, // start epoch antigo
+    };
+
+    const result = await runFlow(dbWithStaleEpoch, ctx, null);
+
+    expect(result.fatal_error).toBeDefined();
+    expect(result.fatal_error).toContain("human_handoff_active");
+    expect(result.fatal_error).toContain("stale_ai_control_epoch");
+  });
+
+  it("PR-3: dryRun (tester) skipa sendGuard mesmo sem ele", async () => {
+    // Tester nao injeta sendGuard porque nao tem ownership real. assertCanAct
+    // skipa em dryRun=true.
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "action-1",
+            type: "action",
+            position: { x: 200, y: 0 },
+            data: { label: "Stop", action_type: "stop_agent", config: {} },
+          },
+        ],
+        edges: [{ id: "e1", source: "entry-1", target: "action-1", sourceHandle: "default" }],
+      }),
+    );
+    const ctx = makeCtx(flow); // dryRun=true por default
+    expect(ctx.sendGuard).toBeUndefined();
+    const result = await runFlow(dbStub, ctx, null);
+    expect(result.fatal_error).toBeUndefined();
+    expect(result.ending_node_id).toBe("action-1");
+  });
+
   it("captura eventos node_entered/exited via provider", async () => {
     const flow = makeLoadedFlow(
       makeFlow({
