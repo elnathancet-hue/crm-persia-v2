@@ -34,6 +34,10 @@ import type { AgentDb } from "../db";
 import { GuardrailError } from "../guardrails";
 import { buildNativeHandlerContext } from "./handler-context";
 import { buildKnowledgeBlock } from "./knowledge-injector";
+import {
+  interpolateLeadPlaceholders,
+  loadLeadForInterpolation,
+} from "./lead-interpolation";
 import { nativeHandlers } from "../tools/registry";
 import { canAiSendNow } from "../send-guard";
 import { buildConversationLlmMessages } from "../summarization";
@@ -1028,16 +1032,6 @@ async function executeActionNode(
 // split, sendText real, persist em messages. Tester provider trata como
 // "Bot diria: ..." (preview sem envio).
 
-function interpolateLeadPlaceholders(
-  template: string,
-  lead: { name?: string | null; phone?: string | null; email?: string | null },
-): string {
-  return template.replace(/\{\{lead\.(\w+)\}\}/g, (_, key) => {
-    const value = (lead as Record<string, unknown>)[key];
-    return typeof value === "string" ? value : "";
-  });
-}
-
 async function executeSendWhatsappMessageAction(
   db: AgentDb,
   ctx: FlowRunContext,
@@ -1073,21 +1067,14 @@ async function executeSendWhatsappMessageAction(
     return followDefaultEdge(ctx, node);
   }
 
-  // Carrega lead pra resolver placeholders. Se sem lead_id ou lead não
-  // encontrado, interpolamos com vazios — mensagem ainda é enviada.
-  let lead: { name?: string | null; phone?: string | null; email?: string | null } = {};
-  if (ctx.leadId) {
-    const { data: leadRow } = await db
-      .from("leads")
-      .select("name, phone, email")
-      .eq("organization_id", ctx.organizationId)
-      .eq("id", ctx.leadId)
-      .maybeSingle();
-    if (leadRow) {
-      lead = leadRow as typeof lead;
-    }
-  }
-
+  // Backlog #12 Auditoria (mai/2026): load + interpolate movidos pra
+  // helper compartilhado (flow/lead-interpolation.ts) pra reuso em
+  // set_lead_custom_field e outros handlers que precisarem.
+  const lead = await loadLeadForInterpolation(
+    db,
+    ctx.organizationId,
+    ctx.leadId,
+  );
   const interpolated = interpolateLeadPlaceholders(rawMessage, lead);
 
   // Emite send_text — realtime-provider envia + persiste, tester-provider
