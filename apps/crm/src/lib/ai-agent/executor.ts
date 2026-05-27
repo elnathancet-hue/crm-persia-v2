@@ -1262,14 +1262,17 @@ export async function executeDebouncedBatch(input: {
     const result = await runFlow(db, ctx, agentConv.current_node_id);
     const duration = Date.now() - startedAt;
 
-    // 6. Persiste current_node_id, last_interaction_at e acumula tokens.
-    // tokens_used_total é incremento — V1 faz SELECT + UPDATE (V2 pode
-    // virar RPC atômico se houver concorrência alta).
+    // 6. Persiste current_node_id e last_interaction_at.
     //
     // PR-4 Auditoria (mai/2026): endereca rodada 1 #1 (Codex) + rodada 9 #4.
     // Helper shouldResetCurrentNodeId (em @persia/shared/ai-agent) decide
     // se o ending_node_id deve virar null antes de persistir — evita
     // reexecutar action/condition terminal na proxima mensagem do lead.
+    //
+    // Backlog #13 Auditoria (mai/2026): tokens_used_total removida via
+    // migration 073 — era dado morto (nada consumia). agent_runs ja
+    // guarda tokens_input/output + cost_usd_cents por run, agregado em
+    // agent_usage_daily pra dashboards e cost-limits.
     const persistedNodeId = shouldResetCurrentNodeId(
       ctx.flowConfig,
       result.ending_node_id,
@@ -1277,21 +1280,11 @@ export async function executeDebouncedBatch(input: {
       ? null
       : result.ending_node_id;
 
-    const totalTokensTurn = result.tokens_input + result.tokens_output;
-    const { data: convRow } = await db
-      .from("agent_conversations")
-      .select("tokens_used_total")
-      .eq("organization_id", orgId)
-      .eq("id", agentConv.id)
-      .maybeSingle();
-    const prevTotal =
-      (convRow as { tokens_used_total?: number } | null)?.tokens_used_total ?? 0;
     await db
       .from("agent_conversations")
       .update({
         current_node_id: persistedNodeId,
         last_interaction_at: new Date().toISOString(),
-        tokens_used_total: prevTotal + totalTokensTurn,
       })
       .eq("organization_id", orgId)
       .eq("id", agentConv.id);

@@ -219,7 +219,11 @@ export interface AgentConversation {
   history_summary_run_count?: number;
   history_summary_token_count?: number;
   variables: Record<string, unknown>; // key/value extracted facts (nome, email, etc)
-  tokens_used_total: number;      // cumulative, for org-level cost views
+  // Backlog #13 Auditoria (mai/2026): tokens_used_total removida via
+  // migration 073. Era dado morto — nenhum produto consumia, cost-limits
+  // e dashboards usam agent_usage_daily (agregado dia + config). Per-
+  // conversation ceiling pode ser reconstruida via agent_runs se virar
+  // requisito futuro.
   /** Incrementado quando o controle da conversa muda (IA <-> humano).
    * Runs antigos capturam este valor e nao podem enviar se ele mudou. */
   ai_control_epoch?: number;

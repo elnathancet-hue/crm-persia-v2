@@ -428,7 +428,6 @@ export type Database = {
           lead_id: string | null
           next_flush_at: string | null
           organization_id: string
-          tokens_used_total: number
           updated_at: string
           variables: Json
         }
@@ -453,7 +452,6 @@ export type Database = {
           lead_id?: string | null
           next_flush_at?: string | null
           organization_id: string
-          tokens_used_total?: number
           updated_at?: string
           variables?: Json
         }
@@ -478,7 +476,6 @@ export type Database = {
           lead_id?: string | null
           next_flush_at?: string | null
           organization_id?: string
-          tokens_used_total?: number
           updated_at?: string
           variables?: Json
         }
