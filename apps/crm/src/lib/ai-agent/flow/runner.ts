@@ -23,13 +23,17 @@ import type {
   FlowNode,
 } from "@persia/shared/ai-agent";
 import {
+  calculateCostUsdCents,
   findEntryNode,
   findOutgoingEdges,
   getNodeById,
 } from "@persia/shared/ai-agent";
+import { assertWithinCostLimits, type CostLimitCache } from "../cost-limits";
 import type { AgentDb } from "../db";
+import { GuardrailError } from "../guardrails";
 import { buildKnowledgeBlock } from "./knowledge-injector";
 import { nativeHandlers } from "../tools/registry";
+import { canAiSendNow } from "../send-guard";
 import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import { evaluateCondition } from "./conditions";
 import type {
@@ -153,6 +157,37 @@ async function executeNode(
   }
 }
 
+/**
+ * PR-3 Auditoria (mai/2026): guard de ownership/handoff antes de cada
+ * AI/action node. Endereca rodada 7 #alta #3 — tools rodavam mesmo com
+ * human_handoff_active, so o send_text final era bloqueado. Agora os
+ * nodes tambem abortam graciosamente.
+ *
+ * Skipa em dryRun (tester nao tem sendGuard) e quando sendGuard nao foi
+ * injetado (caminho de teste antigo). Retorna fatal_error pro runner
+ * encerrar o loop e o caller persistir como failed.
+ */
+async function assertCanAct(
+  ctx: FlowRunContext,
+  node: FlowNode,
+  result: FlowRunResult,
+): Promise<boolean> {
+  if (ctx.dryRun || !ctx.sendGuard) return true;
+  const verdict = await canAiSendNow(ctx.sendGuard);
+  if (verdict.ok) return true;
+  result.fatal_error = `human_handoff_active:${verdict.reason}`;
+  ctx.provider.emit({
+    kind: "guardrail",
+    payload: {
+      reason: "human_handoff_active",
+      block_reason: verdict.reason,
+      node_id: node.id,
+      node_type: node.type,
+    },
+  });
+  return false;
+}
+
 // ============================================================================
 // Entry node — segue edge "default"
 // ============================================================================
@@ -229,6 +264,11 @@ async function executeAIAgentNode(
   node: FlowAIAgentNode,
   result: FlowRunResult,
 ): Promise<string | null> {
+  // PR-3 Auditoria (mai/2026): bloqueia AI node se ownership mudou.
+  // Sem isso, LLM e tool calls rodavam mesmo com human_handoff_active —
+  // so o send_text final batia no last-mile guard.
+  if (!(await assertCanAct(ctx, node, result))) return null;
+
   // PR-FLOW-PIVOT PR 11 (mai/2026): se o flow foi disparado por evento
   // CRM (stage transition, segment entry), inboundMessage.text vem
   // vazio — não há msg do lead pra IA reagir. Skip LLM call gracioso +
@@ -332,6 +372,11 @@ async function executeAIAgentNode(
   // tool_success:emit_event). Captura aqui pra usar depois do loop.
   let emittedHandleName: string | null = null;
 
+  // PR-2 Auditoria (mai/2026): cache de limites entre ping-pongs.
+  // assertWithinCostLimits re-carregaria agent_cost_limits + agent_usage_daily
+  // a cada chamada — cache evita N x SELECT em cada iter do loop.
+  const costLimitCache: CostLimitCache = {};
+
   for (let iter = 0; iter < MAX_LLM_TOOL_PINGPONG; iter++) {
     const llmStart = Date.now();
     ctx.provider.emit({
@@ -341,9 +386,21 @@ async function executeAIAgentNode(
 
     let completion: OpenAI.Chat.ChatCompletion;
     try {
+      // PR-2 Auditoria (mai/2026): cap por chamada LLM. Sem cap, modelos
+      // de reasoning (gpt-5*) consomem ate a janela inteira por turn
+      // (rodada 6 #4). Default 4096 cobre reasoning + output medio sem
+      // truncar respostas comuns.
+      //
+      // gpt-5* exige `max_completion_tokens`; gpt-4o* e anteriores ainda
+      // usam `max_tokens` (max_completion_tokens existe mas e ignored).
+      // Detectar por prefixo do modelo.
+      const maxTokensKey: "max_completion_tokens" | "max_tokens" =
+        model.startsWith("gpt-5") ? "max_completion_tokens" : "max_tokens";
+      const maxTokensValue = 4096;
       completion = await client.chat.completions.create({
         model,
         messages,
+        [maxTokensKey]: maxTokensValue,
         ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: "auto" as const } : {}),
       });
     } catch (err) {
@@ -374,6 +431,48 @@ async function executeAIAgentNode(
         tokens_out: tokensOut,
       },
     });
+
+    // PR-2 Auditoria (mai/2026): intra-loop cost ceiling check.
+    // Endereca rodada 6 #critica #1 — ceiling per-run + agregados precisam
+    // ser enforced ANTES da proxima chamada LLM. Sem isso, um ping-pong
+    // longo (5 iters x N tokens) pode estourar o ceiling sem nenhum
+    // bloqueio. Tester nao roda este check porque dry_run nao deve ser
+    // gated por ceiling de producao.
+    if (!ctx.dryRun) {
+      const costSoFarCents = calculateCostUsdCents(
+        model,
+        result.tokens_input,
+        result.tokens_output,
+      );
+      try {
+        await assertWithinCostLimits({
+          db,
+          orgId: ctx.organizationId,
+          configId: ctx.agentConfigId,
+          agentConversationId: ctx.agentConversationId,
+          tokensSoFarRun: result.tokens_input + result.tokens_output,
+          costSoFarRunUsdCents: costSoFarCents,
+          cache: costLimitCache,
+        });
+      } catch (err) {
+        if (err instanceof GuardrailError) {
+          result.fatal_error = `cost_ceiling:${err.reason}`;
+          ctx.provider.emit({
+            kind: "guardrail",
+            payload: {
+              reason: "cost_ceiling",
+              trip_reason: err.reason,
+              message: err.message,
+              node_id: node.id,
+              tokens_so_far: result.tokens_input + result.tokens_output,
+              cost_so_far_cents: costSoFarCents,
+            },
+          });
+          return null;
+        }
+        throw err;
+      }
+    }
 
     const choice = completion.choices[0];
     if (!choice) {
@@ -717,6 +816,12 @@ async function executeActionNode(
   node: FlowActionNode,
   result: FlowRunResult,
 ): Promise<string | null> {
+  // PR-3 Auditoria (mai/2026): bloqueia action node se ownership mudou.
+  // Especialmente importante porque actions mutam DB (add_tag,
+  // move_pipeline_stage, etc) — operador em controle nao quer ver
+  // estado mudando "em nome da IA" depois que assumiu a conversa.
+  if (!(await assertCanAct(ctx, node, result))) return null;
+
   const actionType = node.data.action_type;
 
   // PR-FLOW-PIVOT PR 9 (mai/2026): action node standalone que envia

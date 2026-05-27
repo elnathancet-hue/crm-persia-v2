@@ -5,6 +5,7 @@
 // não vazam pra UI.
 
 import type { FlowConfig } from "@persia/shared/ai-agent";
+import type { AiOutboundSendGuard } from "../send-guard";
 import type { LoadedFlow } from "./loader";
 
 /**
@@ -101,6 +102,16 @@ export interface FlowRunContext {
   /** Snapshot do FlowConfig já normalizado pra rodadas internas (evita
    * passar `flow.config` toda hora). */
   flowConfig: FlowConfig;
+  /**
+   * PR-3 Auditoria (mai/2026): guard de ownership/handoff pra checar antes
+   * de cada AI node e action node. Endereca rodada 7 #alta #3 — tools
+   * rodavam mesmo com human_handoff_active. Antes, so o send_text final
+   * passava pelo guard (last-mile no realtime-provider). Agora os nodes
+   * tambem abortam graciosamente se ownership muda mid-flow.
+   *
+   * Optional: tester nao injeta este guard (dryRun=true skipa check).
+   */
+  sendGuard?: AiOutboundSendGuard;
 }
 
 /**

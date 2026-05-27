@@ -40,6 +40,19 @@ export type KnowledgeMode = "full" | "rag" | "auto";
 /** Threshold pra modo 'auto' decidir entre full e rag (bytes totais de chunks). */
 const AUTO_FULL_BYTES_THRESHOLD = 30 * 1024; // 30KB
 
+/**
+ * Hard-cap UNIFICADO pra modo 'full' — aplica mesmo quando cliente
+ * escolheu 'full' manualmente. PR-2 Auditoria (mai/2026): rodada 6 #5 +
+ * rodada 8 #1. Antes, so o modo 'auto' aplicava o AUTO_FULL_BYTES_THRESHOLD
+ * (30KB); manual 'full' nao tinha cap e podia injetar 100KB+ a cada turn.
+ *
+ * Decisao de produto (26/mai/2026): 50KB (~16k tokens em PT-BR a 3
+ * char/token). Acima disso, falla pra 'rag' com top-k retrieval. Mantemos
+ * AUTO_FULL_BYTES_THRESHOLD em 30KB pra modo 'auto' continuar
+ * conservador — o hard-cap so age como teto absoluto.
+ */
+const FULL_MODE_HARD_CAP_BYTES = 50 * 1024; // 50KB
+
 /** Top-k pro modo 'rag'. Ajustável depois via agent_configs se virar problema. */
 const RAG_TOP_K = 3;
 
@@ -97,6 +110,25 @@ async function buildKnowledgeBlockUnsafe(
     const totalBytes = await measureKnowledgeBytes(db, organizationId, configId);
     if (totalBytes === 0) return null; // sem conhecimento
     mode = totalBytes < AUTO_FULL_BYTES_THRESHOLD ? "full" : "rag";
+  }
+
+  // 2b. PR-2 Auditoria (mai/2026): hard-cap unificado pra 'full'.
+  // Mesmo quando cliente forca 'full' manualmente em UI, derruba pra
+  // 'rag' se ultrapassar FULL_MODE_HARD_CAP_BYTES (50KB). Sem isso, doc
+  // grande × N turns × M conversas = factura explode silenciosamente.
+  if (mode === "full") {
+    const totalBytes = await measureKnowledgeBytes(db, organizationId, configId);
+    if (totalBytes === 0) return null; // sem conhecimento
+    if (totalBytes > FULL_MODE_HARD_CAP_BYTES) {
+      logError("ai_agent_knowledge_full_exceeded_cap", {
+        organization_id: organizationId,
+        config_id: configId,
+        total_bytes: totalBytes,
+        cap_bytes: FULL_MODE_HARD_CAP_BYTES,
+        fallback_mode: "rag",
+      });
+      mode = "rag";
+    }
   }
 
   // 3. Dispatch pro modo final
