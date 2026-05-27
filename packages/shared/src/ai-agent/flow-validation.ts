@@ -54,7 +54,14 @@ function actionConfigIssue(
       return String(config.message ?? "").trim()
         ? null
         : "Falta escrever a mensagem.";
-    case "create_appointment":
+    case "create_appointment": {
+      // PR-6 Auditoria (mai/2026): create_appointment como action node
+      // exige start_at. Antes era opcional → falhava em runtime com
+      // "start_at invalido" porque o handler valida ISO datetime obrigatorio.
+      const startAt = String(config.start_at ?? "").trim();
+      if (!startAt) return "Falta a data e hora do agendamento.";
+      return null;
+    }
     case "stop_agent":
     case "round_robin_user":
       return null;

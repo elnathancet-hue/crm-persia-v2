@@ -564,6 +564,10 @@ export function flowActionTypeToNativeHandler(
   // Tipos com handler nativo equivalente
   const direct: Record<string, NativeHandlerName> = {
     add_tag: "add_tag",
+    // PR-6 Auditoria (mai/2026): remove_tag agora tem handler nativo.
+    // Antes ficava na lista de "tipos futuros" — UI mostrava o card
+    // mas runtime nao executava.
+    remove_tag: "remove_tag",
     move_pipeline_stage: "move_pipeline_stage",
     create_appointment: "create_appointment",
     trigger_notification: "trigger_notification",

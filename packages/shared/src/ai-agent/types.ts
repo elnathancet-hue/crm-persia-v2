@@ -58,6 +58,11 @@ export const NATIVE_HANDLERS = [
   // Paridade com `edit_lead_ia: true` do flow.json do Jordan. Handler resolve
   // custom_field pelo field_key (slug) e faz upsert no value (TEXT).
   "set_lead_custom_field",
+  // PR-6 Auditoria (mai/2026): handler novo pra fechar gap da rodada 1 #3 +
+  // rodada 4 matriz. Ja existia no FlowActionType + UI mostrava o card,
+  // mas runtime nao tinha handler — guardrail event silencioso. Agora
+  // espelha add_tag: DELETE em lead_tags + lead_activity audit.
+  "remove_tag",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];
