@@ -35,6 +35,7 @@ import { buildNativeHandlerContext } from "./handler-context";
 import { buildKnowledgeBlock } from "./knowledge-injector";
 import { nativeHandlers } from "../tools/registry";
 import { canAiSendNow } from "../send-guard";
+import { buildConversationLlmMessages } from "../summarization";
 import { stripToolCallLeaks } from "../tool-call-sanitizer";
 import { evaluateCondition } from "./conditions";
 import type {
@@ -384,9 +385,57 @@ async function executeAIAgentNode(
     ].join("\n"),
   );
 
+  // Backlog #1 (mai/2026) — endereca rodada 6 #critica #2 (multi-turn quebrado).
+  // Antes, AI node sempre mandava apenas [{system}, {user: inbound atual}] —
+  // IA esquecia tudo entre turns. Cliente migrando de behavior_mode=actions
+  // (que tinha history) caia do precipicio: lead diz "meu nome e Joao" na
+  // msg 1, IA pergunta "qual seu nome?" na msg 2.
+  //
+  // Agora carrega historico via buildConversationLlmMessages — injeta
+  // history_summary (quando presente, como contexto consolidado) +
+  // ultimas N mensagens da CRM conversation. N controlado por
+  // clampRecentMessagesCount em agent_configs.context_summary_recent_messages
+  // (default 20).
+  //
+  // Defensive: tester (sem agentConfig/agentConversation populados) ou
+  // caminho legacy cai pro fallback simples [{user: inbound}].
+  let historyMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+  if (ctx.agentConfig && ctx.agentConversation) {
+    try {
+      historyMessages = (await buildConversationLlmMessages({
+        db,
+        orgId: ctx.organizationId,
+        agentConversation: ctx.agentConversation,
+        config: ctx.agentConfig,
+      })) as OpenAI.Chat.ChatCompletionMessageParam[];
+    } catch (err) {
+      // Best-effort: falha em carregar history NAO quebra o turn — IA
+      // responde sem contexto. Log estruturado pra observabilidade.
+      ctx.provider.emit({
+        kind: "guardrail",
+        payload: {
+          reason: "history_load_failed",
+          message: err instanceof Error ? err.message : String(err),
+          node_id: node.id,
+        },
+      });
+    }
+  }
+
+  // Se o history ja contem a inbound message atual (foi inserida em
+  // executor step 8 antes do flush), nao duplica. Caso contrario
+  // (tester, edge cases), append manual.
+  const lastUserMsg = [...historyMessages].reverse().find((m) => m.role === "user");
+  const inboundAlreadyInHistory =
+    typeof lastUserMsg?.content === "string" &&
+    lastUserMsg.content.includes(ctx.inboundMessage.text);
+
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemParts.join("\n\n") },
-    { role: "user", content: ctx.inboundMessage.text },
+    ...historyMessages,
+    ...(inboundAlreadyInHistory
+      ? []
+      : [{ role: "user" as const, content: ctx.inboundMessage.text }]),
   ];
 
   const openaiTools: OpenAI.Chat.ChatCompletionTool[] = tools.map((t) => ({
