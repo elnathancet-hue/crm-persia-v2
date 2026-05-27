@@ -619,14 +619,31 @@ export function ActionForm({
       )}
 
       {actionType === "move_pipeline_stage" && (
+        // Backlog #11 Auditoria (mai/2026): endereca rodada 3 #4 +
+        // rodada 4 matriz. Antes:
+        //   - Salvava stage_name (nome global, sem pipeline).
+        //   - Handler resolvia "stage_name" dentro do funil ATUAL do
+        //     lead — selecao com mesmo nome em outro funil falhava em
+        //     runtime ("etapa nao pertence ao funil do lead").
+        // Agora:
+        //   - Salva stage_id (UUID — unico).
+        //   - Label inclui nome do funil pra desambiguar etapas
+        //     homonimas ("Comercial > Qualificado" vs "Suporte > Qualificado").
+        //   - Handler ja aceita stage_id direto + valida funil — em runtime
+        //     reporta erro claro se admin escolher etapa de outro funil
+        //     que o lead atualmente nao esta.
         <CatalogSelect
           label="Etapa do funil"
           loading={catalogsLoading}
-          value={(config.stage_name as string) ?? ""}
-          onChange={(v) => updateConfig({ stage_name: v })}
+          value={(config.stage_id as string) ?? ""}
+          onChange={(v) => updateConfig({ stage_id: v })}
           options={catalogs.pipeline_stages.map((s) => ({
-            value: s.name,
-            label: s.name,
+            value: s.id,
+            // Quando pipeline_name esta vazio (defensive caso o catalogo
+            // retorne sem JOIN), mostra so o nome da etapa.
+            label: s.pipeline_name
+              ? `${s.pipeline_name} › ${s.name}`
+              : s.name,
           }))}
           emptyLabel="Nenhuma etapa de funil disponível."
           placeholder="Selecione uma etapa"
