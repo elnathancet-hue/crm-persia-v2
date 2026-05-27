@@ -27,11 +27,15 @@ export const RESUME_KEYWORDS_DEFAULT: ReadonlyArray<string> = [
 ];
 
 // PR B (mai/2026): split de respostas longas pra parecer mais humano.
-// Quando split_enabled = true E reply >= threshold_chars, executor pede
-// ao GPT pra cortar em N mensagens curtas (lib/ai/message-splitter) e
-// envia uma por vez com setTyping + delay entre elas. Default off por
-// conservadorismo — split usa 1 chamada OpenAI extra (~$0.0001 por
-// resposta longa, mas o cliente paga plano fixo).
+// Quando split_enabled = true E reply >= threshold_chars, runtime corta
+// em N mensagens curtas via chunking DETERMINISTICO (whitespace, sem
+// custo) — `realtime-provider.ts::splitMessage`. Envia uma por vez com
+// setTyping + delay entre elas. Default off por conservadorismo.
+//
+// Backlog #14 Auditoria (mai/2026): comentario antigo dizia que split
+// usava GPT extra (~$0.0001 por resposta), mas a implementacao foi
+// simplificada pra chunking deterministico pre-PR-FLOW-PIVOT — zero
+// custo OpenAI. Atualizado pra refletir realidade.
 export const SPLIT_ENABLED_DEFAULT = false;
 export const SPLIT_THRESHOLD_CHARS_DEFAULT = 200;
 export const SPLIT_THRESHOLD_CHARS_MIN = 50;
@@ -363,14 +367,24 @@ export function shouldSendAfterHoursMessage(
 }
 
 /**
- * Normaliza um keyword: uppercase + trim. Usado tanto pro setting
- * (quando salva) quanto pra comparacao (quando lead manda msg).
- * Match e por igualdade exata depois de normalizar — nao usa
- * includes/regex pra evitar false positives (lead falando "humano
- * preciso falar com" nao deve pausar).
+ * Normaliza um keyword: trim + uppercase + remove acentos.
+ *
+ * Backlog #14 Auditoria (mai/2026): rodada 7 #5. Antes era apenas
+ * `trim().toUpperCase()` — "pausa" nao batia com "PAUSAR" no catalogo
+ * porque era match exato apos normalizar. Agora tambem remove acentos
+ * pra absorver variacoes ("PAUSÁ-LO" vira "PAUSA-LO" no catalogo, mas
+ * variantes mais comuns como "PAUSAR" continuam batendo via word
+ * boundary do matchesPauseKeyword/matchesResumeKeyword).
+ *
+ * NFD + replace combina diacritics — espelhando padrao ja usado em
+ * knowledge-injector + slugifyForMaterializer.
  */
 export function normalizeKeyword(raw: string): string {
-  return raw.trim().toUpperCase();
+  return raw
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 }
 
 /**
@@ -441,30 +455,56 @@ export function normalizeHumanizationConfig(
 }
 
 /**
- * True se a mensagem do lead bate exatamente com algum pause keyword
- * (depois de uppercase + trim). Usado no executor antes de processar.
+ * Backlog #14 Auditoria (mai/2026): rodada 7 #5 do POST_CODEX_AUDIT.
+ *
+ * Antes: match por igualdade EXATA do texto inteiro contra cada keyword.
+ * "PAUSAR" no catalogo so batia se lead escrevesse literalmente "PAUSAR"
+ * — frases como "pausar por favor" ou "stop ia agora" nao disparavam.
+ * UX dependia de lead saber a palavra exata isolada.
+ *
+ * Agora: word boundary regex case-insensitive + unaccent. "pausar por
+ * favor" contem palavra "pausar" → bate. "nao pausar" tambem bate
+ * (false positive aceito pra V1 — recomendacao do plano).
+ *
+ * Multi-palavra "STOP IA" matcha apenas como sequencia ("stop ia"),
+ * nao "stop" sozinho — pra preservar configs explicitos.
+ */
+function matchesAnyKeyword(text: string, keywords: readonly string[]): boolean {
+  if (!text || keywords.length === 0) return false;
+  const haystack = normalizeKeyword(text);
+  for (const kw of keywords) {
+    // Escapa caracteres especiais regex e cria word-boundary match.
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`\\b${escaped}\\b`);
+    if (re.test(haystack)) return true;
+  }
+  return false;
+}
+
+/**
+ * True se a mensagem do lead contem algum pause keyword como palavra
+ * isolada (word-boundary, case-insensitive, sem acento). Usado no
+ * executor antes de processar.
  */
 export function matchesPauseKeyword(
   text: string | null | undefined,
   config: HumanizationConfig,
 ): boolean {
   if (!text) return false;
-  const normalized = normalizeKeyword(text);
-  return config.pause_keywords.includes(normalized);
+  return matchesAnyKeyword(text, config.pause_keywords);
 }
 
 /**
- * True se a mensagem do lead bate com algum resume keyword. Quando a
- * conversa esta pausada (human_handoff_at != null) e o lead manda um
- * desses, IA reativa.
+ * True se a mensagem do lead contem algum resume keyword como palavra
+ * isolada. Quando a conversa esta pausada (human_handoff_at != null) e
+ * o lead manda um desses, IA reativa.
  */
 export function matchesResumeKeyword(
   text: string | null | undefined,
   config: HumanizationConfig,
 ): boolean {
   if (!text) return false;
-  const normalized = normalizeKeyword(text);
-  return config.resume_keywords.includes(normalized);
+  return matchesAnyKeyword(text, config.resume_keywords);
 }
 
 /**
