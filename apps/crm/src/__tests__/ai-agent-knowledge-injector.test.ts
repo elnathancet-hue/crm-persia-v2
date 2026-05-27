@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildKnowledgeBlock } from "@/lib/ai-agent/flow/knowledge-injector";
+import { clearKnowledgeCache } from "@/lib/ai-agent/flow/knowledge-cache";
 
 vi.mock("server-only", () => ({}));
 
@@ -15,6 +16,13 @@ vi.mock("@/lib/ai-agent/rag/retriever", () => ({
 }));
 
 import { retrieveWithAttempt } from "@/lib/ai-agent/rag/retriever";
+
+// Backlog #2 (mai/2026): cache de knowledge agora persiste entre
+// chamadas — sem reset, testes da mesma chave (org-1+agent-1) leem
+// resposta do teste anterior. beforeEach garante isolamento.
+beforeEach(() => {
+  clearKnowledgeCache();
+});
 
 /**
  * Mock builder simples — aceita chains arbitrários de eq/order/select

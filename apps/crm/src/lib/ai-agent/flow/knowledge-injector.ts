@@ -3,6 +3,7 @@ import "server-only";
 import { errorMessage, logError } from "@/lib/observability";
 import { retrieveWithAttempt } from "../rag/retriever";
 import type { AgentDb } from "../db";
+import { getCachedBlock, setCachedBlock } from "./knowledge-cache";
 
 /**
  * Knowledge inject (mai/2026) — feature "Documentos da base" no AI Agent.
@@ -149,6 +150,27 @@ async function buildFullModeBlock(
   organizationId: string,
   configId: string,
 ): Promise<string | null> {
+  // Backlog #2 Auditoria (mai/2026): cache lookup com sources_hash check.
+  // Endereca rodada 6 #5 + rodada 8 #1 — antes recarregavamos TUDO a cada
+  // turn. Agora hash de (MAX(updated_at), COUNT(*)) detecta mudancas;
+  // se nada mudou + cache fresh, retorna sem tocar agent_knowledge_chunks.
+  //
+  // Pequeno trade-off: SELECT de hash continua sendo feito em CADA
+  // chamada (1 query barata), mas a query pesada de chunks so roda no
+  // miss. Em orgs com doc grande, economia de ~50KB → ~50B por hit.
+  const cacheKey = `full:${organizationId}:${configId}`;
+  const sourcesHash = await computeFullModeSourcesHash(db, organizationId, configId);
+  // Hash null = falha na query do hash. Skipamos cache pra nao servir
+  // dado stale; cai direto pro load completo.
+  if (sourcesHash !== null) {
+    const cached = getCachedBlock(cacheKey, sourcesHash);
+    if (cached !== undefined) {
+      // Hit (cached pode ser null = "sem chunks"). Retorna direto sem
+      // tocar DB pra os chunks.
+      return cached;
+    }
+  }
+
   // Carrega TODOS chunks completed do agente, ordenados por source+chunk_index
   // pra preservar a ordem natural do documento original
   const { data, error } = await db
@@ -177,7 +199,15 @@ async function buildFullModeBlock(
     source: { title?: string | null } | { title?: string | null }[] | null;
   };
   const rows = (data ?? []) as Row[];
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    // Backlog #2: cacheia "sem chunks" tambem — evita re-query enquanto
+    // sources_hash nao mudar. Quando admin uplodar nova source, hash
+    // muda e o cache invalida automaticamente.
+    if (sourcesHash !== null) {
+      setCachedBlock(cacheKey, null, sourcesHash);
+    }
+    return null;
+  }
 
   // Agrupa por source pra rotular cada documento
   // (Supabase pode retornar `source` como objeto ou array dependendo do schema)
@@ -196,13 +226,63 @@ async function buildFullModeBlock(
     return `### ${s.title}\n${s.parts.join("\n").trim()}`;
   });
 
-  return [
+  const block = [
     "BASE DE CONHECIMENTO",
     "Use as informacoes abaixo como fonte de verdade ao responder perguntas do lead.",
     "Se o lead perguntar algo que NAO esta aqui, diga que nao tem essa informacao.",
     "",
     sections.join("\n\n"),
   ].join("\n");
+
+  // Backlog #2: cacheia bloco computado.
+  if (sourcesHash !== null) {
+    setCachedBlock(cacheKey, block, sourcesHash);
+  }
+
+  return block;
+}
+
+/**
+ * Backlog #2 Auditoria (mai/2026): hash leve pra detectar mudancas em
+ * agent_knowledge_sources sem fazer query pesada de chunks. Combinacao
+ * (MAX(updated_at), COUNT(*)) detecta:
+ *   - source nova adicionada (count muda)
+ *   - source existente reindexed (max(updated_at) muda)
+ *   - source removida (count muda)
+ *
+ * Retorna null em caso de erro — caller skipa cache e cai pro load
+ * completo (degradacao graciosa, sem perder consistencia).
+ */
+async function computeFullModeSourcesHash(
+  db: AgentDb,
+  organizationId: string,
+  configId: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from("agent_knowledge_sources")
+    .select("updated_at")
+    .eq("organization_id", organizationId)
+    .eq("agent_config_id", configId)
+    .eq("indexing_status", "completed");
+
+  if (error) {
+    logError("ai_agent_knowledge_hash_failed", {
+      organization_id: organizationId,
+      config_id: configId,
+      error: errorMessage(error),
+    });
+    return null;
+  }
+
+  const rows = (data ?? []) as Array<{ updated_at: string | null }>;
+  if (rows.length === 0) return `empty:0`;
+
+  let maxUpdated = "";
+  for (const row of rows) {
+    const value = row.updated_at ?? "";
+    if (value > maxUpdated) maxUpdated = value;
+  }
+  return `${rows.length}:${maxUpdated}`;
 }
 
 // ----------------------------------------------------------------------------
