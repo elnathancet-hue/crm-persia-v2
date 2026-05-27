@@ -23,11 +23,14 @@ import type {
   FlowNode,
 } from "@persia/shared/ai-agent";
 import {
+  calculateCostUsdCents,
   findEntryNode,
   findOutgoingEdges,
   getNodeById,
 } from "@persia/shared/ai-agent";
+import { assertWithinCostLimits, type CostLimitCache } from "../cost-limits";
 import type { AgentDb } from "../db";
+import { GuardrailError } from "../guardrails";
 import { buildKnowledgeBlock } from "./knowledge-injector";
 import { nativeHandlers } from "../tools/registry";
 import { stripToolCallLeaks } from "../tool-call-sanitizer";
@@ -332,6 +335,11 @@ async function executeAIAgentNode(
   // tool_success:emit_event). Captura aqui pra usar depois do loop.
   let emittedHandleName: string | null = null;
 
+  // PR-2 Auditoria (mai/2026): cache de limites entre ping-pongs.
+  // assertWithinCostLimits re-carregaria agent_cost_limits + agent_usage_daily
+  // a cada chamada — cache evita N x SELECT em cada iter do loop.
+  const costLimitCache: CostLimitCache = {};
+
   for (let iter = 0; iter < MAX_LLM_TOOL_PINGPONG; iter++) {
     const llmStart = Date.now();
     ctx.provider.emit({
@@ -341,9 +349,21 @@ async function executeAIAgentNode(
 
     let completion: OpenAI.Chat.ChatCompletion;
     try {
+      // PR-2 Auditoria (mai/2026): cap por chamada LLM. Sem cap, modelos
+      // de reasoning (gpt-5*) consomem ate a janela inteira por turn
+      // (rodada 6 #4). Default 4096 cobre reasoning + output medio sem
+      // truncar respostas comuns.
+      //
+      // gpt-5* exige `max_completion_tokens`; gpt-4o* e anteriores ainda
+      // usam `max_tokens` (max_completion_tokens existe mas e ignored).
+      // Detectar por prefixo do modelo.
+      const maxTokensKey: "max_completion_tokens" | "max_tokens" =
+        model.startsWith("gpt-5") ? "max_completion_tokens" : "max_tokens";
+      const maxTokensValue = 4096;
       completion = await client.chat.completions.create({
         model,
         messages,
+        [maxTokensKey]: maxTokensValue,
         ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: "auto" as const } : {}),
       });
     } catch (err) {
@@ -374,6 +394,48 @@ async function executeAIAgentNode(
         tokens_out: tokensOut,
       },
     });
+
+    // PR-2 Auditoria (mai/2026): intra-loop cost ceiling check.
+    // Endereca rodada 6 #critica #1 — ceiling per-run + agregados precisam
+    // ser enforced ANTES da proxima chamada LLM. Sem isso, um ping-pong
+    // longo (5 iters x N tokens) pode estourar o ceiling sem nenhum
+    // bloqueio. Tester nao roda este check porque dry_run nao deve ser
+    // gated por ceiling de producao.
+    if (!ctx.dryRun) {
+      const costSoFarCents = calculateCostUsdCents(
+        model,
+        result.tokens_input,
+        result.tokens_output,
+      );
+      try {
+        await assertWithinCostLimits({
+          db,
+          orgId: ctx.organizationId,
+          configId: ctx.agentConfigId,
+          agentConversationId: ctx.agentConversationId,
+          tokensSoFarRun: result.tokens_input + result.tokens_output,
+          costSoFarRunUsdCents: costSoFarCents,
+          cache: costLimitCache,
+        });
+      } catch (err) {
+        if (err instanceof GuardrailError) {
+          result.fatal_error = `cost_ceiling:${err.reason}`;
+          ctx.provider.emit({
+            kind: "guardrail",
+            payload: {
+              reason: "cost_ceiling",
+              trip_reason: err.reason,
+              message: err.message,
+              node_id: node.id,
+              tokens_so_far: result.tokens_input + result.tokens_output,
+              cost_so_far_cents: costSoFarCents,
+            },
+          });
+          return null;
+        }
+        throw err;
+      }
+    }
 
     const choice = completion.choices[0];
     if (!choice) {

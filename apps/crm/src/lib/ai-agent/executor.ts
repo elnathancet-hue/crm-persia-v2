@@ -50,11 +50,13 @@ import {
   type OrganizationSettings,
 } from "@persia/shared/ai-agent";
 import { errorMessage, logError } from "@/lib/observability";
+import { assertWithinCostLimits } from "./cost-limits";
 import { asAgentDb, type AgentDb } from "./db";
 import { loadFlowByConfigId } from "./flow/loader";
 import { createRealtimeProvider } from "./flow/realtime-provider";
 import { runFlow } from "./flow/runner";
 import type { FlowRunContext } from "./flow/types";
+import { GuardrailError } from "./guardrails";
 import { sendAssistantReply } from "./send-reply";
 
 // ============================================================================
@@ -1113,6 +1115,47 @@ export async function executeDebouncedBatch(input: {
         ...logCtx,
         error: runErr.message,
       });
+    }
+
+    // 3b. PR-2 Auditoria (mai/2026): pre-run cost ceiling check.
+    // Endereca rodada 6 #critica #1 — `assertWithinCostLimits` era dead
+    // code, runtime nunca enforçava. Cliente cadastrava limite na UI
+    // mas IA continuava respondendo indefinidamente.
+    //
+    // Pre-run usa tokensSoFarRun=0 — checa apenas os ceilings agregados
+    // (agent_daily / org_daily / org_monthly) baseados em consumo
+    // historico. Se ja estouraram, aborta o run sem chamar OpenAI.
+    // Ceiling per-run e validado dentro do AI node (intra-loop).
+    try {
+      await assertWithinCostLimits({
+        db,
+        orgId,
+        configId: agentConfig.id,
+        agentConversationId: agentConv.id,
+        tokensSoFarRun: 0,
+        costSoFarRunUsdCents: 0,
+      });
+    } catch (err) {
+      if (err instanceof GuardrailError) {
+        logError("flow_executor_cost_ceiling_pre_run", {
+          ...logCtx,
+          config_id: agentConfig.id,
+          reason: err.reason,
+          message: err.message,
+        });
+        if (runId) {
+          await db
+            .from("agent_runs")
+            .update({
+              status: "failed",
+              error_msg: `cost_ceiling:${err.reason}`,
+              duration_ms: 0,
+            })
+            .eq("id", runId);
+        }
+        return { runId, status: "failed" };
+      }
+      throw err;
     }
 
     // 4. Provider realtime que envia via WhatsApp + persiste outbound em

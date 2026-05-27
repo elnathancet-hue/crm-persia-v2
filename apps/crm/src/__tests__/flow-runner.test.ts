@@ -616,6 +616,143 @@ describe("flow-runner", () => {
     });
   });
 
+  it("PR-2: passa max_completion_tokens=4096 pro gpt-5* e max_tokens pro gpt-4o*", async () => {
+    // Endereca rodada 6 #4: runner nao tinha cap por chamada LLM.
+    // gpt-5* exige max_completion_tokens; gpt-4o* usa max_tokens.
+    // Detectamos por prefixo do modelo.
+    openAiCreateMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "ok", role: "assistant" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    // Mock DB suficiente pra loadAgentConfig + knowledge + cost-limits
+    const dbForAi = {
+      from: (table: string) => {
+        const noop = {} as Record<string, unknown>;
+        const chain: Record<string, unknown> = {};
+        ["select", "eq", "neq", "in", "order", "limit", "is", "lte", "gte"].forEach((m) => {
+          chain[m] = () => chain;
+        });
+        chain.maybeSingle = () => {
+          if (table === "agent_configs") {
+            return Promise.resolve({
+              data: { model: "gpt-5-mini", system_prompt: "Voce e um agente." },
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        chain.single = () => Promise.resolve({ data: null, error: null });
+        chain.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve);
+        Object.assign(noop, chain);
+        return chain;
+      },
+    } as never;
+
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "ai-1",
+            type: "ai_agent",
+            position: { x: 200, y: 0 },
+            data: {
+              label: "IA",
+              system_prompt: "",
+              instructions: [],
+            },
+          },
+        ],
+        edges: [
+          {
+            id: "e1",
+            source: "entry-1",
+            target: "ai-1",
+            sourceHandle: "default",
+          },
+        ],
+      }),
+    );
+    const ctx = makeCtx(flow);
+    // dryRun=true mantem (skipa o ceiling check), mas o cap de
+    // max_completion_tokens roda sempre.
+    await runFlow(dbForAi, ctx, null);
+
+    // Confirmar que OpenAI foi chamado com max_completion_tokens=4096
+    expect(openAiCreateMock).toHaveBeenCalledTimes(1);
+    const callArgs = openAiCreateMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(callArgs).toMatchObject({
+      model: "gpt-5-mini",
+      max_completion_tokens: 4096,
+    });
+    expect(callArgs.max_tokens).toBeUndefined();
+  });
+
+  it("PR-2: gpt-4o usa max_tokens (nao max_completion_tokens)", async () => {
+    openAiCreateMock.mockResolvedValueOnce({
+      choices: [{ message: { content: "ok", role: "assistant" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 10, completion_tokens: 5 },
+    });
+
+    const dbForAi = {
+      from: (table: string) => {
+        const chain: Record<string, unknown> = {};
+        ["select", "eq", "neq", "in", "order", "limit", "is", "lte", "gte"].forEach((m) => {
+          chain[m] = () => chain;
+        });
+        chain.maybeSingle = () => {
+          if (table === "agent_configs") {
+            return Promise.resolve({
+              data: { model: "gpt-4o-mini", system_prompt: "" },
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        chain.single = () => Promise.resolve({ data: null, error: null });
+        chain.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve);
+        return chain;
+      },
+    } as never;
+
+    const flow = makeLoadedFlow(
+      makeFlow({
+        nodes: [
+          {
+            id: "entry-1",
+            type: "entry",
+            position: { x: 0, y: 0 },
+            data: { label: "Início", trigger: "conversation_started" },
+          },
+          {
+            id: "ai-1",
+            type: "ai_agent",
+            position: { x: 200, y: 0 },
+            data: { label: "IA", system_prompt: "", instructions: [] },
+          },
+        ],
+        edges: [{ id: "e1", source: "entry-1", target: "ai-1", sourceHandle: "default" }],
+      }),
+    );
+    const ctx = makeCtx(flow);
+    await runFlow(dbForAi, ctx, null);
+
+    const callArgs = openAiCreateMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(callArgs).toMatchObject({
+      model: "gpt-4o-mini",
+      max_tokens: 4096,
+    });
+    expect(callArgs.max_completion_tokens).toBeUndefined();
+  });
+
   it("captura eventos node_entered/exited via provider", async () => {
     const flow = makeLoadedFlow(
       makeFlow({

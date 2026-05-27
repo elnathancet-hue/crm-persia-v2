@@ -182,4 +182,44 @@ describe("buildKnowledgeBlock", () => {
     expect(result).toContain("BASE DE CONHECIMENTO");
     expect(result).toContain("Default content.");
   });
+
+  it("PR-2: modo 'full' manual com doc grande > 50KB cai pra 'rag'", async () => {
+    // Endereca rodada 6 #5 / rodada 8 #1: cliente forcando 'full' em UI
+    // com doc enorme nao tem cap. Hard-cap unificado (50KB) derruba pra
+    // rag automaticamente, evitando re-injetar 100KB+ a cada turn.
+    vi.mocked(retrieveWithAttempt).mockResolvedValueOnce({
+      success: true,
+      hits: [
+        {
+          chunk_id: "c-rag",
+          source_id: "s-big",
+          source_type: "document",
+          source_title: "BigDoc",
+          content: "Trecho relevante extraido pelo RAG fallback.",
+          distance: 0.15,
+        },
+      ],
+      tokensEmbedded: 30,
+      durationMs: 80,
+    });
+
+    // 60KB de conteudo simulado (acima do cap de 50KB)
+    const bigContent = "x".repeat(60 * 1024);
+    const db = makeDb({
+      "agent_configs.maybeSingle": { knowledge_mode: "full" },
+      agent_knowledge_chunks: [
+        { content: bigContent, chunk_index: 0, source: { title: "BigDoc" } },
+      ],
+    });
+
+    const result = await buildKnowledgeBlock(db, "org-1", "agent-1", "pergunta");
+
+    // Deve ter caido pro rag — bloco e rotulado como "trechos relevantes"
+    expect(result).toContain("trechos relevantes pra essa pergunta");
+    expect(result).toContain("Trecho relevante extraido pelo RAG fallback.");
+    // Conteudo gigantesco do full NAO foi injetado
+    expect(result).not.toContain("xxxxxx");
+    // Confirma que retriever foi chamado (fallback ativado)
+    expect(retrieveWithAttempt).toHaveBeenCalled();
+  });
 });
