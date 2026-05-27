@@ -777,6 +777,18 @@ export async function tryEnqueueForNativeAgent(
       //  - actions/messages.ts:89 (operator reply bumpa epoch)
       //  - executor.ts:matchResume (resume keyword bumpa epoch — Bug J)
       // Esta mudança fecha o padrão: TODA transição de controle bump epoch.
+      //
+      // Backlog #8 Auditoria (mai/2026): endereca rodada 7 #4. Agora
+      // atualiza tambem `conversations.assigned_to=null + status="waiting_human"`
+      // — espelha matchResume (que vira AI/active) e os caminhos manuais
+      // (Assumir IA / operator reply) que ja faziam isso. Antes, lead
+      // mandava "PAUSAR" e chat-window continuava mostrando "AI assigned",
+      // operador ficava sem visibilidade que a IA estava pausada.
+      //
+      // assigned_to=null (em vez de "queue" ou marker proprio) porque
+      // ainda nao tem userId atribuido — espera operador clicar "Assumir"
+      // no chat-window pra setar `assigned_to=userId`. Status
+      // "waiting_human" e o canonical pra "esperando humano".
       await db
         .from("agent_conversations")
         .update({
@@ -786,6 +798,11 @@ export async function tryEnqueueForNativeAgent(
         })
         .eq("organization_id", orgId)
         .eq("id", agentConversationId);
+      await db
+        .from("conversations")
+        .update({ assigned_to: null, status: "waiting_human" })
+        .eq("organization_id", orgId)
+        .eq("id", conversationId);
       return {
         handled: true,
         response: {
