@@ -16,6 +16,11 @@
 
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
+import {
+  hasLeadPlaceholders,
+  interpolateLeadPlaceholders,
+  loadLeadForInterpolation,
+} from "../flow/lead-interpolation";
 import { failureResult, getHandlerDb, successResult } from "./shared";
 
 const setLeadCustomFieldSchema = z.object({
@@ -38,7 +43,7 @@ export const setLeadCustomFieldHandler: NativeHandler = async (context, input) =
     });
   }
 
-  const { field_key, value } = parsed.data;
+  const { field_key, value: rawValue } = parsed.data;
   const db = getHandlerDb(context);
   if (!db) {
     return failureResult("handler context missing db");
@@ -47,11 +52,30 @@ export const setLeadCustomFieldHandler: NativeHandler = async (context, input) =
     return failureResult("no lead_id in context — cannot set custom field");
   }
 
+  // Backlog #12 Auditoria (mai/2026): interpola placeholders `{{lead.X}}`
+  // antes de gravar. UI prometia esse suporte em NodeConfigSheet
+  // ("Pode usar variáveis tipo {{lead.name}}") mas o handler ate aqui
+  // gravava o texto literal. Short-circuit: se nao tem placeholders,
+  // skipa a query no DB.
+  let value = rawValue;
+  if (hasLeadPlaceholders(rawValue)) {
+    const lead = await loadLeadForInterpolation(
+      db,
+      context.organization_id,
+      context.lead_id,
+    );
+    value = interpolateLeadPlaceholders(rawValue, lead);
+  }
+
   // Em dry_run (Tester), simula sem tocar DB.
   if (context.dry_run) {
     return successResult(
-      { field_key, value, simulated: true },
-      [`(dry_run) set lead.custom_fields.${field_key} = "${value}"`],
+      { field_key, value, simulated: true, raw_value: rawValue },
+      [
+        rawValue !== value
+          ? `(dry_run) set lead.custom_fields.${field_key} = "${value}" (interpolated from "${rawValue}")`
+          : `(dry_run) set lead.custom_fields.${field_key} = "${value}"`,
+      ],
     );
   }
 
