@@ -19,7 +19,11 @@ import type {
   TesterResponse,
   TesterSimulateEventRequest,
 } from "@persia/shared/ai-agent";
-import { findEntryNode, normalizeHumanizationConfig } from "@persia/shared/ai-agent";
+import {
+  calculateCostUsdCents,
+  findEntryNode,
+  normalizeHumanizationConfig,
+} from "@persia/shared/ai-agent";
 import { asAgentDb } from "@/lib/ai-agent/db";
 import { loadFlowByConfigId } from "@/lib/ai-agent/flow/loader";
 import { runFlow } from "@/lib/ai-agent/flow/runner";
@@ -28,6 +32,7 @@ import {
   persistCurrentNode,
   resetTesterConversation as resetTesterImpl,
 } from "@/lib/ai-agent/flow/tester-context";
+import { collectGateWarnings } from "@/lib/ai-agent/flow/tester-gates";
 import { createTesterProvider } from "@/lib/ai-agent/flow/tester-provider";
 import type {
   FlowProviderStub,
@@ -47,19 +52,27 @@ export async function testAgentLive(
   const db = asAgentDb(supabase);
 
   try {
-    // 1. Resolve agent_config + flow
+    // 1. Resolve agent_config + flow.
+    //
+    // Backlog #6 Auditoria (mai/2026): SELECT estende status + model pra
+    // gate_warnings (rodada 10 #2) + cost real (rodada 10 #3). UI tester
+    // antes reportava cost_usd_cents=0 mesmo gastando OpenAI real.
     const { data: agentConfig, error: configError } = await db
       .from("agent_configs")
-      .select("id, humanization_config")
+      .select("id, status, model, humanization_config")
       .eq("organization_id", orgId)
       .eq("id", req.config_id)
       .maybeSingle();
     if (configError || !agentConfig) {
       return failedResponse("Agente não encontrado");
     }
-    const humanizationConfig = normalizeHumanizationConfig(
-      (agentConfig as { humanization_config?: unknown }).humanization_config,
-    );
+    const cfg = agentConfig as {
+      status?: string;
+      model?: string;
+      humanization_config?: unknown;
+    };
+    const humanizationConfig = normalizeHumanizationConfig(cfg.humanization_config);
+    const model = cfg.model ?? "gpt-5-mini";
 
     const flow = await loadFlowByConfigId(db, orgId, req.config_id);
     if (!flow) {
@@ -67,6 +80,11 @@ export async function testAgentLive(
         "Agente sem fluxo configurado. Recrie a partir de um template ou edite o canvas.",
       );
     }
+
+    // 1b. Coleta gate_warnings — paridade tester × prod (rodada 10 #2).
+    // Tester NUNCA bloqueia, apenas avisa o admin "esse run nao reflete
+    // o que aconteceria em prod hoje". Producao gateia em executor.ts.
+    const gateWarnings = await collectGateWarnings(db, orgId, cfg.status, humanizationConfig);
 
     // 2. Garante lead/conversation/agent_conversation de teste
     const tester = await ensureTesterContext(db, orgId, req.config_id);
@@ -105,13 +123,22 @@ export async function testAgentLive(
       .filter(isUiVisibleEvent)
       .map((e) => ({ ts: e.ts, kind: mapEventKind(e.kind), payload: e.payload }));
 
+    // 7. Cost real (rodada 10 #3): tokens vem do runner que somou todos os
+    // ping-pong do AI node; cost via MODEL_PRICING.
+    const tokensTotal = result.tokens_input + result.tokens_output;
+    const costCents = calculateCostUsdCents(
+      model,
+      result.tokens_input,
+      result.tokens_output,
+    );
+
     return {
       run_id: null,
       events: uiEvents,
       steps: [],
       next_node_id: result.ending_node_id,
-      tokens_used: 0,
-      cost_usd_cents: 0,
+      tokens_used: tokensTotal,
+      cost_usd_cents: costCents,
       applied_config: {
         split_enabled: humanizationConfig.split_enabled,
         split_threshold_chars: humanizationConfig.split_threshold_chars,
@@ -120,6 +147,7 @@ export async function testAgentLive(
         pause_keywords: humanizationConfig.pause_keywords,
         resume_keywords: humanizationConfig.resume_keywords,
       },
+      ...(gateWarnings.length > 0 ? { gate_warnings: gateWarnings } : {}),
       ...(result.fatal_error ? { error: result.fatal_error } : {}),
     };
   } catch (err) {
@@ -143,7 +171,27 @@ export async function simulateCrmEvent(
   const db = asAgentDb(supabase);
 
   try {
-    // 1. Carrega flow + valida entry node.
+    // 1. Carrega agent_config (status + model + humanization_config) — espelha
+    // padrao do testAgentLive pra coletar gate_warnings e calcular custo
+    // real. Sem reuse direto porque simulateCrmEvent tem branch extra de
+    // validacao do entry node antes de rodar.
+    const { data: agentConfig, error: configError } = await db
+      .from("agent_configs")
+      .select("id, status, model, humanization_config")
+      .eq("organization_id", orgId)
+      .eq("id", req.config_id)
+      .maybeSingle();
+    if (configError || !agentConfig) {
+      return failedResponse("Agente não encontrado");
+    }
+    const cfg = agentConfig as {
+      status?: string;
+      model?: string;
+      humanization_config?: unknown;
+    };
+    const humanizationConfig = normalizeHumanizationConfig(cfg.humanization_config);
+    const model = cfg.model ?? "gpt-5-mini";
+
     const flow = await loadFlowByConfigId(db, orgId, req.config_id);
     if (!flow) {
       return failedResponse(
@@ -185,16 +233,19 @@ export async function simulateCrmEvent(
         tokens_used: 0,
         cost_usd_cents: 0,
         applied_config: {
-          split_enabled: false,
-          split_threshold_chars: 0,
-          split_delay_seconds: 0,
-          business_hours_enabled: false,
-          pause_keywords: [],
-          resume_keywords: [],
+          split_enabled: humanizationConfig.split_enabled,
+          split_threshold_chars: humanizationConfig.split_threshold_chars,
+          split_delay_seconds: humanizationConfig.split_delay_seconds,
+          business_hours_enabled: humanizationConfig.business_hours_enabled,
+          pause_keywords: humanizationConfig.pause_keywords,
+          resume_keywords: humanizationConfig.resume_keywords,
         },
         error: `Em produção esse fluxo não dispararia: a ${targetType} simulada não é a configurada na entrada.`,
       };
     }
+
+    // 1b. Coleta gate_warnings — paridade tester × prod.
+    const gateWarnings = await collectGateWarnings(db, orgId, cfg.status, humanizationConfig);
 
     // 2. Garante lead/conversation/agent_conversation de teste.
     const tester = await ensureTesterContext(db, orgId, req.config_id);
@@ -235,21 +286,29 @@ export async function simulateCrmEvent(
       .filter(isUiVisibleEvent)
       .map((e) => ({ ts: e.ts, kind: mapEventKind(e.kind), payload: e.payload }));
 
+    const tokensTotal = result.tokens_input + result.tokens_output;
+    const costCents = calculateCostUsdCents(
+      model,
+      result.tokens_input,
+      result.tokens_output,
+    );
+
     return {
       run_id: null,
       events: uiEvents,
       steps: [],
       next_node_id: result.ending_node_id,
-      tokens_used: 0,
-      cost_usd_cents: 0,
+      tokens_used: tokensTotal,
+      cost_usd_cents: costCents,
       applied_config: {
-        split_enabled: false,
-        split_threshold_chars: 0,
-        split_delay_seconds: 0,
-        business_hours_enabled: false,
-        pause_keywords: [],
-        resume_keywords: [],
+        split_enabled: humanizationConfig.split_enabled,
+        split_threshold_chars: humanizationConfig.split_threshold_chars,
+        split_delay_seconds: humanizationConfig.split_delay_seconds,
+        business_hours_enabled: humanizationConfig.business_hours_enabled,
+        pause_keywords: humanizationConfig.pause_keywords,
+        resume_keywords: humanizationConfig.resume_keywords,
       },
+      ...(gateWarnings.length > 0 ? { gate_warnings: gateWarnings } : {}),
       ...(result.fatal_error ? { error: result.fatal_error } : {}),
     };
   } catch (err) {

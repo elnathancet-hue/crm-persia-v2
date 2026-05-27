@@ -425,6 +425,26 @@ export interface TesterLiveResponse {
    * o motivo em PT-BR pra UI mostrar banner amigavel. */
   human_message?: string;
   error?: string;
+  /**
+   * Backlog #6 Auditoria (mai/2026): warnings de paridade entre tester
+   * e producao. Tester nao bloqueia em nenhum dos casos — apenas avisa
+   * o admin "esse run nao reflete o que aconteceria em prod hoje".
+   *
+   * Codigos:
+   *   - feature_flag_off: org tem native_agent_enabled = false em
+   *     organizations.settings.features. Producao iria pro pipeline legacy.
+   *   - agent_not_active: agent_configs.status != 'active'. Producao
+   *     filtra; tester ignora.
+   *   - outside_business_hours: humanization.business_hours_enabled = true
+   *     e agora esta fora do range. Producao mandaria after_hours_message.
+   *
+   * Cada warning tem mensagem PT-BR pra UI mostrar como banner amarelo
+   * em cima dos eventos.
+   */
+  gate_warnings?: Array<{
+    code: "feature_flag_off" | "agent_not_active" | "outside_business_hours";
+    message: string;
+  }>;
 }
 
 // ============================================================================
