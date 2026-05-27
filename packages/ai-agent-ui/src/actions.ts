@@ -64,15 +64,39 @@ export interface AgentActions {
   // stages: agora o agente tem 1 flow JSONB com nodes/edges visuais.
   /** Carrega o flow_config do agente. Null = agente sem flow (criado
    * via API sem template). Canvas deve renderizar estado vazio com
-   * dica de "arraste a primeira tarefa". */
-  getFlow: (configId: string) => Promise<FlowConfig | null>;
+   * dica de "arraste a primeira tarefa".
+   *
+   * Backlog #3 Auditoria (mai/2026): retorna tambem a `version` corrente
+   * pra UI passar como `expectedVersion` no saveFlow (CAS optimistic
+   * locking). */
+  getFlow: (
+    configId: string,
+  ) => Promise<{ config: FlowConfig; version: number } | null>;
   /** Persiste o flow inteiro (nodes + edges + viewport + enabled_tools).
    * Retorna a nova version pra UI atualizar state local. Server normaliza
-   * antes de salvar via normalizeFlowConfig. */
+   * antes de salvar via normalizeFlowConfig.
+   *
+   * Backlog #3 Auditoria (mai/2026): CAS optimistic locking. UI passa
+   * `expectedVersion` (versao carregada no momento do load do canvas).
+   * Se outro admin salvou primeiro (versao no DB e diferente), retorno
+   * `{ ok: false, conflict: true, current_version }`. UI decide:
+   * mostrar modal "recarregue antes de salvar" OU oferecer overwrite.
+   *
+   * Backwards-compat: chamadas sem `expectedVersion` mantem comportamento
+   * antigo (last-write-wins). Caller novo passa pra ativar CAS. */
   saveFlow: (
     configId: string,
     config: FlowConfig,
-  ) => Promise<{ ok: true; version: number }>;
+    expectedVersion?: number,
+  ) => Promise<
+    | { ok: true; version: number }
+    | {
+        ok: false;
+        conflict: true;
+        expected_version: number;
+        current_version: number;
+      }
+  >;
   /** Carrega catálogos pros pickers do NodeConfigSheet (tags, stages,
    * templates, agenda, membros, outros agentes). Single roundtrip. */
   getFlowCatalogs: (

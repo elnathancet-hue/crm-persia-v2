@@ -176,6 +176,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
+  // Backlog #3 Auditoria (mai/2026): version carregada do flow no DB
+  // no momento do load. Passada como `expectedVersion` no saveFlow pra
+  // CAS optimistic locking. null = flow ainda nao existe (primeira save).
+  const [loadedVersion, setLoadedVersion] = React.useState<number | null>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   // PR 21 (mai/2026): configSheetOpen removido — Sheet não é mais
@@ -222,14 +226,15 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     let cancelled = false;
     (async () => {
       try {
-        const config = await actions.getFlow(configId);
+        const loaded = await actions.getFlow(configId);
         if (cancelled) return;
-        if (config) {
-          const { nodes: rfNodes, edges: rfEdges } = persiaToReactFlow(config);
+        if (loaded) {
+          const { nodes: rfNodes, edges: rfEdges } = persiaToReactFlow(loaded.config);
           setNodes(rfNodes);
           setEdges(rfEdges);
-          setViewport(config.viewport);
-          setEnabledTools(config.enabled_tools);
+          setViewport(loaded.config.viewport);
+          setEnabledTools(loaded.config.enabled_tools);
+          setLoadedVersion(loaded.version);
           // PR 24: reset undo stack ao carregar novo flow — histórico
           // do flow anterior não faz sentido pro novo.
           history.reset();
@@ -860,8 +865,30 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     setSaving(true);
     try {
       const config = reactFlowToPersia(nodes, edges, viewport, enabledTools);
-      const res = await actions.saveFlow(configId, config);
+      // Backlog #3 (mai/2026): passa loadedVersion pra CAS optimistic
+      // locking. Servidor recusa se outro admin salvou entre o load
+      // deste canvas e este save.
+      const res = await actions.saveFlow(
+        configId,
+        config,
+        loadedVersion ?? undefined,
+      );
+      if (!res.ok) {
+        // Conflito de versao detectado. Nao limpa dirty — usuario
+        // precisa recarregar a pagina pra ver o flow novo + decidir
+        // como integrar suas edicoes. Toast persistente porque o
+        // ato e destrutivo se ignorado.
+        toast.error(
+          `Outro editor salvou este fluxo enquanto você estava editando ` +
+            `(versão ${res.current_version} no servidor, você tem v${res.expected_version}). ` +
+            `Recarregue a página antes de salvar de novo — suas edições atuais ` +
+            `ficarão como referência no histórico do navegador.`,
+          { duration: 12000 },
+        );
+        return;
+      }
       setDirty(false);
+      setLoadedVersion(res.version);
       toast.success(`Fluxo salvo (versão ${res.version}).`);
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err);
@@ -873,7 +900,16 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     } finally {
       setSaving(false);
     }
-  }, [actions, configId, edges, enabledTools, nodes, viewport, validationIssues]);
+  }, [
+    actions,
+    configId,
+    edges,
+    enabledTools,
+    loadedVersion,
+    nodes,
+    viewport,
+    validationIssues,
+  ]);
 
   // PR 20 UX (mai/2026): auto-save removido a pedido do cliente.
   // Comportamento agora é igual ao Jordan/ManyChat — salva SÓ quando

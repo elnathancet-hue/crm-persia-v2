@@ -72,7 +72,8 @@ export function createAdminAgentActions(orgId: string): AgentActions {
     updateEntryCondition: (id, input) => updateEntryCondition(orgId, id, input),
     deleteEntryCondition: (id) => deleteEntryCondition(orgId, id),
     getFlow: (configId) => getFlow(orgId, configId),
-    saveFlow: (configId, config) => saveFlow(orgId, configId, config),
+    saveFlow: (configId, config, expectedVersion) =>
+      saveFlow(orgId, configId, config, expectedVersion),
     getFlowCatalogs: (configId) => getFlowCatalogs(orgId, configId),
     createToolFromPreset: (input) => createToolFromPreset(orgId, input),
     createCustomWebhookTool: (input) => createCustomWebhookTool(orgId, input),
