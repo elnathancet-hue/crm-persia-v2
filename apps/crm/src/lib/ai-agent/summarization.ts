@@ -1,7 +1,9 @@
 import "server-only";
 
+import type OpenAI from "openai";
 import {
   DEFAULT_CONTEXT_SUMMARIZATION,
+  INTERNAL_MODEL,
   clampRecentMessagesCount,
   clampTokenThreshold,
   clampTurnThreshold,
@@ -11,6 +13,7 @@ import {
   type ContextSummarizationConfig,
   type ConversationSummaryCounters,
 } from "@persia/shared/ai-agent";
+import { errorMessage, logError, logInfo } from "@/lib/observability";
 import type { AgentDb } from "./db";
 
 type LlmHistoryMessage = {
@@ -229,4 +232,131 @@ function toMessageText(message: ConversationMessageRow): string {
   if (text) return text;
   if (message.media_url) return "[midia enviada]";
   return "[mensagem sem texto]";
+}
+
+// ============================================================================
+// Backlog #1 (mai/2026) — runConversationSummarization
+// ============================================================================
+//
+// Endereca rodada 6 #critica #2 + #3 do POST_CODEX_AUDIT_AGENT_FLOW_353.md.
+// Antes, summarization.ts era dead code — funcoes existiam mas nenhum caller
+// disparava. IA respondia sem history e sem summary, multi-turn quebrado.
+//
+// Esta funcao orquestra:
+//   1. Carrega mensagens novas desde o ultimo summary (loadMessagesForSummarization).
+//   2. Se nada novo, retorna no-op silenciosamente (idempotente).
+//   3. Formata como transcript (formatMessagesForSummarization).
+//   4. Monta user prompt com resumo anterior + novas (buildSummarizationUserPrompt).
+//   5. Chama OpenAI gpt-4o-mini (INTERNAL_MODEL — cheap + bom em prosa curta).
+//   6. UPDATE agent_conversations.history_summary + updated_at + run_count +
+//      token_count via patch atomico.
+//
+// Modo fire-and-forget: caller passa await ou void(). Falha aqui NAO derruba
+// o run principal — proximo flush tenta de novo (counters acumulam).
+
+export interface SummarizationResult {
+  status: "summarized" | "skipped_no_new_messages" | "failed";
+  reason?: string;
+  tokens_input?: number;
+  tokens_output?: number;
+}
+
+export async function runConversationSummarization(params: {
+  db: AgentDb;
+  openaiClient: OpenAI;
+  orgId: string;
+  agentConversation: Pick<
+    AgentConversation,
+    | "id"
+    | "crm_conversation_id"
+    | "history_summary"
+    | "history_summary_updated_at"
+    | "history_summary_run_count"
+    | "history_summary_token_count"
+    | "created_at"
+  >;
+}): Promise<SummarizationResult> {
+  const { db, openaiClient, orgId, agentConversation } = params;
+
+  if (!agentConversation.crm_conversation_id) {
+    return { status: "skipped_no_new_messages", reason: "no_crm_conversation" };
+  }
+
+  try {
+    const messages = await loadMessagesForSummarization({
+      db,
+      orgId,
+      conversation: agentConversation,
+    });
+
+    if (messages.length === 0) {
+      return { status: "skipped_no_new_messages", reason: "no_new_messages_since_last_summary" };
+    }
+
+    const formatted = formatMessagesForSummarization(messages);
+    const userPrompt = buildSummarizationUserPrompt({
+      previousSummary: agentConversation.history_summary,
+      formattedMessages: formatted,
+    });
+
+    const completion = await openaiClient.chat.completions.create({
+      model: INTERNAL_MODEL, // gpt-4o-mini — cheap + bom em prosa curta
+      messages: [
+        { role: "system", content: SUMMARIZATION_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 1500, // ~800 palavras max do system prompt + margem
+    });
+
+    const newSummary = completion.choices[0]?.message?.content?.trim();
+    if (!newSummary) {
+      return { status: "failed", reason: "empty_summary_from_openai" };
+    }
+
+    const tokensIn = completion.usage?.prompt_tokens ?? 0;
+    const tokensOut = completion.usage?.completion_tokens ?? 0;
+    const newRunCount =
+      (Number(agentConversation.history_summary_run_count ?? 0)) + 1;
+    const newTokenCount =
+      (Number(agentConversation.history_summary_token_count ?? 0)) + tokensIn + tokensOut;
+
+    const { error: updateError } = await db
+      .from("agent_conversations")
+      .update({
+        history_summary: newSummary,
+        history_summary_updated_at: new Date().toISOString(),
+        history_summary_run_count: newRunCount,
+        history_summary_token_count: newTokenCount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("organization_id", orgId)
+      .eq("id", agentConversation.id);
+
+    if (updateError) {
+      logError("ai_agent_summarization_update_failed", {
+        organization_id: orgId,
+        agent_conversation_id: agentConversation.id,
+        error: updateError.message,
+      });
+      return { status: "failed", reason: `db_update_failed:${updateError.message}` };
+    }
+
+    logInfo("ai_agent_summarization_completed", {
+      organization_id: orgId,
+      agent_conversation_id: agentConversation.id,
+      tokens_input: tokensIn,
+      tokens_output: tokensOut,
+      message_count: messages.length,
+      run_count: newRunCount,
+    });
+
+    return { status: "summarized", tokens_input: tokensIn, tokens_output: tokensOut };
+  } catch (err) {
+    logError("ai_agent_summarization_failed", {
+      organization_id: orgId,
+      agent_conversation_id: agentConversation.id,
+      error: errorMessage(err),
+    });
+    return { status: "failed", reason: errorMessage(err) };
+  }
 }

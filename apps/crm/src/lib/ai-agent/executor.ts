@@ -62,6 +62,10 @@ import { runFlow } from "./flow/runner";
 import type { FlowRunContext } from "./flow/types";
 import { GuardrailError } from "./guardrails";
 import { sendAssistantReply } from "./send-reply";
+import {
+  runConversationSummarization,
+  shouldTriggerConversationSummarization,
+} from "./summarization";
 
 // ============================================================================
 // Tipos públicos (mesmo shape do stub — compatíveis com webhook+debounce)
@@ -1296,6 +1300,38 @@ export async function executeDebouncedBatch(input: {
           error_msg: result.fatal_error ?? null,
         })
         .eq("id", runId);
+    }
+
+    // Backlog #1 (mai/2026) — trigger summarization fire-and-forget.
+    // Endereca rodada 6 #critica #3 do POST_CODEX_AUDIT_AGENT_FLOW_353.md.
+    // Antes, summarization.ts era dead code. Agora, apos cada run
+    // bem-sucedido, checa thresholds (turns desde ultimo summary OR
+    // tokens acumulados) e dispara consolidacao via gpt-4o-mini.
+    //
+    // Fire-and-forget intencional: nao bloqueia retorno do flush. Lead
+    // ja recebeu a resposta do turn atual; summary e pra prox turn.
+    // Falha aqui = log + segue, proximo flush retenta (counters
+    // acumulam).
+    if (!result.fatal_error && openaiClient) {
+      const shouldSummarize = shouldTriggerConversationSummarization(
+        agentConv,
+        agentConfig,
+      );
+      if (shouldSummarize) {
+        void runConversationSummarization({
+          db,
+          openaiClient,
+          orgId,
+          agentConversation: agentConv,
+        }).catch((err) => {
+          // Best-effort: log mas nao propaga. runConversationSummarization
+          // ja faz logError internamente — esse catch e safety net.
+          logError("flow_executor_summarization_unhandled", {
+            ...logCtx,
+            error: errorMessage(err),
+          });
+        });
+      }
     }
 
     return {
