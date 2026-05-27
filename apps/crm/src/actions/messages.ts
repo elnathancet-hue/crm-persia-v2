@@ -38,49 +38,62 @@ export type Message = {
 };
 
 // PR-AI-AGENT-HUMAN-A: auto-pause native AI quando humano (operator)
-// responde manualmente pelo CRM. Lê humanization_config do agent_configs
-// ativo da org e seta human_handoff_at na agent_conversation. Toda
-// chamada e best-effort — falha aqui nao bloqueia envio da msg humana.
+// responde manualmente pelo CRM. Seta human_handoff_at na agent_conversation
+// quando a humanization_config DAQUELE agent_config tem auto_pause_minutes > 0.
+// Toda chamada e best-effort — falha aqui nao bloqueia envio da msg humana.
 // Idempotente: usa NULL guard no UPDATE pra so pausar conversas ativas
 // (nao reseta timer se ja pausada).
+//
+// PR-4 Auditoria (mai/2026): endereca rodada 7 #alta #2. Antes, este
+// helper carregava humanization do "primeiro agent_config ativo da org"
+// (ORDER BY created_at, LIMIT 1), nao do agente que atende a conversa.
+// Em orgs multi-agent (routing condicional), isso podia silenciosamente
+// desligar auto-pause quando o agente "mais antigo" tinha
+// auto_pause_minutes=0. Agora cada agent_conversations e avaliada com
+// a config do SEU proprio config_id via JOIN.
 async function autoPauseNativeAgent(
   supabase: Awaited<ReturnType<typeof requireRole>>["supabase"],
   orgId: string,
   conversationId: string,
 ): Promise<void> {
   try {
-    const { data: agentConfig } = await supabase
-      .from("agent_configs")
-      .select("humanization_config")
-      .eq("organization_id", orgId)
-      .eq("status", "active")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    const humanization = normalizeHumanizationConfig(
-      (agentConfig as { humanization_config?: unknown } | null)?.humanization_config,
-    );
-
-    // auto_pause_minutes = 0 desliga a feature.
-    if (humanization.auto_pause_minutes <= 0) return;
-
     const now = new Date().toISOString();
+    // JOIN agent_conversations × agent_configs pra avaliar humanization
+    // por linha. Supabase PostgREST embed: nested `agent_configs!inner`
+    // garante que rows com config_id orfa nao retornam (defensive).
     const { data: agentConversations, error: loadError } = await supabase
       .from("agent_conversations")
-      .select("id, human_handoff_at, ai_control_epoch")
+      .select(
+        "id, config_id, human_handoff_at, ai_control_epoch, agent_configs!inner(humanization_config)",
+      )
       .eq("organization_id", orgId)
       .eq("crm_conversation_id", conversationId);
 
     if (loadError) throw loadError;
 
     for (const row of agentConversations ?? []) {
-      if ((row as { human_handoff_at?: string | null }).human_handoff_at) {
-        continue;
-      }
+      const typedRow = row as {
+        id: string;
+        config_id: string;
+        human_handoff_at?: string | null;
+        ai_control_epoch?: number | null;
+        agent_configs?:
+          | { humanization_config?: unknown }
+          | Array<{ humanization_config?: unknown }>;
+      };
+      // Postgrest pode retornar embed como objeto OU array dependendo do schema.
+      const configRow = Array.isArray(typedRow.agent_configs)
+        ? typedRow.agent_configs[0]
+        : typedRow.agent_configs;
+      const humanization = normalizeHumanizationConfig(
+        configRow?.humanization_config,
+      );
+      // auto_pause_minutes=0 desliga a feature pra ESSE agente especifico.
+      if (humanization.auto_pause_minutes <= 0) continue;
+      // ja pausada — preserva o timer original.
+      if (typedRow.human_handoff_at) continue;
 
-      const currentEpoch =
-        (row as { ai_control_epoch?: number | null }).ai_control_epoch ?? 0;
+      const currentEpoch = typedRow.ai_control_epoch ?? 0;
       await supabase
         .from("agent_conversations")
         .update({
@@ -90,7 +103,7 @@ async function autoPauseNativeAgent(
           updated_at: now,
         })
         .eq("organization_id", orgId)
-        .eq("id", (row as { id: string }).id);
+        .eq("id", typedRow.id);
     }
   } catch (err: unknown) {
     logError("auto_pause_native_agent_failed", {

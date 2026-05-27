@@ -523,6 +523,32 @@ export function getNodeById(flow: FlowConfig, nodeId: string): FlowNode | null {
   return flow.nodes.find((n) => n.id === nodeId) ?? null;
 }
 
+/**
+ * PR-4 Auditoria (mai/2026): decide se o ending_node_id de um run deve
+ * ser persistido em `agent_conversations.current_node_id` OU resetado
+ * pra null. Endereca rodada 1 #1 (Codex).
+ *
+ * Antes, executor.ts salvava sempre o ending_node_id — quando o flow
+ * terminava em `action` ou `condition`, a proxima mensagem do lead
+ * reentrava direto naquele node, reexecutando o efeito (mensagem
+ * duplicada, tag reaplicada, transferencia repetida).
+ *
+ * Regra: persistir apenas para `ai_agent` (precisa de continuidade
+ * conversacional) e `entry` (point of start, sempre ok). `action` e
+ * `condition` retornam null pra forcar o entry node na proxima execucao.
+ *
+ * Pure function — facilita unit test sem mockar todo o flow runtime.
+ */
+export function shouldResetCurrentNodeId(
+  flow: FlowConfig,
+  endingNodeId: string | null,
+): boolean {
+  if (!endingNodeId) return false;
+  const node = getNodeById(flow, endingNodeId);
+  if (!node) return true; // node removido entre runs — reset pra entry
+  return node.type === "action" || node.type === "condition";
+}
+
 // ============================================================================
 // Bridge: NativeHandlerName ↔ FlowActionType
 // ============================================================================

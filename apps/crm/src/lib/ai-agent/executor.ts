@@ -42,6 +42,7 @@ import {
   matchesResumeKeyword,
   normalizeHumanizationConfig,
   pickSecondaryAgent,
+  shouldResetCurrentNodeId,
   shouldSendAfterHoursMessage,
   shouldTriggerFlowFromInbound,
   type AgentEntryCondition,
@@ -1225,6 +1226,18 @@ export async function executeDebouncedBatch(input: {
     // 6. Persiste current_node_id, last_interaction_at e acumula tokens.
     // tokens_used_total é incremento — V1 faz SELECT + UPDATE (V2 pode
     // virar RPC atômico se houver concorrência alta).
+    //
+    // PR-4 Auditoria (mai/2026): endereca rodada 1 #1 (Codex) + rodada 9 #4.
+    // Helper shouldResetCurrentNodeId (em @persia/shared/ai-agent) decide
+    // se o ending_node_id deve virar null antes de persistir — evita
+    // reexecutar action/condition terminal na proxima mensagem do lead.
+    const persistedNodeId = shouldResetCurrentNodeId(
+      ctx.flowConfig,
+      result.ending_node_id,
+    )
+      ? null
+      : result.ending_node_id;
+
     const totalTokensTurn = result.tokens_input + result.tokens_output;
     const { data: convRow } = await db
       .from("agent_conversations")
@@ -1237,7 +1250,7 @@ export async function executeDebouncedBatch(input: {
     await db
       .from("agent_conversations")
       .update({
-        current_node_id: result.ending_node_id,
+        current_node_id: persistedNodeId,
         last_interaction_at: new Date().toISOString(),
         tokens_used_total: prevTotal + totalTokensTurn,
       })
