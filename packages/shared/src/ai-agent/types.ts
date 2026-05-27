@@ -74,7 +74,16 @@ export const SPIKE_NATIVE_HANDLERS = ["stop_agent"] as const satisfies readonly 
 // Tool execution modes
 // ============================================================================
 
-export type ToolExecutionMode = "native" | "n8n_webhook";
+// Backlog #7 Auditoria (mai/2026): adicionado "mcp" — endereca rodada
+// 2 #4 do POST_CODEX_AUDIT_AGENT_FLOW_353.md. Migration 062 ja estende
+// o CHECK constraint de agent_tools.execution_mode e o flow runner ja
+// despacha em runner.ts:dispatchToolCall. Faltava apenas o tipo
+// compartilhado pra eliminar a deriva DB↔runtime↔UI.
+//
+// - native:     handler nativo em apps/crm/src/lib/ai-agent/tools/.
+// - n8n_webhook: legacy externo via webhook_url + webhook_secret.
+// - mcp:        servidor externo via mcp_server_connections + JSON-RPC.
+export type ToolExecutionMode = "native" | "n8n_webhook" | "mcp";
 
 // ============================================================================
 // Agent status

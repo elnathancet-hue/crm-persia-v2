@@ -38,7 +38,7 @@ Schema introduzido pelas **migrations 017 → 049** (cronologicamente). Tabelas 
 |---|---|---|
 | `agent_configs` | `name`, `system_prompt`, `model`, `status`, `is_primary`, `behavior_mode`, `humanization_config`, `guardrails`, `debounce_window_ms`, `handoff_notification_*` | 1 row por agente. `is_primary=true` UNIQUE por org via partial index |
 | `agent_stages` | `config_id`, `order_index`, `slug`, `situation`, `instruction`, `transition_hint`, `rag_enabled`, `action_type`, `action_config` | Etapas do funil. `action_type` quando `behavior_mode='actions'` |
-| `agent_tools` | `config_id`, `name`, `description`, `input_schema`, `execution_mode` (`native`\|`n8n_webhook`), `native_handler`, `webhook_url`, `is_enabled` | Tools registradas no agente |
+| `agent_tools` | `config_id`, `name`, `description`, `input_schema`, `execution_mode` (`native`\|`n8n_webhook`\|`mcp`), `native_handler`, `webhook_url`, `mcp_server_id`, `is_enabled` | Tools registradas no agente |
 | `agent_stage_tools` | junction `(stage_id, tool_id, is_enabled)` | Allowlist de tools por etapa |
 | `agent_conversations` | `crm_conversation_id`, `lead_id`, `config_id`, `current_stage_id`, `variables`, `history_summary`, `human_handoff_at`, `actions_executed`, `next_flush_at` | Sticky por lead — preserva estado entre msgs |
 | `agent_runs` | `agent_conversation_id`, `inbound_message_id`, `status`, `model`, `tokens_*`, `cost_usd_cents`, `is_test` | 1 row por execução. `is_test=true` filtrável em dashboards |
