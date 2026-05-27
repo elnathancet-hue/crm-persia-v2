@@ -21,6 +21,19 @@ import { asAgentDb } from "@/lib/ai-agent/db";
 import { loadFlowByConfigId } from "@/lib/ai-agent/flow/loader";
 import { agentPaths, requireAgentRole } from "./utils";
 
+export interface FlowImpactPreview {
+  /** Quantas conversas tem current_node_id apontando pra um node que
+   * NAO existe no `config` proposto (orfas). Estas vao falhar com
+   * node_not_found no proximo turno se o save acontecer assim. */
+  affected_conversations: number;
+  /** Lista deduplicada dos node_ids em uso por convs vivas que sumiriam
+   * no save. UI usa pra mostrar "voce vai remover X, Y, Z (em uso)". */
+  at_risk_node_ids: string[];
+  /** Total de convs com current_node_id IS NOT NULL pro agente. Servirve
+   * de denominador no UX ("3 de 12 conversas afetadas"). */
+  total_live_conversations: number;
+}
+
 export interface SaveFlowSuccess {
   ok: true;
   version: number;
@@ -179,4 +192,78 @@ export async function saveFlow(
   }
   for (const path of agentPaths(configId)) revalidatePath(path);
   return { ok: true, version: 1 };
+}
+
+/**
+ * Backlog #4 Auditoria (mai/2026): endereca rodada 9 #1 + #5 do
+ * POST_CODEX_AUDIT_AGENT_FLOW_353.md.
+ *
+ * Antes, admin editava flow + salvava sem aviso. Conversas vivas com
+ * `current_node_id` apontando pra nodes removidos disparavam
+ * `flow_executor_no_flow` ou `node_not_found:<id>` no proximo turno —
+ * lead em silencio sem o admin perceber.
+ *
+ * Esta action computa o impacto ANTES do save: quantas convs vao ficar
+ * orfas e quais node_ids dessas convs sumiriam. UI usa pra mostrar
+ * modal "X conversas em andamento vao ser afetadas, deseja prosseguir?"
+ *
+ * NAO altera DB — apenas read-only analysis. Cliente pode chamar
+ * sempre que o flow muda no canvas, sem efeitos colaterais. Mantemos
+ * requireAgentRole("admin") porque preview de impacto e operacao
+ * sensivel (vaza nodes em uso).
+ */
+export async function previewFlowImpact(
+  configId: string,
+  config: FlowConfig,
+): Promise<FlowImpactPreview> {
+  const { supabase, orgId } = await requireAgentRole("admin");
+  const db = asAgentDb(supabase);
+
+  // IDOR defense.
+  const { data: agentConfig, error: configError } = await db
+    .from("agent_configs")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("id", configId)
+    .maybeSingle();
+  if (configError || !agentConfig) {
+    throw new Error("Agente não encontrado");
+  }
+
+  const normalized = normalizeFlowConfig(config);
+  const nodeIdsInNewConfig = new Set(normalized.nodes.map((n) => n.id));
+
+  // Carrega current_node_id de TODAS convs vivas pro agente. crm_conversation_id
+  // not null + current_node_id not null = conversa em andamento que tem
+  // estado dependente do flow.
+  const { data: liveConvs, error: convError } = await db
+    .from("agent_conversations")
+    .select("current_node_id")
+    .eq("organization_id", orgId)
+    .eq("config_id", configId)
+    .not("current_node_id", "is", null);
+
+  if (convError) {
+    throw new Error(`Falha ao analisar impacto: ${convError.message}`);
+  }
+
+  const rows = (liveConvs ?? []) as Array<{ current_node_id: string }>;
+  const atRiskSet = new Set<string>();
+  for (const row of rows) {
+    if (!nodeIdsInNewConfig.has(row.current_node_id)) {
+      atRiskSet.add(row.current_node_id);
+    }
+  }
+
+  // Conta convs cujo current_node_id esta no atRiskSet (cada conv afetada
+  // pode ser separada — mesma node_id em N convs).
+  const affectedCount = rows.filter(
+    (r) => !nodeIdsInNewConfig.has(r.current_node_id),
+  ).length;
+
+  return {
+    affected_conversations: affectedCount,
+    at_risk_node_ids: Array.from(atRiskSet),
+    total_live_conversations: rows.length,
+  };
 }

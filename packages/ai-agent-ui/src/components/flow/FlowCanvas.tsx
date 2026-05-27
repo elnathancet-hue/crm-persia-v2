@@ -383,6 +383,21 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     string | null
   >(null);
 
+  // Backlog #4 Auditoria (mai/2026): estado do modal de impacto pre-save.
+  // Quando `previewFlowImpact` retorna affected_conversations > 0, em vez
+  // de salvar direto, abrimos esse modal com os numeros + nodes em risco.
+  // null = sem dialog aberto. Objeto = dialog visivel + pendingConfig que
+  // sera salvo se admin confirmar.
+  const [pendingImpactConfirm, setPendingImpactConfirm] = React.useState<
+    | {
+        affected: number;
+        atRiskNodeIds: string[];
+        total: number;
+        pendingConfig: ReturnType<typeof reactFlowToPersia>;
+      }
+    | null
+  >(null);
+
   // Executa o delete sem perguntar. Usado direto pra non-entry, e via
   // AlertDialog action pro entry.
   const executeNodeDelete = React.useCallback(
@@ -862,34 +877,41 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       return;
     }
 
+    // Backlog #4: helper persistFlowConfig esta declarado abaixo na
+    // ordem da arvore React; usamos persistFlowConfigRef pra evitar
+    // dependency loop com handleSave (que precisa do helper E o helper
+    // nao precisa do handleSave).
     setSaving(true);
     try {
       const config = reactFlowToPersia(nodes, edges, viewport, enabledTools);
-      // Backlog #3 (mai/2026): passa loadedVersion pra CAS optimistic
-      // locking. Servidor recusa se outro admin salvou entre o load
-      // deste canvas e este save.
-      const res = await actions.saveFlow(
-        configId,
-        config,
-        loadedVersion ?? undefined,
-      );
-      if (!res.ok) {
-        // Conflito de versao detectado. Nao limpa dirty — usuario
-        // precisa recarregar a pagina pra ver o flow novo + decidir
-        // como integrar suas edicoes. Toast persistente porque o
-        // ato e destrutivo se ignorado.
-        toast.error(
-          `Outro editor salvou este fluxo enquanto você estava editando ` +
-            `(versão ${res.current_version} no servidor, você tem v${res.expected_version}). ` +
-            `Recarregue a página antes de salvar de novo — suas edições atuais ` +
-            `ficarão como referência no histórico do navegador.`,
-          { duration: 12000 },
-        );
-        return;
+
+      // Backlog #4 Auditoria (mai/2026): preview de impacto antes do
+      // save. Quando ha convs vivas com current_node_id apontando pra
+      // nodes que sumiriam, abre modal de confirmacao com os numeros.
+      // Operacao read-only — sem efeito colateral.
+      //
+      // Defensive: se previewFlowImpact nao estiver disponivel (cliente
+      // legado sem o DI atualizado), pula a checagem e segue pro save.
+      if (actions.previewFlowImpact) {
+        try {
+          const impact = await actions.previewFlowImpact(configId, config);
+          if (impact.affected_conversations > 0) {
+            setPendingImpactConfirm({
+              affected: impact.affected_conversations,
+              atRiskNodeIds: impact.at_risk_node_ids,
+              total: impact.total_live_conversations,
+              pendingConfig: config,
+            });
+            return; // espera confirmacao do dialog
+          }
+        } catch (err) {
+          // Best-effort: falha no preview NAO bloqueia o save. Operador
+          // ja avaliou edicao no canvas; preview e safety net adicional.
+          console.warn("[FlowCanvas] previewFlowImpact falhou — seguindo save sem aviso:", err);
+        }
       }
-      setDirty(false);
-      setLoadedVersion(res.version);
-      toast.success(`Fluxo salvo (versão ${res.version}).`);
+
+      await persistFlowConfigRef.current(config);
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err);
       console.error("[FlowCanvas] saveFlow falhou:", err);
@@ -905,11 +927,44 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     configId,
     edges,
     enabledTools,
-    loadedVersion,
     nodes,
     viewport,
     validationIssues,
   ]);
+
+  // Backlog #4: helper interno que faz o save de fato (CAS + atualizar
+  // state). Extraido pra ser chamado tanto no caminho normal (sem convs
+  // vivas afetadas) quanto pos-confirmacao do modal de impacto.
+  const persistFlowConfig = React.useCallback(
+    async (config: ReturnType<typeof reactFlowToPersia>) => {
+      // Backlog #3 (mai/2026): passa loadedVersion pra CAS optimistic
+      // locking. Servidor recusa se outro admin salvou entre o load
+      // deste canvas e este save.
+      const res = await actions.saveFlow(
+        configId,
+        config,
+        loadedVersion ?? undefined,
+      );
+      if (!res.ok) {
+        toast.error(
+          `Outro editor salvou este fluxo enquanto você estava editando ` +
+            `(versão ${res.current_version} no servidor, você tem v${res.expected_version}). ` +
+            `Recarregue a página antes de salvar de novo — suas edições atuais ` +
+            `ficarão como referência no histórico do navegador.`,
+          { duration: 12000 },
+        );
+        return;
+      }
+      setDirty(false);
+      setLoadedVersion(res.version);
+      toast.success(`Fluxo salvo (versão ${res.version}).`);
+    },
+    [actions, configId, loadedVersion],
+  );
+  const persistFlowConfigRef = React.useRef(persistFlowConfig);
+  React.useEffect(() => {
+    persistFlowConfigRef.current = persistFlowConfig;
+  }, [persistFlowConfig]);
 
   // PR 20 UX (mai/2026): auto-save removido a pedido do cliente.
   // Comportamento agora é igual ao Jordan/ManyChat — salva SÓ quando
@@ -1103,6 +1158,64 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
               }}
             >
               Remover entrada
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Backlog #4 Auditoria (mai/2026): modal de impacto pre-save.
+          Quando ha convs vivas com current_node_id apontando pra nodes
+          que sumiriam, admin precisa confirmar a operacao. Padrao
+          espelha o entry-delete acima — apenas avisa, nao bloqueia.
+          Recover via Ctrl+Z. */}
+      <AlertDialog
+        open={pendingImpactConfirm !== null}
+        onOpenChange={(open) => !open && setPendingImpactConfirm(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingImpactConfirm?.affected === 1
+                ? "1 conversa em andamento vai ser afetada"
+                : `${pendingImpactConfirm?.affected ?? 0} conversas em andamento vão ser afetadas`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingImpactConfirm
+                ? `${pendingImpactConfirm.affected} de ${pendingImpactConfirm.total} conversas vivas estão parando em etapas que você removeu ou renomeou. ` +
+                  `Quando o próximo turno de cada uma chegar, o agente vai falhar e o lead pode ficar sem resposta. ` +
+                  `Se prosseguir, lembre que pode desfazer com Ctrl+Z OU restaurar do backup do navegador antes de recarregar.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setPendingImpactConfirm(null)}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const pending = pendingImpactConfirm;
+                setPendingImpactConfirm(null);
+                if (!pending) return;
+                setSaving(true);
+                // Reusar o persistFlowConfig (via ref). Catch+toast aqui
+                // porque saimos do try do handleSave original.
+                persistFlowConfigRef
+                  .current(pending.pendingConfig)
+                  .catch((err: unknown) => {
+                    const raw = err instanceof Error ? err.message : String(err);
+                    console.error("[FlowCanvas] saveFlow falhou apos confirmacao:", err);
+                    toast.error(
+                      raw.startsWith("An error occurred in the Server")
+                        ? "Não consegui salvar o fluxo agora. Tente novamente — se persistir, fale com o suporte."
+                        : raw,
+                    );
+                  })
+                  .finally(() => setSaving(false));
+              }}
+            >
+              Salvar mesmo assim
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

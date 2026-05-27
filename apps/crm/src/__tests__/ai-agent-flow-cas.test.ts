@@ -22,7 +22,7 @@ vi.mock("next/headers", () => ({
 }));
 
 import { requireRole } from "@/lib/auth";
-import { saveFlow } from "@/actions/ai-agent/flow";
+import { previewFlowImpact, saveFlow } from "@/actions/ai-agent/flow";
 
 const ORG_ID = "org-1";
 const CONFIG_ID = "cfg-1";
@@ -157,6 +157,99 @@ describe("Backlog #3: saveFlow CAS optimistic locking", () => {
     supabase.queue("agent_configs", { data: null, error: null });
 
     await expect(saveFlow(CONFIG_ID, baseConfig)).rejects.toThrow(
+      /Agente n[aã]o encontrado/i,
+    );
+  });
+});
+
+describe("Backlog #4: previewFlowImpact", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const configEntryOnly = {
+    nodes: [
+      {
+        id: "entry-1",
+        type: "entry" as const,
+        position: { x: 0, y: 0 },
+        data: { label: "Inicio", trigger: "conversation_started" as const },
+      },
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    enabled_tools: [],
+  };
+
+  it("zero impacto quando nao ha convs vivas", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("agent_configs", { data: { id: CONFIG_ID }, error: null });
+    supabase.queue("agent_conversations", { data: [], error: null });
+
+    const result = await previewFlowImpact(CONFIG_ID, configEntryOnly);
+
+    expect(result).toEqual({
+      affected_conversations: 0,
+      at_risk_node_ids: [],
+      total_live_conversations: 0,
+    });
+  });
+
+  it("zero impacto quando todas convs estao em nodes que continuam existindo", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("agent_configs", { data: { id: CONFIG_ID }, error: null });
+    // 3 convs todas paradas em "entry-1" (que existe no config novo)
+    supabase.queue("agent_conversations", {
+      data: [
+        { current_node_id: "entry-1" },
+        { current_node_id: "entry-1" },
+        { current_node_id: "entry-1" },
+      ],
+      error: null,
+    });
+
+    const result = await previewFlowImpact(CONFIG_ID, configEntryOnly);
+
+    expect(result).toEqual({
+      affected_conversations: 0,
+      at_risk_node_ids: [],
+      total_live_conversations: 3,
+    });
+  });
+
+  it("contabiliza convs afetadas + deduplica node_ids em risco", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("agent_configs", { data: { id: CONFIG_ID }, error: null });
+    // Mix: 2 convs em "old-node-a" (removido), 1 em "old-node-b" (removido),
+    // 2 em "entry-1" (mantido). Total 5 convs, 3 afetadas.
+    supabase.queue("agent_conversations", {
+      data: [
+        { current_node_id: "old-node-a" },
+        { current_node_id: "old-node-a" },
+        { current_node_id: "old-node-b" },
+        { current_node_id: "entry-1" },
+        { current_node_id: "entry-1" },
+      ],
+      error: null,
+    });
+
+    const result = await previewFlowImpact(CONFIG_ID, configEntryOnly);
+
+    expect(result.affected_conversations).toBe(3);
+    expect(result.total_live_conversations).toBe(5);
+    // at_risk_node_ids deduplicado (2 convs em old-node-a contam 1x na lista)
+    expect(result.at_risk_node_ids.sort()).toEqual(["old-node-a", "old-node-b"]);
+  });
+
+  it("IDOR check: config inexistente lanca erro", async () => {
+    const supabase = createSupabaseMock();
+    stubAuth(supabase);
+    supabase.queue("agent_configs", { data: null, error: null });
+
+    await expect(previewFlowImpact(CONFIG_ID, configEntryOnly)).rejects.toThrow(
       /Agente n[aã]o encontrado/i,
     );
   });
