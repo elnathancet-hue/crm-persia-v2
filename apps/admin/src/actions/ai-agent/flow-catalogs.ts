@@ -7,8 +7,8 @@
 // explícito do contexto (cookie de impersonation).
 
 import { fromAny } from "@/lib/ai-agent/db";
-import { listTags, listStagesForOrg } from "@persia/shared/crm";
-import type { Stage, Tag } from "@persia/shared/crm";
+import { listPipelines, listTags, listStagesForOrg } from "@persia/shared/crm";
+import type { Pipeline, Stage, Tag } from "@persia/shared/crm";
 import type {
   FlowCatalogs,
   FlowCatalogAgent,
@@ -30,6 +30,7 @@ export async function getFlowCatalogs(
 
   const [
     tagsRes,
+    pipelinesRes,
     stagesRes,
     templatesRes,
     agendaRes,
@@ -39,6 +40,10 @@ export async function getFlowCatalogs(
     customFieldsRes,
   ] = await Promise.allSettled([
     listTags(ctx, { orderBy: "name" }),
+    // Backlog #5 Auditoria (mai/2026): rodada 2 #3 — admin precisa
+    // resolver pipeline_name no catalogo de stages pra UX consistente
+    // com CRM. Antes retornava string vazia.
+    listPipelines(ctx),
     listStagesForOrg(ctx),
     fromAny(db, "agent_notification_templates")
       .select("id, name")
@@ -69,6 +74,12 @@ export async function getFlowCatalogs(
       .order("sort_order", { ascending: true }),
   ]);
 
+  const pipelinesById = new Map(
+    pipelinesRes.status === "fulfilled"
+      ? (pipelinesRes.value as Pipeline[]).map((p) => [p.id, p.name])
+      : [],
+  );
+
   return {
     tags:
       tagsRes.status === "fulfilled"
@@ -84,7 +95,7 @@ export async function getFlowCatalogs(
             id: s.id,
             name: s.name,
             pipeline_id: s.pipeline_id,
-            pipeline_name: "",
+            pipeline_name: pipelinesById.get(s.pipeline_id) ?? "",
           }))
         : [],
     notification_templates:

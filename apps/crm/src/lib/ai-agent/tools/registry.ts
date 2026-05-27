@@ -59,40 +59,11 @@ export function isImplementedNativeHandler(
   return !!handler && handler in nativeHandlers;
 }
 
-export function getDefaultStopAgentTool(params: {
-  configId: string;
-  organizationId: string;
-}): Omit<AgentTool, "id" | "created_at" | "updated_at"> {
-  return materializePresetTool({
-    configId: params.configId,
-    organizationId: params.organizationId,
-    preset: requirePreset("stop_agent"),
-  });
-}
-
-export function materializePresetTool(params: {
-  configId: string;
-  organizationId: string;
-  preset: NativeToolPreset;
-}): Omit<AgentTool, "id" | "created_at" | "updated_at"> {
-  return {
-    config_id: params.configId,
-    organization_id: params.organizationId,
-    name: params.preset.name,
-    description: params.preset.description,
-    input_schema: params.preset.input_schema,
-    execution_mode: "native",
-    native_handler: params.preset.handler,
-    webhook_url: null,
-    webhook_secret: null,
-    is_enabled: true,
-  };
-}
-
-function requirePreset(handler: NativeHandlerName): NativeToolPreset {
-  const preset = getPreset(handler);
-  if (!preset) {
-    throw new Error(`Missing native tool preset for ${handler}`);
-  }
-  return preset;
-}
+// Backlog #5 Auditoria (mai/2026): getDefaultStopAgentTool e
+// materializePresetTool foram movidos pra @persia/shared/ai-agent
+// (template-materializer.ts) pra paridade com Admin. Re-exportamos aqui
+// pra manter callers internos do CRM funcionando sem mudancas.
+export {
+  getDefaultStopAgentTool,
+  materializePresetTool,
+} from "@persia/shared/ai-agent";

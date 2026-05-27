@@ -6,27 +6,24 @@ import {
   DEFAULT_GUARDRAILS,
   PAUSE_KEYWORDS_DEFAULT,
   RESUME_KEYWORDS_DEFAULT,
+  // Backlog #5 Auditoria (mai/2026): applyAgentTemplate + helpers de tool
+  // movidos pra shared/template-materializer.ts pra paridade Admin/CRM.
+  applyAgentTemplate,
   clampAutoPauseMinutes,
   clampSplitDelaySeconds,
   clampSplitThresholdChars,
   getAgentTemplate,
+  getDefaultStopAgentTool,
   isAgentTemplateSlug,
   normalizeHumanizationConfig,
   sanitizeBusinessHours,
   sanitizeKeywordList,
   type AgentConfig,
-  type AgentTemplate,
   type CreateAgentInput,
   type UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import type { AgentDb } from "@/lib/ai-agent/db";
 import { revalidatePath } from "next/cache";
-import { slugify } from "./utils";
-import {
-  getDefaultStopAgentTool,
-  materializePresetTool,
-} from "@/lib/ai-agent/tools/registry";
-import { getPreset } from "@persia/shared/ai-agent";
 import {
   assertAgentStatus,
   assertConfigBelongsToOrg,
@@ -128,7 +125,7 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentConfig>
       ? input.template_slug
       : "blank";
   const template = getAgentTemplate(templateSlug);
-  await applyTemplate(db, orgId, config, template);
+  await applyAgentTemplate({ db, orgId, config, template });
 
   for (const path of agentPaths()) revalidatePath(path);
   return config;
@@ -341,242 +338,3 @@ export async function deleteAgent(configId: string): Promise<void> {
   if (error) throw new Error(error.message);
   for (const path of agentPaths()) revalidatePath(path);
 }
-
-// ============================================================================
-// applyTemplate — PR-AI-AGENT-TEMPLATE-FULL-STACK (mai/2026)
-// ----------------------------------------------------------------------------
-// Materializa um template novo (v2 com seed_tags / appointment_types /
-// notification_templates / humanization / stages v2 com action_type +
-// auto_actions). Templates antigos (so com stages basicas) continuam
-// funcionando — campos novos sao todos opcionais.
-//
-// Estrategia "best-effort": falha em qualquer parte loga + segue. O
-// agente foi criado; cliente pode editar/recriar recursos faltantes
-// manualmente. Melhor que rollback total.
-// ============================================================================
-async function applyTemplate(
-  db: AgentDb,
-  orgId: string,
-  config: AgentConfig,
-  template: AgentTemplate,
-): Promise<void> {
-  // 1. Atualiza humanization_config se o template define. behavior_mode
-  // é fixo 'flow' pós-PR-FLOW-PIVOT (mai/2026).
-  const configPatch: Record<string, unknown> = {};
-  if (template.humanization_config) {
-    configPatch.humanization_config = normalizeHumanizationConfig(
-      template.humanization_config,
-    );
-  }
-  if (Object.keys(configPatch).length > 0) {
-    const { error } = await db
-      .from("agent_configs")
-      .update(configPatch)
-      .eq("id", config.id)
-      .eq("organization_id", orgId);
-    if (error) {
-      console.error("[applyTemplate] failed to patch config:", error.message);
-    }
-  }
-
-  // 2. Seed de tags na org (idempotente — unique constraint em (org_id, name)).
-  // Tag existente mantem cor original (NAO sobrescreve).
-  //
-  // PR-AI-AGENT-TEMPLATE-SCHEMA-FIX (mai/2026): tabela tags (migration
-  // 001) so tem id/organization_id/name/color/created_at — NAO tem
-  // description. Removido daqui pra evitar 'column not found'.
-  if (template.seed_tags && template.seed_tags.length > 0) {
-    for (const tag of template.seed_tags) {
-      const { data: existing } = await db
-        .from("tags")
-        .select("id")
-        .eq("organization_id", orgId)
-        .eq("name", tag.name)
-        .maybeSingle();
-      if (existing) continue;
-      const { error } = await db.from("tags").insert({
-        organization_id: orgId,
-        name: tag.name,
-        color: tag.color ?? "#6366f1",
-      });
-      if (error) {
-        console.error(`[applyTemplate] seed tag "${tag.name}" failed:`, error.message);
-      }
-    }
-  }
-
-  // 3. Seed de tipos de agendamento (agenda_services) — idempotente por slug.
-  if (template.seed_appointment_types && template.seed_appointment_types.length > 0) {
-    for (const t of template.seed_appointment_types) {
-      const slug = slugify(t.name);
-      const { data: existing } = await db
-        .from("agenda_services")
-        .select("id")
-        .eq("organization_id", orgId)
-        .eq("slug", slug)
-        .maybeSingle();
-      if (existing) continue;
-      const { error } = await db.from("agenda_services").insert({
-        organization_id: orgId,
-        slug,
-        name: t.name,
-        description: t.description ?? null,
-        duration_minutes: t.duration_minutes,
-        default_channel: t.default_channel ?? null,
-        default_location: t.default_location ?? null,
-        default_meeting_url: t.default_meeting_url ?? null,
-      });
-      if (error) {
-        console.error(
-          `[applyTemplate] seed appointment_type "${t.name}" failed:`,
-          error.message,
-        );
-      }
-    }
-  }
-
-  // 4. Seed de templates de notificacao (escopados ao config recem-criado).
-  //
-  // PR-AI-AGENT-TEMPLATE-SCHEMA-FIX (mai/2026): schema real da tabela
-  // (migration 023):
-  //   - body_template (NAO body)
-  //   - description NOT NULL com CHECK char_length BETWEEN 10 AND 500
-  //   - target_address NOT NULL com CHECK BETWEEN 5 AND 80
-  //   - name CHECK BETWEEN 3 AND 60
-  //
-  // target_address: como o cliente ainda nao configurou destinatario,
-  // usa placeholder "0000000000" (10 chars, dentro do range). Cliente
-  // troca pelo numero real via UI antes de testar.
-  const PLACEHOLDER_TARGET = "0000000000";
-  if (
-    template.seed_notification_templates &&
-    template.seed_notification_templates.length > 0
-  ) {
-    const rows = template.seed_notification_templates.map((t) => {
-      // description CHECK 10-500. Garante minimo 10 chars com fallback.
-      const description = t.description?.trim() || `Notificacao do template ${t.name}`;
-      return {
-        organization_id: orgId,
-        config_id: config.id,
-        name: t.name,
-        description: description.length < 10
-          ? `${description} (configure pra completar)`
-          : description,
-        target_type: "phone",
-        target_address: t.target_address?.trim() || PLACEHOLDER_TARGET,
-        body_template: t.body,
-        status: "active",
-      };
-    });
-    const { error } = await db.from("agent_notification_templates").insert(rows);
-    if (error) {
-      console.error("[applyTemplate] seed notification_templates failed:", error.message);
-    }
-  }
-
-  // 5. PR-FLOW-PIVOT (mai/2026): seed do agent_flows. Se o template
-  // define `flow_config` explícito, usa direto. Senão, cria flow mínimo
-  // com 1 node de entrada + 1 node IA usando o system_prompt do template.
-  // Tools nativas (todas exceto transfer_to_stage que não existe mais)
-  // ficam disponíveis na enabled_tools — UI canvas refina depois.
-  // PR-FLOW-PIVOT PR 7 (mai/2026): seed da tool emit_event. Permite a
-  // IA avançar pelos handles nomeados das instructions[] do node IA.
-  // Sem isso, LLM não tem a tool exposta no API call → handles ficam
-  // desconectados.
-  const emitEventPreset = getPreset("emit_event");
-  let emitEventToolId: string | null = null;
-  if (emitEventPreset) {
-    const emitEventTool = materializePresetTool({
-      configId: config.id,
-      organizationId: orgId,
-      preset: emitEventPreset,
-    });
-    const { data: insertedEmit, error: emitErr } = await db
-      .from("agent_tools")
-      .insert(emitEventTool)
-      .select("id")
-      .maybeSingle();
-    if (emitErr) {
-      console.error(
-        "[applyTemplate] failed to seed emit_event tool:",
-        emitErr.message,
-      );
-    } else {
-      emitEventToolId = (insertedEmit as { id?: string } | null)?.id ?? null;
-    }
-  }
-
-  // Keep default AI node prompt empty: template.system_prompt is already
-  // stored in agent_configs.system_prompt. Duplicating it here makes later
-  // Configuracoes edits look ignored because the Flow node keeps a stale copy.
-  const flowConfig = template.flow_config ?? {
-    nodes: [
-      {
-        id: "entry-1",
-        type: "entry",
-        position: { x: 0, y: 0 },
-        data: {
-          label: "Conversa iniciada",
-          trigger: "conversation_started",
-        },
-      },
-      {
-        id: "ai-1",
-        type: "ai_agent",
-        position: { x: 280, y: 0 },
-        data: {
-          label: template.label,
-          system_prompt: "",
-          instructions: [],
-        },
-      },
-    ],
-    edges: [
-      {
-        id: "edge-entry-ai",
-        source: "entry-1",
-        target: "ai-1",
-        sourceHandle: "default",
-      },
-    ],
-    viewport: { x: 0, y: 0, zoom: 1 },
-    enabled_tools: emitEventToolId ? [emitEventToolId] : [],
-  };
-
-  // PR-6 Auditoria (mai/2026): endereca rodada 3 #2. Quando template
-  // traz `flow_config` proprio, o `enabled_tools` dele e usado direto e
-  // o `emit_event` (criado em DB acima como agent_tools row) NAO entra
-  // no allowlist do flow. Resultado: o canvas mostra 4 handles
-  // conectados, o prompt manda chamar emit_event, mas a tool nao
-  // chega ao modelo. Branches morrem silenciosamente.
-  //
-  // Fix: se ha qualquer AI node com instructions[].length > 0 no flow
-  // do template, garantir que emit_event esta no enabled_tools.
-  const aiNodesWithInstructions = (flowConfig.nodes ?? []).some((node) => {
-    if (node.type !== "ai_agent") return false;
-    const data = node.data as { instructions?: Array<unknown> } | undefined;
-    return (data?.instructions?.length ?? 0) > 0;
-  });
-  const enabledTools = [...(flowConfig.enabled_tools ?? [])];
-  if (
-    aiNodesWithInstructions &&
-    emitEventToolId &&
-    !enabledTools.includes(emitEventToolId)
-  ) {
-    enabledTools.push(emitEventToolId);
-  }
-
-  const { error: flowError } = await db.from("agent_flows").insert({
-    agent_config_id: config.id,
-    organization_id: orgId,
-    nodes: flowConfig.nodes,
-    edges: flowConfig.edges,
-    viewport: flowConfig.viewport,
-    enabled_tools: enabledTools,
-    version: 1,
-  });
-  if (flowError) {
-    console.error("[applyTemplate] failed to seed agent_flows:", flowError.message);
-  }
-}
-

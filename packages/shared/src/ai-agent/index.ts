@@ -26,3 +26,5 @@ export * from "./entry-conditions";
 export * from "./lead-status";
 export * from "./flow";
 export * from "./flow-validation";
+// Backlog #5 Auditoria (mai/2026): paridade Admin/CRM no template seed.
+export * from "./template-materializer";
