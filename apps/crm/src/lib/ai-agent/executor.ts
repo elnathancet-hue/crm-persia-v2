@@ -32,6 +32,7 @@ import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import type { IncomingMessage, WhatsAppProvider } from "@persia/shared/whatsapp";
 import { createProvider } from "@persia/shared/providers";
 import { phoneBR } from "@persia/shared/validation";
+import OpenAI from "openai";
 import {
   NATIVE_AGENT_FEATURE_FLAG,
   calculateCostUsdCents,
@@ -45,6 +46,8 @@ import {
   shouldResetCurrentNodeId,
   shouldSendAfterHoursMessage,
   shouldTriggerFlowFromInbound,
+  type AgentConfig,
+  type AgentConversation,
   type AgentEntryCondition,
   type DebounceFlushBatch,
   type LeadStateForRouting,
@@ -1007,11 +1010,12 @@ export async function executeDebouncedBatch(input: {
     // contra race entre claim e pause. flushReadyConversations ja filtra
     // por handoff IS NULL, mas operador pode pausar EXATAMENTE entre o
     // SELECT do candidate e o claim atomic. Re-load aqui pega a foto pos-claim.
+    // PR-5 Auditoria (mai/2026): seleciona row inteira porque handlers
+    // nativos (stop_agent, transfer_to_agent) precisam de history_summary,
+    // variables, actions_executed_detail.
     const { data: agentConvRow, error: agentConvErr } = await db
       .from("agent_conversations")
-      .select(
-        "id, config_id, lead_id, crm_conversation_id, current_node_id, variables, ai_control_epoch, human_handoff_at",
-      )
+      .select("*")
       .eq("organization_id", orgId)
       .eq("id", batch.agent_conversation_id)
       .maybeSingle();
@@ -1022,13 +1026,9 @@ export async function executeDebouncedBatch(input: {
       });
       return { runId: null, status: "failed" };
     }
-    const agentConv = agentConvRow as {
-      id: string;
-      config_id: string;
+    const agentConv = agentConvRow as AgentConversation & {
       lead_id: string | null;
       crm_conversation_id: string | null;
-      current_node_id: string | null;
-      ai_control_epoch?: number | null;
       human_handoff_at?: string | null;
     };
     const expectedControlEpoch = agentConv.ai_control_epoch ?? 0;
@@ -1052,10 +1052,16 @@ export async function executeDebouncedBatch(input: {
 
     // 2. Load agent_config + flow + lead phone + whatsapp_connection em
     // paralelo.
+    // PR-5 Auditoria (mai/2026): seleciona row inteira do agent_configs
+    // (em vez de apenas model/system_prompt/humanization_config) porque
+    // o FlowRunContext agora carrega o config pra handlers nativos
+    // (stop_agent precisa do handoff_notification_template,
+    // trigger_notification precisa do handoff_notification_target,
+    // create_appointment respeita calendar_connection_id).
     const [configRes, flowRes, leadRes, connRes] = await Promise.all([
       db
         .from("agent_configs")
-        .select("id, model, system_prompt, humanization_config")
+        .select("*")
         .eq("organization_id", orgId)
         .eq("id", agentConv.config_id)
         .maybeSingle(),
@@ -1099,13 +1105,17 @@ export async function executeDebouncedBatch(input: {
       return { runId: null, status: "failed" };
     }
 
-    const agentConfig = configRes.data as {
-      id: string;
-      model: string;
-      system_prompt: string;
-      humanization_config?: unknown;
-    };
+    const agentConfig = configRes.data as AgentConfig;
     const humanization = normalizeHumanizationConfig(agentConfig.humanization_config);
+
+    // PR-5 Auditoria (mai/2026): OpenAI client compartilhado pro flow
+    // runner (assistant LLM) E handlers nativos (stop_agent gera handoff
+    // brief, future handlers podem usar meta-IA). Best-effort: se
+    // OPENAI_API_KEY nao estiver setada, openaiClient fica undefined e
+    // handlers que precisam dele fazem fallback gracioso.
+    const openaiClient = process.env.OPENAI_API_KEY
+      ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      : undefined;
     const leadPhone = (leadRes.data as { phone: string }).phone;
     // createProvider espera a row inteira de whatsapp_connections — defensive cast.
     const provider = createProvider(connRes.data as Parameters<typeof createProvider>[0]);
@@ -1211,6 +1221,14 @@ export async function executeDebouncedBatch(input: {
       agentConversationId: agentConv.id,
       leadId: agentConv.lead_id,
       sendGuard,
+      // PR-5 (mai/2026): contexto enriquecido pra handlers nativos.
+      // buildNativeHandlerContext (runner.ts) injeta esses campos no
+      // HandlerContextWithDb passado pra cada handler. Endereca rodada
+      // 4 #critica — handlers que falhavam com "database context missing".
+      agentConfig,
+      agentConversation: agentConv,
+      whatsappProvider: provider,
+      openaiClient,
       inboundMessage: {
         text: batch.concatenated_text,
         received_at: batch.latest_received_at,

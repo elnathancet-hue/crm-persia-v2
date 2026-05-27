@@ -4,7 +4,9 @@
 // tester actions. Mantém superfície pública estreita — handler internals
 // não vazam pra UI.
 
-import type { FlowConfig } from "@persia/shared/ai-agent";
+import type OpenAI from "openai";
+import type { AgentConfig, AgentConversation, FlowConfig } from "@persia/shared/ai-agent";
+import type { WhatsAppProvider } from "@persia/shared/whatsapp";
 import type { AiOutboundSendGuard } from "../send-guard";
 import type { LoadedFlow } from "./loader";
 
@@ -112,6 +114,20 @@ export interface FlowRunContext {
    * Optional: tester nao injeta este guard (dryRun=true skipa check).
    */
   sendGuard?: AiOutboundSendGuard;
+  /**
+   * PR-5 Auditoria (mai/2026): contexto enriquecido pra handlers nativos.
+   * Endereca rodada 4 #critica — handlers exigiam db/provider/config/
+   * agentConversation/openaiClient mas o runner nao injetava nada. Sem
+   * isso, qualquer action node (add_tag, move_pipeline_stage, etc) ou
+   * tool call retornava "database context missing".
+   *
+   * Todos opcionais — tester nao injeta, dry_run nos handlers garante
+   * que mutacoes sao skipadas mesmo se db estiver presente.
+   */
+  agentConfig?: AgentConfig;
+  agentConversation?: AgentConversation;
+  whatsappProvider?: WhatsAppProvider;
+  openaiClient?: OpenAI;
 }
 
 /**

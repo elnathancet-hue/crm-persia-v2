@@ -31,6 +31,7 @@ import {
 import { assertWithinCostLimits, type CostLimitCache } from "../cost-limits";
 import type { AgentDb } from "../db";
 import { GuardrailError } from "../guardrails";
+import { buildNativeHandlerContext } from "./handler-context";
 import { buildKnowledgeBlock } from "./knowledge-injector";
 import { nativeHandlers } from "../tools/registry";
 import { canAiSendNow } from "../send-guard";
@@ -699,17 +700,12 @@ async function dispatchToolCall(
       };
     }
     try {
-      return await handler(
-        {
-          organization_id: ctx.organizationId,
-          lead_id: ctx.leadId ?? "",
-          crm_conversation_id: ctx.crmConversationId ?? "",
-          agent_conversation_id: ctx.agentConversationId,
-          run_id: "", // V1 sem audit em agent_runs
-          dry_run: ctx.dryRun,
-        },
-        input,
-      );
+      // PR-5 (mai/2026): handler context enriquecido com db + provider +
+      // config + agentConversation + openaiClient. Antes, ctx minimo
+      // fazia getHandlerDb(context) retornar null → "database context
+      // missing" em add_tag, move_pipeline_stage, set_lead_custom_field
+      // etc. Agora handlers funcionam de verdade.
+      return await handler(buildNativeHandlerContext(db, ctx), input);
     } catch (err) {
       return {
         success: false,
@@ -895,15 +891,12 @@ async function executeActionNode(
 
   let handlerResult;
   try {
+    // PR-5 (mai/2026): action node tambem usa o contexto enriquecido.
+    // Especialmente importante porque action nodes mutam DB diretamente
+    // (sem ping-pong de LLM no meio) — sem db, falham silenciosamente
+    // com guardrail event que o cliente nao ve.
     handlerResult = await handler(
-      {
-        organization_id: ctx.organizationId,
-        lead_id: ctx.leadId ?? "",
-        crm_conversation_id: ctx.crmConversationId ?? "",
-        agent_conversation_id: ctx.agentConversationId,
-        run_id: "",
-        dry_run: ctx.dryRun,
-      },
+      buildNativeHandlerContext(db, ctx),
       node.data.config,
     );
   } catch (err) {
