@@ -26,10 +26,15 @@ function actionConfigIssue(
       return String(config.tag_name ?? "").trim()
         ? null
         : "Falta selecionar uma tag.";
-    case "move_pipeline_stage":
-      return String(config.stage_name ?? "").trim()
-        ? null
-        : "Falta escolher a etapa de destino.";
+    case "move_pipeline_stage": {
+      // Backlog #11 Auditoria (mai/2026): aceita stage_id (preferido,
+      // novo formato) OU stage_name (legacy, retrocompat). Handler ja
+      // aceita ambos. UI nova salva stage_id; configs antigas com
+      // stage_name continuam validas ate cliente re-salvar.
+      const hasId = String(config.stage_id ?? "").trim().length > 0;
+      const hasName = String(config.stage_name ?? "").trim().length > 0;
+      return hasId || hasName ? null : "Falta escolher a etapa de destino.";
+    }
     case "trigger_notification":
       return String(config.template_name ?? "").trim()
         ? null
