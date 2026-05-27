@@ -324,6 +324,14 @@ export async function tryEnqueueForNativeAgent(
     };
   }
 
+  // PR-1 (mai/2026): rastreia se ja temos agent_conversations conhecido
+  // (SELECT achou OU INSERT bem-sucedido OU re-SELECT pos-23505). Se sim,
+  // falha pos-criacao NAO cai no fallback legacy — legacy criaria
+  // conversation/messages duplicados em paralelo com o estado nativo.
+  // Em vez disso, retornamos handled=true status="native_error" e o cron
+  // flush retenta na proxima janela (lease-based claim em debounce.ts).
+  let agentConvKnown = false;
+
   try {
     // 4. Phone normalizado (mesma lógica da pipeline legacy).
     let phone = msg.phone;
@@ -370,29 +378,48 @@ export async function tryEnqueueForNativeAgent(
         })
         .select("id")
         .single();
-      if (leadErr || !newLead) {
-        throw new Error(`lead_create_failed: ${leadErr?.message ?? "unknown"}`);
-      }
-      lead = newLead;
-      createdLead = true;
-      // Bug A fix (mai/2026): busca foto WhatsApp em background.
-      // Não bloqueia o pipeline — se UAZAPI falhar, lead fica sem
-      // avatar e UI cai no fallback de iniciais. Rodamos só uma vez
-      // (na criação do lead) pra evitar rate limit em /chat/details.
-      const newLeadId = newLead.id;
-      void (async () => {
-        try {
-          const avatarUrl = await input.provider.getContactProfilePic(phone);
-          if (avatarUrl) {
-            await db
-              .from("leads")
-              .update({ avatar_url: avatarUrl })
-              .eq("id", newLeadId);
-          }
-        } catch {
-          // Best-effort — falha não interrompe atendimento.
+      if (leadErr?.code === "23505") {
+        // PR-1 (mai/2026): paridade com incoming-pipeline.ts:118-126.
+        // Race entre 2 webhooks do mesmo phone novo chegando em <100ms.
+        // UNIQUE partial (migration 010, org+phone WHERE phone NOT NULL)
+        // dispara 23505 no perdedor. Re-SELECT pra pegar o lead vencedor
+        // sem isNewLead (evita disparar onNewLead/auto-deal duplicado —
+        // o vencedor ja fez isso pela trigger lead_auto_deal).
+        const { data: existingLead } = await db
+          .from("leads")
+          .select("id")
+          .eq("organization_id", orgId)
+          .eq("phone", phone)
+          .maybeSingle();
+        if (!existingLead) {
+          throw new Error(`lead_race_refetch_failed: phone=${phone}`);
         }
-      })();
+        lead = existingLead;
+        // createdLead fica false — evita avatar fetch + onNewLead duplicados.
+      } else if (leadErr || !newLead) {
+        throw new Error(`lead_create_failed: ${leadErr?.message ?? "unknown"}`);
+      } else {
+        lead = newLead;
+        createdLead = true;
+        // Bug A fix (mai/2026): busca foto WhatsApp em background.
+        // Não bloqueia o pipeline — se UAZAPI falhar, lead fica sem
+        // avatar e UI cai no fallback de iniciais. Rodamos só uma vez
+        // (na criação do lead) pra evitar rate limit em /chat/details.
+        const newLeadId = newLead.id;
+        void (async () => {
+          try {
+            const avatarUrl = await input.provider.getContactProfilePic(phone);
+            if (avatarUrl) {
+              await db
+                .from("leads")
+                .update({ avatar_url: avatarUrl })
+                .eq("id", newLeadId);
+            }
+          } catch {
+            // Best-effort — falha não interrompe atendimento.
+          }
+        })();
+      }
     }
     const leadId = (lead as { id: string }).id;
     const selectedAgent = await pickAgentForLead(
@@ -539,6 +566,7 @@ export async function tryEnqueueForNativeAgent(
       .eq("crm_conversation_id", conversationId)
       .maybeSingle();
     if (agentConv) {
+      agentConvKnown = true;
       const existingConfigId = (agentConv as { config_id?: string | null }).config_id;
       if (existingConfigId && existingConfigId !== agentConfigId) {
         // Override pra manter stickiness com o agente que iniciou a conv
@@ -554,9 +582,13 @@ export async function tryEnqueueForNativeAgent(
       }
     }
 
-    const debounceWindowMs =
+    // PR-1 (mai/2026): `let` em vez de `const` pra debounceWindowMs e
+    // humanization — 23505 catch no INSERT do agent_conversations pode
+    // trocar finalAgent pelo config do vencedor (multi-agent edge), e
+    // precisamos atualizar esses valores derivados antes do enqueue.
+    let debounceWindowMs =
       finalAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
-    const humanization = normalizeHumanizationConfig(
+    let humanization = normalizeHumanizationConfig(
       finalAgent.humanization_config,
     );
     const matchResume = matchesResumeKeyword(messageContent ?? "", humanization);
@@ -593,14 +625,66 @@ export async function tryEnqueueForNativeAgent(
           actions_executed: [],
           actions_executed_detail: {},
         })
-        .select("id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
+        .select("id, config_id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
         .single();
-      if (agentConvErr || !newAgentConv) {
+      if (agentConvErr?.code === "23505") {
+        // PR-1 (mai/2026): race entre 2 webhooks paralelos do mesmo lead
+        // chegando antes da UNIQUE conhecer o vencedor. UNIQUE partial
+        // (migration 071) dispara 23505 no perdedor. Re-SELECT pra pegar
+        // a linha do vencedor + aplicar stickiness pelo config_id dele
+        // (paridade com o branch SELECT acima, linhas 560-574).
+        const { data: existing, error: refetchErr } = await db
+          .from("agent_conversations")
+          .select("id, config_id, current_node_id, human_handoff_at, after_hours_notified_at, ai_control_epoch")
+          .eq("organization_id", orgId)
+          .eq("lead_id", leadId)
+          .eq("crm_conversation_id", conversationId)
+          .maybeSingle();
+        if (refetchErr || !existing) {
+          throw new Error(
+            `agent_conv_race_refetch_failed: ${refetchErr?.message ?? "no_row_after_23505"}`,
+          );
+        }
+        agentConv = existing;
+        agentConvKnown = true;
+        const winnerConfigId = (existing as { config_id?: string | null }).config_id;
+        if (winnerConfigId && winnerConfigId !== agentConfigId) {
+          // Vencedor escolheu config diferente (edge multi-agent). Mantem
+          // stickiness com ele em vez de duplicar inserts. humanization
+          // ja foi computada com o config "perdedor" — pra correcao 100%
+          // teria que recomputar humanization aqui tambem, mas como
+          // ja passamos do bloco de business_hours/pause keyword,
+          // recarregar agora nao tem efeito util. Logamos pra rastrear
+          // frequencia em prod.
+          const attemptedConfigId = agentConfigId;
+          agentConfigId = winnerConfigId;
+          const stickyAgent = await loadRoutingAgentById(db, orgId, agentConfigId);
+          if (stickyAgent) {
+            finalAgent = stickyAgent;
+            // Re-derivar valores que dependem do finalAgent. matchResume
+            // ja foi avaliado com humanization do perdedor, mas o flow
+            // de pause/resume abaixo (linha 686+) recompoe baseado em
+            // humanization corrente — entao a atualizacao aqui se
+            // propaga corretamente.
+            debounceWindowMs = finalAgent.debounce_window_ms ?? DEBOUNCE_WINDOW_MS_DEFAULT;
+            humanization = normalizeHumanizationConfig(finalAgent.humanization_config);
+          }
+          logError("native_agent_race_config_mismatch", {
+            ...logCtx,
+            lead_id: leadId,
+            crm_conversation_id: conversationId,
+            attempted_config_id: attemptedConfigId,
+            winner_config_id: winnerConfigId,
+          });
+        }
+      } else if (agentConvErr || !newAgentConv) {
         throw new Error(
           `agent_conv_create_failed: ${agentConvErr?.message ?? "unknown"}`,
         );
+      } else {
+        agentConv = newAgentConv;
+        agentConvKnown = true;
       }
-      agentConv = newAgentConv;
     }
     const agentConversationId = (agentConv as { id: string }).id;
     const humanHandoffAt = (agentConv as { human_handoff_at?: string | null })
@@ -858,9 +942,35 @@ export async function tryEnqueueForNativeAgent(
     logError("native_agent_enqueue_failed", {
       ...logCtx,
       error: errorMessage(err),
+      phase: agentConvKnown ? "post_agent_conv" : "pre_agent_conv",
     });
-    // Fallback: retorna handled=false pra webhook tentar o pipeline legacy
-    // como last resort. Cliente nunca fica sem resposta por falha de DB.
+    // PR-1 (mai/2026): ramo pre/pos-criacao do agent_conversations.
+    //
+    // Pre-creation: nenhum estado nativo criado ainda. Webhook cai pro
+    //   legacy pipeline (processIncomingMessage) — cliente recebe
+    //   resposta via n8n/OpenAI como fallback. Inbound message ainda
+    //   nao foi inserido OU foi inserido mas o legacy faz dedup pelo
+    //   whatsapp_msg_id (incoming-pipeline.ts:58-66) e skipa.
+    //
+    // Post-creation: agent_conversations existe (criado por esta request
+    //   OU encontrado via SELECT/23505 refetch). Cair pro legacy aqui
+    //   geraria conflito: legacy chamaria n8n/OpenAI enquanto o cron
+    //   flush eventualmente pega pending_messages dessa agent_conv. Lead
+    //   recebe 2 respostas. Retornamos handled=true status=native_error
+    //   pra webhook PARAR aqui — flush retenta na proxima janela quando
+    //   pending_messages tiver entrada.
+    if (agentConvKnown) {
+      // Erro detalhado ja foi capturado em logError acima — nao expomos
+      // o stack aqui pra nao vazar internals no response do webhook.
+      return {
+        handled: true,
+        response: {
+          ok: true,
+          handledBy: "ai_native_flow",
+          status: "native_error",
+        },
+      };
+    }
     return {
       handled: false,
       response: {
