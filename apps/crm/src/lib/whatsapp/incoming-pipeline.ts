@@ -36,6 +36,52 @@ export interface IncomingContext {
   requestId?: string;
 }
 
+/**
+ * Backlog #9 Auditoria (mai/2026): rodada 5 #media.
+ *
+ * Timeout para a chamada n8n no caminho LEGACY (`processIncomingMessage`).
+ * Sem isso, a Meta retransmite o webhook quando n8n leva 30-60s, gerando
+ * duplicidade de inserts em `agent_conversations` e respostas duplicadas
+ * pro lead. Meta espera ~20s antes do primeiro retry; 8s deixa folga
+ * pra todo o resto do pipeline (lead create + dispatch + provider send)
+ * caber dentro do envelope da resposta HTTP do webhook.
+ *
+ * Curto prazo conforme a recomendacao do plano. Medio prazo (nao
+ * implementado ainda): mover envelope cru pra `incoming_webhook_events`
+ * + worker assincrono, retornando 200 imediatamente apos validar HMAC.
+ */
+const N8N_FETCH_TIMEOUT_MS = 8_000;
+
+/**
+ * Wrap `fetch` com AbortController + timeout. Re-lanca o erro original
+ * (incluindo DOMException de abort) pro caller distinguir AbortError de
+ * falhas HTTP/network — ver `isAbortError()`.
+ */
+async function fetchWithTimeout(
+  input: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * AbortController.abort() em Node 18+ lanca DOMException com name="AbortError".
+ * Em alguns runtimes (older undici, bun) aparece como Error com mesmo name.
+ * Cobrimos ambos.
+ */
+function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const name = (err as { name?: unknown }).name;
+  return name === "AbortError" || name === "TimeoutError";
+}
+
 export interface IncomingResult {
   ok: boolean;
   skipped?: string;
@@ -453,7 +499,11 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
 
       const aiContext = (orgSettings.ai_context || {}) as Record<string, string>;
 
-      const n8nResponse = await fetch(n8nWebhookUrl, {
+      // Backlog #9: usa fetchWithTimeout (8s) em vez de fetch direto.
+      // Sem timeout, n8n lento -> Meta retransmite -> duplicidade no
+      // pipeline nativo. O caller (catch abaixo) distingue AbortError
+      // pra logar como timeout especifico em vez de erro generico.
+      const n8nResponse = await fetchWithTimeout(n8nWebhookUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -488,7 +538,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
           },
           funnelStages: funnelStages.length > 0 ? funnelStages : null,
         }),
-      });
+      }, N8N_FETCH_TIMEOUT_MS);
 
       if (n8nResponse.ok) {
         const n8nData = await n8nResponse.json();
@@ -553,12 +603,26 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         });
       }
     } catch (err: unknown) {
-      logError("incoming_pipeline_n8n_call_failed", {
-        ...baseLogContext,
-        lead_id: lead.id,
-        conversation_id: conversation.id,
-        error: errorMessage(err),
-      });
+      // Backlog #9: distingue timeout (AbortController) de erros genericos
+      // pra observability — timeout indica n8n lento (recomenda subir
+      // capacidade ou ajustar workflow), erro generico indica problema
+      // de rede/auth/payload. Mesmo handling (cair pro OpenAI fallback)
+      // mas log estruturado diferente.
+      if (isAbortError(err)) {
+        logError("incoming_pipeline_n8n_timeout", {
+          ...baseLogContext,
+          lead_id: lead.id,
+          conversation_id: conversation.id,
+          timeout_ms: N8N_FETCH_TIMEOUT_MS,
+        });
+      } else {
+        logError("incoming_pipeline_n8n_call_failed", {
+          ...baseLogContext,
+          lead_id: lead.id,
+          conversation_id: conversation.id,
+          error: errorMessage(err),
+        });
+      }
     }
   }
 
