@@ -310,7 +310,15 @@ export async function assignConversation(
 }
 
 export async function closeConversation(conversationId: string) {
-  const { supabase, orgId } = await requireRole("agent");
+  // Fix mai/2026: alem do close da conversation, agora:
+  //   1. Limpa `agent_conversations.human_handoff_at` pra que a IA reative
+  //      automaticamente no proximo contato do lead (nova conversation
+  //      sera criada via webhook quando lead mandar nova msg).
+  //   2. Insere lead_activities com type='conversation_closed' pra audit
+  //      no historico do lead.
+  // Action ja existia (cobre sync UAZAPI + ai_summary placeholder) — esses
+  // 2 passos foram adicionados pra fechar o gap de "fechar e reativar".
+  const { supabase, orgId, userId } = await requireRole("agent");
 
   const { data: conv } = await supabase
     .from("conversations")
@@ -341,8 +349,35 @@ export async function closeConversation(conversationId: string) {
     return { data: null, error: error.message };
   }
 
-  if ((conv.leads as any)?.phone) {
-    const phone = (conv.leads as any).phone as string;
+  // Passo 1: limpa handoff do native agent (paused=false libera IA).
+  // Best-effort: se nao existir agent_conversations linkada (org legacy
+  // que usa pipeline n8n), helper vira no-op silencioso.
+  await setNativeAgentHandoffForConversation(supabase, orgId, conversationId, false);
+
+  // Passo 2: log no historico do lead. Best-effort — falha aqui nao
+  // bloqueia o close.
+  if (conv.lead_id) {
+    const { error: activityError } = await supabase
+      .from("lead_activities")
+      .insert({
+        organization_id: orgId,
+        lead_id: conv.lead_id,
+        performed_by: userId,
+        type: "conversation_closed",
+        description: "Conversa encerrada manualmente.",
+        metadata: {
+          source: "chat_ui",
+          conversation_id: conversationId,
+        },
+        created_at: now,
+      });
+    if (activityError) {
+      console.error("[closeConversation] activity log failed:", activityError.message);
+    }
+  }
+
+  if ((conv.leads as { phone?: string } | null)?.phone) {
+    const phone = (conv.leads as { phone: string }).phone;
 
     import("@/lib/whatsapp/sync").then(({ enableChatbotForLead, syncTicketStatusToUazapi }) => {
       enableChatbotForLead(orgId, phone);
@@ -353,6 +388,9 @@ export async function closeConversation(conversationId: string) {
   }
 
   revalidatePath("/chat");
+  if (conv.lead_id) {
+    revalidatePath(`/leads/${conv.lead_id}`);
+  }
   return { data, error: null };
 }
 

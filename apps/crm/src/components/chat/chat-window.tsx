@@ -11,6 +11,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -343,6 +353,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [loading, setLoading] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -520,8 +531,14 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const handleClose = async () => {
     if (!conversationId) return;
     setClosing(true);
-    await closeConversation(conversationId);
+    const result = await closeConversation(conversationId);
     setClosing(false);
+    setCloseConfirmOpen(false);
+    if (result?.error) {
+      toast.error(`Não foi possível fechar a conversa: ${result.error}`);
+    } else {
+      toast.success("Conversa encerrada. IA será reativada no próximo contato do lead.");
+    }
   };
 
   const handleMessageSent = (message: Message) => {
@@ -751,7 +768,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               {!isClosed && (
                 <DropdownMenuItem
                   variant="destructive"
-                  onClick={handleClose}
+                  onClick={() => setCloseConfirmOpen(true)}
                   disabled={closing}
                 >
                   <X className="size-4" />
@@ -969,6 +986,30 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de confirmacao pra fechar conversa (kebab > "Fechar conversa"). */}
+      {/* Reativa IA automaticamente — a proxima msg do lead cria conversation nova. */}
+      <AlertDialog open={closeConfirmOpen} onOpenChange={setCloseConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Encerrar conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A conversa será marcada como encerrada. A IA será reativada
+              automaticamente quando o lead enviar uma nova mensagem (em
+              uma conversa nova). O histórico desta conversa fica preservado.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={closing}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClose}
+              disabled={closing}
+            >
+              {closing ? "Encerrando..." : "Encerrar conversa"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
