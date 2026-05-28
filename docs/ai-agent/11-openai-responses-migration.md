@@ -17,12 +17,38 @@ A documentação atual da OpenAI recomenda a Responses API para novos projetos e
 workflows agentic. A migração faz sentido para o AI Agent, mas **não é uma troca
 simples de método**. O contrato de tools, retorno, usage e controle de tokens muda.
 
-Decisão segura: migrar incrementalmente, com adaptador e feature flag.
+Decisão segura: migrar por fases, com adaptador e feature flag.
 
 ```txt
 AI_AGENT_OPENAI_API=chat      # default inicial
 AI_AGENT_OPENAI_API=responses # opt-in controlado
 ```
+
+## Correção de escopo: não usamos Assistants API
+
+Esta auditoria é especificamente sobre **Chat Completions → Responses API**.
+
+O produto **não usa Assistants API** no runtime do AI Agent. Qualquer orientação da
+OpenAI sobre "transição leve" a partir de Assistants API não se aplica diretamente ao
+nosso caso.
+
+Estado atual real:
+
+```txt
+AI Agent runtime:      chat.completions.create()
+Legacy helpers:        chat.completions.create()
+Assistants API:        não usada no runtime
+Responses API:         ainda não usada
+```
+
+Consequência: a migração não deve ser tratada como compatibilidade automática nem como
+troca superficial. Para nós, é uma migração de contrato do loop LLM:
+
+- `messages` → `input`;
+- `choices[0].message.tool_calls` → itens `function_call` em `response.output`;
+- tool result como `role: "tool"` → item `function_call_output`;
+- `prompt_tokens/completion_tokens` → `input_tokens/output_tokens`;
+- `max_tokens/max_completion_tokens` → `max_output_tokens`.
 
 ## Escopo recomendado
 
