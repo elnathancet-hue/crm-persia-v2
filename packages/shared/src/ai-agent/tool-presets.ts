@@ -9,6 +9,15 @@
 // Shipping gate: each preset declares `shipped_in_pr`. UI renders all presets
 // but disables "Adicionar" for handlers whose PR has not merged yet, so the
 // Decision Intelligence modal matches the roadmap in-product.
+//
+// OpenAI Responses strict-ready (mai/2026, pós PR #379-#380):
+//   - Cada `input_schema` declara `additionalProperties: false` no root.
+//   - Cada propriedade declarada está em `required[]`.
+//   - Campos opcionais (na intenção semântica) viram `nullable: true`;
+//     o adapter `apps/crm/src/lib/ai-agent/flow/openai-runtime.ts` converte
+//     pra `type: ["<original>", "null"]` ao enviar pra Responses API.
+//   - Handlers em `apps/crm/src/lib/ai-agent/tools/*.ts` aceitam ambos
+//     `undefined` e `null` via `.nullish()` no Zod schema.
 
 import type { JSONSchemaObject, NativeHandlerName } from "./types";
 
@@ -49,10 +58,13 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR1",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["reason"],
       properties: {
         reason: {
           type: "string",
-          description: "Short reason for the handoff (optional).",
+          nullable: true,
+          description: "Short reason for the handoff. Pass null when not provided.",
         },
       },
     },
@@ -71,6 +83,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR3",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["user", "reason"],
       properties: {
         user: {
           type: "string",
@@ -79,7 +93,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         },
         reason: {
           type: "string",
-          description: "Optional short justification for the transfer.",
+          nullable: true,
+          description: "Short justification for the transfer. Pass null when not provided.",
         },
       },
     },
@@ -100,13 +115,19 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR3",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["target_agent_name", "reason"],
       properties: {
         target_agent_name: {
           type: "string",
           description:
             "Nome EXATO do agente alvo, conforme listado no catalogo de outros agentes no system prompt. Deve estar ativo.",
         },
-        reason: { type: "string" },
+        reason: {
+          type: "string",
+          nullable: true,
+          description: "Short justification. Pass null when not provided.",
+        },
       },
     },
   },
@@ -122,6 +143,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR3",
     input_schema: {
       type: "object",
+      additionalProperties: false,
       required: ["tag_name"],
       properties: {
         tag_name: {
@@ -146,6 +168,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR5",
     input_schema: {
       type: "object",
+      additionalProperties: false,
       required: ["source"],
       properties: {
         source: { type: "string" },
@@ -163,6 +186,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR5",
     input_schema: {
       type: "object",
+      additionalProperties: false,
       required: ["product_id"],
       properties: {
         product_id: { type: "string", format: "uuid" },
@@ -180,6 +204,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR5",
     input_schema: {
       type: "object",
+      additionalProperties: false,
       required: ["department_id"],
       properties: {
         department_id: { type: "string", format: "uuid" },
@@ -198,8 +223,10 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR5",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["department_id"],
       properties: {
-        department_id: { type: "string", format: "uuid" },
+        department_id: { type: "string", format: "uuid", nullable: true },
       },
     },
   },
@@ -214,6 +241,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR5",
     input_schema: {
       type: "object",
+      additionalProperties: false,
       properties: {},
     },
   },
@@ -229,8 +257,10 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR5",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["text"],
       properties: {
-        text: { type: "string" },
+        text: { type: "string", nullable: true, description: "TTS text. Pass null to use the agent's normal reply." },
       },
     },
   },
@@ -247,7 +277,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
-      required: ["slug"],
+      additionalProperties: false,
+      required: ["slug", "caption"],
       properties: {
         slug: {
           type: "string",
@@ -256,8 +287,9 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         },
         caption: {
           type: "string",
+          nullable: true,
           description:
-            "Legenda opcional enviada junto. Máximo 500 caracteres. Use quando precisar dar contexto pro arquivo.",
+            "Legenda enviada junto. Máximo 500 caracteres. Pass null when no caption is needed.",
         },
       },
     },
@@ -275,7 +307,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR7",
     input_schema: {
       type: "object",
-      required: ["template_name"],
+      additionalProperties: false,
+      required: ["template_name", "custom"],
       properties: {
         template_name: {
           type: "string",
@@ -283,9 +316,10 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
             "Nome do template configurado (case-insensitive). Resolva pela lista visivel ao agente.",
         },
         custom: {
-          type: "object",
+          type: "string",
+          nullable: true,
           description:
-            "Variaveis customizadas que substituem {{custom.<chave>}} no template. Opcional. Use chaves curtas (ate 40 chars) e valores curtos (ate 200 chars).",
+            'JSON serializado das variaveis customizadas que substituem {{custom.<chave>}} no template. Ex: \'{"nome":"Maria"}\'. Pass null when no custom vars are needed. Chaves curtas (ate 40 chars), valores curtos (ate 200 chars).',
         },
       },
     },
@@ -303,52 +337,74 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR7",
     input_schema: {
       type: "object",
-      required: ["action"],
+      additionalProperties: false,
+      required: [
+        "action",
+        "event_summary",
+        "event_description",
+        "start_time",
+        "duration_minutes",
+        "attendee_email",
+        "time_min",
+        "time_max",
+        "max_results",
+        "event_id",
+      ],
       properties: {
         action: {
           type: "string",
+          enum: ["list", "create", "cancel"],
           description: "list | create | cancel",
         },
         event_summary: {
           type: "string",
-          description: "Titulo do evento (so action=create)",
+          nullable: true,
+          description: "Titulo do evento (so action=create). Pass null otherwise.",
         },
         event_description: {
           type: "string",
-          description: "Detalhes do evento (so action=create)",
+          nullable: true,
+          description: "Detalhes do evento (so action=create). Pass null otherwise.",
         },
         start_time: {
           type: "string",
-          description: "ISO 8601 (so action=create)",
+          nullable: true,
+          description: "ISO 8601 (so action=create). Pass null otherwise.",
         },
         duration_minutes: {
           type: "integer",
           minimum: 5,
           maximum: 480,
-          description: "Duracao em minutos (so action=create)",
+          nullable: true,
+          description: "Duracao em minutos (so action=create). Pass null otherwise.",
         },
         attendee_email: {
           type: "string",
+          nullable: true,
           description:
-            "Email do participante alem do dono do calendario (so action=create)",
+            "Email do participante alem do dono do calendario (so action=create). Pass null otherwise.",
         },
         time_min: {
           type: "string",
-          description: "ISO 8601 limite inferior (action=list)",
+          nullable: true,
+          description: "ISO 8601 limite inferior (action=list). Pass null otherwise.",
         },
         time_max: {
           type: "string",
-          description: "ISO 8601 limite superior (action=list)",
+          nullable: true,
+          description: "ISO 8601 limite superior (action=list). Pass null otherwise.",
         },
         max_results: {
           type: "integer",
           minimum: 1,
           maximum: 25,
-          description: "Quantos eventos retornar (action=list, default 10)",
+          nullable: true,
+          description: "Quantos eventos retornar (action=list, default 10). Pass null otherwise.",
         },
         event_id: {
           type: "string",
-          description: "ID do evento Google (so action=cancel)",
+          nullable: true,
+          description: "ID do evento Google (so action=cancel). Pass null otherwise.",
         },
       },
     },
@@ -368,6 +424,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["stage_name", "reason"],
       properties: {
         stage_name: {
           type: "string",
@@ -376,7 +434,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         },
         reason: {
           type: "string",
-          description: "Justificativa curta da movimentacao (logada no historico do lead).",
+          nullable: true,
+          description: "Justificativa curta da movimentacao (logada no historico do lead). Pass null when not provided.",
         },
       },
     },
@@ -403,7 +462,17 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
-      required: ["start_at"],
+      additionalProperties: false,
+      required: [
+        "start_at",
+        "type_slug",
+        "description",
+        "duration_minutes",
+        "title",
+        "channel",
+        "location",
+        "meeting_url",
+      ],
       properties: {
         start_at: {
           type: "string",
@@ -413,39 +482,46 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         },
         type_slug: {
           type: "string",
+          nullable: true,
           description:
-            "Slug EXATO do tipo de agendamento configurado pela organizacao (ex: 'consulta-inicial'). Quando passado, duration/title/channel/location/meeting_url sao herdados do tipo. RECOMENDADO sempre quando ha tipos cadastrados.",
+            "Slug EXATO do tipo de agendamento configurado pela organizacao (ex: 'consulta-inicial'). Quando passado, duration/title/channel/location/meeting_url sao herdados do tipo. RECOMENDADO sempre quando ha tipos cadastrados. Pass null when no type is configured.",
         },
         description: {
           type: "string",
-          description: "Detalhes/contexto adicional do agendamento (opcional).",
+          nullable: true,
+          description: "Detalhes/contexto adicional do agendamento. Pass null when not provided.",
         },
         duration_minutes: {
           type: "integer",
           minimum: 15,
           maximum: 480,
+          nullable: true,
           description:
-            "Override de duracao em minutos. Quando passa type_slug, este campo SOBRESCREVE a duracao padrao do tipo. Sem type_slug, e obrigatorio.",
+            "Override de duracao em minutos. Quando passa type_slug, este campo SOBRESCREVE a duracao padrao do tipo. Sem type_slug, e obrigatorio. Pass null to use the type's default.",
         },
         title: {
           type: "string",
+          nullable: true,
           description:
-            "Override de titulo. Quando passa type_slug, sobrescreve o nome do tipo. Sem type_slug, e obrigatorio.",
+            "Override de titulo. Quando passa type_slug, sobrescreve o nome do tipo. Sem type_slug, e obrigatorio. Pass null to use the type's default.",
         },
         channel: {
           type: "string",
           enum: ["whatsapp", "phone", "online", "in_person"],
-          description: "Override do canal padrao do tipo (opcional).",
+          nullable: true,
+          description: "Override do canal padrao do tipo. Pass null to use default.",
         },
         location: {
           type: "string",
+          nullable: true,
           description:
-            "Override do endereco padrao (use quando channel='in_person'). Opcional.",
+            "Override do endereco padrao (use quando channel='in_person'). Pass null when not applicable.",
         },
         meeting_url: {
           type: "string",
+          nullable: true,
           description:
-            "Override da URL de reuniao (use quando channel='online'). Opcional.",
+            "Override da URL de reuniao (use quando channel='online'). Pass null when not applicable.",
         },
       },
     },
@@ -463,18 +539,22 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
+      additionalProperties: false,
+      required: ["only_upcoming", "limit"],
       properties: {
         only_upcoming: {
           type: "boolean",
+          nullable: true,
           description:
-            "If true (default), return only future appointments. If false, includes past appointments too.",
+            "If true (default), return only future appointments. If false, includes past appointments too. Pass null to use the default.",
         },
         limit: {
           type: "integer",
           minimum: 1,
           maximum: 50,
+          nullable: true,
           description:
-            "Maximum number of appointments to return. Default 10.",
+            "Maximum number of appointments to return. Default 10. Pass null to use the default.",
         },
       },
     },
@@ -492,7 +572,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
-      required: ["appointment_id"],
+      additionalProperties: false,
+      required: ["appointment_id", "reason"],
       properties: {
         appointment_id: {
           type: "string",
@@ -502,8 +583,9 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         },
         reason: {
           type: "string",
+          nullable: true,
           description:
-            "Short reason for the cancellation (e.g. 'Lead nao pode comparecer'). Shown to the lead in the WhatsApp notification.",
+            "Short reason for the cancellation (e.g. 'Lead nao pode comparecer'). Shown to the lead in the WhatsApp notification. Pass null when not provided.",
         },
       },
     },
@@ -521,7 +603,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
-      required: ["appointment_id", "new_start_at"],
+      additionalProperties: false,
+      required: ["appointment_id", "new_start_at", "new_duration_minutes"],
       properties: {
         appointment_id: {
           type: "string",
@@ -539,8 +622,9 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
           type: "integer",
           minimum: 15,
           maximum: 480,
+          nullable: true,
           description:
-            "Optional new duration. If omitted, keeps the original duration.",
+            "New duration. Pass null to keep the original duration.",
         },
       },
     },
@@ -558,7 +642,8 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR7",
     input_schema: {
       type: "object",
-      required: ["handle_name"],
+      additionalProperties: false,
+      required: ["handle_name", "reason"],
       properties: {
         handle_name: {
           type: "string",
@@ -567,8 +652,9 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
         },
         reason: {
           type: "string",
+          nullable: true,
           description:
-            "Optional short justification for the event (logged in agent_steps audit).",
+            "Short justification for the event (logged in agent_steps audit). Pass null when not provided.",
         },
       },
     },
@@ -586,6 +672,7 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     shipped_in_pr: "PR8",
     input_schema: {
       type: "object",
+      additionalProperties: false,
       required: ["field_key", "value"],
       properties: {
         field_key: {

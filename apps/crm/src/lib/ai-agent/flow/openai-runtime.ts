@@ -200,9 +200,65 @@ function toResponsesFunctionTool(tool: AgentLlmTool): FunctionTool {
     type: "function",
     name: tool.name,
     description: tool.description ?? undefined,
-    parameters: tool.parameters ?? {},
+    parameters: rewriteNullableForResponses(tool.parameters ?? {}),
     strict: tool.strict ?? false,
   };
+}
+
+/**
+ * Strict-ready conversion (mai/2026, pós PR #379-#380):
+ *
+ * Os presets em `packages/shared/src/ai-agent/tool-presets.ts` declaram
+ * campos opcionais via `{ type: "string", nullable: true }` (shape custom
+ * desta codebase). A Responses API exige JSON Schema 2020-12 com
+ * `type: ["string", "null"]` quando o campo pode ser null em strict mode.
+ *
+ * Esta função reescreve recursivamente o schema antes do envio:
+ *   - { type: "X", nullable: true } -> { type: ["X", "null"] }
+ *   - Remove a chave `nullable` (não faz parte do JSON Schema padrão).
+ *   - Preserva todos os outros atributos (enum, format, items, etc).
+ *
+ * Chat Completions tolera o campo `nullable` (ignora), por isso esta
+ * conversão NÃO é aplicada em `toChatCompletionTool`. Mantemos o shape
+ * original no Chat Completions pra evitar mudança de comportamento.
+ */
+function rewriteNullableForResponses(schema: unknown): Record<string, unknown> {
+  if (!schema || typeof schema !== "object") {
+    return {};
+  }
+  return rewriteNode(schema as Record<string, unknown>) as Record<string, unknown>;
+}
+
+function rewriteNode(node: Record<string, unknown>): unknown {
+  // Recursive walk
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "nullable") {
+      // skip — converted into type tuple below
+      continue;
+    }
+    if (key === "properties" && value && typeof value === "object") {
+      const props: Record<string, unknown> = {};
+      for (const [propKey, propValue] of Object.entries(value as Record<string, unknown>)) {
+        props[propKey] =
+          propValue && typeof propValue === "object"
+            ? rewriteNode(propValue as Record<string, unknown>)
+            : propValue;
+      }
+      out[key] = props;
+    } else if (key === "items" && value && typeof value === "object") {
+      out[key] = rewriteNode(value as Record<string, unknown>);
+    } else {
+      out[key] = value;
+    }
+  }
+
+  // Aplica conversão nullable -> tipo tupla
+  if (node.nullable === true && typeof node.type === "string") {
+    out.type = [node.type, "null"];
+  }
+
+  return out;
 }
 
 function toResponsesInput(

@@ -34,10 +34,10 @@ import {
 // Pelo menos um e obrigatorio. Validacao no codigo, nao no zod (precisa
 // de refinement custom — preferimos mensagem clara).
 const moveStageSchema = z.object({
-  stage_name: z.string().trim().min(1).max(120).optional(),
-  stage_id: z.string().uuid().optional(),
-  pipeline_id: z.string().uuid().optional(),
-  reason: z.string().trim().min(1).max(500).optional(),
+  stage_name: z.string().trim().min(1).max(120).nullish(),
+  stage_id: z.string().uuid().nullish(),
+  pipeline_id: z.string().uuid().nullish(),
+  reason: z.string().trim().min(1).max(500).nullish(),
 });
 
 interface LeadRow {

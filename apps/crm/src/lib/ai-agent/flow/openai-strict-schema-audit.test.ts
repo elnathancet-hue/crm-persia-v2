@@ -63,7 +63,11 @@ describe("openai strict schema audit", () => {
     ]);
   });
 
-  it("audita todos os presets nativos sem forcar strict=true ainda", () => {
+  it("todos os presets nativos sao strict-ready apos PR de strict schemas (mai/2026)", () => {
+    // PR pos-#380: cada preset declara additionalProperties: false +
+    // required[] com todas as propriedades + opcionais marcados nullable.
+    // Adapter `apps/crm/src/lib/ai-agent/flow/openai-runtime.ts` converte
+    // `nullable: true` em `type: [original, "null"]` ao enviar pra Responses.
     const audited = NATIVE_TOOL_PRESETS.map((preset) => ({
       name: preset.name,
       handler: preset.handler,
@@ -73,17 +77,21 @@ describe("openai strict schema audit", () => {
     const strictReady = audited.filter((entry) => entry.result.compatibleWithStrict);
     const strictBlocked = audited.filter((entry) => !entry.result.compatibleWithStrict);
 
-    expect(audited).toHaveLength(20);
-    expect(strictReady).toHaveLength(0);
-    expect(strictBlocked).toHaveLength(20);
-
-    for (const entry of strictBlocked) {
-      expect(entry.result.issues).toContainEqual({
-        path: "$",
-        severity: "error",
-        message:
-          "Strict function schemas must set additionalProperties: false.",
-      });
+    if (strictBlocked.length > 0) {
+      const detail = strictBlocked
+        .map((entry) =>
+          `${entry.name}: ${entry.result.issues
+            .map((issue) => `[${issue.severity}] ${issue.path} ${issue.message}`)
+            .join(" | ")}`,
+        )
+        .join("\n");
+      throw new Error(
+        `Esperado 20/20 presets strict-ready; ${strictBlocked.length} bloqueados:\n${detail}`,
+      );
     }
+
+    expect(audited).toHaveLength(20);
+    expect(strictReady).toHaveLength(20);
+    expect(strictBlocked).toHaveLength(0);
   });
 });

@@ -613,9 +613,16 @@ export interface JSONSchemaObject {
 export type JSONSchemaProperty =
   // PR-AGENDA-TOOLS (mai/2026): adicionado "date-time" pros handlers de
   // agenda (create_appointment + reschedule_appointment recebem ISO 8601).
-  | { type: "string"; description?: string; enum?: readonly string[]; format?: "uuid" | "email" | "uri" | "date-time" }
-  | { type: "number"; description?: string; minimum?: number; maximum?: number }
-  | { type: "integer"; description?: string; minimum?: number; maximum?: number }
-  | { type: "boolean"; description?: string }
-  | { type: "array"; description?: string; items: JSONSchemaProperty }
-  | { type: "object"; description?: string; properties?: Record<string, JSONSchemaProperty>; required?: string[] };
+  //
+  // OpenAI Responses strict-ready (mai/2026, pós PR #379-#380): cada
+  // variant aceita `nullable?: boolean`. Quando `nullable: true`, o
+  // adapter em `apps/crm/src/lib/ai-agent/flow/openai-runtime.ts` converte
+  // pro formato JSON Schema 2020-12 `type: ["<original>", "null"]` ao
+  // mandar pra Responses API (que exige tipos explícitos pra accept null).
+  // Chat Completions tolera o campo `nullable` (ignora) sem quebra.
+  | { type: "string"; description?: string; enum?: readonly string[]; format?: "uuid" | "email" | "uri" | "date-time"; nullable?: boolean }
+  | { type: "number"; description?: string; minimum?: number; maximum?: number; nullable?: boolean }
+  | { type: "integer"; description?: string; minimum?: number; maximum?: number; nullable?: boolean }
+  | { type: "boolean"; description?: string; nullable?: boolean }
+  | { type: "array"; description?: string; items: JSONSchemaProperty; nullable?: boolean }
+  | { type: "object"; description?: string; properties?: Record<string, JSONSchemaProperty>; required?: string[]; additionalProperties?: boolean; nullable?: boolean };

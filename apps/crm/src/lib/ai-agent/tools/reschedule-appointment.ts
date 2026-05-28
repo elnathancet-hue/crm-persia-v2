@@ -22,7 +22,7 @@ import { failureResult, getHandlerDb, successResult } from "./shared";
 const rescheduleSchema = z.object({
   appointment_id: z.string().uuid(),
   new_start_at: z.string().datetime({ offset: true }),
-  new_duration_minutes: z.number().int().min(15).max(480).optional(),
+  new_duration_minutes: z.number().int().min(15).max(480).nullish(),
 });
 
 interface AppointmentRow {

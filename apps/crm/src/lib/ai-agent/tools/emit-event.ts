@@ -15,7 +15,7 @@ import { failureResult, successResult } from "./shared";
 
 const emitEventSchema = z.object({
   handle_name: z.string().trim().min(1).max(80),
-  reason: z.string().optional(),
+  reason: z.string().nullish(),
 });
 
 export const emitEventHandler: NativeHandler = async (_context, input) => {

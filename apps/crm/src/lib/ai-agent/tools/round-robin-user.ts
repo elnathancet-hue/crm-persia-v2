@@ -50,7 +50,7 @@ const TERMINAL_STATUSES = ["won", "lost", "archived"] as const;
 const ASSIGNABLE_ROLES = ["agent", "admin", "owner"] as const;
 
 const roundRobinUserSchema = z.object({
-  reason: z.string().trim().min(1).max(500).optional(),
+  reason: z.string().trim().min(1).max(500).nullish(),
 });
 
 interface MemberCandidate {

@@ -12,8 +12,8 @@ import { failureResult, getHandlerDb, successResult } from "./shared";
 // do LLM ficar barato em tokens.
 
 const listSchema = z.object({
-  only_upcoming: z.boolean().optional(),
-  limit: z.number().int().min(1).max(50).optional(),
+  only_upcoming: z.boolean().nullish(),
+  limit: z.number().int().min(1).max(50).nullish(),
 });
 
 export const listLeadAppointmentsHandler: NativeHandler = async (

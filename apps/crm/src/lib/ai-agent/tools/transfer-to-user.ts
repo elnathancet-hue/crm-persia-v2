@@ -9,9 +9,9 @@ import { failureResult, getHandlerDb, insertLeadActivity, successResult, trimRea
 // vindo do catalogo no system prompt) OU `user_id` (UUID — retrocompat).
 // Pelo menos um obrigatorio.
 const transferToUserSchema = z.object({
-  user: z.string().trim().min(1).max(200).optional(),
-  user_id: z.string().uuid().optional(),
-  reason: z.string().trim().min(1).max(500).optional(),
+  user: z.string().trim().min(1).max(200).nullish(),
+  user_id: z.string().uuid().nullish(),
+  reason: z.string().trim().min(1).max(500).nullish(),
 });
 
 interface MemberLookup {
@@ -102,8 +102,8 @@ export const transferToUserHandler: NativeHandler = async (context, input) => {
   const reason = trimReason(parsed.data.reason, "agent_requested_transfer");
 
   const resolved = await resolveTargetUser(db, context.organization_id, {
-    user: parsed.data.user,
-    user_id: parsed.data.user_id,
+    user: parsed.data.user ?? undefined,
+    user_id: parsed.data.user_id ?? undefined,
   });
   if ("error" in resolved) {
     return failureResult(resolved.error, {

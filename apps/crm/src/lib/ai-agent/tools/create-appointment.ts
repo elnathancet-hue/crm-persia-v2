@@ -40,18 +40,18 @@ const createSchema = z.object({
   start_at: z.string().datetime({ offset: true }),
   // PR-AI-AGENT-APPOINTMENT-TYPES: novo caminho recomendado — IA passa
   // slug do tipo, runtime resolve duracao/canal/local/titulo.
-  type_slug: z.string().trim().min(1).max(80).optional(),
+  type_slug: z.string().trim().min(1).max(80).nullish(),
   // Campos antigos — agora opcionais. Quando passados junto com
   // type_slug, fazem override do default. Quando passados sozinhos
   // (sem type_slug), mantem comportamento legado.
-  duration_minutes: z.number().int().min(15).max(480).optional(),
-  title: z.string().trim().min(1).max(200).optional(),
-  description: z.string().trim().max(2000).optional(),
+  duration_minutes: z.number().int().min(15).max(480).nullish(),
+  title: z.string().trim().min(1).max(200).nullish(),
+  description: z.string().trim().max(2000).nullish(),
   channel: z
     .enum(["whatsapp", "phone", "online", "in_person"])
-    .optional(),
-  location: z.string().trim().max(500).optional(),
-  meeting_url: z.string().trim().max(500).optional(),
+    .nullish(),
+  location: z.string().trim().max(500).nullish(),
+  meeting_url: z.string().trim().max(500).nullish(),
 });
 
 interface AppointmentTypeRow {
