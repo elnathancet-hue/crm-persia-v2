@@ -258,6 +258,8 @@ Checklist:
 
 ### PR 2 — Adaptador isolado
 
+Status: implementado em `apps/crm/src/lib/ai-agent/flow/openai-runtime.ts`.
+
 Adicionar `openai-runtime.ts` com duas implementações:
 
 - `runChatCompletionTurn(...)`
