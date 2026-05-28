@@ -278,11 +278,18 @@ Testes unitários do adaptador com mocks:
 
 ### PR 3 — Validador de schemas strict
 
+Status: implementado em `apps/crm/src/lib/ai-agent/flow/openai-strict-schema-audit.ts`.
+
 Adicionar helper/test que varre tools fixtures e schemas nativas.
 
 Objetivo: encontrar antes do runtime qualquer schema incompatível com Responses strict.
 
 Não alterar schemas compartilhadas nesta PR, exceto se teste provar bug.
+
+Resultado inicial: os 20 presets nativos atuais são compatíveis com o envio não-strict
+usado pelo adaptador, mas **0/20 estão prontos para `strict=true`**. O bloqueio comum
+é ausência de `additionalProperties: false` no root; vários presets também têm campos
+opcionais que precisariam virar nullable/required antes de habilitar strict mode.
 
 ### PR 4 — Runner com feature flag
 
