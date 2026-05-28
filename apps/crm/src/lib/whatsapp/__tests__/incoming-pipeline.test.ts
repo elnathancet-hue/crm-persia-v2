@@ -13,10 +13,18 @@ vi.mock("@/lib/ai/message-splitter", () => ({
 vi.mock("@/lib/webhooks/dispatcher", () => ({
   dispatchWebhook: vi.fn(),
 }));
+// Backlog #9: spy de logError pra assertar o code novo
+// "incoming_pipeline_n8n_timeout".
+vi.mock("@/lib/observability", () => ({
+  errorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+  logError: vi.fn(),
+}));
 
 import { onKeyword, onNewLead } from "@/lib/flows/triggers";
 import { parseSplitConfig, splitMessage } from "@/lib/ai/message-splitter";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
+import { logError } from "@/lib/observability";
 import { processIncomingMessage } from "@/lib/whatsapp/incoming-pipeline";
 import type { IncomingMessage, WhatsAppProvider } from "@/lib/whatsapp/provider";
 import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
@@ -382,5 +390,90 @@ describe("processIncomingMessage", () => {
     // Without OPENAI_API_KEY the OpenAI fallback is skipped too → handledBy "none"
     expect(result.handledBy).toBe("none");
     expect(provider.sendText).not.toHaveBeenCalled();
+  });
+
+  it("Backlog #9: aborts n8n fetch on timeout and logs n8n_timeout (not generic call_failed)", async () => {
+    // Endereca rodada 5 #media — sem AbortController no fetch n8n,
+    // Meta retransmite o webhook quando n8n leva 30-60s, gerando
+    // duplicidade de agent_conversations + respostas duplicadas. Agora:
+    // 1) fetchWithTimeout(8s) aborta a request
+    // 2) catch detecta AbortError -> logError("incoming_pipeline_n8n_timeout")
+    // 3) pipeline cai pro OpenAI fallback (out-of-scope desse teste).
+    const supabase = createSupabaseMock();
+    supabase.queue("messages", { data: null, error: null }); // dedup
+    supabase.queue("leads", { data: { id: "lead-timeout" }, error: null });
+    supabase.queue("conversations", {
+      data: { id: "conv-timeout", assigned_to: "ai", status: "active" },
+      error: null,
+    });
+    supabase.queue("organizations", {
+      data: { settings: { n8n_webhook_url: "https://n8n.example/slow" } },
+      error: null,
+    });
+    // Promise.all stubs — vazios pra short-circuit do contexto.
+    supabase.queue("deals", { data: null, error: null });
+    supabase.queue("lead_tags", { data: [], error: null });
+    supabase.queue("leads", { data: null, error: null });
+    supabase.queue("ai_assistants", { data: null, error: null });
+    supabase.queue("pipelines", { data: null, error: null });
+    // OpenAI fallback: assistant null -> skip
+    supabase.queue("ai_assistants", { data: null, error: null });
+
+    // Mock fetch: resolve apenas quando o signal abortar — replica n8n
+    // pendurado por mais de 8s.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          const signal = init.signal;
+          if (!signal) {
+            // Sem signal = bug do nosso code, falha o teste.
+            reject(new Error("no AbortSignal passed to fetch"));
+            return;
+          }
+          signal.addEventListener("abort", () => {
+            const err = new Error("aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        });
+      }),
+    );
+
+    // Encurta o timer pra teste rodar rapido sem alterar constante de prod.
+    // Como N8N_FETCH_TIMEOUT_MS e modular const, usamos vi.useFakeTimers
+    // pra adiantar 8s sem esperar real.
+    vi.useFakeTimers();
+
+    const provider = makeProvider();
+    const runPromise = processIncomingMessage({
+      supabase: supabase as never,
+      orgId: "org-1",
+      provider,
+      msg: baseMsg({ text: "oi lento" }),
+    });
+
+    // Avanca alem do timeout pra abortar
+    await vi.advanceTimersByTimeAsync(8_500);
+    const result = await runPromise;
+    vi.useRealTimers();
+
+    // Pipeline caiu pro fallback OpenAI (assistant null -> handledBy "none")
+    expect(result.ok).toBe(true);
+    expect(result.handledBy).toBe("none");
+
+    // Crucial: log estruturado de timeout disparou (nao o generico)
+    expect(logError).toHaveBeenCalledWith(
+      "incoming_pipeline_n8n_timeout",
+      expect.objectContaining({
+        lead_id: "lead-timeout",
+        conversation_id: "conv-timeout",
+        timeout_ms: 8000,
+      }),
+    );
+    expect(logError).not.toHaveBeenCalledWith(
+      "incoming_pipeline_n8n_call_failed",
+      expect.anything(),
+    );
   });
 });
