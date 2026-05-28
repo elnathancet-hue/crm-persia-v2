@@ -276,7 +276,27 @@ export function RulesTab({
     };
   }, [agent.id, getFlowCatalogs]);
 
+  // Save flow fix #1 (mai/2026): preserva input do cliente durante save.
+  //
+  // Antes: este useEffect ressincronizava state local SEMPRE que agent.*
+  // mudava. Race condition: cliente digitando enquanto save retorna do
+  // server -> setAgent triggera resync -> input fresco do cliente eh
+  // sobrescrito pela versao "stale" do server.
+  //
+  // Agora: ressincroniza apenas quando
+  //   (a) agent.id mudou (cliente abriu outro agente — sempre puxa do server)
+  //   (b) NAO esta dirty (cliente nao tem mudancas locais — server eh fonte)
+  // Quando dirty + mesmo agente, preserva o input do cliente. Save bem
+  // sucedido limpa dirty (state local = server), aí o proximo resync passa.
+  const prevAgentIdRef = React.useRef<string>(agent.id);
+  const dirtyRef = React.useRef(false);
   React.useEffect(() => {
+    const agentChanged = prevAgentIdRef.current !== agent.id;
+    prevAgentIdRef.current = agent.id;
+    if (!agentChanged && dirtyRef.current) {
+      // Mesma config aberta + cliente tem mudancas locais. NAO sobrescreve.
+      return;
+    }
     setName(agent.name);
     setPrompt(agent.system_prompt);
     setDescription(agent.description ?? "");
@@ -409,6 +429,13 @@ export function RulesTab({
     newLeadStageDirty ||
     debounceDirty ||
     humanizationDirty;
+
+  // Sincroniza ref do dirty pro useEffect de resync acima ler sem
+  // recriar deps. Padrao "ref reflete state recente" — comum em
+  // codigo que precisa ler valor atual dentro de outro effect.
+  React.useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   // PR 35 (mai/2026): dirty flags por accordion. UI mostra bullet
   // âmbar no header de cada accordion que tem mudança não salva,
