@@ -16,7 +16,7 @@ import "server-only";
 //
 // Invalidacao automatica via `sources_hash` derivado de
 // MAX(updated_at) + COUNT(*) em agent_knowledge_sources. Sempre que
-// uma source nova e indexed (indexing_status -> completed), MAX(updated_at)
+// uma source nova e indexed (indexing_status -> indexed), MAX(updated_at)
 // muda, hash muda, cache miss → re-carrega.
 //
 // Trade-offs aceitos pra V1:

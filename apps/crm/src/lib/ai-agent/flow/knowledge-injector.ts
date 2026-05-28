@@ -27,7 +27,11 @@ import { getCachedBlock, setCachedBlock } from "./knowledge-cache";
  *     se <30KB usa full, senão usa rag.
  *
  * O helper retorna `null` quando:
- *   - Agente não tem nenhuma source com `indexing_status='completed'`
+ *   - Agente não tem nenhuma source com `indexing_status='indexed'` (fix
+ *     mai/2026: era `'completed'`, que nunca existiu — CHECK constraint
+ *     da migration 022 só aceita `pending | processing | indexed | failed`.
+ *     Bug silencioso: full mode nunca retornava nada em prod desde PR #354.
+ *     Descoberto durante smoke test do PR 5 da migração Responses.)
  *   - Retrieval falha (Voyage caiu, embedding error etc) — log + null
  *     pra não bloquear resposta da IA
  *
@@ -180,7 +184,7 @@ async function buildFullModeBlock(
     )
     .eq("source.organization_id", organizationId)
     .eq("source.agent_config_id", configId)
-    .eq("source.indexing_status", "completed")
+    .eq("source.indexing_status", "indexed")
     .order("source_id", { ascending: true })
     .order("chunk_index", { ascending: true });
 
@@ -263,7 +267,7 @@ async function computeFullModeSourcesHash(
     .select("updated_at")
     .eq("organization_id", organizationId)
     .eq("agent_config_id", configId)
-    .eq("indexing_status", "completed");
+    .eq("indexing_status", "indexed");
 
   if (error) {
     logError("ai_agent_knowledge_hash_failed", {
@@ -353,7 +357,7 @@ async function measureKnowledgeBytes(
     )
     .eq("source.organization_id", organizationId)
     .eq("source.agent_config_id", configId)
-    .eq("source.indexing_status", "completed");
+    .eq("source.indexing_status", "indexed");
 
   if (error) {
     logError("ai_agent_knowledge_measure_failed", {
