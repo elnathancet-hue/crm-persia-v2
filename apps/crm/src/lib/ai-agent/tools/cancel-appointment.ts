@@ -20,7 +20,7 @@ import { failureResult, getHandlerDb, successResult, trimReason } from "./shared
 
 const cancelSchema = z.object({
   appointment_id: z.string().uuid(),
-  reason: z.string().trim().min(1).max(500).optional(),
+  reason: z.string().trim().min(1).max(500).nullish(),
 });
 
 interface AppointmentRow {

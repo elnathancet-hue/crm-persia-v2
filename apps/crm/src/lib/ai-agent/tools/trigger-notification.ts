@@ -22,9 +22,37 @@ import {
   successResult,
 } from "./shared";
 
+// OpenAI Responses strict-ready (mai/2026): `custom` agora chega do LLM
+// como string JSON serializada (preset declara `type: "string", nullable: true`
+// pra ficar compatível com Responses strict mode — objects arbitrários sem
+// `additionalProperties: false` quebram strict). Aceita também o shape
+// antigo `Record<string,string>` direto pra retrocompat com callers internos.
 const triggerNotificationSchema = z.object({
   template_name: z.string().trim().min(1).max(120),
-  custom: z.record(z.string(), z.string()).optional(),
+  custom: z
+    .union([z.record(z.string(), z.string()), z.string(), z.null()])
+    .optional()
+    .transform((value): Record<string, string> | undefined => {
+      if (value === null || value === undefined) return undefined;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return undefined;
+        try {
+          const parsed = JSON.parse(trimmed) as unknown;
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            const result: Record<string, string> = {};
+            for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+              result[k] = typeof v === "string" ? v : String(v);
+            }
+            return result;
+          }
+          return undefined;
+        } catch {
+          return undefined;
+        }
+      }
+      return value as Record<string, string>;
+    }),
 }) satisfies z.ZodType<TriggerNotificationHandlerInput>;
 
 export const triggerNotificationHandler: NativeHandler = async (

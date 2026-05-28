@@ -325,4 +325,45 @@ describe("openai-runtime adapter", () => {
       output: "plain",
     });
   });
+
+  it("converte nullable: true em type tupla ao enviar pra Responses (strict-ready)", async () => {
+    // PR pos-#380: presets shared declaram opcionais como { type: "string", nullable: true }.
+    // Adapter precisa reescrever pra { type: ["string", "null"] } no caminho
+    // Responses (Chat Completions tolera o nullable e fica intacto).
+    const create = vi.fn().mockResolvedValue({
+      output_text: "ok",
+      output: [],
+      status: "completed",
+      incomplete_details: null,
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    });
+
+    await runResponsesTurn(
+      { responses: { create } },
+      {
+        ...baseInput,
+        tools: [
+          {
+            name: "stop_agent",
+            description: "Pause agent",
+            parameters: {
+              type: "object",
+              additionalProperties: false,
+              required: ["reason"],
+              properties: {
+                reason: { type: "string", nullable: true, description: "why" },
+              },
+            },
+            strict: true,
+          },
+        ],
+      },
+    );
+
+    const sentTools = create.mock.calls[0]?.[0].tools as Array<{
+      parameters: { properties: { reason: { type: unknown; nullable?: unknown } } };
+    }>;
+    expect(sentTools[0]!.parameters.properties.reason.type).toEqual(["string", "null"]);
+    expect(sentTools[0]!.parameters.properties.reason.nullable).toBeUndefined();
+  });
 });

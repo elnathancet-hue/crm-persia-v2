@@ -22,9 +22,9 @@ import { failureResult, getHandlerDb, successResult, trimReason } from "./shared
 //   5. Valida que o agente alvo tem `agent_flows` (senao a proxima msg
 //      do lead cai em flow_executor_no_flow).
 const transferToAgentSchema = z.object({
-  target_agent_name: z.string().trim().min(1).max(200).optional(),
-  agent_config_id: z.string().uuid().optional(),
-  reason: z.string().trim().min(1).max(500).optional(),
+  target_agent_name: z.string().trim().min(1).max(200).nullish(),
+  agent_config_id: z.string().uuid().nullish(),
+  reason: z.string().trim().min(1).max(500).nullish(),
 });
 
 export const transferToAgentHandler: NativeHandler = async (context, input) => {

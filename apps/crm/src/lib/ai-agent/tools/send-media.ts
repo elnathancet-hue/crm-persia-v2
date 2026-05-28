@@ -26,7 +26,7 @@ import {
 
 const sendMediaSchema = z.object({
   slug: z.string().trim().min(1).max(120),
-  caption: z.string().trim().max(500).optional(),
+  caption: z.string().trim().max(500).nullish(),
 });
 
 // Mapeia category guardado em automation_tools.category pra type aceito
