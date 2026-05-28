@@ -2477,3 +2477,75 @@ PR de >1500 LOC, dificil de revisar e perigoso de reverter.
 Tambem evitar PR de "refactor + fix" misturados. Os 6 PRs sao apenas
 fixes; refactors (history, summarization, Admin/CRM parity) ficam no
 backlog em PRs proprios.
+
+## Closeout (27/mai/2026)
+
+10 auditorias rodadas, plano completo executado em 20 PRs (6 barreira +
+14 backlog). Todos mergeados em `main`.
+
+### 6 PRs barreira (gates de correcao critica antes do backlog)
+
+| PR  | Escopo                                                             | Endereca                |
+| --- | ------------------------------------------------------------------ | ----------------------- |
+| #355 | Migration 070+071: log dedup + UNIQUE partial + 23505 catch        | R5 critico              |
+| #356 | max_completion_tokens 4096 + hard-cap 50KB + assertWithinCostLimits | R6 #1 + R6 #4 + R6 #5  |
+| #357 | Debounce filtra handoff_at + canAiSendNow guard                    | R7 #1 + R7 #2 + R7 #3   |
+| #358 | current_node_id null em terminal + FlowCanvas bloqueia validation  | R1, R3, R4              |
+| #360 | buildNativeHandlerContext + dry_run real + transfer_to_agent flow  | R5 (PR-5)               |
+| #361 | applyTemplate mescla emit_event + remove_tag handler               | R6 (PR-6)               |
+
+### 14 itens backlog
+
+| #   | PR    | Item                                                                 | Endereca                |
+| --- | ----- | -------------------------------------------------------------------- | ----------------------- |
+| 1   | #354  | History de mensagens + summarization no AI node                      | R6 #2 + R6 #3           |
+| 2   | #355\* | Knowledge cache por (config_id, sources_hash)                      | R6 #5 + R8 #1           |
+| 3   | #359  | CAS em agent_flows.version + UI conflict modal                       | R9 #3                   |
+| 4   | #362  | previewFlowImpact: "X convs afetadas" antes do save                  | R9 #1 + R9 #5           |
+| 5   | #365  | Paridade Admin/CRM em configs.ts + flow-catalogs.ts                 | R2 #1 + R2 #2 + R2 #3   |
+| 6   | #370  | Tester: gate_warnings + cost real                                    | R10 #1 + R10 #2 + R10 #3 |
+| 7   | #363  | ToolExecutionMode aceita "mcp" no contrato                           | R2 #4                   |
+| 8   | #364  | matchPause atualiza conversations.assigned_to + helper unificado    | R7 #4 + R7 #7           |
+| 9   | #372  | Timeout 8s no fetch n8n + AbortController (curto prazo)              | R5 #media               |
+| 10  | #371  | Threshold de knowledge em tokens (heuristica chars/3 PT-BR)         | R8 #3                   |
+| 11  | #366  | move_pipeline_stage salva stage_id + selecao por funil               | R3 #media + R4 matriz   |
+| 12  | #367  | Interpolacao {{lead.X}} em set_lead_custom_field                     | R4 #media               |
+| 13  | #368  | Drop agent_conversations.tokens_used_total (migration 073)           | R6 #6                   |
+| 14  | #369  | Fuzzy/regex em matchesPauseKeyword/matchesResumeKeyword              | R7 #5                   |
+
+\* Backlog #2 entrou junto com o PR-1 (#355) — cache foi natural extension
+do hard-cap unificado de full mode.
+
+### Itens NAO endereçados (intencional)
+
+- **Webhook Meta para fila assincrona (medio prazo)**: PR #372 cobriu
+  apenas o curto prazo (AbortController 8s). A mudanca arquitetural
+  pra `incoming_webhook_events` + worker assincrono fica como follow-up
+  em PR proprio (registrado no header da const `N8N_FETCH_TIMEOUT_MS`).
+- **Cost ceiling default por org nova** (decisao pendente #5): nao
+  bloqueia nada — esperando dados de consumo real pra calibrar default.
+- **Atualizar memory `project_gpt5_reasoning_tokens_bug.md`**: arquivo
+  de memoria do usuario, fora do escopo de PR de codigo.
+
+### Validacao final
+
+- Suite total: **542 testes verdes em main**, +110 testes novos somando
+  todos os PRs (~25% growth na cobertura de ai-agent).
+- Typecheck CRM + Admin: green em todos os 20 PRs.
+- Build CRM + Admin: green em todos os 20 PRs.
+- Lint (eslint pre-commit hook): green em todos os 20 PRs.
+- Migrations aplicadas via Supabase CLI: 070, 071, 072, 073.
+
+### Padroes que ficaram para o proximo audit
+
+1. **Shared modules sao read-only para Codex** — alteracoes em
+   `packages/shared/src/ai-agent/*` devem passar por revisao dupla
+   (UI owner + Runtime owner). Documentado em
+   [CODEX_SYNC.md](CODEX_SYNC.md).
+2. **Test files reusam helpers de `@/test/helpers`** — supabase-mock,
+   tester-context-mock. Evita duplicar boilerplate em cada teste novo.
+3. **Comentarios em PT-BR com numero do backlog/PR** — facilita
+   rastreabilidade no `git blame` 6 meses depois (ex: "Backlog #6
+   Auditoria (mai/2026): rodada 10 #2").
+4. **AbortController + timeout em qualquer fetch externo** — voyage,
+   n8n, MCP. Sem isso, retries cascateam.
