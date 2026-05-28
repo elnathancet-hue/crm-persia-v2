@@ -1,5 +1,6 @@
 import "server-only";
 
+import { estimateTokens } from "@persia/shared/ai-agent";
 import { errorMessage, logError } from "@/lib/observability";
 import { retrieveWithAttempt } from "../rag/retriever";
 import type { AgentDb } from "../db";
@@ -38,21 +39,31 @@ import { getCachedBlock, setCachedBlock } from "./knowledge-cache";
 
 export type KnowledgeMode = "full" | "rag" | "auto";
 
-/** Threshold pra modo 'auto' decidir entre full e rag (bytes totais de chunks). */
-const AUTO_FULL_BYTES_THRESHOLD = 30 * 1024; // 30KB
+/**
+ * Threshold pra modo 'auto' decidir entre full e rag, agora em TOKENS.
+ *
+ * Backlog #10 Auditoria (mai/2026): rodada 8 #3. Antes usavamos 30KB
+ * (chars) que em PT-BR (~3 chars/token) equivale a ~10k tokens — alem
+ * da janela pratica do gpt-4o-mini (~8k em prod somando system_prompt +
+ * tools schema + history). Threshold em tokens reflete o limite real
+ * que importa.
+ *
+ * Default 6000 tokens deixa folga pra ~2k de overhead (prompt + tools
+ * schema + history) antes de bater na janela de 8k do gpt-4o-mini.
+ */
+const AUTO_FULL_TOKEN_THRESHOLD = 6000;
 
 /**
  * Hard-cap UNIFICADO pra modo 'full' — aplica mesmo quando cliente
  * escolheu 'full' manualmente. PR-2 Auditoria (mai/2026): rodada 6 #5 +
- * rodada 8 #1. Antes, so o modo 'auto' aplicava o AUTO_FULL_BYTES_THRESHOLD
- * (30KB); manual 'full' nao tinha cap e podia injetar 100KB+ a cada turn.
+ * rodada 8 #1. Antes, so o modo 'auto' aplicava o threshold; manual
+ * 'full' nao tinha cap e podia injetar 100KB+ a cada turn.
  *
- * Decisao de produto (26/mai/2026): 50KB (~16k tokens em PT-BR a 3
- * char/token). Acima disso, falla pra 'rag' com top-k retrieval. Mantemos
- * AUTO_FULL_BYTES_THRESHOLD em 30KB pra modo 'auto' continuar
- * conservador — o hard-cap so age como teto absoluto.
+ * Backlog #10 (mai/2026): convertido pra TOKENS. 16000 tokens equivale
+ * a ~48KB em PT-BR (proximo do 50KB anterior em bytes). Acima disso,
+ * falla pra 'rag' com top-k retrieval.
  */
-const FULL_MODE_HARD_CAP_BYTES = 50 * 1024; // 50KB
+const FULL_MODE_HARD_CAP_TOKENS = 16000;
 
 /** Top-k pro modo 'rag'. Ajustável depois via agent_configs se virar problema. */
 const RAG_TOP_K = 3;
@@ -106,26 +117,28 @@ async function buildKnowledgeBlockUnsafe(
     }
   }
 
-  // 2. Resolve mode 'auto' antes do trabalho pesado — só conta bytes
+  // 2. Resolve mode 'auto' antes do trabalho pesado — Backlog #10: agora
+  // mede em TOKENS estimados, nao bytes.
   if (mode === "auto") {
-    const totalBytes = await measureKnowledgeBytes(db, organizationId, configId);
-    if (totalBytes === 0) return null; // sem conhecimento
-    mode = totalBytes < AUTO_FULL_BYTES_THRESHOLD ? "full" : "rag";
+    const totalTokens = await measureKnowledgeTokens(db, organizationId, configId);
+    if (totalTokens === 0) return null; // sem conhecimento
+    mode = totalTokens < AUTO_FULL_TOKEN_THRESHOLD ? "full" : "rag";
   }
 
   // 2b. PR-2 Auditoria (mai/2026): hard-cap unificado pra 'full'.
   // Mesmo quando cliente forca 'full' manualmente em UI, derruba pra
-  // 'rag' se ultrapassar FULL_MODE_HARD_CAP_BYTES (50KB). Sem isso, doc
+  // 'rag' se ultrapassar FULL_MODE_HARD_CAP_TOKENS (16k). Sem isso, doc
   // grande × N turns × M conversas = factura explode silenciosamente.
+  // Backlog #10 (mai/2026): cap convertido pra tokens estimados.
   if (mode === "full") {
-    const totalBytes = await measureKnowledgeBytes(db, organizationId, configId);
-    if (totalBytes === 0) return null; // sem conhecimento
-    if (totalBytes > FULL_MODE_HARD_CAP_BYTES) {
+    const totalTokens = await measureKnowledgeTokens(db, organizationId, configId);
+    if (totalTokens === 0) return null; // sem conhecimento
+    if (totalTokens > FULL_MODE_HARD_CAP_TOKENS) {
       logError("ai_agent_knowledge_full_exceeded_cap", {
         organization_id: organizationId,
         config_id: configId,
-        total_bytes: totalBytes,
-        cap_bytes: FULL_MODE_HARD_CAP_BYTES,
+        total_tokens: totalTokens,
+        cap_tokens: FULL_MODE_HARD_CAP_TOKENS,
         fallback_mode: "rag",
       });
       mode = "rag";
@@ -338,10 +351,16 @@ async function buildRagModeBlock(
 }
 
 // ----------------------------------------------------------------------------
-// Helper: mede bytes totais dos chunks completed do agente
+// Helper: estima tokens totais dos chunks completed do agente
+//
+// Backlog #10 Auditoria (mai/2026): rodada 8 #3. Antes media bytes
+// (content.length) e comparava com threshold em bytes. Agora estima
+// tokens via heuristica chars/3 (PT-BR) — limite que realmente importa
+// pra janela de contexto da OpenAI. Ver token-estimate.ts pra trade-off
+// vs tiktoken.
 // ----------------------------------------------------------------------------
 
-async function measureKnowledgeBytes(
+async function measureKnowledgeTokens(
   db: AgentDb,
   organizationId: string,
   configId: string,
@@ -366,5 +385,5 @@ async function measureKnowledgeBytes(
 
   type Row = { content: string };
   const rows = (data ?? []) as Row[];
-  return rows.reduce((sum, row) => sum + (row.content?.length ?? 0), 0);
+  return rows.reduce((sum, row) => sum + estimateTokens(row.content), 0);
 }

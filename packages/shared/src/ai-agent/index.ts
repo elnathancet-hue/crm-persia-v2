@@ -28,3 +28,5 @@ export * from "./flow";
 export * from "./flow-validation";
 // Backlog #5 Auditoria (mai/2026): paridade Admin/CRM no template seed.
 export * from "./template-materializer";
+// Backlog #10 Auditoria (mai/2026): threshold de knowledge em TOKENS, nao bytes.
+export * from "./token-estimate";
