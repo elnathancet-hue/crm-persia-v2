@@ -13,6 +13,7 @@ import {
   ListOrdered,
   Menu,
   PlayCircle,
+  Save,
   Settings2,
   Wrench,
 } from "lucide-react";
@@ -126,6 +127,12 @@ interface Props {
   initialFollowups?: AgentFollowup[];
 }
 
+type RulesSaveControl = {
+  dirty: boolean;
+  isPending: boolean;
+  onSave: () => void;
+} | null;
+
 export function AgentEditor({
   initialAgent,
   initialStages,
@@ -168,6 +175,28 @@ export function AgentEditor({
   // "stages" (Fluxo). Sem prompt configurado, o fluxo não funciona.
   const [activeSection, setActiveSection] = React.useState<AgentSectionId>("rules");
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const rulesSaveRef = React.useRef<(() => void) | null>(null);
+  const [rulesSaveMeta, setRulesSaveMeta] = React.useState({
+    dirty: false,
+    isPending: false,
+  });
+  const handleRulesSaveControlChange = React.useCallback(
+    (control: RulesSaveControl) => {
+      rulesSaveRef.current = control?.onSave ?? null;
+      setRulesSaveMeta((prev) => {
+        const next = control
+          ? { dirty: control.dirty, isPending: control.isPending }
+          : { dirty: false, isPending: false };
+        return prev.dirty === next.dirty && prev.isPending === next.isPending
+          ? prev
+          : next;
+      });
+    },
+    [],
+  );
+  const handleRulesSaveClick = React.useCallback(() => {
+    rulesSaveRef.current?.();
+  }, []);
   // PR 23 UX (mai/2026): sidebar do editor pode ser recolhida pra abrir
   // mais espaço — especialmente útil no canvas do Fluxo. Estado
   // persiste em localStorage (key global, não por agente — preferência
@@ -317,6 +346,31 @@ export function AgentEditor({
     setMobileNavOpen(false);
   }, []);
 
+  const rulesSaveAction =
+    activeSection === "rules" ? (
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "text-xs",
+            rulesSaveMeta.dirty
+              ? "font-medium text-progress"
+              : "text-muted-foreground",
+          )}
+        >
+          {rulesSaveMeta.dirty ? "Alterações não salvas" : "Tudo salvo"}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleRulesSaveClick}
+          disabled={!rulesSaveMeta.dirty || rulesSaveMeta.isPending}
+        >
+          <Save className="size-3.5" />
+          Salvar
+        </Button>
+      </div>
+    ) : null;
+
   return (
     /* PR 28 (mai/2026): FlowTesterProvider envolve o editor inteiro
        pra que TesterSheet (publisher) e FlowCanvas/NodeViews
@@ -422,6 +476,7 @@ export function AgentEditor({
         agent={agent}
         onActivate={() => handleStatusChange("active")}
         isPending={isPending}
+        saveAction={rulesSaveAction}
       />
 
       {/* Layout: sidebar fixa (lg+) + conteudo. Em <lg, sidebar so via
@@ -458,6 +513,7 @@ export function AgentEditor({
               knowledgeSources={knowledgeSources}
               onKnowledgeSourcesChange={setKnowledgeSources}
               onKnowledgeRefresh={refreshKnowledgeSources}
+              onSaveControlChange={handleRulesSaveControlChange}
             />
           )}
           {activeSection === "stages" && <FlowCanvas configId={agent.id} />}
@@ -534,10 +590,12 @@ function PublishingChecklist({
   agent,
   onActivate,
   isPending,
+  saveAction,
 }: {
   agent: AgentConfig;
   onActivate: () => void;
   isPending: boolean;
+  saveAction?: React.ReactNode;
 }) {
   const isActive = agent.status === "active";
   const isPrimary = Boolean(agent.is_primary);
@@ -545,14 +603,19 @@ function PublishingChecklist({
   if (isActive) {
     return (
       <div className="-mx-6 px-6 py-2 bg-success-soft/40 border-b border-success-ring/30">
-        <div className="flex items-center gap-2 text-xs">
-          <CheckCircle2 className="size-4 text-success" />
-          <span className="font-medium text-foreground">Agente publicado.</span>
-          <span className="text-muted-foreground">
-            {isPrimary
-              ? "Como principal, ele responde novas conversas automaticamente."
-              : "Como secundário, ele participa quando uma entrada configurada bater."}
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-xs">
+            <CheckCircle2 className="size-4 shrink-0 text-success" />
+            <span className="shrink-0 font-medium text-foreground">
+              Agente publicado.
+            </span>
+            <span className="min-w-0 text-muted-foreground">
+              {isPrimary
+                ? "Como principal, ele responde novas conversas automaticamente."
+                : "Como secundário, ele participa quando uma entrada configurada bater."}
+            </span>
+          </div>
+          {saveAction ? <div className="shrink-0">{saveAction}</div> : null}
         </div>
       </div>
     );
@@ -560,21 +623,24 @@ function PublishingChecklist({
 
   return (
     <div className="-mx-6 px-6 py-3 bg-muted/30 border-b border-border/60">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-semibold text-muted-foreground">
-          Para publicar:
-        </span>
-        <ChecklistChip
-          done={false}
-          icon={PlayCircle}
-          label="Ativar agente"
-          actionLabel="Ativar"
-          onAction={onActivate}
-          isPending={isPending}
-        />
-        <span className="text-xs text-muted-foreground">
-          Fluxo e entradas podem ser ajustados depois.
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-muted-foreground">
+            Para publicar:
+          </span>
+          <ChecklistChip
+            done={false}
+            icon={PlayCircle}
+            label="Ativar agente"
+            actionLabel="Ativar"
+            onAction={onActivate}
+            isPending={isPending}
+          />
+          <span className="text-xs text-muted-foreground">
+            Fluxo e entradas podem ser ajustados depois.
+          </span>
+        </div>
+        {saveAction ? <div className="shrink-0">{saveAction}</div> : null}
       </div>
     </div>
   );

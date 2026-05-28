@@ -80,6 +80,12 @@ import { ActionNodeView } from "./nodes/ActionNodeView";
 import { ConditionNodeView } from "./nodes/ConditionNodeView";
 import { EdgeWithDelete } from "./edges/edge-with-delete";
 
+// Backlog UX (mai/2026): React Flow usa zoom alto demais em fitView quando
+// o flow tem poucos cards, fazendo o editor abrir "colado" nos nodes. O
+// limite abaixo vale apenas para fitView automatico/atalhos; zoom manual
+// pelos controles do canvas continua livre.
+const FLOW_FIT_VIEW_MAX_ZOOM = 0.7;
+
 // ============================================================================
 // React Flow node bindings — mapeia type→component dos custom nodes
 // ============================================================================
@@ -769,7 +775,11 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     setSelectedNodeId(aiId);
     setDirty(true);
     setTimeout(() => {
-      fitView({ duration: 400, padding: 0.25 });
+      fitView({
+        duration: 400,
+        padding: 0.25,
+        maxZoom: FLOW_FIT_VIEW_MAX_ZOOM,
+      });
     }, 100);
     toast.success("Fluxo inicial criado e conectado.");
   }, [
@@ -838,7 +848,11 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     // setTimeout pra deixar o React aplicar o setState antes do
     // fitView calcular bounds das novas posições. 100ms é suficiente.
     setTimeout(() => {
-      fitView({ duration: 600, padding: 0.2 });
+      fitView({
+        duration: 600,
+        padding: 0.2,
+        maxZoom: FLOW_FIT_VIEW_MAX_ZOOM,
+      });
     }, 100);
     toast.success("Fluxo organizado.");
   }, [fitView, snapshotBeforeMutation]);
@@ -854,7 +868,12 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
       toast.info("Nenhuma entrada no fluxo.");
       return;
     }
-    fitView({ nodes: [{ id: entry.id }], duration: 400, padding: 0.4 });
+    fitView({
+      nodes: [{ id: entry.id }],
+      duration: 400,
+      padding: 0.4,
+      maxZoom: FLOW_FIT_VIEW_MAX_ZOOM,
+    });
   }, [fitView]);
 
   // -- Save (manual via botão + auto-save debounce) --
@@ -1367,6 +1386,10 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
             setViewport(v);
           }}
           fitView={nodes.length > 0}
+          fitViewOptions={{
+            maxZoom: FLOW_FIT_VIEW_MAX_ZOOM,
+            padding: 0.2,
+          }}
           attributionPosition="bottom-left"
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />

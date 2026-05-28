@@ -32,7 +32,6 @@ import {
   Minus,
   Plug,
   Plus,
-  Save,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -119,6 +118,13 @@ interface Props {
   knowledgeSources: AgentKnowledgeSource[];
   onKnowledgeSourcesChange: (next: AgentKnowledgeSource[]) => void;
   onKnowledgeRefresh: () => Promise<void>;
+  onSaveControlChange?: (
+    control: {
+      dirty: boolean;
+      isPending: boolean;
+      onSave: () => void;
+    } | null,
+  ) => void;
 }
 
 const DEBOUNCE_PRESETS = [
@@ -153,6 +159,7 @@ export function RulesTab({
   knowledgeSources,
   onKnowledgeSourcesChange,
   onKnowledgeRefresh,
+  onSaveControlChange,
 }: Props) {
   const [name, setName] = React.useState(agent.name);
   const [prompt, setPrompt] = React.useState(agent.system_prompt);
@@ -498,6 +505,11 @@ export function RulesTab({
     onChange,
   ]);
 
+  React.useEffect(() => {
+    onSaveControlChange?.({ dirty, isPending, onSave: handleSave });
+    return () => onSaveControlChange?.(null);
+  }, [dirty, handleSave, isPending, onSaveControlChange]);
+
   return (
     /* PR 34 (mai/2026): outer wrap pra acomodar sticky save bar no
        rodapé. pb-20 reserva espaço pro bar ficar visível sem cobrir
@@ -516,25 +528,8 @@ export function RulesTab({
       <UnsavedChangesGuard dirty={dirty} />
 
       <Card className="shadow-sm">
-        <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Configuração do agente</CardTitle>
-          <div className="flex flex-wrap items-center gap-2">
-            {dirty ? (
-              <span className="text-xs font-medium text-progress">
-                Alterações não salvas
-              </span>
-            ) : (
-              <span className="text-xs text-muted-foreground">Tudo salvo</span>
-            )}
-            <Button
-              onClick={handleSave}
-              disabled={!dirty || isPending}
-              size="sm"
-            >
-              <Save className="size-3.5" />
-              Salvar
-            </Button>
-          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <EntryConditionsCard

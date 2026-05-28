@@ -233,6 +233,13 @@ mudança significativa (move nó, criar edge, mudar config). Stack de 50 estados
 
 `Ctrl+Z` / `Ctrl+Shift+Z` integrados.
 
+### Zoom inicial do canvas
+
+`FlowCanvas` limita apenas o zoom dos `fitView` automáticos com
+`FLOW_FIT_VIEW_MAX_ZOOM`. Isso evita abrir fluxos pequenos com cards enormes quando há
+poucos nós no canvas. O limite não altera o zoom manual: o usuário ainda pode aproximar
+ou afastar usando mouse/trackpad/controles do React Flow.
+
 ## NodeConfigSheet
 
 `packages/ai-agent-ui/src/components/flow/NodeConfigSheet.tsx`. Sheet lateral que abre
