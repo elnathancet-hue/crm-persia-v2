@@ -21,6 +21,7 @@
 | [08-templates-and-parity.md](./08-templates-and-parity.md) | Templates (`blank`, `consultor_funil_completo`, etc), `applyAgentTemplate`, materializer compartilhado, paridade Admin/CRM. | Novo template ou bug "Admin não bate com CRM". |
 | [09-observability.md](./09-observability.md) | Todos os log codes (`incoming_pipeline_*`, `ai_agent_*`, etc), SQL pra dashboards, métricas chave. | Setup de monitoring ou triage em prod. |
 | [10-runbooks.md](./10-runbooks.md) | "Cliente reclama de X → diagnóstico Y". Cenários reais já vistos (alucinação de agendamento, IA travada em etapa, factura OpenAI explodiu). | **Quando o cliente liga.** |
+| [11-openai-responses-migration.md](./11-openai-responses-migration.md) | Auditoria segura para migrar do Chat Completions para Responses API com adaptador, feature flag e testes. | Antes de qualquer PR que troque chamadas OpenAI no runner. |
 | [INVARIANTS.md](./INVARIANTS.md) | Spec read-only pra Codex. Shapes, contratos, o que NÃO mexer. Padrões obrigatórios. | Codex deve ler ANTES de qualquer edit em `lib/ai-agent/*` ou `packages/shared/src/ai-agent/*`. |
 
 ---
@@ -74,6 +75,7 @@ Mapa rápido código ↔ doc.
 | --- | --- |
 | `apps/crm/src/lib/ai-agent/executor.ts` | [01-architecture.md](./01-architecture.md) + [03-flow-runtime.md](./03-flow-runtime.md) |
 | `apps/crm/src/lib/ai-agent/flow/runner.ts` | [03-flow-runtime.md](./03-flow-runtime.md) |
+| `apps/crm/src/lib/ai-agent/flow/openai-runtime.ts` | [11-openai-responses-migration.md](./11-openai-responses-migration.md) |
 | `apps/crm/src/lib/ai-agent/flow/knowledge-injector.ts` | [05-knowledge.md](./05-knowledge.md) |
 | `apps/crm/src/lib/ai-agent/flow/knowledge-cache.ts` | [05-knowledge.md § Cache](./05-knowledge.md) |
 | `apps/crm/src/lib/ai-agent/flow/tester-gates.ts` | [07-tester-and-canvas.md § gate_warnings](./07-tester-and-canvas.md) |
