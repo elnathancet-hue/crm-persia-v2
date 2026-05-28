@@ -34,6 +34,16 @@ import type { AgentDb } from "../db";
 import { GuardrailError } from "../guardrails";
 import { buildNativeHandlerContext } from "./handler-context";
 import { buildKnowledgeBlock } from "./knowledge-injector";
+import { getOpenAiApiMode } from "./openai-api-mode";
+import {
+  runChatCompletionTurn,
+  runResponsesTurn,
+  toResponsesFunctionCallOutput,
+  type AgentLlmInput,
+  type AgentLlmOutput,
+  type AgentLlmTool,
+} from "./openai-runtime";
+import type { ResponseInputItem } from "openai/resources/responses/responses";
 import {
   interpolateLeadPlaceholders,
   loadLeadForInterpolation,
@@ -455,8 +465,28 @@ async function executeAIAgentNode(
     },
   }));
 
+  // PR 4 do plano docs/ai-agent/11-openai-responses-migration.md (mai/2026):
+  // tools no shape neutro pro adapter — vale pra chat e responses.
+  const adapterTools: AgentLlmTool[] = tools.map((t) => ({
+    name: t.name,
+    description: t.description ?? null,
+    parameters: t.input_schema as Record<string, unknown>,
+    // strict mode é opt-in pelo caller (PR 5/6). Hoje deixamos false
+    // pra não mudar comportamento no flip da feature flag.
+    strict: false,
+  }));
+
   // Mapa de tool name → row pra resolver native_handler depois.
   const toolByName = new Map(tools.map((t) => [t.name, t]));
+
+  // PR 4 do plano docs/ai-agent/11-openai-responses-migration.md:
+  // modo "chat" (default) vs "responses" (opt-in via env). Decisão antes
+  // do loop pra não re-ler env a cada iteração.
+  const apiMode = getOpenAiApiMode();
+  // Pra Responses ping-pong stateless (PR #380): mantém items separados
+  // (`function_call` retornados + `function_call_output` injetados pós-handler)
+  // pra próxima iteração receber via `responsesInputItems`.
+  const responsesPendingItems: ResponseInputItem[] = [];
 
   let lastSuccessfulToolName: string | null = null;
   // PR-FLOW-PIVOT PR 7 (mai/2026): se a IA chamar emit_event(handle),
@@ -476,25 +506,36 @@ async function executeAIAgentNode(
       payload: { iteration: iter, model, message_count: messages.length },
     });
 
-    let completion: OpenAI.Chat.ChatCompletion;
+    // PR-2 Auditoria (mai/2026): cap por chamada LLM. Sem cap, modelos
+    // de reasoning (gpt-5*) consomem ate a janela inteira por turn
+    // (rodada 6 #4). Default 4096 cobre reasoning + output medio sem
+    // truncar respostas comuns.
+    //
+    // PR 4 do plano docs/ai-agent/11-openai-responses-migration.md:
+    // delega pra adapter `runChatCompletionTurn` / `runResponsesTurn`
+    // baseado em `apiMode`. Adapter já lida com `max_completion_tokens`
+    // (gpt-5*) vs `max_tokens` (gpt-4o*) e `max_output_tokens` (responses).
+    const adapterInput: AgentLlmInput = {
+      model,
+      // Extrai system da primeira msg (sempre presente — buildada acima).
+      // Adapter re-prepende como mensagem system OU usa como `instructions`
+      // (Responses) — caller não precisa duplicar.
+      system: extractSystem(messages),
+      messages: messages.filter((m) => m.role !== "system"),
+      tools: adapterTools,
+      maxOutputTokens: 4096,
+      // Responses ping-pong: passa items pendentes (function_call retornados +
+      // function_call_output gerados nos handlers da iteração anterior).
+      ...(apiMode === "responses" && responsesPendingItems.length > 0
+        ? { responsesInputItems: [...responsesPendingItems] }
+        : {}),
+    };
+    let llmOutput: AgentLlmOutput;
     try {
-      // PR-2 Auditoria (mai/2026): cap por chamada LLM. Sem cap, modelos
-      // de reasoning (gpt-5*) consomem ate a janela inteira por turn
-      // (rodada 6 #4). Default 4096 cobre reasoning + output medio sem
-      // truncar respostas comuns.
-      //
-      // gpt-5* exige `max_completion_tokens`; gpt-4o* e anteriores ainda
-      // usam `max_tokens` (max_completion_tokens existe mas e ignored).
-      // Detectar por prefixo do modelo.
-      const maxTokensKey: "max_completion_tokens" | "max_tokens" =
-        model.startsWith("gpt-5") ? "max_completion_tokens" : "max_tokens";
-      const maxTokensValue = 4096;
-      completion = await client.chat.completions.create({
-        model,
-        messages,
-        [maxTokensKey]: maxTokensValue,
-        ...(openaiTools.length > 0 ? { tools: openaiTools, tool_choice: "auto" as const } : {}),
-      });
+      llmOutput =
+        apiMode === "responses"
+          ? await runResponsesTurn(client, adapterInput)
+          : await runChatCompletionTurn(client, adapterInput);
     } catch (err) {
       result.fatal_error = `llm_call_failed:${
         err instanceof Error ? err.message : String(err)
@@ -503,21 +544,23 @@ async function executeAIAgentNode(
         kind: "guardrail",
         payload: {
           reason: "llm_call_failed",
+          provider_mode: apiMode,
           message: err instanceof Error ? err.message : String(err),
         },
       });
       return null;
     }
     const llmDuration = Date.now() - llmStart;
-    const tokensIn = completion.usage?.prompt_tokens ?? 0;
-    const tokensOut = completion.usage?.completion_tokens ?? 0;
+    const tokensIn = llmOutput.usage.inputTokens;
+    const tokensOut = llmOutput.usage.outputTokens;
     result.tokens_input += tokensIn;
     result.tokens_output += tokensOut;
     ctx.provider.emit({
       kind: "llm_call",
       payload: {
         iteration: iter,
-        finish_reason: completion.choices[0]?.finish_reason ?? "unknown",
+        finish_reason: llmOutput.finishKind,
+        provider_mode: apiMode,
         duration_ms: llmDuration,
         tokens_in: tokensIn,
         tokens_out: tokensOut,
@@ -566,15 +609,13 @@ async function executeAIAgentNode(
       }
     }
 
-    const choice = completion.choices[0];
-    if (!choice) {
-      result.fatal_error = "llm_returned_no_choices";
-      return null;
-    }
+    // PR 4: shape normalizado pelo adapter — `llmOutput.finishKind`
+    // ("final"|"tool_calls"|"incomplete"), `llmOutput.text`, `llmOutput.toolCalls`.
+    // `responsesInputItems` populated apenas em modo responses (function_call items).
 
     // Caso 1: LLM emitiu texto final (sem tool call). Send + segue edge default.
-    if (choice.finish_reason !== "tool_calls") {
-      const rawText = (choice.message.content ?? "").trim();
+    if (llmOutput.finishKind !== "tool_calls") {
+      const rawText = (llmOutput.text ?? "").trim();
       // Bug D fix (mai/2026): strippa tool calls escritas como texto
       // (emit_event(...), add_tag(...), etc) antes de enviar pro user.
       // Loga em guardrail event pra medir frequência da alucinação.
@@ -600,38 +641,57 @@ async function executeAIAgentNode(
       break;
     }
 
-    // Caso 2: LLM pediu tool calls. Anexa assistant msg + executa cada call.
-    messages.push({
-      role: "assistant",
-      content: choice.message.content ?? null,
-      tool_calls: choice.message.tool_calls,
-    } as OpenAI.Chat.ChatCompletionMessageParam);
+    // Caso 2: LLM pediu tool calls.
+    // - Mode "chat": espelha histórico em `messages[]` (role=assistant + role=tool)
+    //   pra próxima iter via Chat Completions API.
+    // - Mode "responses": acumula `function_call` items retornados (em
+    //   `llmOutput.responsesInputItems`) + cria `function_call_output` por
+    //   handler em `responsesPendingItems` pra ping-pong stateless (PR #380).
+    if (apiMode === "chat") {
+      // Reconstrói as tool_calls no formato Chat Completions a partir do output normalizado.
+      messages.push({
+        role: "assistant",
+        content: llmOutput.text || null,
+        tool_calls: llmOutput.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: { name: tc.name, arguments: tc.argumentsJson },
+        })),
+      } as OpenAI.Chat.ChatCompletionMessageParam);
+    } else {
+      // Mode responses: acumula function_call items (vindos do output).
+      responsesPendingItems.push(...llmOutput.responsesInputItems);
+    }
 
-    for (const call of choice.message.tool_calls ?? []) {
-      if (call.type !== "function") continue;
-      const toolRow = toolByName.get(call.function.name);
+    for (const call of llmOutput.toolCalls) {
+      const toolRow = toolByName.get(call.name);
       const callId = call.id;
       let toolArgs: Record<string, unknown> = {};
       try {
-        toolArgs = call.function.arguments
-          ? (JSON.parse(call.function.arguments) as Record<string, unknown>)
+        toolArgs = call.argumentsJson
+          ? (JSON.parse(call.argumentsJson) as Record<string, unknown>)
           : {};
       } catch (parseErr) {
+        const errOutput = { success: false, error: "invalid_json_arguments" };
         ctx.provider.emit({
           kind: "tool_result",
           payload: {
             tool_call_id: callId,
-            tool_name: call.function.name,
+            tool_name: call.name,
             success: false,
             error: "invalid_json_arguments",
             details: parseErr instanceof Error ? parseErr.message : String(parseErr),
           },
         });
-        messages.push({
-          role: "tool",
-          tool_call_id: callId,
-          content: JSON.stringify({ success: false, error: "invalid_json_arguments" }),
-        });
+        if (apiMode === "chat") {
+          messages.push({
+            role: "tool",
+            tool_call_id: callId,
+            content: JSON.stringify(errOutput),
+          });
+        } else {
+          responsesPendingItems.push(toResponsesFunctionCallOutput(callId, errOutput));
+        }
         result.tool_calls_failed++;
         continue;
       }
@@ -640,29 +700,31 @@ async function executeAIAgentNode(
         kind: "tool_call",
         payload: {
           tool_call_id: callId,
-          tool_name: call.function.name,
+          tool_name: call.name,
           input: toolArgs,
         },
       });
 
       if (!toolRow) {
+        const errOutput = { success: false, error: "tool_not_in_allowlist" };
         ctx.provider.emit({
           kind: "tool_result",
           payload: {
             tool_call_id: callId,
-            tool_name: call.function.name,
+            tool_name: call.name,
             success: false,
             error: "tool_not_in_allowlist",
           },
         });
-        messages.push({
-          role: "tool",
-          tool_call_id: callId,
-          content: JSON.stringify({
-            success: false,
-            error: "tool_not_in_allowlist",
-          }),
-        });
+        if (apiMode === "chat") {
+          messages.push({
+            role: "tool",
+            tool_call_id: callId,
+            content: JSON.stringify(errOutput),
+          });
+        } else {
+          responsesPendingItems.push(toResponsesFunctionCallOutput(callId, errOutput));
+        }
         result.tool_calls_failed++;
         continue;
       }
@@ -670,30 +732,34 @@ async function executeAIAgentNode(
       const handlerResult = await dispatchToolCall(db, ctx, toolRow, toolArgs);
       const resultPayload = {
         tool_call_id: callId,
-        tool_name: call.function.name,
+        tool_name: call.name,
         success: handlerResult.success,
         output: handlerResult.output,
         error: handlerResult.error,
         side_effects: handlerResult.side_effects,
       };
       ctx.provider.emit({ kind: "tool_result", payload: resultPayload });
-      messages.push({
-        role: "tool",
-        tool_call_id: callId,
-        content: JSON.stringify({
-          success: handlerResult.success,
-          output: handlerResult.output,
-          error: handlerResult.error,
-        }),
-      });
+      const toolReplyContent = {
+        success: handlerResult.success,
+        output: handlerResult.output,
+        error: handlerResult.error,
+      };
+      if (apiMode === "chat") {
+        messages.push({
+          role: "tool",
+          tool_call_id: callId,
+          content: JSON.stringify(toolReplyContent),
+        });
+      } else {
+        responsesPendingItems.push(toResponsesFunctionCallOutput(callId, toolReplyContent));
+      }
 
       if (handlerResult.success) {
         result.tool_calls_succeeded++;
-        lastSuccessfulToolName = call.function.name;
+        lastSuccessfulToolName = call.name;
         // PR-FLOW-PIVOT PR 7 (mai/2026): se foi emit_event, captura o
-        // handle_name pra sobrescrever a edge a seguir. Output do handler
-        // tem o handle_name normalizado (vide handlers/emit-event.ts).
-        if (call.function.name === "emit_event") {
+        // handle_name pra sobrescrever a edge a seguir.
+        if (call.name === "emit_event") {
           const emittedHandle = (handlerResult.output as { handle_name?: string })
             ?.handle_name;
           if (typeof emittedHandle === "string" && emittedHandle.length > 0) {
@@ -1160,4 +1226,17 @@ async function executeConditionNode(
     return edges[0].target;
   }
   return null;
+}
+
+// PR 4 do plano docs/ai-agent/11-openai-responses-migration.md:
+// extrai o conteudo da primeira mensagem role="system" pra passar
+// ao adapter como campo proprio (`AgentLlmInput.system`). O adapter
+// re-injeta como system msg (Chat) ou `instructions` (Responses).
+// Quando não há mensagem system, retorna string vazia — adapter omite.
+function extractSystem(
+  messages: OpenAI.Chat.ChatCompletionMessageParam[],
+): string {
+  const sys = messages.find((m) => m.role === "system");
+  if (!sys) return "";
+  return typeof sys.content === "string" ? sys.content : "";
 }

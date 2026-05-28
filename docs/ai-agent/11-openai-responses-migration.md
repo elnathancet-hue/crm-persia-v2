@@ -296,24 +296,39 @@ opcionais que precisariam virar nullable/required antes de habilitar strict mode
 
 ### PR 4 — Runner com feature flag
 
-Alterar `executeAIAgentNode` para chamar o adaptador:
+**Status:** implementado (pós PR 4' de strict schemas).
+Wire em `apps/crm/src/lib/ai-agent/flow/runner.ts`:
 
-```ts
-const apiMode = process.env.AI_AGENT_OPENAI_API === "responses"
-  ? "responses"
-  : "chat";
-```
+- Helper `getOpenAiApiMode()` em
+  `apps/crm/src/lib/ai-agent/flow/openai-api-mode.ts` lê
+  `process.env.AI_AGENT_OPENAI_API`. Aceita `"chat" | "responses"`,
+  qualquer outro valor cai pra `"chat"` (defensive).
+- Default `"chat"` — sem mudança de comportamento em prod sem env var.
+- LLM call no loop ping-pong delega pra
+  `runChatCompletionTurn()` / `runResponsesTurn()` baseado no modo.
+- Em modo `"responses"`, ping-pong stateless reusa
+  `responsesPendingItems` (function_call retornados + function_call_output
+  injetados nos handlers da iteração anterior) — não usa
+  `previous_response_id` ainda.
+- Telemetria: evento `llm_call` no provider stub ganha
+  `payload.provider_mode` (`"chat" | "responses"`).
 
-Default: `chat`.
-
-Teste obrigatórios:
+Testes obrigatórios (todos passam):
 
 - todos testes atuais do runner continuam passando em `chat`;
-- novos testes cobrem `responses`;
-- `emit_event` continua escolhendo edge nomeada;
-- tool nativa continua retornando tool output;
-- custo/tokens continuam preenchidos;
-- send-guard não muda.
+- novos testes cobrem `responses` (mock estático com
+  `responses.create` no `vi.mock("openai", ...)`);
+- env desconhecida cai pro default `chat` (defensive);
+- `emit_event` continua escolhendo edge nomeada — código não toca nesse
+  path;
+- tool nativa continua retornando tool output via `dispatchToolCall`;
+- custo/tokens continuam preenchidos: agora vem do shape normalizado
+  `llmOutput.usage.inputTokens/outputTokens` (mapeado do
+  `prompt_tokens/completion_tokens` em Chat e do
+  `input_tokens/output_tokens` em Responses);
+- send-guard não muda — `assertCanAct()` continua sendo chamado antes
+  do loop;
+- cost ceiling intra-loop preservado.
 
 ### PR 5 — Opt-in em ambiente controlado
 
