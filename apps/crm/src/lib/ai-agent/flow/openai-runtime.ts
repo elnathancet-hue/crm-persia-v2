@@ -26,6 +26,7 @@ export interface AgentLlmInput {
   model: string;
   system: string;
   messages: ChatCompletionMessageParam[];
+  responsesInputItems?: ResponseInputItem[];
   tools: AgentLlmTool[];
   maxOutputTokens: number;
 }
@@ -40,6 +41,7 @@ export interface AgentLlmToolCall {
 export interface AgentLlmOutput {
   text: string;
   toolCalls: AgentLlmToolCall[];
+  responsesInputItems: ResponseInputItem[];
   usage: {
     inputTokens: number;
     outputTokens: number;
@@ -96,7 +98,10 @@ export async function runResponsesTurn(
   const response = await client.responses.create({
     model: input.model,
     instructions: input.system,
-    input: toResponsesInput(input.messages),
+    input: [
+      ...toResponsesInput(input.messages),
+      ...(input.responsesInputItems ?? []),
+    ],
     max_output_tokens: input.maxOutputTokens,
     ...(input.tools.length > 0
       ? {
@@ -135,6 +140,7 @@ function normalizeChatCompletion(completion: ChatCompletion): AgentLlmOutput {
   return {
     text: typeof message?.content === "string" ? message.content : "",
     toolCalls,
+    responsesInputItems: [],
     usage: {
       inputTokens: completion.usage?.prompt_tokens ?? 0,
       outputTokens: completion.usage?.completion_tokens ?? 0,
@@ -151,8 +157,8 @@ function normalizeChatCompletion(completion: ChatCompletion): AgentLlmOutput {
 }
 
 function normalizeResponse(response: Response): AgentLlmOutput {
-  const toolCalls = response.output
-    .filter(isResponseFunctionToolCall)
+  const responseFunctionCalls = response.output.filter(isResponseFunctionToolCall);
+  const toolCalls = responseFunctionCalls
     .map((call) => ({
       id: call.call_id,
       responseItemId: call.id,
@@ -163,6 +169,7 @@ function normalizeResponse(response: Response): AgentLlmOutput {
   return {
     text: response.output_text ?? "",
     toolCalls,
+    responsesInputItems: responseFunctionCalls,
     usage: {
       inputTokens: response.usage?.input_tokens ?? 0,
       outputTokens: response.usage?.output_tokens ?? 0,

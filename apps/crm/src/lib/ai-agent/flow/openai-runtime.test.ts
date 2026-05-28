@@ -42,6 +42,7 @@ describe("openai-runtime adapter", () => {
     expect(output).toEqual({
       text: "Olá!",
       toolCalls: [],
+      responsesInputItems: [],
       usage: { inputTokens: 12, outputTokens: 4 },
       finishKind: "final",
       rawProvider: "chat_completions",
@@ -152,6 +153,7 @@ describe("openai-runtime adapter", () => {
     expect(output).toEqual({
       text: "Olá pelo Responses",
       toolCalls: [],
+      responsesInputItems: [],
       usage: { inputTokens: 15, outputTokens: 5 },
       finishKind: "final",
       rawProvider: "responses",
@@ -222,6 +224,70 @@ describe("openai-runtime adapter", () => {
         argumentsJson: "{\"tag_name\":\"quente\"}",
       },
     ]);
+    expect(output.responsesInputItems).toEqual([
+      {
+        type: "function_call",
+        id: "fc_item_1",
+        call_id: "call_a",
+        name: "emit_event",
+        arguments: "{\"event_name\":\"qualified\"}",
+        status: "completed",
+      },
+      {
+        type: "function_call",
+        id: "fc_item_2",
+        call_id: "call_b",
+        name: "add_tag",
+        arguments: "{\"tag_name\":\"quente\"}",
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("envia function_call e function_call_output numa rodada Responses seguinte", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: "Pronto, marquei como qualificado.",
+      output: [],
+      status: "completed",
+      incomplete_details: null,
+      usage: { input_tokens: 40, output_tokens: 8, total_tokens: 48 },
+    });
+
+    await runResponsesTurn(
+      { responses: { create } },
+      {
+        ...baseInput,
+        responsesInputItems: [
+          {
+            type: "function_call",
+            call_id: "call_a",
+            name: "emit_event",
+            arguments: "{\"event_name\":\"qualified\"}",
+            status: "completed",
+          },
+          toResponsesFunctionCallOutput("call_a", {
+            success: true,
+            output: { handle_name: "qualified" },
+          }),
+        ],
+      },
+    );
+
+    expect(create.mock.calls[0]?.[0].input).toEqual([
+      { role: "user", content: "oi", type: "message" },
+      {
+        type: "function_call",
+        call_id: "call_a",
+        name: "emit_event",
+        arguments: "{\"event_name\":\"qualified\"}",
+        status: "completed",
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_a",
+        output: "{\"success\":true,\"output\":{\"handle_name\":\"qualified\"}}",
+      },
+    ]);
   });
 
   it("tolera usage ausente e marca output incompleto", async () => {
@@ -240,6 +306,7 @@ describe("openai-runtime adapter", () => {
     expect(output).toEqual({
       text: "parcial",
       toolCalls: [],
+      responsesInputItems: [],
       usage: { inputTokens: 0, outputTokens: 0 },
       finishKind: "incomplete",
       rawProvider: "responses",
