@@ -21,6 +21,7 @@ import type {
   FlowConditionNode,
   FlowEntryNode,
   FlowNode,
+  NativeHandlerName,
   ToolExecutionMode,
 } from "@persia/shared/ai-agent";
 import {
@@ -28,6 +29,7 @@ import {
   findEntryNode,
   findOutgoingEdges,
   getNodeById,
+  getPreset,
 } from "@persia/shared/ai-agent";
 import { assertWithinCostLimits, type CostLimitCache } from "../cost-limits";
 import type { AgentDb } from "../db";
@@ -456,12 +458,32 @@ async function executeAIAgentNode(
       : [{ role: "user" as const, content: ctx.inboundMessage.text }]),
   ];
 
+  // Fix (mai/2026, pós smoke test PR 5): pra tools nativas o `input_schema`
+  // VEM do preset shared, não do `agent_tools.input_schema` persistido no
+  // DB. Motivo: agent_tools rows criados ANTES do PR #381 têm schemas
+  // antigos (sem `additionalProperties: false`, sem `required` completo).
+  // Em Responses strict mode, OpenAI rejeita esses schemas com 400. Source
+  // of truth pra handlers nativos é sempre o preset compartilhado.
+  //
+  // Custom webhooks (n8n_webhook) e MCP continuam usando o input_schema
+  // do DB porque NÃO há preset shared correspondente — o admin configurou
+  // o schema na criação do tool.
+  const resolveInputSchema = (t: LoadedToolRow): Record<string, unknown> => {
+    if (t.execution_mode === "native" && t.native_handler) {
+      const preset = getPreset(t.native_handler as NativeHandlerName);
+      if (preset) {
+        return preset.input_schema as unknown as Record<string, unknown>;
+      }
+    }
+    return t.input_schema as Record<string, unknown>;
+  };
+
   const openaiTools: OpenAI.Chat.ChatCompletionTool[] = tools.map((t) => ({
     type: "function",
     function: {
       name: t.name,
       description: t.description,
-      parameters: t.input_schema as Record<string, unknown>,
+      parameters: resolveInputSchema(t),
     },
   }));
 
@@ -474,7 +496,7 @@ async function executeAIAgentNode(
   const adapterTools: AgentLlmTool[] = tools.map((t) => ({
     name: t.name,
     description: t.description ?? null,
-    parameters: t.input_schema as Record<string, unknown>,
+    parameters: resolveInputSchema(t),
   }));
 
   // Mapa de tool name → row pra resolver native_handler depois.
