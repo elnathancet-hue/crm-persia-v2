@@ -259,6 +259,9 @@ Checklist:
 ### PR 2 — Adaptador isolado
 
 Status: implementado em `apps/crm/src/lib/ai-agent/flow/openai-runtime.ts`.
+Atualização pós-auditoria: o adaptador também preserva itens `function_call`
+retornados pela Responses API e aceita `function_call_output` em rodadas seguintes,
+permitindo o ping-pong stateless sem `previous_response_id`.
 
 Adicionar `openai-runtime.ts` com duas implementações:
 
