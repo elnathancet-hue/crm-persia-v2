@@ -57,6 +57,16 @@ import { FollowupTab } from "./FollowupTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
 import { useAgentActions } from "../context";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
 
 // PR-AI-AGENT-SIDEBAR (mai/2026): editor migrado de 9 tabs horizontais
 // underline (CrmTabs-style) pra sidebar vertical agrupada. Razao:
@@ -332,20 +342,87 @@ export function AgentEditor({
     persistAgent({ name: trimmed }, "Nome atualizado");
   };
 
+  // Save flow fix #3 (mai/2026): valida dirty antes de salvar status
+  // isolado. Antes, cliente editava prompt + trocava status -> status
+  // salvava direto + indicator dizia "Tudo salvo" enquanto prompt
+  // continuava dirty -> cliente saia e perdia tudo.
+  const [pendingStatusChange, setPendingStatusChange] =
+    React.useState<AgentStatus | null>(null);
+
   const handleStatusChange = (status: AgentStatus) => {
+    if (rulesSaveMeta.dirty && activeSection === "rules") {
+      setPendingStatusChange(status);
+      return;
+    }
     persistAgent({ status }, `Status: ${statusLabel(status)}`);
   };
+
+  const handleSaveAndChangeStatus = React.useCallback(() => {
+    if (!pendingStatusChange) return;
+    // 1. Salva mudancas atuais.
+    rulesSaveRef.current?.();
+    // 2. Aplica novo status na sequencia. persistAgent serializa via
+    //    startTransition (queue), entao patch do status entra atras do
+    //    save anterior — server processa em ordem.
+    persistAgent(
+      { status: pendingStatusChange },
+      `Status: ${statusLabel(pendingStatusChange)}`,
+    );
+    setPendingStatusChange(null);
+  }, [pendingStatusChange, persistAgent]);
+
+  const handleDiscardAndChangeStatus = React.useCallback(() => {
+    if (!pendingStatusChange) return;
+    // Cliente escolheu descartar — aplica status sem salvar mudancas
+    // locais. State local sera ressincronizado quando o agent updated
+    // chegar do server (useEffect do RulesTab).
+    persistAgent(
+      { status: pendingStatusChange },
+      `Status: ${statusLabel(pendingStatusChange)}`,
+    );
+    setPendingStatusChange(null);
+  }, [pendingStatusChange, persistAgent]);
 
   const sidebarGroups = React.useMemo(
     () => buildSidebarGroups({ stagesCount: stages.length }),
     [stages.length],
   );
 
-  const handleSelect = React.useCallback((id: string) => {
-    setActiveSection(id as AgentSectionId);
-    setMobileNavOpen(false);
-  }, []);
+  // Save flow fix #2 (mai/2026): bloqueia troca de section quando ha
+  // mudancas nao salvas. Sem isso, cliente trocava aba e perdia tudo
+  // silenciosamente (UnsavedChangesGuard so cobre link/reload, nao
+  // navegacao de section dentro do mesmo editor).
+  const [pendingSectionSwitch, setPendingSectionSwitch] =
+    React.useState<AgentSectionId | null>(null);
 
+  const handleSelect = React.useCallback(
+    (id: string) => {
+      const next = id as AgentSectionId;
+      if (next === activeSection) return;
+      if (rulesSaveMeta.dirty && activeSection === "rules") {
+        // Cliente tem mudancas nao salvas no Comportamento. Pede
+        // confirmacao antes de trocar de section.
+        setPendingSectionSwitch(next);
+        return;
+      }
+      setActiveSection(next);
+      setMobileNavOpen(false);
+    },
+    [activeSection, rulesSaveMeta.dirty],
+  );
+
+  const discardAndSwitch = React.useCallback(() => {
+    if (pendingSectionSwitch) {
+      setActiveSection(pendingSectionSwitch);
+      setMobileNavOpen(false);
+    }
+    setPendingSectionSwitch(null);
+  }, [pendingSectionSwitch]);
+
+  // Save flow fix #2 (mai/2026): botao Salvar agora vive num footer
+  // sticky GLOBAL — visivel em qualquer section, nao some quando o
+  // cliente troca de aba. Mantem inline tambem no header (legado) pra
+  // compat com testes.
   const rulesSaveAction =
     activeSection === "rules" ? (
       <div className="flex items-center gap-2">
@@ -441,6 +518,7 @@ export function AgentEditor({
                   lastSavedAt={saveStatus.lastSavedAt}
                   errorMessage={saveStatus.errorMessage}
                   onRetry={handleRetrySave}
+                  isDirty={rulesSaveMeta.dirty}
                 />
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -555,6 +633,93 @@ export function AgentEditor({
         open={testerOpen}
         onOpenChange={setTesterOpen}
       />
+
+      {/* Save flow fix #2 (mai/2026): footer sticky GLOBAL com botao
+          Salvar. Aparece em qualquer section quando ha mudancas nao
+          salvas no Comportamento. Fica acima do FAB (z-30 vs z-40),
+          mas alinhado a esquerda pra nao competir visualmente. */}
+      {activeSection === "rules" && rulesSaveMeta.dirty && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-warning-ring/40 bg-warning-soft/95 backdrop-blur-sm">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="size-2 rounded-full bg-warning animate-pulse" />
+              <span className="font-medium text-warning-foreground">
+                Você tem alterações não salvas
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleRulesSaveClick}
+              disabled={rulesSaveMeta.isPending}
+            >
+              <Save className="size-3.5" />
+              {rulesSaveMeta.isPending ? "Salvando..." : "Salvar agora"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Save flow fix #2 (mai/2026): bloqueio de troca de section
+          quando ha mudancas nao salvas. */}
+      <AlertDialog
+        open={pendingSectionSwitch !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingSectionSwitch(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sair sem salvar?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você tem alterações no Comportamento do agente que ainda
+              não foram salvas. Se trocar de seção agora, essas mudanças
+              serão descartadas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+            <AlertDialogAction onClick={discardAndSwitch}>
+              Descartar e trocar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Save flow fix #3 (mai/2026): valida dirty antes de salvar
+          status isolado. Cliente escolhe salvar tudo OU descartar
+          mudancas locais. */}
+      <AlertDialog
+        open={pendingStatusChange !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingStatusChange(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Salvar antes de mudar o status?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você tem alterações no Comportamento do agente que ainda não
+              foram salvas. Você pode salvar tudo junto OU descartar
+              as mudanças e aplicar apenas o novo status.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDiscardAndChangeStatus}
+            >
+              Descartar e mudar status
+            </Button>
+            <AlertDialogAction onClick={handleSaveAndChangeStatus}>
+              Salvar tudo e mudar status
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </FlowTesterProvider>
   );

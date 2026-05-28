@@ -27,6 +27,12 @@ interface Props {
   /** Botão "Tentar de novo" renderizado quando status=error.
    * Quando omitido, só mostra a mensagem (sem retry). */
   onRetry?: () => void;
+  /** Save flow fix #4 (mai/2026): bandeira de dirty derivada do
+   * RulesTab. Quando true, indicator mostra "Alterações não salvas"
+   * em vez de "Salvo agora" — mantendo header e footer consistentes.
+   * Sem isso, status change isolado deixava header em "saved" enquanto
+   * o prompt continuava com mudanças pendentes (UX confusa). */
+  isDirty?: boolean;
 }
 
 export function SaveStatusIndicator({
@@ -34,6 +40,7 @@ export function SaveStatusIndicator({
   lastSavedAt,
   errorMessage,
   onRetry,
+  isDirty,
 }: Props) {
   // Force re-render a cada 30s quando em estado "saved" pra atualizar
   // o "há Xm". Sem isso, o texto fica congelado em "agora" pra sempre.
@@ -43,6 +50,17 @@ export function SaveStatusIndicator({
     const interval = setInterval(forceRerender, 30000);
     return () => clearInterval(interval);
   }, [status]);
+
+  // Save flow fix #4: dirty override no idle/saved — server respondeu
+  // mas o usuário tem mudanças locais pendentes em outro campo.
+  if (isDirty && (status === "idle" || status === "saved")) {
+    return (
+      <div className="inline-flex items-center gap-1.5 text-xs font-medium text-warning-foreground">
+        <span className="size-2 rounded-full bg-warning animate-pulse" />
+        <span>Alterações não salvas</span>
+      </div>
+    );
+  }
 
   if (status === "idle") return null;
 
