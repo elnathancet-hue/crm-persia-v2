@@ -467,13 +467,14 @@ async function executeAIAgentNode(
 
   // PR 4 do plano docs/ai-agent/11-openai-responses-migration.md (mai/2026):
   // tools no shape neutro pro adapter — vale pra chat e responses.
+  //
+  // PR 5 prep (mai/2026): omitimos `strict` pra que o adapter aplique seu
+  // default (`true` no caminho Responses, after PR #381 deixar schemas
+  // strict-ready). Chat Completions ignora o flag.
   const adapterTools: AgentLlmTool[] = tools.map((t) => ({
     name: t.name,
     description: t.description ?? null,
     parameters: t.input_schema as Record<string, unknown>,
-    // strict mode é opt-in pelo caller (PR 5/6). Hoje deixamos false
-    // pra não mudar comportamento no flip da feature flag.
-    strict: false,
   }));
 
   // Mapa de tool name → row pra resolver native_handler depois.

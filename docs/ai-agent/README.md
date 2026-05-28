@@ -22,6 +22,7 @@
 | [09-observability.md](./09-observability.md) | Todos os log codes (`incoming_pipeline_*`, `ai_agent_*`, etc), SQL pra dashboards, métricas chave. | Setup de monitoring ou triage em prod. |
 | [10-runbooks.md](./10-runbooks.md) | "Cliente reclama de X → diagnóstico Y". Cenários reais já vistos (alucinação de agendamento, IA travada em etapa, factura OpenAI explodiu). | **Quando o cliente liga.** |
 | [11-openai-responses-migration.md](./11-openai-responses-migration.md) | Auditoria segura para migrar do Chat Completions para Responses API com adaptador, feature flag e testes. | Antes de qualquer PR que troque chamadas OpenAI no runner. |
+| [12-responses-smoke-test.md](./12-responses-smoke-test.md) | Runbook dos 7 cenários pra validar `AI_AGENT_OPENAI_API=responses` em staging antes de virar default. | Antes de rodar o opt-in em staging (PR 5). |
 | [INVARIANTS.md](./INVARIANTS.md) | Spec read-only pra Codex. Shapes, contratos, o que NÃO mexer. Padrões obrigatórios. | Codex deve ler ANTES de qualquer edit em `lib/ai-agent/*` ou `packages/shared/src/ai-agent/*`. |
 
 ---

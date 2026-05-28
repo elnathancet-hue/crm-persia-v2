@@ -57,6 +57,7 @@ import { errorMessage, logError } from "@/lib/observability";
 import { assertWithinCostLimits } from "./cost-limits";
 import { asAgentDb, type AgentDb } from "./db";
 import { loadFlowByConfigId } from "./flow/loader";
+import { getOpenAiApiMode } from "./flow/openai-api-mode";
 import { createRealtimeProvider } from "./flow/realtime-provider";
 import { runFlow } from "./flow/runner";
 import type { FlowRunContext } from "./flow/types";
@@ -1143,6 +1144,11 @@ export async function executeDebouncedBatch(input: {
 
     // 3. Insere agent_runs row (status='running'). Audit minimal — PR 6
     // adiciona tokens/cost.
+    //
+    // PR 5 prep do plano docs/ai-agent/11-openai-responses-migration.md
+    // (mai/2026): persiste o `provider_mode` snapshot via getOpenAiApiMode
+    // pra permitir comparar runs chat vs responses no DB (migration 074).
+    const apiMode = getOpenAiApiMode();
     const { data: runRow, error: runErr } = await db
       .from("agent_runs")
       .insert({
@@ -1151,6 +1157,7 @@ export async function executeDebouncedBatch(input: {
         inbound_message_id: batch.latest_inbound_message_id,
         status: "running",
         model: agentConfig.model,
+        provider_mode: apiMode,
         tokens_input: 0,
         tokens_output: 0,
         cost_usd_cents: 0,

@@ -196,12 +196,19 @@ function toChatCompletionTool(tool: AgentLlmTool): ChatCompletionTool {
 }
 
 function toResponsesFunctionTool(tool: AgentLlmTool): FunctionTool {
+  // PR 5 prep do plano docs/ai-agent/11-openai-responses-migration.md
+  // (mai/2026): strict=true por default no caminho Responses.
+  // Habilitado em mai/2026 após PR #381 deixar todos os 20 presets nativos
+  // strict-ready (additionalProperties: false + required completo + nullable
+  // explícito). Caller pode ainda forçar `strict: false` setando explicitamente
+  // — primeira ocorrência de `false` vence.
+  const explicitStrict = typeof tool.strict === "boolean" ? tool.strict : null;
   return {
     type: "function",
     name: tool.name,
     description: tool.description ?? undefined,
     parameters: rewriteNullableForResponses(tool.parameters ?? {}),
-    strict: tool.strict ?? false,
+    strict: explicitStrict ?? true,
   };
 }
 
