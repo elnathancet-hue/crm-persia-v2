@@ -23,6 +23,10 @@ import { shouldTriggerFlowFromInbound } from "@persia/shared/ai-agent";
 vi.mock("server-only", () => ({}));
 
 const openAiCreateMock = vi.hoisted(() => vi.fn());
+// PR 4 do plano docs/ai-agent/11-openai-responses-migration.md (mai/2026):
+// Adapter pode rotear pra `responses.create` quando AI_AGENT_OPENAI_API=responses.
+// Mock estatico expoe ambos pra cobrir cada modo sem doMock dinamico.
+const openAiResponsesCreateMock = vi.hoisted(() => vi.fn());
 
 vi.mock("openai", () => ({
   default: vi.fn(() => ({
@@ -30,6 +34,9 @@ vi.mock("openai", () => ({
       completions: {
         create: openAiCreateMock,
       },
+    },
+    responses: {
+      create: openAiResponsesCreateMock,
     },
   })),
 }));
@@ -96,6 +103,8 @@ const dbStub = {
 describe("flow-runner", () => {
   beforeEach(() => {
     openAiCreateMock.mockReset();
+    openAiResponsesCreateMock.mockReset();
+    delete process.env.AI_AGENT_OPENAI_API;
     process.env.OPENAI_API_KEY = "test-key";
   });
 
@@ -971,5 +980,114 @@ describe("flow-runner", () => {
       "entry-1",
       "action-1",
     ]);
+  });
+
+  // ============================================================================
+  // PR 4 do docs/ai-agent/11-openai-responses-migration.md (mai/2026)
+  // ============================================================================
+  describe("PR 4 — feature flag AI_AGENT_OPENAI_API", () => {
+    const dbForAi = {
+      from: (table: string) => {
+        const chain: Record<string, unknown> = {};
+        ["select", "eq", "neq", "in", "order", "limit", "is", "lte", "gte"].forEach((m) => {
+          chain[m] = () => chain;
+        });
+        chain.maybeSingle = () => {
+          if (table === "agent_configs") {
+            return Promise.resolve({
+              data: { model: "gpt-5-mini", system_prompt: "Voce e um agente." },
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        chain.single = () => Promise.resolve({ data: null, error: null });
+        chain.then = (resolve: (v: unknown) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve);
+        return chain;
+      },
+    } as never;
+
+    function makeAiFlow() {
+      return makeLoadedFlow(
+        makeFlow({
+          nodes: [
+            {
+              id: "entry-1",
+              type: "entry",
+              position: { x: 0, y: 0 },
+              data: { label: "Início", trigger: "conversation_started" },
+            },
+            {
+              id: "ai-1",
+              type: "ai_agent",
+              position: { x: 200, y: 0 },
+              data: { label: "IA", system_prompt: "", instructions: [] },
+            },
+          ],
+          edges: [{ id: "e1", source: "entry-1", target: "ai-1", sourceHandle: "default" }],
+        }),
+      );
+    }
+
+    it("default (sem env) usa Chat Completions e nao toca em responses.create", async () => {
+      openAiCreateMock.mockResolvedValueOnce({
+        choices: [{ message: { content: "ok", role: "assistant" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+
+      const result = await runFlow(dbForAi, makeCtx(makeAiFlow()), null);
+
+      expect(result.fatal_error).toBeUndefined();
+      expect(openAiCreateMock).toHaveBeenCalledTimes(1);
+      expect(openAiResponsesCreateMock).not.toHaveBeenCalled();
+      // Telemetria: provider_mode aparece no evento llm_call
+      const llmEvents = result.events.filter((e) => e.kind === "llm_call");
+      const callEvent = llmEvents.find(
+        (e) => (e.payload as { provider_mode?: string }).provider_mode === "chat",
+      );
+      expect(callEvent).toBeDefined();
+    });
+
+    it("AI_AGENT_OPENAI_API=responses vai pra responses.create + emite provider_mode='responses'", async () => {
+      process.env.AI_AGENT_OPENAI_API = "responses";
+
+      openAiResponsesCreateMock.mockResolvedValueOnce({
+        output_text: "ok via responses",
+        output: [],
+        status: "completed",
+        incomplete_details: null,
+        usage: { input_tokens: 12, output_tokens: 4, total_tokens: 16 },
+      });
+
+      const result = await runFlow(dbForAi, makeCtx(makeAiFlow()), null);
+
+      expect(result.fatal_error).toBeUndefined();
+      expect(openAiResponsesCreateMock).toHaveBeenCalledTimes(1);
+      expect(openAiCreateMock).not.toHaveBeenCalled();
+      // Cost real: tokens vem do usage.input_tokens/output_tokens
+      expect(result.tokens_input).toBe(12);
+      expect(result.tokens_output).toBe(4);
+      // Telemetria
+      const llmEvents = result.events.filter((e) => e.kind === "llm_call");
+      const callEvent = llmEvents.find(
+        (e) => (e.payload as { provider_mode?: string }).provider_mode === "responses",
+      );
+      expect(callEvent).toBeDefined();
+    });
+
+    it("env desconhecida cai pro default chat (defensive)", async () => {
+      process.env.AI_AGENT_OPENAI_API = "garbage";
+
+      openAiCreateMock.mockResolvedValueOnce({
+        choices: [{ message: { content: "ok", role: "assistant" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+
+      await runFlow(dbForAi, makeCtx(makeAiFlow()), null);
+
+      expect(openAiCreateMock).toHaveBeenCalledTimes(1);
+      expect(openAiResponsesCreateMock).not.toHaveBeenCalled();
+    });
   });
 });
