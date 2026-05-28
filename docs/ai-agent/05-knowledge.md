@@ -42,7 +42,7 @@ history (~500-1500) — sobra pouco pra knowledge. Por isso threshold conservado
 
 ### `full`
 
-Concatena todos os chunks `completed` do agente.
+Concatena todos os chunks `indexed` do agente.
 
 ```ts
 async function buildFullModeBlock(db, orgId, configId): Promise<string | null> {
@@ -202,7 +202,7 @@ const VOYAGE_MODEL = "voyage-3";  // dim 1024
    `chunker.ts` pra dividir o doc em chunks (~500-800 chars cada).
 4. Pra cada batch (max 128 chunks por call), chama `embedTexts(chunks, "document")`.
 5. INSERT em `agent_knowledge_chunks` com embedding (vector(1024)).
-6. UPDATE `agent_knowledge_sources.indexing_status='completed'`.
+6. UPDATE `agent_knowledge_sources.indexing_status='indexed'`.
 
 Erros: status='failed' + `error_message`. Admin vê na UI e tenta reindexar.
 
@@ -229,7 +229,7 @@ Erros: status='failed' + `error_message`. Admin vê na UI e tenta reindexar.
 
 ### `null` returns (não bloqueia AI)
 
-- Org sem nenhuma source `completed` → `null`. IA roda sem contexto.
+- Org sem nenhuma source `indexed` → `null`. IA roda sem contexto.
 - Modo `rag` + Voyage caiu → `retrieveWithAttempt` retorna `{ success: false }` →
   `null`. IA roda sem contexto.
 - Schema mismatch (RLS, coluna ausente em ambiente desatualizado) → catch + log →

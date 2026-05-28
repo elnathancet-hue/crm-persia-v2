@@ -218,7 +218,7 @@ Voyage AI RAG. Dim 1024. Migration 022.
 | `agent_config_id` | uuid FK | |
 | `type` | text | `"faq" \| "document"`. |
 | `title` | text | |
-| `status` | text | `"pending" \| "indexing" \| "completed" \| "failed"`. Renomeado em migration 022 (`indexing_status`). |
+| `indexing_status` | text | `"pending" \| "processing" \| "indexed" \| "failed"` (migration 022 CHECK). |
 | `embedding_provider` | text | `"voyage"`. |
 | `embedding_model` | text | `"voyage-3"`. |
 | `embedding_dim` | int | 1024. |
