@@ -332,18 +332,33 @@ Testes obrigatórios (todos passam):
 
 ### PR 5 — Opt-in em ambiente controlado
 
-Ativar `AI_AGENT_OPENAI_API=responses` só em ambiente de teste/staging.
+**Status:** infra preparada (mai/2026). Smoke test manual ainda a executar
+em staging real.
 
-Validar manualmente:
+**Infra entregue:**
 
-- conversa simples;
-- conversa com RAG;
-- `emit_event`;
-- `move_pipeline_stage`;
-- `trigger_notification`;
-- erro de tool;
-- handoff humano mid-run;
-- tester live.
+- Migration 074 adiciona `agent_runs.provider_mode` (`chat | responses | NULL`)
+  com CHECK constraint e index parcial pra dashboards comparativos.
+- Runtime persiste `provider_mode` no INSERT inicial do `agent_runs` em
+  `executor.ts` via `getOpenAiApiMode()`.
+- Adapter Responses agora envia `strict: true` por default (apos PR #381
+  deixar todos os 20 presets nativos strict-ready). Caller pode forcar
+  `strict: false` explicito.
+- Runbook detalhado: [12-responses-smoke-test.md](./12-responses-smoke-test.md)
+  cobre os 8 cenarios numerados com curl/SQL prontos pra copy-paste.
+- SQL queries comparativas em [09-observability.md § Comparing chat vs
+  responses](./09-observability.md).
+
+**Como executar:**
+
+1. Aplicar migration 074 (`npx supabase db push`).
+2. Setar `AI_AGENT_OPENAI_API=responses` no EasyPanel **staging**.
+3. Restart do app.
+4. Rodar os 8 cenarios do runbook.
+5. Comparar metricas (custo, latencia, tokens, taxa de sucesso) via SQL do
+   observability.
+
+**Quando todos os 8 cenarios passam → libera PR 6.**
 
 ### PR 6 — Default Responses
 

@@ -170,8 +170,10 @@ Sticky por lead. 1 row por `(org, lead, crm_conversation_id)`.
 | `tokens_input`, `tokens_output` | int | Soma de todas as iterações do loop. |
 | `cost_usd_cents` | int | `calculateCostUsdCents(model, in, out)`. |
 | `is_test` | boolean | `true` pro Tester (PR #257, migration 047). Dashboards filtram. |
-| `started_at`, `finished_at` | timestamp | |
-| `error` | text? | |
+| `provider_mode` | text? | `"chat" \| "responses"` (migration 074). NULL = legacy/desconhecido. Setado em runtime via `getOpenAiApiMode()`. |
+| `created_at` | timestamp | INSERT timestamp. |
+| `duration_ms` | int | Tempo total do run, UPDATE no fim. |
+| `error_msg` | text? | Error fatal do runFlow. |
 
 ### `agent_steps`
 
@@ -395,6 +397,7 @@ MCP servers configurados por org. Migration 062.
 | `071_agent_conv_uniq.sql` | UNIQUE partial em agent_conversations |
 | `072_ai_agent_remove_tag_handler.sql` | CHECK pro remove_tag |
 | `073_drop_tokens_used_total.sql` | Drop column órfão |
+| `074_agent_runs_provider_mode.sql` | `agent_runs.provider_mode` TEXT NULL (chat\|responses) + CHECK + index parcial. PR 5 prep da migração Responses. |
 
 ## RLS (Row-Level Security)
 

@@ -326,6 +326,69 @@ describe("openai-runtime adapter", () => {
     });
   });
 
+  it("aplica strict=true por default no caminho Responses quando caller nao passa strict", async () => {
+    // PR 5 prep do plano docs/ai-agent/11-openai-responses-migration.md
+    // (mai/2026): apos PR #381 deixar schemas strict-ready, flipamos
+    // default. Caller pode forcar strict=false explicito (1a ocorrencia
+    // do flag vence), mas presets nativos passam sem strict e ganham true.
+    const create = vi.fn().mockResolvedValue({
+      output_text: "ok",
+      output: [],
+      status: "completed",
+      incomplete_details: null,
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    });
+
+    await runResponsesTurn(
+      { responses: { create } },
+      {
+        ...baseInput,
+        tools: [
+          {
+            name: "add_tag",
+            parameters: {
+              type: "object",
+              additionalProperties: false,
+              required: ["tag_name"],
+              properties: { tag_name: { type: "string" } },
+            },
+            // sem strict explícito → default true
+          },
+        ],
+      },
+    );
+
+    const sentTools = create.mock.calls[0]?.[0].tools as Array<{ strict: boolean }>;
+    expect(sentTools[0]!.strict).toBe(true);
+  });
+
+  it("caller forcando strict=false sobrepoe o default", async () => {
+    const create = vi.fn().mockResolvedValue({
+      output_text: "ok",
+      output: [],
+      status: "completed",
+      incomplete_details: null,
+      usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+    });
+
+    await runResponsesTurn(
+      { responses: { create } },
+      {
+        ...baseInput,
+        tools: [
+          {
+            name: "legacy_tool",
+            parameters: { type: "object" },
+            strict: false,
+          },
+        ],
+      },
+    );
+
+    const sentTools = create.mock.calls[0]?.[0].tools as Array<{ strict: boolean }>;
+    expect(sentTools[0]!.strict).toBe(false);
+  });
+
   it("converte nullable: true em type tupla ao enviar pra Responses (strict-ready)", async () => {
     // PR pos-#380: presets shared declaram opcionais como { type: "string", nullable: true }.
     // Adapter precisa reescrever pra { type: ["string", "null"] } no caminho

@@ -898,6 +898,7 @@ export type Database = {
           inbound_message_id: string | null
           model: string
           organization_id: string
+          provider_mode: string | null
           status: string
           tokens_input: number
           tokens_output: number
@@ -912,6 +913,7 @@ export type Database = {
           inbound_message_id?: string | null
           model: string
           organization_id: string
+          provider_mode?: string | null
           status?: string
           tokens_input?: number
           tokens_output?: number
@@ -926,6 +928,7 @@ export type Database = {
           inbound_message_id?: string | null
           model?: string
           organization_id?: string
+          provider_mode?: string | null
           status?: string
           tokens_input?: number
           tokens_output?: number

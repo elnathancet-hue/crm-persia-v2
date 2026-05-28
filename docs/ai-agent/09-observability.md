@@ -264,10 +264,93 @@ SELECT
   AVG(cost_usd_cents / 100.0) AS avg_usd_per_run
 FROM agent_runs
 WHERE is_test = FALSE
-  AND started_at > NOW() - INTERVAL '24 hours'
+  AND created_at > NOW() - INTERVAL '24 hours'
 GROUP BY model
 ORDER BY total_usd DESC;
 ```
+
+### Comparing chat vs responses (PR 5 prep, mai/2026)
+
+Após migration 074, `agent_runs.provider_mode` registra qual API OpenAI foi usada.
+Estas queries comparam custo/latência/qualidade entre os dois modos.
+
+**Snapshot 24h dos 2 modos:**
+
+```sql
+SELECT
+  COALESCE(provider_mode, 'unknown') AS mode,
+  COUNT(*) AS runs,
+  COUNT(*) FILTER (WHERE status = 'succeeded') AS succeeded,
+  COUNT(*) FILTER (WHERE status = 'failed') AS failed,
+  AVG(duration_ms)::int AS avg_duration_ms,
+  AVG(tokens_input + tokens_output)::int AS avg_tokens,
+  ROUND(AVG(cost_usd_cents) / 100.0, 4) AS avg_usd,
+  ROUND(SUM(cost_usd_cents) / 100.0, 2) AS total_usd
+FROM agent_runs
+WHERE created_at > NOW() - INTERVAL '24 hours'
+  AND is_test = FALSE
+GROUP BY COALESCE(provider_mode, 'unknown')
+ORDER BY mode;
+```
+
+**Sinais a observar quando flipar pra `responses`:**
+
+| Métrica | Esperado em Responses | Indica problema se |
+| --- | --- | --- |
+| `avg_duration_ms` | ≈ Chat OU menor (Reasoning melhor) | >>> Chat (latência regrediu) |
+| `avg_tokens` | ≈ Chat | >>> Chat (prompt bloated) ou <<< Chat (output truncado) |
+| `succeeded` rate | ≈ Chat | <<< Chat (regressão de strict, validation, etc) |
+| `avg_usd` | ≈ Chat | >>> Chat (model usage inesperado) |
+
+**Tools mais chamadas por modo:**
+
+```sql
+SELECT
+  COALESCE(ar.provider_mode, 'unknown') AS mode,
+  st.native_handler,
+  COUNT(*) AS calls,
+  COUNT(*) FILTER (WHERE (st.output->>'success')::boolean = TRUE) AS succeeded,
+  COUNT(*) FILTER (WHERE (st.output->>'success')::boolean = FALSE) AS failed
+FROM agent_steps st
+JOIN agent_runs ar ON ar.id = st.run_id
+WHERE st.step_type = 'tool'
+  AND ar.created_at > NOW() - INTERVAL '24 hours'
+  AND ar.is_test = FALSE
+GROUP BY COALESCE(ar.provider_mode, 'unknown'), st.native_handler
+ORDER BY calls DESC;
+```
+
+Procure por handler com `failed > 0` em `responses` mas `failed = 0` em `chat` —
+sinal de schema strict rejeitando input que Chat tolerava.
+
+**Distribuição de finish reason / status por modo:**
+
+```sql
+SELECT
+  COALESCE(provider_mode, 'unknown') AS mode,
+  status,
+  COUNT(*) AS runs
+FROM agent_runs
+WHERE created_at > NOW() - INTERVAL '24 hours'
+  AND is_test = FALSE
+GROUP BY COALESCE(provider_mode, 'unknown'), status
+ORDER BY mode, status;
+```
+
+**Cost ceiling hits por modo:**
+
+```sql
+SELECT
+  COALESCE(provider_mode, 'unknown') AS mode,
+  COUNT(*) AS hits
+FROM agent_runs
+WHERE error_msg LIKE 'cost_ceiling:%'
+  AND created_at > NOW() - INTERVAL '7 days'
+GROUP BY COALESCE(provider_mode, 'unknown');
+```
+
+Spike em Responses mas não em Chat = chamadas mais caras (acontece quando Responses
+usa reasoning tokens mais agressivamente em gpt-5*).
 
 ### Hard-cap knowledge fallback (PR #371)
 
