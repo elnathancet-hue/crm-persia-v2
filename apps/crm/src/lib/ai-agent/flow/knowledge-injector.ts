@@ -180,10 +180,10 @@ async function buildFullModeBlock(
   const { data, error } = await db
     .from("agent_knowledge_chunks")
     .select(
-      "content, chunk_index, source:agent_knowledge_sources!inner(title, indexing_status, agent_config_id, organization_id)",
+      "content, chunk_index, source:agent_knowledge_sources!inner(title, indexing_status, config_id, organization_id)",
     )
     .eq("source.organization_id", organizationId)
-    .eq("source.agent_config_id", configId)
+    .eq("source.config_id", configId)
     .eq("source.indexing_status", "indexed")
     .order("source_id", { ascending: true })
     .order("chunk_index", { ascending: true });
@@ -266,7 +266,7 @@ async function computeFullModeSourcesHash(
     .from("agent_knowledge_sources")
     .select("updated_at")
     .eq("organization_id", organizationId)
-    .eq("agent_config_id", configId)
+    .eq("config_id", configId)
     .eq("indexing_status", "indexed");
 
   if (error) {
@@ -353,10 +353,10 @@ async function measureKnowledgeBytes(
   const { data, error } = await db
     .from("agent_knowledge_chunks")
     .select(
-      "content, source:agent_knowledge_sources!inner(agent_config_id, organization_id, indexing_status)",
+      "content, source:agent_knowledge_sources!inner(config_id, organization_id, indexing_status)",
     )
     .eq("source.organization_id", organizationId)
-    .eq("source.agent_config_id", configId)
+    .eq("source.config_id", configId)
     .eq("source.indexing_status", "indexed");
 
   if (error) {
