@@ -27,6 +27,7 @@ import { errorMessage, logError } from "@/lib/observability";
 import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import { phoneBR } from "@persia/shared/validation";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
+import { cacheLeadAvatarFromUrl } from "@/lib/lead-avatar-cache";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
@@ -196,7 +197,12 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       const newLeadId = lead.id;
       void (async () => {
         try {
-          const avatarUrl = await provider.getContactProfilePic(normalizedPhone);
+          const remoteAvatarUrl = await provider.getContactProfilePic(normalizedPhone);
+          const avatarUrl = await cacheLeadAvatarFromUrl({
+            organizationId: orgId,
+            leadId: newLeadId,
+            remoteUrl: remoteAvatarUrl,
+          });
           if (avatarUrl) {
             await supabase
               .from("leads")

@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
+import { cacheLeadAvatarFromUrl } from "@/lib/lead-avatar-cache";
 import {
   bulkMarkLeadsAsLost as bulkMarkLeadsAsLostShared,
   bulkMarkLeadsAsWon as bulkMarkLeadsAsWonShared,
@@ -199,8 +200,14 @@ export async function refreshLeadAvatar(
   const { createProvider } = await import("@/lib/whatsapp/providers");
   const provider = createProvider(connection);
 
-  // getContactProfilePic ja retorna null em falha — nao throw aqui.
-  const avatarUrl = await provider.getContactProfilePic(lead.phone);
+  // getContactProfilePic retorna a URL temporaria do WhatsApp; cacheamos
+  // no Storage antes de salvar para evitar hotlink/expiracao da pps.whatsapp.
+  const remoteAvatarUrl = await provider.getContactProfilePic(lead.phone);
+  const avatarUrl = await cacheLeadAvatarFromUrl({
+    organizationId: orgId,
+    leadId,
+    remoteUrl: remoteAvatarUrl,
+  });
 
   // Se veio null OU igual ao que ja tinha, retorna sem UPDATE.
   // Evita revalidacao desnecessaria de caches.
