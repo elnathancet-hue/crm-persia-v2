@@ -77,6 +77,7 @@ export function EntryNodeView({
   const expandedContent =
     onPatch && catalogs ? (
       <InlineFormPanel
+        key={id}
         nodeType="entry"
         data={data as unknown as Record<string, unknown>}
         onPatch={onPatch}

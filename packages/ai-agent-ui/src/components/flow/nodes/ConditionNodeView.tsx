@@ -84,6 +84,7 @@ export function ConditionNodeView({
   const expandedContent =
     onPatch && catalogs ? (
       <InlineFormPanel
+        key={id}
         nodeType="condition"
         data={data as unknown as Record<string, unknown>}
         onPatch={onPatch}
