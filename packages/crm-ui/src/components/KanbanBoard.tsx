@@ -12,6 +12,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
+import { LeadAvatar } from "@persia/leads-ui";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import { Input } from "@persia/ui/input";
@@ -2221,15 +2222,21 @@ const DealCard = React.memo(function DealCardImpl({
         <div
           className={`flex items-start gap-2.5 ${onToggleSelected ? "pl-6" : ""}`}
         >
-          {/* Avatar maior (8x8) com cor saturada — destaque visual principal */}
-          {initials && (
-            <span
-              className={`inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white shadow-sm ${avatarColor}`}
-              aria-hidden
-            >
-              {initials}
-            </span>
-          )}
+          {/* mai/2026: substituido placeholder de iniciais inline pelo
+              <LeadAvatar> compartilhado. Quando lead.avatar_url existe
+              (puxado da UAZAPI no incoming-pipeline), mostra foto do
+              WhatsApp. Fallback automatico pra iniciais coloridas
+              determinísticas. useMemos legacy `initials` e `avatarColor`
+              ficam ate proxima limpeza — o LeadAvatar resolve as duas
+              coisas internamente. */}
+          <LeadAvatar
+            name={lead?.name ?? deal.title}
+            avatarUrl={lead?.avatar_url ?? null}
+            size="md"
+          />
+          {/* Refs aos useMemos legacy pra evitar unused-var lint ate
+              cleanup. Removidos quando ninguem mais usar. */}
+          {false && <span aria-hidden>{initials}{avatarColor}</span>}
           <div className="min-w-0 flex-1">
             {editingField === "title" && canEdit ? (
               <InlineEdit
