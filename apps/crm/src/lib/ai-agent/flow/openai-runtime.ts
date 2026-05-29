@@ -166,10 +166,30 @@ function normalizeResponse(response: Response): AgentLlmOutput {
       argumentsJson: call.arguments || "{}",
     }));
 
+  // Bug critico mai/2026 — observado em prod com gpt-5-mini:
+  //
+  //   400 Item 'fc_xxx' of type 'function_call' was provided without its
+  //   required 'reasoning' item: 'rs_xxx'.
+  //
+  // Reasoning models (gpt-5*, o1*, o3*) emitem items `reasoning` que
+  // vinculam-se a cada `function_call` no mesmo turn. Quando montamos o
+  // input do PROXIMO turn pra Responses API, precisamos REENVIAR ambos
+  // — o function_call sem seu reasoning pareado eh rejeitado.
+  //
+  // Antes filtravamos so `function_call`. Agora preservamos ambos em
+  // ORDEM ORIGINAL (reasoning normalmente vem antes do function_call
+  // associado). Outros types (message, refusal) NAO entram aqui porque
+  // o texto do assistant ja vai pelo historico normal de `messages`.
+  //
+  // Doc: https://platform.openai.com/docs/guides/function-calling#reasoning-items
+  const preservedItems = response.output.filter(
+    (item) => item.type === "function_call" || item.type === "reasoning",
+  ) as ResponseInputItem[];
+
   return {
     text: response.output_text ?? "",
     toolCalls,
-    responsesInputItems: responseFunctionCalls,
+    responsesInputItems: preservedItems,
     usage: {
       inputTokens: response.usage?.input_tokens ?? 0,
       outputTokens: response.usage?.output_tokens ?? 0,
