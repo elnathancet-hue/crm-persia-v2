@@ -21,14 +21,16 @@ export interface CreateDealInput {
   stageId: string;
   title: string;
   value?: number;
-  leadId?: string | null;
+  /** NOT NULL no DB desde migration 039. */
+  leadId: string;
 }
 
 export interface UpdateDealInput {
   title?: string;
   value?: number;
   status?: string;
-  leadId?: string | null;
+  /** NOT NULL no DB desde migration 039. Omitir = nao alterar. */
+  leadId?: string;
 }
 
 export type DealStatus = "open" | "won" | "lost";
@@ -64,17 +66,16 @@ export async function createDeal(
     throw new Error("Etapa nao encontrada neste funil");
   }
 
-  if (input.leadId) {
-    const { data: lead } = await db
-      .from("leads")
-      .select("id")
-      .eq("id", input.leadId)
-      .eq("organization_id", orgId)
-      .maybeSingle();
+  // lead_id é NOT NULL no DB (migration 039) — sempre validar.
+  const { data: lead } = await db
+    .from("leads")
+    .select("id")
+    .eq("id", input.leadId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
 
-    if (!lead) {
-      throw new Error("Lead nao encontrado nesta organizacao");
-    }
+  if (!lead) {
+    throw new Error("Lead nao encontrado nesta organizacao");
   }
 
   const { data, error } = await db
@@ -83,7 +84,7 @@ export async function createDeal(
       organization_id: orgId,
       pipeline_id: input.pipelineId,
       stage_id: input.stageId,
-      lead_id: input.leadId || null,
+      lead_id: input.leadId,
       title: input.title,
       value: input.value ?? 0,
       status: "open",
@@ -179,7 +180,7 @@ export async function moveDealKanban(
 
   if (!deal) throw new Error("Deal nao encontrado nesta organizacao");
 
-  const dealRow = deal as { id: string; pipeline_id: string; lead_id: string | null; stage_id: string | null };
+  const dealRow = deal as { id: string; pipeline_id: string; lead_id: string; stage_id: string | null };
   const stageRow = stage as { id: string; pipeline_id: string; name: string };
 
   if (dealRow.pipeline_id !== stageRow.pipeline_id) {
@@ -198,7 +199,7 @@ export async function moveDealKanban(
 
   if (error) throw sanitizeMutationError(error, "Erro ao mover negocio");
 
-  if (!sameStage && dealRow.lead_id) {
+  if (!sameStage) {
     // Resolve nome da stage origem pra mensagem amigavel.
     let fromStageName: string | null = null;
     if (dealRow.stage_id) {
@@ -424,14 +425,12 @@ export async function bulkMarkDealsAsLost(
 
   if (error) throw sanitizeMutationError(error, "Erro ao marcar negocios como perdidos");
 
-  const rows = (updated ?? []) as { id: string; lead_id: string | null }[];
+  const rows = (updated ?? []) as { id: string; lead_id: string }[];
 
-  // Audit log fire-and-forget — 1 entry por deal com lead.
+  // Audit log fire-and-forget — 1 entry por deal.
   await logBulkActivities(
     ctx,
-    rows
-      .filter((r): r is { id: string; lead_id: string } => r.lead_id !== null)
-      .map((r) => ({
+    rows.map((r) => ({
         lead_id: r.lead_id,
         type: "deal_lost" as const,
         description: `Marcado como perdido: ${trimmedReason}`,
@@ -497,7 +496,7 @@ export async function bulkMoveDealsToStage(
   const found = (deals ?? []) as {
     id: string;
     pipeline_id: string;
-    lead_id: string | null;
+    lead_id: string;
     stage_id: string | null;
   }[];
   if (found.length !== dealIds.length) {
@@ -526,9 +525,7 @@ export async function bulkMoveDealsToStage(
 
   await logBulkActivities(
     ctx,
-    dealsAffected
-      .filter((d): d is typeof d & { lead_id: string } => d.lead_id !== null)
-      .map((d) => ({
+    dealsAffected.map((d) => ({
         lead_id: d.lead_id,
         type: "stage_change" as const,
         description: `Movido para "${stageRow.name}" (bulk)`,
@@ -580,16 +577,14 @@ export async function bulkUpdateDealStatus(
     .select("id, lead_id");
   if (error) throw sanitizeMutationError(error, "Erro ao atualizar status dos negocios");
 
-  const rows = (updated ?? []) as { id: string; lead_id: string | null }[];
+  const rows = (updated ?? []) as { id: string; lead_id: string }[];
 
   const statusLabel =
     status === "won" ? "ganho" : status === "lost" ? "perdido" : "em aberto";
 
   await logBulkActivities(
     ctx,
-    rows
-      .filter((r): r is { id: string; lead_id: string } => r.lead_id !== null)
-      .map((r) => ({
+    rows.map((r) => ({
         lead_id: r.lead_id,
         type: "status_change" as const,
         description: `Marcado como ${statusLabel} (bulk)`,
@@ -631,7 +626,7 @@ export async function bulkDeleteDeals(
     .in("id", dealIds);
   const snapshot = (preDeleteSnapshot ?? []) as {
     id: string;
-    lead_id: string | null;
+    lead_id: string;
     title: string | null;
   }[];
 
@@ -649,9 +644,7 @@ export async function bulkDeleteDeals(
 
   await logBulkActivities(
     ctx,
-    reallyDeleted
-      .filter((d): d is typeof d & { lead_id: string } => d.lead_id !== null)
-      .map((d) => ({
+    reallyDeleted.map((d) => ({
         lead_id: d.lead_id,
         type: "deal_deleted" as const,
         description: d.title
@@ -713,9 +706,8 @@ export async function bulkApplyTagsToDealLeads(
     .in("id", dealIds);
   const leadIds = Array.from(
     new Set(
-      ((deals ?? []) as { id: string; lead_id: string | null }[])
-        .map((d) => d.lead_id)
-        .filter((id): id is string => id !== null),
+      ((deals ?? []) as { id: string; lead_id: string }[])
+        .map((d) => d.lead_id),
     ),
   );
   if (leadIds.length === 0) return { leads_count: 0, links_count: 0 };
