@@ -432,6 +432,7 @@ export function KanbanBoard({
             name: lead.name ?? "",
             phone: lead.phone,
             email: lead.email,
+            avatar_url: lead.avatar_url,
             assigned_to: lead.assigned_to,
             lead_tags: lead.lead_tags ?? [],
             assignee: lead.assignee ?? null,
