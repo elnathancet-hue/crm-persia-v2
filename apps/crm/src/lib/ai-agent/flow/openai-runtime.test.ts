@@ -244,6 +244,140 @@ describe("openai-runtime adapter", () => {
     ]);
   });
 
+  it("preserva reasoning items junto com function_call (gpt-5* reasoning models)", async () => {
+    // Bug critico mai/2026 — observado em prod com gpt-5-mini:
+    //   400 Item 'fc_xxx' of type 'function_call' was provided without
+    //   its required 'reasoning' item: 'rs_xxx'.
+    //
+    // Reasoning models emitem `reasoning` items que sao vinculados a
+    // cada `function_call` no mesmo turn. Quando reenviamos o turn no
+    // proximo input, precisamos REENVIAR ambos em ordem. Antes o
+    // adapter filtrava so function_call e quebrava no 2o turn em prod.
+    //
+    // Este teste reproduz exatamente o shape que a OpenAI retorna:
+    // reasoning vem ANTES do function_call associado, e ambos precisam
+    // ser preservados em responsesInputItems pra reenvio.
+    const create = vi.fn().mockResolvedValue({
+      output_text: "",
+      output: [
+        {
+          type: "reasoning",
+          id: "rs_0c299a0421cd9460006a18f3a15530819687b73868b6c998ed",
+          summary: [],
+        },
+        {
+          type: "function_call",
+          id: "fc_0c299a0421cd9460006a18f3a922d881969adde37f5d83bbfc",
+          call_id: "call_qualified_1",
+          name: "emit_event",
+          arguments: "{\"event_name\":\"qualified\"}",
+          status: "completed",
+        },
+      ],
+      status: "completed",
+      incomplete_details: null,
+      usage: { input_tokens: 2289, output_tokens: 1009, total_tokens: 3298 },
+    });
+
+    const output = await runResponsesTurn(
+      { responses: { create } },
+      {
+        ...baseInput,
+        model: "gpt-5-mini",
+        tools: [
+          {
+            name: "emit_event",
+            parameters: { type: "object" },
+            strict: true,
+          },
+        ],
+      },
+    );
+
+    // toolCalls ignora reasoning (sao items de controle, nao tool calls)
+    expect(output.toolCalls).toEqual([
+      {
+        id: "call_qualified_1",
+        responseItemId: "fc_0c299a0421cd9460006a18f3a922d881969adde37f5d83bbfc",
+        name: "emit_event",
+        argumentsJson: "{\"event_name\":\"qualified\"}",
+      },
+    ]);
+
+    // responsesInputItems PRECISA conter os 2 — sem o reasoning, o
+    // proximo turn da 400 na OpenAI.
+    expect(output.responsesInputItems).toEqual([
+      {
+        type: "reasoning",
+        id: "rs_0c299a0421cd9460006a18f3a15530819687b73868b6c998ed",
+        summary: [],
+      },
+      {
+        type: "function_call",
+        id: "fc_0c299a0421cd9460006a18f3a922d881969adde37f5d83bbfc",
+        call_id: "call_qualified_1",
+        name: "emit_event",
+        arguments: "{\"event_name\":\"qualified\"}",
+        status: "completed",
+      },
+    ]);
+  });
+
+  it("reenvia reasoning + function_call + function_call_output no proximo turn", async () => {
+    // Validacao end-to-end: depois de capturar reasoning+function_call,
+    // o proximo runResponsesTurn precisa repassar tudo intacto no
+    // payload.input pra OpenAI aceitar.
+    const create = vi.fn().mockResolvedValue({
+      output_text: "Pronto, marquei como qualificado.",
+      output: [],
+      status: "completed",
+      incomplete_details: null,
+      usage: { input_tokens: 40, output_tokens: 8, total_tokens: 48 },
+    });
+
+    await runResponsesTurn(
+      { responses: { create } },
+      {
+        ...baseInput,
+        model: "gpt-5-mini",
+        responsesInputItems: [
+          {
+            type: "reasoning",
+            id: "rs_abc",
+            summary: [],
+          } as never,
+          {
+            type: "function_call",
+            id: "fc_abc",
+            call_id: "call_x",
+            name: "emit_event",
+            arguments: "{\"event_name\":\"qualified\"}",
+            status: "completed",
+          },
+          toResponsesFunctionCallOutput("call_x", { success: true }),
+        ],
+      },
+    );
+
+    expect(create.mock.calls[0]?.[0].input).toEqual([
+      { role: "user", content: "oi", type: "message" },
+      { type: "reasoning", id: "rs_abc", summary: [] },
+      {
+        type: "function_call",
+        id: "fc_abc",
+        call_id: "call_x",
+        name: "emit_event",
+        arguments: "{\"event_name\":\"qualified\"}",
+        status: "completed",
+      },
+      {
+        type: "function_call_output",
+        call_id: "call_x",
+        output: "{\"success\":true}",
+      },
+    ]);
+  });
+
   it("envia function_call e function_call_output numa rodada Responses seguinte", async () => {
     const create = vi.fn().mockResolvedValue({
       output_text: "Pronto, marquei como qualificado.",
