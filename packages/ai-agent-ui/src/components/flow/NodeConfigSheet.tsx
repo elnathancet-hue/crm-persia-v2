@@ -16,7 +16,33 @@
 // FlowCanvas atualizar o state local + marcar dirty.
 
 import * as React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import {
+  Bell,
+  BadgeCheck,
+  Calendar,
+  Filter,
+  FileText,
+  Hash,
+  ImageIcon,
+  ListChecks,
+  MessageCircle,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Power,
+  Shuffle,
+  Sparkles,
+  StopCircle,
+  Tag as TagIcon,
+  TagsIcon,
+  Trash2,
+  TrendingUp,
+  UserCheck,
+  UserCog,
+  Users,
+  Wand2,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { FlowNode } from "@persia/shared/ai-agent";
 import {
@@ -50,6 +76,7 @@ import {
 import { Textarea } from "@persia/ui/textarea";
 import type { FlowCatalogs } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
+import { FieldCard } from "./field-card";
 
 const ENTRY_TRIGGER_LABELS: Record<string, string> = {
   conversation_started: "Em qualquer mensagem do lead",
@@ -255,19 +282,27 @@ export function EntryForm({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="entry-label">Nome desta entrada</Label>
+    <div className="space-y-3">
+      <FieldCard
+        icon={Pencil}
+        title="Nome desta entrada"
+        description="Como esse ponto de entrada aparece no canvas."
+        variant="muted"
+      >
         <Input
           id="entry-label"
           value={(draft.label as string) ?? ""}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
           placeholder="Conversa iniciada"
         />
-      </div>
+      </FieldCard>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="entry-trigger">Quando o fluxo deve disparar?</Label>
+      <FieldCard
+        icon={Zap}
+        title="Quando o fluxo deve disparar?"
+        description="Escolha o gatilho que dá início ao fluxo."
+        variant="primary"
+      >
         <Select value={trigger} onValueChange={setTrigger}>
           <SelectTrigger id="entry-trigger">
             <SelectValue placeholder="Selecione um gatilho">
@@ -289,72 +324,119 @@ export function EntryForm({
             </SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </FieldCard>
 
       {trigger === "conversation_started" && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground px-1">
           O fluxo inicia em toda mensagem inbound do lead.
         </p>
       )}
 
       {trigger === "keyword_match" && (
-        <KeywordListField
-          value={
-            Array.isArray(config.keywords)
-              ? (config.keywords as unknown[]).filter(
-                  (k): k is string => typeof k === "string",
-                )
-              : []
-          }
-          onChange={(keywords) => updateConfig({ keywords })}
-        />
+        <FieldCard
+          icon={Hash}
+          title="Palavras-chave"
+          description="O fluxo dispara quando o lead mandar qualquer uma."
+          variant="success"
+          required
+        >
+          <KeywordListField
+            value={
+              Array.isArray(config.keywords)
+                ? (config.keywords as unknown[]).filter(
+                    (k): k is string => typeof k === "string",
+                  )
+                : []
+            }
+            onChange={(keywords) => updateConfig({ keywords })}
+          />
+        </FieldCard>
       )}
 
       {trigger === "segment_entered" && (
-        <>
-          <CatalogSelect
-            label="Segmentação alvo"
-            loading={catalogsLoading}
-            value={(config.segment_id as string) ?? ""}
-            onChange={(v) => updateConfig({ segment_id: v })}
-            options={catalogs.segments.map((s) => ({
-              value: s.id,
-              label: s.name,
-            }))}
-            emptyLabel="Nenhuma segmentação cadastrada."
-            placeholder="Selecione uma segmentação"
-          />
-          <p className="text-xs text-muted-foreground">
-            O fluxo dispara quando o lead começa a casar com as regras
-            desta segmentação (após criar lead, mudar tags ou atualizar
-            campos). Desenhe começando com uma ação (ex: &quot;Enviar
-            mensagem WhatsApp&quot;) porque não há mensagem do lead pra IA
-            reagir.
-          </p>
-        </>
+        <FieldCard
+          icon={Users}
+          title="Segmentação alvo"
+          description="Lead entra nesta segmentação → fluxo dispara."
+          variant="progress"
+          required
+          helperText={
+            <>
+              Desenhe começando com uma ação (ex: &quot;Enviar mensagem
+              WhatsApp&quot;) — não há mensagem do lead pra IA reagir aqui.
+            </>
+          }
+        >
+          {catalogsLoading ? (
+            <div className="h-9 rounded-md bg-muted animate-pulse" />
+          ) : catalogs.segments.length === 0 ? (
+            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+              Nenhuma segmentação cadastrada.
+            </div>
+          ) : (
+            <Select
+              value={(config.segment_id as string) || undefined}
+              onValueChange={(v) => updateConfig({ segment_id: v ?? "" })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma segmentação">
+                  {catalogs.segments.find((s) => s.id === config.segment_id)?.name ??
+                    "Selecione uma segmentação"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {catalogs.segments.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </FieldCard>
       )}
 
       {trigger === "pipeline_stage_entered" && (
-        <>
-          <CatalogSelect
-            label="Etapa do funil alvo"
-            loading={catalogsLoading}
-            value={(config.stage_id as string) ?? ""}
-            onChange={(v) => updateConfig({ stage_id: v })}
-            options={catalogs.pipeline_stages.map((s) => ({
-              value: s.id,
-              label: s.name,
-            }))}
-            emptyLabel="Nenhuma etapa configurada."
-            placeholder="Selecione uma etapa"
-          />
-          <p className="text-xs text-muted-foreground">
-            O fluxo dispara quando o lead entra nesta etapa — seja por
-            drag no Kanban ou via outro agente. Desenhe começando com uma
-            ação (ex: &quot;Enviar mensagem WhatsApp&quot;) porque não há
-            mensagem do lead pra IA reagir.
-          </p>
-        </>
+        <FieldCard
+          icon={TrendingUp}
+          title="Etapa do funil alvo"
+          description="Lead entra nesta etapa → fluxo dispara."
+          variant="progress"
+          required
+          helperText={
+            <>
+              Desenhe começando com uma ação (ex: &quot;Enviar mensagem
+              WhatsApp&quot;) — não há mensagem do lead pra IA reagir aqui.
+            </>
+          }
+        >
+          {catalogsLoading ? (
+            <div className="h-9 rounded-md bg-muted animate-pulse" />
+          ) : catalogs.pipeline_stages.length === 0 ? (
+            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+              Nenhuma etapa configurada.
+            </div>
+          ) : (
+            <Select
+              value={(config.stage_id as string) || undefined}
+              onValueChange={(v) => updateConfig({ stage_id: v ?? "" })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma etapa">
+                  {catalogs.pipeline_stages.find((s) => s.id === config.stage_id)?.name ??
+                    "Selecione uma etapa"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {catalogs.pipeline_stages.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.pipeline_name ? `${s.pipeline_name} › ${s.name}` : s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </FieldCard>
       )}
     </div>
   );
@@ -496,26 +578,43 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
   const hasLocalPrompt = systemPromptValue.trim().length > 0;
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="ai-label">Nome da etapa</Label>
+    <div className="space-y-3">
+      <FieldCard
+        icon={Pencil}
+        title="Nome da etapa"
+        description="Rótulo do card no canvas — a IA não vê."
+        variant="muted"
+      >
         <Input
           id="ai-label"
           value={(draft.label as string) ?? ""}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
           placeholder="Ex: Qualificação inicial"
         />
-        <p className="text-xs text-muted-foreground">
-          Rótulo que aparece no card. Só pra você se organizar — a IA não vê.
-        </p>
-      </div>
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="ai-prompt">Instrução desta etapa</Label>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-            Opcional
-          </span>
-        </div>
+      </FieldCard>
+
+      <FieldCard
+        icon={Wand2}
+        title="Instrução desta etapa"
+        description="Especialize o comportamento da IA neste ponto do funil."
+        variant="primary"
+        optional
+        helperText={
+          hasLocalPrompt ? (
+            <>
+              <span className="font-medium text-foreground">Nesta etapa</span> a
+              IA usa o <span className="font-medium">prompt geral do agente +
+              esta instrução</span> juntos.
+            </>
+          ) : (
+            <span className="text-success inline-flex items-center gap-1">
+              <span aria-hidden>✓</span>
+              Usando o <span className="font-medium">prompt geral</span> do
+              agente (Configurações → Comportamento).
+            </span>
+          )
+        }
+      >
         <Textarea
           id="ai-prompt"
           value={systemPromptValue}
@@ -526,25 +625,16 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
           rows={6}
           className="text-xs"
         />
-        {hasLocalPrompt ? (
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Nesta etapa</span> a
-            IA usa o <span className="font-medium">prompt geral do agente +
-            esta instrução</span> juntos.
-          </p>
-        ) : (
-          <p className="text-xs text-success flex items-center gap-1">
-            <span aria-hidden>✓</span>
-            <span>
-              Usando o <span className="font-medium">prompt geral</span> do
-              agente (Configurações → Comportamento).
-            </span>
-          </p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Próximos passos do fluxo</Label>
+      </FieldCard>
+
+      <FieldCard
+        icon={Sparkles}
+        title="Próximos passos do fluxo"
+        description="Saídas nomeadas que a IA pode disparar."
+        variant="success"
+        helperText="Cada saída vira um caminho no canvas. Quando a IA atender o critério, sinaliza a saída e o fluxo segue por ela."
+      >
+        <div className="flex items-center justify-end -mt-1 mb-1">
           <Button
             type="button"
             variant="ghost"
@@ -555,22 +645,17 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
             Adicionar saída
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Cada saída vira um caminho no canvas. Quando a IA atender o
-          critério que você descreve abaixo, ela sinaliza essa saída e o
-          fluxo segue por ela.
-        </p>
         {instructions.length === 0 ? (
           <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
             Sem saídas configuradas. A IA continua pelo caminho padrão
-            (handle "continua" do card) toda vez que responder.
+            (handle &quot;continua&quot; do card) toda vez que responder.
           </div>
         ) : (
           <div className="space-y-2">
             {instructions.map((ins, idx) => (
               <div
                 key={ins.id}
-                className="rounded-md border border-border bg-card p-2.5 space-y-2"
+                className="rounded-md border border-border bg-background p-2.5 space-y-2"
               >
                 <div className="flex items-center justify-between">
                   <Label className="text-[11px]">Saída #{idx + 1}</Label>
@@ -624,7 +709,7 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
             ))}
           </div>
         )}
-      </div>
+      </FieldCard>
     </div>
   );
 }
@@ -646,26 +731,46 @@ export function ActionForm({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="action-label">Nome da ação</Label>
+    <div className="space-y-3">
+      <FieldCard
+        icon={Pencil}
+        title="Nome da ação"
+        description="Rótulo do card no canvas."
+        variant="muted"
+      >
         <Input
           id="action-label"
           value={(draft.label as string) ?? ""}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
         />
-      </div>
+      </FieldCard>
 
-      {(actionType === "add_tag" || actionType === "remove_tag") && (
-        <CatalogSelect
-          label="Tag"
-          loading={catalogsLoading}
-          value={(config.tag_name as string) ?? ""}
-          onChange={(v) => updateConfig({ tag_name: v })}
-          options={catalogs.tags.map((t) => ({ value: t.name, label: t.name }))}
-          emptyLabel="Nenhuma tag cadastrada. Crie em CRM → Tags."
-          placeholder="Selecione uma tag"
-        />
+      {actionType === "add_tag" && (
+        <FieldCard
+          icon={TagIcon}
+          title="Adicionar tag"
+          description="Tag a marcar no lead."
+          variant="success"
+          required
+        >
+          {renderTagSelect(catalogs, catalogsLoading, config.tag_name as string, (v) =>
+            updateConfig({ tag_name: v }),
+          )}
+        </FieldCard>
+      )}
+
+      {actionType === "remove_tag" && (
+        <FieldCard
+          icon={TagsIcon}
+          title="Remover tag"
+          description="Tag a remover do lead."
+          variant="destructive"
+          required
+        >
+          {renderTagSelect(catalogs, catalogsLoading, config.tag_name as string, (v) =>
+            updateConfig({ tag_name: v }),
+          )}
+        </FieldCard>
       )}
 
       {actionType === "move_pipeline_stage" && (
@@ -678,18 +783,25 @@ export function ActionForm({
       )}
 
       {actionType === "trigger_notification" && (
-        <CatalogSelect
-          label="Template de notificação"
-          loading={catalogsLoading}
-          value={(config.template_name as string) ?? ""}
-          onChange={(v) => updateConfig({ template_name: v })}
-          options={catalogs.notification_templates.map((t) => ({
-            value: t.name,
-            label: t.name,
-          }))}
-          emptyLabel="Nenhum template cadastrado. Crie na aba Notificações."
-          placeholder="Selecione um template"
-        />
+        <FieldCard
+          icon={Bell}
+          title="Template de notificação"
+          description="Mensagem template a ser disparada."
+          variant="progress"
+          required
+        >
+          {renderSimpleSelect({
+            loading: catalogsLoading,
+            value: (config.template_name as string) ?? "",
+            onChange: (v) => updateConfig({ template_name: v }),
+            options: catalogs.notification_templates.map((t) => ({
+              value: t.name,
+              label: t.name,
+            })),
+            emptyLabel: "Nenhum template cadastrado. Crie na aba Notificações.",
+            placeholder: "Selecione um template",
+          })}
+        </FieldCard>
       )}
 
       {actionType === "create_appointment" && (
@@ -699,19 +811,16 @@ export function ActionForm({
             #alta — "completar form com start_at + type_slug + duration_minutes".
             Antes, create_appointment como action node so tinha type_slug
             opcional — handler exigia start_at e falhava em runtime quando
-            usado deterministicamente (Codex marcou como "inviavel como
-            action determinante atual"). Agora o admin define quando o
+            usado deterministicamente. Agora o admin define quando o
             appointment e criado.
-
-            Campos:
-              - start_at (datetime-local + Z UTC): instante absoluto.
-                Tradeoff V1: timezone UTC assumido. Sem suporte a relative
-                offset ("+24h") ainda — exige modelo de variaveis no flow.
-              - type_slug (dropdown): herda duration/channel/location.
-              - duration_minutes: sobrescreve duracao do type_slug.
           */}
-          <div className="space-y-1.5">
-            <Label htmlFor="action-appointment-start">Data e hora</Label>
+          <FieldCard
+            icon={Calendar}
+            title="Data e hora"
+            description="Em UTC. Para 14:00 em São Paulo, use 17:00 aqui."
+            variant="primary"
+            required
+          >
             <Input
               id="action-appointment-start"
               type="datetime-local"
@@ -732,26 +841,33 @@ export function ActionForm({
                 updateConfig({ start_at: `${raw}:00.000Z` });
               }}
             />
-            <p className="text-xs text-muted-foreground">
-              Em UTC. Para 14:00 em São Paulo, use 17:00 aqui.
-            </p>
-          </div>
-          <CatalogSelect
-            label="Tipo de agendamento (opcional)"
-            loading={catalogsLoading}
-            value={(config.type_slug as string) ?? ""}
-            onChange={(v) => updateConfig({ type_slug: v })}
-            options={catalogs.agenda_services.map((s) => ({
-              value: s.slug,
-              label: `${s.name} (${s.duration_minutes}min)`,
-            }))}
-            emptyLabel="Nenhum tipo de agendamento. Configure em Agenda → Tipos."
-            placeholder="A IA decide no momento"
-          />
-          <div className="space-y-1.5">
-            <Label htmlFor="action-appointment-duration">
-              Duração em minutos (opcional)
-            </Label>
+          </FieldCard>
+          <FieldCard
+            icon={ListChecks}
+            title="Tipo de agendamento"
+            description="Herda duração, canal e local do tipo selecionado."
+            variant="muted"
+            optional
+          >
+            {renderSimpleSelect({
+              loading: catalogsLoading,
+              value: (config.type_slug as string) ?? "",
+              onChange: (v) => updateConfig({ type_slug: v }),
+              options: catalogs.agenda_services.map((s) => ({
+                value: s.slug,
+                label: `${s.name} (${s.duration_minutes}min)`,
+              })),
+              emptyLabel: "Nenhum tipo de agendamento. Configure em Agenda → Tipos.",
+              placeholder: "A IA decide no momento",
+            })}
+          </FieldCard>
+          <FieldCard
+            icon={Pencil}
+            title="Duração em minutos"
+            description="Sobrescreve a duração do tipo selecionado."
+            variant="muted"
+            optional
+          >
             <Input
               id="action-appointment-duration"
               type="number"
@@ -774,105 +890,155 @@ export function ActionForm({
               }}
               placeholder="Sobrescreve duração do tipo selecionado"
             />
-          </div>
+          </FieldCard>
         </>
       )}
 
       {actionType === "send_media" && (
-        <>
-          {/* Fix mai/2026: era Input livre. Cliente colava a URL completa
-              da API ("https://...?slug=xxx") em vez do slug, runtime nao
-              encontrava o arquivo e midia nao era enviada. Picker resolve
-              — cliente seleciona da lista de Biblioteca de midia. */}
-          <CatalogSelect
-            label="Mídia a enviar"
-            loading={catalogsLoading}
-            value={(config.slug as string) ?? ""}
-            onChange={(v) => updateConfig({ slug: v })}
-            options={catalogs.media_library.map((m) => ({
+        // Fix mai/2026: era Input livre. Cliente colava a URL completa
+        // da API ("https://...?slug=xxx") em vez do slug, runtime nao
+        // encontrava o arquivo. Picker resolve.
+        <FieldCard
+          icon={ImageIcon}
+          title="Mídia a enviar"
+          description="Arquivo do seu acervo (imagem, vídeo, PDF...)."
+          variant="progress"
+          required
+          helperText="A IA envia o arquivo quando o fluxo passar por aqui."
+        >
+          {renderSimpleSelect({
+            loading: catalogsLoading,
+            value: (config.slug as string) ?? "",
+            onChange: (v) => updateConfig({ slug: v }),
+            options: catalogs.media_library.map((m) => ({
               value: m.slug,
               label: `${m.name} (${labelForMediaCategory(m.category)})`,
-            }))}
-            emptyLabel="Nenhuma mídia cadastrada. Acesse Automação → Biblioteca de mídia para adicionar."
-            placeholder="Selecione uma mídia"
-          />
-          <p className="text-xs text-muted-foreground">
-            A IA envia esse arquivo do seu acervo quando o fluxo passar
-            por aqui.
-          </p>
-        </>
+            })),
+            emptyLabel:
+              "Nenhuma mídia cadastrada. Acesse Automação → Biblioteca de mídia.",
+            placeholder: "Selecione uma mídia",
+          })}
+        </FieldCard>
       )}
 
       {actionType === "transfer_to_user" && (
-        <CatalogSelect
-          label="Atendente"
-          loading={catalogsLoading}
-          value={(config.user as string) ?? ""}
-          onChange={(v) => updateConfig({ user: v })}
-          options={catalogs.members.map((m) => ({
-            value: m.email ?? m.user_id,
-            label: m.name + (m.email ? ` (${m.email})` : ""),
-          }))}
-          emptyLabel="Nenhum membro ativo na organização."
-          placeholder="Selecione um membro"
-        />
+        <FieldCard
+          icon={UserCheck}
+          title="Atendente"
+          description="Lead é atribuído a este membro e a IA pausa."
+          variant="muted"
+          required
+        >
+          {renderSimpleSelect({
+            loading: catalogsLoading,
+            value: (config.user as string) ?? "",
+            onChange: (v) => updateConfig({ user: v }),
+            options: catalogs.members.map((m) => ({
+              value: m.email ?? m.user_id,
+              label: m.name + (m.email ? ` (${m.email})` : ""),
+            })),
+            emptyLabel: "Nenhum membro ativo na organização.",
+            placeholder: "Selecione um membro",
+          })}
+        </FieldCard>
       )}
 
       {actionType === "transfer_to_agent" && (
-        <CatalogSelect
-          label="Outro agente"
-          loading={catalogsLoading}
-          value={(config.target_agent_name as string) ?? ""}
-          onChange={(v) => updateConfig({ target_agent_name: v })}
-          options={catalogs.other_agents.map((a) => ({
-            value: a.name,
-            label: a.name,
-          }))}
-          emptyLabel="Sem outros agentes ativos."
-          placeholder="Selecione um agente"
-        />
+        <FieldCard
+          icon={UserCog}
+          title="Outro agente IA"
+          description="Transfere a conversa pra outro agente."
+          variant="muted"
+          required
+        >
+          {renderSimpleSelect({
+            loading: catalogsLoading,
+            value: (config.target_agent_name as string) ?? "",
+            onChange: (v) => updateConfig({ target_agent_name: v }),
+            options: catalogs.other_agents.map((a) => ({
+              value: a.name,
+              label: a.name,
+            })),
+            emptyLabel: "Sem outros agentes ativos.",
+            placeholder: "Selecione um agente",
+          })}
+        </FieldCard>
       )}
 
       {actionType === "stop_agent" && (
-        <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
-          Esta ação encerra a sessão da IA sem mais perguntas. Útil pra
-          escapar de conversas fora de escopo.
-        </div>
+        <FieldCard
+          icon={StopCircle}
+          title="Encerrar IA"
+          description="Pausa o agente sem mais perguntas."
+          variant="destructive"
+        >
+          <p className="text-xs text-muted-foreground">
+            Útil pra escapar de conversas fora do escopo do agente.
+            A IA volta a responder no próximo gatilho de entrada do fluxo.
+          </p>
+        </FieldCard>
       )}
 
       {actionType === "set_lead_custom_field" && (
         <>
-          <CatalogSelect
-            label="Campo personalizado"
-            loading={catalogsLoading}
-            value={(config.field_key as string) ?? ""}
-            onChange={(v) => updateConfig({ field_key: v })}
-            options={catalogs.custom_fields.map((f) => ({
-              value: f.field_key,
-              label: `${f.name} (${f.field_type})`,
-            }))}
-            emptyLabel="Nenhum campo personalizado. Crie em CRM → Campos personalizados."
-            placeholder="Selecione um campo"
-          />
-          <div className="space-y-1.5">
-            <Label htmlFor="action-cf-value">Valor a salvar</Label>
+          <FieldCard
+            icon={Pencil}
+            title="Campo personalizado"
+            description="Campo do lead que será atualizado."
+            variant="muted"
+            required
+          >
+            {renderSimpleSelect({
+              loading: catalogsLoading,
+              value: (config.field_key as string) ?? "",
+              onChange: (v) => updateConfig({ field_key: v }),
+              options: catalogs.custom_fields.map((f) => ({
+                value: f.field_key,
+                label: `${f.name} (${f.field_type})`,
+              })),
+              emptyLabel:
+                "Nenhum campo personalizado. Crie em CRM → Campos personalizados.",
+              placeholder: "Selecione um campo",
+            })}
+          </FieldCard>
+          <FieldCard
+            icon={FileText}
+            title="Valor a salvar"
+            description="Aceita variáveis da conversa, ex: {{lead.name}}."
+            variant="muted"
+            required
+            helperText={
+              <>
+                Pode usar variáveis tipo <code>{"{{lead.name}}"}</code>. Tipo
+                do campo (date/number/boolean) é convertido pelo CRM na leitura.
+              </>
+            }
+          >
             <Input
               id="action-cf-value"
               value={(config.value as string) ?? ""}
               onChange={(e) => updateConfig({ value: e.target.value })}
               placeholder="Texto literal ou {{variavel}} da conversa"
             />
-            <p className="text-xs text-muted-foreground">
-              Pode usar variáveis tipo <code>{"{{lead.name}}"}</code>. Tipo do
-              campo (date/number/boolean) é convertido pelo CRM na leitura.
-            </p>
-          </div>
+          </FieldCard>
         </>
       )}
 
       {actionType === "send_whatsapp_message" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="action-msg">Mensagem</Label>
+        <FieldCard
+          icon={MessageCircle}
+          title="Mensagem WhatsApp"
+          description="Texto literal enviado ao lead — sem passar pela IA."
+          variant="primary"
+          required
+          helperText={
+            <>
+              Variáveis aceitas: <code>{"{{lead.name}}"}</code>,{" "}
+              <code>{"{{lead.phone}}"}</code>, <code>{"{{lead.email}}"}</code>.
+              Quebras de linha são preservadas.
+            </>
+          }
+        >
           <Textarea
             id="action-msg"
             rows={6}
@@ -880,34 +1046,96 @@ export function ActionForm({
             onChange={(e) => updateConfig({ message: e.target.value })}
             placeholder="Olá {{lead.name}}, tudo bem? Aqui é o time da empresa..."
           />
-          <p className="text-xs text-muted-foreground">
-            Texto literal enviado ao lead via WhatsApp, sem passar pela IA.
-            Variáveis aceitas:{" "}
-            <code>{"{{lead.name}}"}</code>, <code>{"{{lead.phone}}"}</code>,{" "}
-            <code>{"{{lead.email}}"}</code>. Quebras de linha são preservadas.
-          </p>
-        </div>
+        </FieldCard>
       )}
 
       {actionType === "round_robin_user" && (
-        <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground space-y-2">
-          <p>
-            O lead é atribuído ao membro da equipe com MENOS leads ativos
-            no momento (algoritmo &quot;least-loaded&quot;).
-          </p>
-          <p>
-            Candidatos: todos com perfil <strong>Atendente</strong>,{" "}
-            <strong>Admin</strong> ou <strong>Owner</strong> ativos. Quem
-            tiver papel <strong>Viewer</strong> não recebe leads.
-          </p>
-          <p>
-            Após atribuir, o agente IA é pausado automaticamente nessa
-            conversa (humano assumiu).
-          </p>
-        </div>
+        <FieldCard
+          icon={Shuffle}
+          title="Round-robin (rodízio)"
+          description="Próximo atendente disponível, distribuído por carga."
+          variant="success"
+        >
+          <div className="text-xs text-muted-foreground space-y-2">
+            <p>
+              O lead é atribuído ao membro da equipe com MENOS leads ativos
+              no momento (algoritmo &quot;least-loaded&quot;).
+            </p>
+            <p>
+              Candidatos: todos com perfil <strong>Atendente</strong>,{" "}
+              <strong>Admin</strong> ou <strong>Owner</strong> ativos. Quem
+              tiver papel <strong>Viewer</strong> não recebe leads.
+            </p>
+            <p>
+              Após atribuir, o agente IA é pausado automaticamente nessa
+              conversa (humano assumiu).
+            </p>
+          </div>
+        </FieldCard>
       )}
     </div>
   );
+}
+
+// Helpers locais — selects e tag picker reusados pelos action types.
+// Mantemos `CatalogSelect` (label propria + container interno) pros
+// casos legacy, mas FieldCard ja prove header colorido + helper, entao
+// inside-FieldCard renderizamos so o select cru.
+
+function renderSimpleSelect(props: {
+  loading?: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+  emptyLabel: string;
+  placeholder: string;
+}) {
+  if (props.loading) {
+    return <div className="h-9 rounded-md bg-muted animate-pulse" />;
+  }
+  if (props.options.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+        {props.emptyLabel}
+      </div>
+    );
+  }
+  const selectedLabel = props.options.find((o) => o.value === props.value)?.label;
+  return (
+    <Select
+      value={props.value || undefined}
+      onValueChange={(v) => props.onChange(v ?? "")}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder={props.placeholder}>
+          {selectedLabel ?? props.placeholder}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {props.options.map((o) => (
+          <SelectItem key={o.value} value={o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function renderTagSelect(
+  catalogs: FlowCatalogs,
+  loading: boolean | undefined,
+  value: string | undefined,
+  onChange: (v: string) => void,
+) {
+  return renderSimpleSelect({
+    loading,
+    value: value ?? "",
+    onChange,
+    options: catalogs.tags.map((t) => ({ value: t.name, label: t.name })),
+    emptyLabel: "Nenhuma tag cadastrada. Crie em CRM → Tags.",
+    placeholder: "Selecione uma tag",
+  });
 }
 
 export function ConditionForm({
@@ -927,67 +1155,93 @@ export function ConditionForm({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="cond-label">Nome da verificação</Label>
+    <div className="space-y-3">
+      <FieldCard
+        icon={Pencil}
+        title="Nome da verificação"
+        description="Rótulo do card no canvas."
+        variant="muted"
+      >
         <Input
           id="cond-label"
           value={(draft.label as string) ?? ""}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
         />
-      </div>
+      </FieldCard>
 
       {conditionType === "has_tag" && (
-        <CatalogSelect
-          label="Tag a verificar"
-          loading={catalogsLoading}
-          value={(config.tag_name as string) ?? ""}
-          onChange={(v) => updateConfig({ tag_name: v })}
-          options={catalogs.tags.map((t) => ({ value: t.name, label: t.name }))}
-          emptyLabel="Nenhuma tag cadastrada."
-          placeholder="Selecione uma tag"
-        />
+        <FieldCard
+          icon={TagIcon}
+          title="Tag a verificar"
+          description="Lead com esta tag segue por &quot;Sim&quot;."
+          variant="progress"
+          required
+        >
+          {renderTagSelect(catalogs, catalogsLoading, config.tag_name as string, (v) =>
+            updateConfig({ tag_name: v }),
+          )}
+        </FieldCard>
       )}
 
       {conditionType === "lead_custom_field_equals" && (
         <>
-          <CatalogSelect
-            label="Campo personalizado"
-            loading={catalogsLoading}
-            value={(config.field_name as string) ?? ""}
-            onChange={(v) => updateConfig({ field_name: v })}
-            options={catalogs.custom_fields.map((f) => ({
-              value: f.name,
-              label: `${f.name} (${f.field_type})`,
-            }))}
-            emptyLabel="Nenhum campo personalizado cadastrado."
-            placeholder="Selecione um campo"
-          />
-          <div className="space-y-1.5">
-            <Label htmlFor="cond-value">Valor esperado</Label>
+          <FieldCard
+            icon={Filter}
+            title="Campo personalizado"
+            description="Campo do lead a comparar."
+            variant="progress"
+            required
+          >
+            {renderSimpleSelect({
+              loading: catalogsLoading,
+              value: (config.field_name as string) ?? "",
+              onChange: (v) => updateConfig({ field_name: v }),
+              options: catalogs.custom_fields.map((f) => ({
+                value: f.name,
+                label: `${f.name} (${f.field_type})`,
+              })),
+              emptyLabel: "Nenhum campo personalizado cadastrado.",
+              placeholder: "Selecione um campo",
+            })}
+          </FieldCard>
+          <FieldCard
+            icon={FileText}
+            title="Valor esperado"
+            description="Lead com este valor segue por &quot;Sim&quot;."
+            variant="progress"
+            required
+          >
             <Input
               id="cond-value"
               value={(config.value as string) ?? ""}
               onChange={(e) => updateConfig({ value: e.target.value })}
               placeholder="ex: 18+"
             />
-          </div>
+          </FieldCard>
         </>
       )}
 
       {conditionType === "in_segment" && (
-        <CatalogSelect
-          label="Segmentação"
-          loading={catalogsLoading}
-          value={(config.segment_id as string) ?? ""}
-          onChange={(v) => updateConfig({ segment_id: v })}
-          options={catalogs.segments.map((s) => ({
-            value: s.id,
-            label: s.name,
-          }))}
-          emptyLabel="Nenhuma segmentação cadastrada. Crie em CRM → Segmentações."
-          placeholder="Selecione uma segmentação"
-        />
+        <FieldCard
+          icon={Users}
+          title="Segmentação"
+          description="Lead dentro desta segmentação segue por &quot;Sim&quot;."
+          variant="progress"
+          required
+        >
+          {renderSimpleSelect({
+            loading: catalogsLoading,
+            value: (config.segment_id as string) ?? "",
+            onChange: (v) => updateConfig({ segment_id: v }),
+            options: catalogs.segments.map((s) => ({
+              value: s.id,
+              label: s.name,
+            })),
+            emptyLabel:
+              "Nenhuma segmentação cadastrada. Crie em CRM → Segmentações.",
+            placeholder: "Selecione uma segmentação",
+          })}
+        </FieldCard>
       )}
     </div>
   );
@@ -1130,62 +1384,71 @@ function PipelineStagePicker({
     [stages, pipelineId],
   );
 
-  if (loading) {
+  if (pipelines.length === 0 && !loading) {
     return (
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label>Funil</Label>
-          <div className="h-9 rounded-md bg-muted animate-pulse" />
+      <FieldCard
+        icon={Filter}
+        title="Funil Kanban"
+        description="Escolha o funil onde o lead será adicionado."
+        variant="primary"
+      >
+        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+          Nenhum funil configurado. Crie um funil em CRM → Configurações.
         </div>
-        <div className="space-y-1.5">
-          <Label>Etapa do funil</Label>
-          <div className="h-9 rounded-md bg-muted animate-pulse" />
-        </div>
-      </div>
-    );
-  }
-
-  if (pipelines.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
-        Nenhum funil configurado. Crie um funil em CRM → Configurações.
-      </div>
+      </FieldCard>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1.5">
-        <Label>Funil</Label>
-        <Select
-          value={pipelineId || undefined}
-          onValueChange={(v) => {
-            const next = v ?? "";
-            setPipelineId(next);
-            // Trocar de funil zera o stage_id — etapa antiga nao pertence
-            // ao novo funil. Cliente precisa escolher de novo.
-            if (next !== selectedStage?.pipeline_id) {
-              onChange("");
-            }
-          }}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione o funil">
-              {pipelines.find((p) => p.id === pipelineId)?.name ?? "Selecione o funil"}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {pipelines.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Etapa do funil</Label>
-        {!pipelineId ? (
+      <FieldCard
+        icon={Filter}
+        title="Funil Kanban"
+        description="Escolha o funil onde o lead será adicionado."
+        variant="primary"
+        required
+      >
+        {loading ? (
+          <div className="h-9 rounded-md bg-muted animate-pulse" />
+        ) : (
+          <Select
+            value={pipelineId || undefined}
+            onValueChange={(v) => {
+              const next = v ?? "";
+              setPipelineId(next);
+              // Trocar de funil zera o stage_id — etapa antiga nao pertence
+              // ao novo funil. Cliente precisa escolher de novo.
+              if (next !== selectedStage?.pipeline_id) {
+                onChange("");
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o funil">
+                {pipelines.find((p) => p.id === pipelineId)?.name ?? "Selecione o funil"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {pipelines.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </FieldCard>
+      <FieldCard
+        icon={ListChecks}
+        title="Etapa do funil"
+        description="Defina em qual etapa do funil o lead será posicionado."
+        variant="progress"
+        required
+        helperText="A IA precisa que o lead já esteja neste funil pra mover a etapa dar certo."
+      >
+        {loading ? (
+          <div className="h-9 rounded-md bg-muted animate-pulse" />
+        ) : !pipelineId ? (
           <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
             Escolha um funil acima primeiro.
           </div>
@@ -1212,11 +1475,7 @@ function PipelineStagePicker({
             </SelectContent>
           </Select>
         )}
-        <p className="text-xs text-muted-foreground">
-          A IA precisa que o lead já esteja neste funil pra mover a etapa
-          dar certo.
-        </p>
-      </div>
+      </FieldCard>
     </div>
   );
 }
