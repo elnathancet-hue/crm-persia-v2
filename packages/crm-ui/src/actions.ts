@@ -222,4 +222,28 @@ export interface KanbanActions {
   findOrCreateConversationByLead?: (
     leadId: string,
   ) => Promise<{ conversationId: string; created: boolean }>;
+
+  /**
+   * mai/2026 — busca leads pra aba "Selecionar existente" do "+" do
+   * Kanban. Casamento parcial (ILIKE) em nome/telefone/email + dados
+   * de em que funil/etapa o lead esta hoje (pra UI mostrar contexto).
+   *
+   * Opcional pra retro-compat com adapter antigo (admin pode nao
+   * implementar — UI esconde a aba "Existente" quando undefined).
+   */
+  searchLeadsForKanban?: (
+    query: string,
+    limit?: number,
+  ) => Promise<
+    Array<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      current_pipeline_id: string | null;
+      current_pipeline_name: string | null;
+      current_stage_id: string | null;
+      current_stage_name: string | null;
+    }>
+  >;
 }
