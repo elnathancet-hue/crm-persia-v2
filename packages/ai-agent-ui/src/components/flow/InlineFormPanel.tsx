@@ -8,13 +8,25 @@
 // dentro do card.
 //
 // Pattern de bridge:
-// - Mantém local `draft` state sincronizado com `node.data` (Forms
-//   existentes usam `draft + setDraft` — não refatoramos eles)
+// - Mantém local `draft` state — fonte da verdade enquanto o componente
+//   está montado.
 // - Debounce 200ms — toda mudança no draft propaga pra canvas via
 //   `onPatch(data)`. Não persiste no DB (só salva no botão "Salvar"
 //   global do canvas).
-// - Sync inbound: se `node.data` muda externamente (ex: import), o
-//   draft é resetado.
+// - Troca de node: `<InlineFormPanel key={node.id}>` no caller força
+//   remount — draft inicializa do node novo. Limpa e sem race.
+//
+// Fix mai/2026: bug pre-existente. useEffect "inbound" antigo
+// (`if (lastDataRef.current !== data) setDraft(data)`) sobrescrevia
+// keystrokes do cliente quando o canvas re-renderizava por causa do
+// PROPRIO onPatch. Sequencia:
+//   1. Cliente digita "a" -> setDraft({a})
+//   2. Debounce 200ms -> onPatch({a}) -> setNodes no canvas
+//   3. Cliente digita "b" durante a re-render do canvas -> setDraft({ab})
+//   4. Canvas termina re-render -> `data` prop chega como {a} (ref nova)
+//   5. Inbound useEffect: lastRef !== data -> setDraft({a}) <- perde "b"
+// Cliente reportava "nao consigo digitar". Fix: remover o useEffect
+// inbound. Cliente trocar de node ja remonta o componente via key={id}.
 
 import * as React from "react";
 import {
@@ -29,7 +41,9 @@ import type { FlowNode } from "@persia/shared/ai-agent";
 interface Props {
   /** Tipo + data atual do node (apenas para escolher o form certo). */
   nodeType: FlowNode["type"];
-  /** Snapshot atual de node.data — usado pra inicializar/sincronizar draft. */
+  /** Snapshot atual de node.data — usado APENAS pra inicializar o draft.
+   * Mudancas em `data` apos o mount NAO ressincronizam o draft.
+   * Caller troca de node via key={id} pra forcar remount. */
   data: Record<string, unknown>;
   /** Callback chamado com o draft completo após debounce. Caller deve
    * atualizar o estado do node no canvas. */
@@ -47,23 +61,20 @@ export function InlineFormPanel({
   catalogs,
   catalogsLoading,
 }: Props) {
-  const [draft, setDraft] = React.useState<Record<string, unknown>>(data);
-
-  // Sync inbound: se a `data` mudar de fora (ex: cliente abre outro
-  // node ou faz undo), zera o draft. Comparamos por referência — caller
-  // garante que passa a mesma ref enquanto edita.
-  const lastDataRef = React.useRef(data);
-  React.useEffect(() => {
-    if (lastDataRef.current !== data) {
-      lastDataRef.current = data;
-      setDraft(data);
-    }
-  }, [data]);
+  // Inicializa SO no mount (lazy initializer). `data` posterior nao
+  // re-inicializa — draft eh fonte da verdade enquanto montado.
+  const [draft, setDraft] = React.useState<Record<string, unknown>>(
+    () => data,
+  );
 
   // Sync outbound debounced: toda vez que draft muda, propaga pro
   // canvas após 200ms. Evita centenas de updates por keystroke.
+  //
+  // Comparacao `draft === data` evita ping-pong (1a render quando draft
+  // === data inicial). Apos primeiro keystroke, draft muda de ref e
+  // entra no caminho de debounce.
   React.useEffect(() => {
-    if (draft === data) return; // nada mudou
+    if (draft === data) return;
     const handle = window.setTimeout(() => {
       onPatch(draft);
     }, DEBOUNCE_MS);

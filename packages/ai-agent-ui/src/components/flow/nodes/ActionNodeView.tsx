@@ -159,6 +159,7 @@ export function ActionNodeView({
   const expandedContent =
     onPatch && catalogs ? (
       <InlineFormPanel
+        key={id}
         nodeType="action"
         data={data as unknown as Record<string, unknown>}
         onPatch={onPatch}

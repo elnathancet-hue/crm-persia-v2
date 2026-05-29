@@ -53,9 +53,13 @@ export function AIAgentNodeView({
   // Ambos cenários são válidos — não tem motivo pra marcar âmbar.
   //
   // PR 21 (mai/2026): form inline quando selected
+  // Fix mai/2026: key={id} forca remount do InlineFormPanel quando o
+  // cliente seleciona outro node. Sem isso, draft de outro node poderia
+  // vazar pra este. Tambem garante que data inicial seja respeitada.
   const expandedContent =
     onPatch && catalogs ? (
       <InlineFormPanel
+        key={id}
         nodeType="ai_agent"
         data={data as unknown as Record<string, unknown>}
         onPatch={onPatch}
