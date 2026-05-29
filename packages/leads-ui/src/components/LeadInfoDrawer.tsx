@@ -99,6 +99,7 @@ import type {
 } from "../actions";
 import { useLeadsActions } from "../context";
 import { LeadCommentsTab } from "./LeadCommentsTab";
+import { LeadAvatar, LeadAvatarWithRefresh } from "./LeadAvatar";
 import { useCurrentUser } from "../hooks/use-current-user";
 import { useLeadPresence } from "../hooks/use-lead-presence";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -230,6 +231,14 @@ export function LeadInfoDrawer({
   const [form, setForm] = React.useState<FormState>(() =>
     leadToFormState(lead),
   );
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(
+    lead.avatar_url ?? null,
+  );
+  const [avatarRefreshing, setAvatarRefreshing] = React.useState(false);
+
+  React.useEffect(() => {
+    setAvatarUrl(lead.avatar_url ?? null);
+  }, [lead.id, lead.avatar_url]);
 
   // PR-U3: state pra exclusao. AlertDialog controlled via state pra
   // que o handler de deletar consiga fechar + chamar onDeleted.
@@ -647,6 +656,27 @@ export function LeadInfoDrawer({
   }
   const isPending = updateMutation.pending;
 
+  async function handleRefreshAvatar() {
+    if (!actions.refreshLeadAvatar || avatarRefreshing) return;
+    setAvatarRefreshing(true);
+    try {
+      const result = await actions.refreshLeadAvatar(lead.id);
+      setAvatarUrl(result.avatar_url);
+      onSaved?.({ avatar_url: result.avatar_url } as Partial<LeadWithTags>);
+      toast.success(result.updated ? "Foto atualizada" : "Foto verificada", {
+        id: `lead-avatar-${lead.id}`,
+        duration: 4000,
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao atualizar foto",
+        { id: `lead-avatar-${lead.id}`, duration: 6000 },
+      );
+    } finally {
+      setAvatarRefreshing(false);
+    }
+  }
+
   return (
     // Frente B (UX produto-first): drawer lateral migrou pra Dialog
     // centralizado responsivo. Critérios:
@@ -661,7 +691,21 @@ export function LeadInfoDrawer({
       >
         <DialogHeader className="px-6 pt-5 pb-3 pr-12 border-b border-border bg-card shrink-0">
           <div className="flex items-start justify-between gap-3">
-            <DialogTitle>Informações do lead</DialogTitle>
+            <div className="flex min-w-0 items-center gap-3">
+              {actions.refreshLeadAvatar ? (
+                <LeadAvatarWithRefresh
+                  name={lead.name}
+                  avatarUrl={avatarUrl}
+                  size="lg"
+                  hasPhone={Boolean(lead.phone)}
+                  loading={avatarRefreshing}
+                  onRefresh={handleRefreshAvatar}
+                />
+              ) : (
+                <LeadAvatar name={lead.name} avatarUrl={avatarUrl} size="lg" />
+              )}
+              <DialogTitle>Informações do lead</DialogTitle>
+            </div>
             <PresenceAvatars
               watchers={watchers}
               othersCount={othersCount}

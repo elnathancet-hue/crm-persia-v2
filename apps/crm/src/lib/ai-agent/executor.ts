@@ -32,6 +32,7 @@ import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import type { IncomingMessage, WhatsAppProvider } from "@persia/shared/whatsapp";
 import { createProvider } from "@persia/shared/providers";
 import { phoneBR } from "@persia/shared/validation";
+import { cacheLeadAvatarFromUrl } from "@/lib/lead-avatar-cache";
 import OpenAI from "openai";
 import {
   NATIVE_AGENT_FEATURE_FLAG,
@@ -419,7 +420,12 @@ export async function tryEnqueueForNativeAgent(
         const newLeadId = newLead.id;
         void (async () => {
           try {
-            const avatarUrl = await input.provider.getContactProfilePic(phone);
+            const remoteAvatarUrl = await input.provider.getContactProfilePic(phone);
+            const avatarUrl = await cacheLeadAvatarFromUrl({
+              organizationId: input.orgId,
+              leadId: newLeadId,
+              remoteUrl: remoteAvatarUrl,
+            });
             if (avatarUrl) {
               await db
                 .from("leads")
