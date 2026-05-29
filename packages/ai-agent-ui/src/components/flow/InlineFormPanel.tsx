@@ -83,7 +83,19 @@ export function InlineFormPanel({
   }, [draft]);
 
   return (
-    <div className="space-y-3 nodrag" onClick={(e) => e.stopPropagation()}>
+    // Fix mai/2026: ReactFlow tem 3 classes especiais que precisam estar
+    // em qualquer elemento que deveria escapar do canvas behavior:
+    //   - nodrag: impede drag do node quando mousedown no elemento
+    //   - nopan:  impede pan do canvas (translate da viewport)
+    //   - nowheel: impede zoom do canvas via scroll wheel
+    // Antes so tinha `nodrag`. Sintoma: input/textarea no panel inline
+    // perdiam focus instantaneamente porque o `nopan` faltante deixava
+    // ReactFlow consumir o mousedown pra iniciar pan do canvas. Cliente
+    // nao conseguia digitar.
+    <div
+      className="space-y-3 nodrag nopan nowheel"
+      onClick={(e) => e.stopPropagation()}
+    >
       {nodeType === "entry" && (
         <EntryForm
           draft={draft}
