@@ -11,6 +11,11 @@
 // V1 não inclui: media library (automation_tools), segments,
 // lead_custom_fields. Entram em PRs posteriores quando esses
 // pickers ficarem necessários.
+//
+// mai/2026: media_library agora incluida. Bug em prod — cliente
+// colava URL completa da API no campo "Slug da midia" da action
+// send_media, runtime nao encontrava e midia nao era enviada.
+// Picker resolve.
 
 import { asAgentDb } from "@/lib/ai-agent/db";
 import { listPipelines, listTags, listStagesForOrg } from "@persia/shared/crm";
@@ -19,6 +24,7 @@ import type {
   FlowCatalogs,
   FlowCatalogAgent,
   FlowCatalogAgendaService,
+  FlowCatalogMedia,
   FlowCatalogNotificationTemplate,
 } from "@persia/ai-agent-ui";
 import { requireAgentRole } from "./utils";
@@ -51,6 +57,7 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
     agentsRes,
     segmentsRes,
     customFieldsRes,
+    mediaRes,
   ] = await Promise.allSettled([
     listTags(ctx, { orderBy: "name" }),
     listPipelines(ctx),
@@ -88,6 +95,13 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
       .select("id, name, field_key, field_type")
       .eq("organization_id", orgId)
       .order("sort_order", { ascending: true }),
+    db
+      .from("automation_tools")
+      .select("id, slug, name, file_type, category")
+      .eq("organization_id", orgId)
+      .eq("is_active", true)
+      .not("slug", "is", null)
+      .order("name", { ascending: true }),
   ]);
 
   const pipelinesById = new Map(
@@ -149,6 +163,20 @@ export async function getFlowCatalogs(configId: string): Promise<FlowCatalogs> {
             field_key: string;
             field_type: string;
           }>)
+        : [],
+    media_library:
+      mediaRes.status === "fulfilled" && !mediaRes.value.error
+        ? ((mediaRes.value.data ?? []) as Array<{
+            id: string;
+            slug: string | null;
+            name: string;
+            file_type: string;
+            category: string;
+          }>)
+            // Defensive: filtra fora qualquer row que escapou do
+            // `.not("slug", "is", null)` (concorrencia com toggle
+            // is_active, schema migration etc).
+            .filter((m): m is FlowCatalogMedia => typeof m.slug === "string" && m.slug.length > 0)
         : [],
   };
 }

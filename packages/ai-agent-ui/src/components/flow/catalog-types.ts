@@ -54,6 +54,27 @@ export interface FlowCatalogCustomField {
   field_type: string;
 }
 
+/**
+ * mai/2026: itens da Biblioteca de midia (automation_tools). Action
+ * "Enviar midia" usa pra cliente escolher o arquivo da lista em vez
+ * de digitar slug livre. Bug observado em prod: cliente colava a URL
+ * completa da API no campo slug — runtime nao encontrava + midia nao
+ * era enviada. Picker resolve.
+ *
+ * Inclui campos pra UI mostrar nome amigavel + indicio do tipo:
+ *   - slug: identificador real usado no runtime (campo persistido)
+ *   - name: rotulo visivel
+ *   - file_type: mime type (UI infere icone)
+ *   - category: "imagem" | "video" | "documento" | "outro"
+ */
+export interface FlowCatalogMedia {
+  id: string;
+  slug: string;
+  name: string;
+  file_type: string;
+  category: string;
+}
+
 export interface FlowCatalogs {
   tags: FlowCatalogTag[];
   pipeline_stages: FlowCatalogPipelineStage[];
@@ -69,6 +90,9 @@ export interface FlowCatalogs {
    * node "Salvar dado do lead" + condition "Verificar campo
    * personalizado" usam pra picker. */
   custom_fields: FlowCatalogCustomField[];
+  /** mai/2026: Biblioteca de midia (automation_tools). Action node
+   * "Enviar midia" usa pra picker em vez de Input livre. */
+  media_library: FlowCatalogMedia[];
 }
 
 export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
@@ -80,4 +104,5 @@ export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
   other_agents: [],
   segments: [],
   custom_fields: [],
+  media_library: [],
 };

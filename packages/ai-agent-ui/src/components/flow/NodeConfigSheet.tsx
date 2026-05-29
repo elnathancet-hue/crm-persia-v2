@@ -752,18 +752,28 @@ export function ActionForm({
       )}
 
       {actionType === "send_media" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="action-media-slug">Slug da mídia</Label>
-          <Input
-            id="action-media-slug"
+        <>
+          {/* Fix mai/2026: era Input livre. Cliente colava a URL completa
+              da API ("https://...?slug=xxx") em vez do slug, runtime nao
+              encontrava o arquivo e midia nao era enviada. Picker resolve
+              — cliente seleciona da lista de Biblioteca de midia. */}
+          <CatalogSelect
+            label="Mídia a enviar"
+            loading={catalogsLoading}
             value={(config.slug as string) ?? ""}
-            onChange={(e) => updateConfig({ slug: e.target.value })}
-            placeholder="ex: catalogo-2026"
+            onChange={(v) => updateConfig({ slug: v })}
+            options={catalogs.media_library.map((m) => ({
+              value: m.slug,
+              label: `${m.name} (${labelForMediaCategory(m.category)})`,
+            }))}
+            emptyLabel="Nenhuma mídia cadastrada. Acesse Automação → Biblioteca de mídia para adicionar."
+            placeholder="Selecione uma mídia"
           />
           <p className="text-xs text-muted-foreground">
-            Configure os arquivos em Automação → Biblioteca.
+            A IA envia esse arquivo do seu acervo quando o fluxo passar
+            por aqui.
           </p>
-        </div>
+        </>
       )}
 
       {actionType === "transfer_to_user" && (
@@ -1015,3 +1025,19 @@ function CatalogSelect({
 
 // Silencia warning de import tipo-only quando catalogs default não é usado.
 export const _DEFAULT_CATALOGS = EMPTY_FLOW_CATALOGS;
+
+// Rotulo amigavel pra categoria de midia. Mapeia os valores que
+// /automations/tools cadastra ("documento" | "imagem" | "video" | "outro")
+// pros rotulos PT-BR mostrados no Select de send_media.
+function labelForMediaCategory(category: string): string {
+  switch (category) {
+    case "imagem":
+      return "imagem";
+    case "video":
+      return "vídeo";
+    case "documento":
+      return "documento";
+    default:
+      return "arquivo";
+  }
+}
