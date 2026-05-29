@@ -92,8 +92,19 @@ export function InlineFormPanel({
     // perdiam focus instantaneamente porque o `nopan` faltante deixava
     // ReactFlow consumir o mousedown pra iniciar pan do canvas. Cliente
     // nao conseguia digitar.
+    //
+    // Fix mai/2026 (cont.): adicionar onMouseDown + onPointerDown.
+    // ReactFlow escuta pointer/mouse, NAO click. Antes so tinha
+    // `onClick stopPropagation` — nao adiantava porque o evento que
+    // dispara drag/pan eh o pointerdown/mousedown, nao click. Cliente
+    // continuava sem conseguir digitar mesmo com nodrag/nopan/nowheel
+    // porque alguns shadcn components (Select, Popover) tem portais
+    // que escapam do tree DOM — handlers aqui sao defesa em profundidade.
+    // NAO usar preventDefault — isso quebraria focus nativo nos campos.
     <div
       className="space-y-3 nodrag nopan nowheel"
+      onPointerDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       {nodeType === "entry" && (
