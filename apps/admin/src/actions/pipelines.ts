@@ -61,7 +61,7 @@ export async function createDeal(data: {
   stage_id: string;
   title: string;
   value: number;
-  lead_id?: string;
+  lead_id: string;
 }) {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();
@@ -251,7 +251,7 @@ export async function updateDeal(
     title?: string;
     value?: number;
     status?: string;
-    lead_id?: string | null;
+    lead_id?: string;
   },
 ) {
   try {

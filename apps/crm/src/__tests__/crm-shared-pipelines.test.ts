@@ -163,27 +163,27 @@ describe("@persia/shared/crm — pipelines & stages & deals", () => {
   // deletePipeline
   // ============================================================================
 
-  it("deletePipeline em cascata: ownership → deals → stages → pipeline", async () => {
+  it("deletePipeline em cascata via RPC atomico", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("pipelines", { data: { id: "p1" }, error: null }); // ownership
-    supabase.queue("pipeline_stages", { data: [{ id: "s1" }, { id: "s2" }], error: null }); // get stages
-    supabase.queue("deals", { data: null, error: null }); // delete deals stage 1
-    supabase.queue("deals", { data: null, error: null }); // delete deals stage 2
-    supabase.queue("pipeline_stages", { data: null, error: null }); // delete all stages
-    supabase.queue("pipelines", { data: null, error: null }); // delete pipeline
+    supabase.queue("rpc:delete_pipeline_cascade", { data: null, error: null });
 
     await deletePipeline(ctx(supabase), "p1");
 
-    expect(supabase.deletes.deals).toBe(true);
-    expect(supabase.deletes.pipeline_stages).toBe(true);
-    expect(supabase.deletes.pipelines).toBe(true);
+    expect(supabase.rpcCalls).toHaveLength(1);
+    expect(supabase.rpcCalls[0]).toEqual({
+      fn: "delete_pipeline_cascade",
+      args: { p_org_id: ORG_A, p_pipeline_id: "p1" },
+    });
   });
 
-  it("deletePipeline throw quando pipeline nao pertence ao org", async () => {
+  it("deletePipeline throw quando RPC retorna erro", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("pipelines", { data: null, error: null });
+    supabase.queue("rpc:delete_pipeline_cascade", {
+      data: null,
+      error: { message: "Pipeline nao encontrado nesta organizacao" },
+    });
 
-    await expect(deletePipeline(ctx(supabase), "p-fake")).rejects.toThrow(/nao encontrado/i);
+    await expect(deletePipeline(ctx(supabase), "p-fake")).rejects.toThrow(/excluir funil/i);
   });
 
   // ============================================================================
@@ -248,21 +248,23 @@ describe("@persia/shared/crm — pipelines & stages & deals", () => {
   // updateStageOrder (bulk)
   // ============================================================================
 
-  it("updateStageOrder atualiza sort_order pra cada stage", async () => {
+  it("updateStageOrder via RPC atomico", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("pipeline_stages", { data: null, error: null });
-    supabase.queue("pipeline_stages", { data: null, error: null });
-    supabase.queue("pipeline_stages", { data: null, error: null });
+    supabase.queue("rpc:reorder_stages", { data: null, error: null });
 
-    await updateStageOrder(ctx(supabase), [
+    const stages = [
       { id: "s1", position: 0 },
       { id: "s2", position: 1 },
       { id: "s3", position: 2 },
-    ]);
+    ];
 
-    expect(supabase.updates.pipeline_stages).toHaveLength(3);
-    const updates = supabase.updates.pipeline_stages as Array<{ sort_order: number }>;
-    expect(updates.map((u) => u.sort_order)).toEqual([0, 1, 2]);
+    await updateStageOrder(ctx(supabase), stages);
+
+    expect(supabase.rpcCalls).toHaveLength(1);
+    expect(supabase.rpcCalls[0]).toEqual({
+      fn: "reorder_stages",
+      args: { p_org_id: ORG_A, p_stages: stages },
+    });
   });
 
   // ============================================================================
@@ -290,7 +292,7 @@ describe("@persia/shared/crm — pipelines & stages & deals", () => {
     supabase.queue("pipeline_stages", { data: null, error: null });
 
     await expect(
-      createDeal(ctx(supabase), { pipelineId: "p1", stageId: "s-fake", title: "Deal X" }),
+      createDeal(ctx(supabase), { pipelineId: "p1", stageId: "s-fake", title: "Deal X", leadId: "lead-1" }),
     ).rejects.toThrow(/Etapa nao encontrada neste funil/);
   });
 
@@ -312,12 +314,13 @@ describe("@persia/shared/crm — pipelines & stages & deals", () => {
   it("createDeal insere com defaults (status=open, value=0 quando omitido)", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("pipeline_stages", { data: { id: "s1", pipeline_id: "p1" }, error: null });
+    supabase.queue("leads", { data: { id: "lead-1" }, error: null });
     supabase.queue("deals", {
       data: { id: "d-new", title: "X", status: "open", value: 0 },
       error: null,
     });
 
-    await createDeal(ctx(supabase), { pipelineId: "p1", stageId: "s1", title: "X" });
+    await createDeal(ctx(supabase), { pipelineId: "p1", stageId: "s1", title: "X", leadId: "lead-1" });
 
     expect(supabase.inserts.deals?.[0]).toMatchObject({
       organization_id: ORG_A,

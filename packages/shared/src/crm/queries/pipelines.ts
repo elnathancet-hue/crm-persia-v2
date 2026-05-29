@@ -22,9 +22,11 @@ export async function listPipelines(
   opts: ListPipelinesOptions = {},
 ): Promise<Pipeline[] | PipelineWithStagesAndDeals[]> {
   const { db, orgId } = ctx;
+  // Select explicito pra evitar overfetch de colunas pesadas
+  // (ex: deals.loss_note, metadata JSONB) que o Kanban nao renderiza.
   const select = opts.withStagesAndDeals
-    ? "*, pipeline_stages(*, deals(*))"
-    : "*";
+    ? "id, name, created_at, pipeline_stages(id, pipeline_id, name, color, sort_order, outcome, description, deals(id, title, value, status, lead_id, pipeline_id, stage_id, sort_order, assigned_to, created_at, updated_at))"
+    : "id, name, created_at";
 
   const { data, error } = await db
     .from("pipelines")

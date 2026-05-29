@@ -92,21 +92,23 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     expect(supabase.inserts.lead_activities ?? []).toHaveLength(0);
   });
 
-  it("moveDealKanban NAO loga quando deal nao tem lead_id (orphan deal)", async () => {
+  it("moveDealKanban loga em lead_activities pra qualquer deal (lead_id sempre presente)", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("pipeline_stages", {
       data: { id: "stage-b", pipeline_id: "p1", name: "Q" },
       error: null,
     });
     supabase.queue("deals", {
-      data: { id: "d1", pipeline_id: "p1", lead_id: null, stage_id: "stage-a" },
+      data: { id: "d1", pipeline_id: "p1", lead_id: "lead-1", stage_id: "stage-a" },
       error: null,
     });
     supabase.queue("deals", { data: null, error: null });
+    supabase.queue("lead_activities", { data: null, error: null });
 
     await moveDealKanban(ctx(supabase), "d1", "stage-b", 5);
 
-    expect(supabase.inserts.lead_activities ?? []).toHaveLength(0);
+    const inserts = supabase.inserts.lead_activities ?? [];
+    expect(inserts).toHaveLength(1);
   });
 
   // ==========================================================================
@@ -162,13 +164,13 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     expect(result.updated_count).toBe(2);
   });
 
-  it("bulkMarkDealsAsLost loga 1 entry em lead_activities por deal com lead", async () => {
+  it("bulkMarkDealsAsLost loga 1 entry em lead_activities por deal", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("deals", {
       data: [
         { id: "d1", lead_id: "lead-1" },
         { id: "d2", lead_id: "lead-2" },
-        { id: "d3", lead_id: null },  // sem lead — pula log
+        { id: "d3", lead_id: "lead-3" },
       ],
       error: null,
     });
@@ -182,7 +184,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     const inserts = supabase.inserts.lead_activities ?? [];
     expect(inserts).toHaveLength(1);
     const batch = inserts[0] as Array<Record<string, unknown>>;
-    expect(batch).toHaveLength(2);  // so deals com lead_id
+    expect(batch).toHaveLength(3);  // todos os deals tem lead_id
     expect(batch[0].type).toBe("deal_lost");
     expect(batch[0].description).toContain("Sem orcamento");
     const meta = batch[0].metadata as Record<string, unknown>;
@@ -252,8 +254,8 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     });
     supabase.queue("deals", {
       data: [
-        { id: "d1", pipeline_id: "p1", lead_id: null, stage_id: "stage-a" },
-        { id: "d2", pipeline_id: "p2", lead_id: null, stage_id: "stage-x" }, // outro pipeline
+        { id: "d1", pipeline_id: "p1", lead_id: "lead-1", stage_id: "stage-a" },
+        { id: "d2", pipeline_id: "p2", lead_id: "lead-2", stage_id: "stage-x" }, // outro pipeline
       ],
       error: null,
     });
@@ -270,7 +272,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
       error: null,
     });
     supabase.queue("deals", {
-      data: [{ id: "d1", pipeline_id: "p1", lead_id: null, stage_id: "stage-a" }],
+      data: [{ id: "d1", pipeline_id: "p1", lead_id: "lead-1", stage_id: "stage-a" }],
       error: null,
     });
     // Pediu 2, voltou 1 — id "d2" nao existe ou e de outro tenant
@@ -288,7 +290,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     supabase.queue("deals", {
       data: [
         { id: "d1", lead_id: "lead-1" },
-        { id: "d2", lead_id: null },
+        { id: "d2", lead_id: "lead-2" },
       ],
       error: null,
     });
@@ -300,13 +302,13 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     const inserts = supabase.inserts.lead_activities ?? [];
     expect(inserts).toHaveLength(1);
     const batch = inserts[0] as Array<Record<string, unknown>>;
-    expect(batch).toHaveLength(1);  // so o deal com lead_id
+    expect(batch).toHaveLength(2);  // todos os deals tem lead_id
     expect(batch[0].description).toContain("ganho");
   });
 
   it("bulkUpdateDealStatus seta closed_at quando status != open", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("deals", { data: [{ id: "d1", lead_id: null }], error: null });
+    supabase.queue("deals", { data: [{ id: "d1", lead_id: "lead-1" }], error: null });
 
     await bulkUpdateDealStatus(ctx(supabase), ["d1"], "lost");
 
@@ -317,7 +319,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
 
   it("bulkUpdateDealStatus limpa closed_at quando volta pra open", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("deals", { data: [{ id: "d1", lead_id: null }], error: null });
+    supabase.queue("deals", { data: [{ id: "d1", lead_id: "lead-1" }], error: null });
 
     await bulkUpdateDealStatus(ctx(supabase), ["d1"], "open");
 
@@ -335,7 +337,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     supabase.queue("deals", {
       data: [
         { id: "d1", lead_id: "lead-1", title: "Negocio A" },
-        { id: "d2", lead_id: null, title: "Negocio B" },
+        { id: "d2", lead_id: "lead-2", title: "Negocio B" },
       ],
       error: null,
     });
@@ -350,7 +352,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     const inserts = supabase.inserts.lead_activities ?? [];
     expect(inserts).toHaveLength(1);
     const batch = inserts[0] as Array<Record<string, unknown>>;
-    expect(batch).toHaveLength(1);  // so d1 tem lead
+    expect(batch).toHaveLength(2);  // todos os deals tem lead_id
     expect(batch[0].type).toBe("deal_deleted");
     expect(batch[0].description).toContain("Negocio A");
   });
@@ -360,8 +362,8 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     // Snapshot mostra 2 deals
     supabase.queue("deals", {
       data: [
-        { id: "d1", lead_id: null, title: "A" },
-        { id: "d2", lead_id: null, title: "B" },
+        { id: "d1", lead_id: "lead-1", title: "A" },
+        { id: "d2", lead_id: "lead-2", title: "B" },
       ],
       error: null,
     });
@@ -428,7 +430,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     expect(batch[0].type).toBe("tag_applied");
   });
 
-  it("bulkApplyTagsToDealLeads retorna zeros quando todos os deals sao orphan", async () => {
+  it("bulkApplyTagsToDealLeads aplica tags a todos os leads dos deals", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("tags", {
       data: [{ id: "tag-1", name: "X" }],
@@ -436,11 +438,12 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
     });
     supabase.queue("deals", {
       data: [
-        { id: "d1", lead_id: null },
-        { id: "d2", lead_id: null },
+        { id: "d1", lead_id: "lead-1" },
+        { id: "d2", lead_id: "lead-2" },
       ],
       error: null,
     });
+    supabase.queue("lead_tags", { data: null, error: null });
 
     const result = await bulkApplyTagsToDealLeads(
       ctx(supabase),
@@ -448,7 +451,7 @@ describe("@persia/shared/crm — bulk mutations + audit log", () => {
       ["tag-1"],
     );
 
-    expect(result).toEqual({ leads_count: 0, links_count: 0 });
+    expect(result).toEqual({ leads_count: 2, links_count: 2 });
   });
 
   it("bulkApplyTagsToDealLeads gera N×M links (N leads × M tags)", async () => {

@@ -76,12 +76,13 @@ export const adminKanbanActions: KanbanActions = {
 
   // ============ DEALS ============
   createDeal: async ({ pipelineId, stageId, title, value, leadId }) => {
+    if (!leadId) throw new Error("leadId obrigatorio para criar deal");
     const deal = await createDeal({
       pipeline_id: pipelineId,
       stage_id: stageId,
       title,
       value,
-      lead_id: leadId ?? undefined,
+      lead_id: leadId,
     });
     if (!deal) throw new Error("Erro ao criar negocio");
     return deal as Awaited<ReturnType<KanbanActions["createDeal"]>>;

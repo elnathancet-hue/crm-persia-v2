@@ -102,15 +102,18 @@ export async function moveLeadStage(
 
   // PR-FLOW-PIVOT PR 11 (mai/2026): dispara agent_flows com entry
   // pipeline_stage_entered. Fire-and-forget — drag-drop do Kanban
-  // continua responsivo mesmo se flow demorar.
+  // continua responsivo mesmo se flow demorar. Loga com contexto
+  // suficiente pra debugging (leadId + stageId).
   void import("@/lib/ai-agent/flow/triggers")
     .then(({ triggerAgentFlowsForStageEntry }) =>
       triggerAgentFlowsForStageEntry(supabase, orgId, leadId, stageId),
     )
     .catch((err) => {
       console.error(
-        "[moveLeadStage] triggerAgentFlowsForStageEntry failed:",
-        err,
+        "[moveLeadStage] triggerAgentFlowsForStageEntry FAILED — " +
+          "automacoes IA NAO dispararam para este lead. " +
+          `leadId=${leadId} stageId=${stageId} orgId=${orgId}`,
+        err instanceof Error ? err.message : err,
       );
     });
 

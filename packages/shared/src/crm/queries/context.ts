@@ -12,6 +12,8 @@
 
 export interface CrmQueryDb {
   from: (table: string) => any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rpc?: (...args: any[]) => any;
 }
 
 export interface CrmQueryContext {

@@ -178,13 +178,14 @@ export async function getDeals(pipelineId?: string) {
 
 export async function createDeal(formData: FormData) {
   const { supabase, orgId } = await requireRole("agent");
-  const leadIdRaw = formData.get("lead_id") as string;
+  const leadId = formData.get("lead_id") as string;
+  if (!leadId) throw new Error("lead_id eh obrigatorio pra criar deal.");
   const deal = await createDealShared(
     { db: supabase, orgId },
     {
       pipelineId: formData.get("pipeline_id") as string,
       stageId: formData.get("stage_id") as string,
-      leadId: leadIdRaw || null,
+      leadId,
       title: formData.get("title") as string,
       value: parseFloat((formData.get("value") as string) || "0"),
     },
@@ -224,17 +225,33 @@ export async function createLeadWithDeal(input: CreateLeadWithDealInput) {
   const lead = await createLeadShared(ctx, input.lead);
 
   // 2. Cria o deal vinculado ao lead na etapa escolhida.
+  // Se falhar, vincula pipeline/stage no lead pra ele ao menos
+  // aparecer no Kanban (sem deal, mas visivel).
   const dealTitle = (input.dealTitle ?? input.lead.name ?? "Novo lead").trim();
-  const deal = await createDealShared(ctx, {
-    pipelineId: input.pipelineId,
-    stageId: input.stageId,
-    leadId: lead.id,
-    title: dealTitle || "Novo lead",
-    value: input.dealValue ?? 0,
-  });
-
-  revalidatePath("/crm");
-  return { lead, deal };
+  try {
+    const deal = await createDealShared(ctx, {
+      pipelineId: input.pipelineId,
+      stageId: input.stageId,
+      leadId: lead.id,
+      title: dealTitle || "Novo lead",
+      value: input.dealValue ?? 0,
+    });
+    revalidatePath("/crm");
+    return { lead, deal };
+  } catch (err) {
+    // Fallback: vincula lead ao pipeline/stage pra nao ficar invisivel.
+    await supabase
+      .from("leads")
+      .update({
+        pipeline_id: input.pipelineId,
+        stage_id: input.stageId,
+        sort_order: 0,
+      })
+      .eq("id", lead.id)
+      .eq("organization_id", orgId);
+    revalidatePath("/crm");
+    throw err;
+  }
 }
 
 export async function updateDeal(
@@ -243,7 +260,7 @@ export async function updateDeal(
     title?: string;
     value?: number;
     status?: string;
-    lead_id?: string | null;
+    lead_id?: string;
   },
 ) {
   const { supabase, orgId } = await requireRole("agent");

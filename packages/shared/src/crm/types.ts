@@ -208,7 +208,8 @@ export interface Deal {
   title: string;
   value: number;
   status: string;
-  lead_id: string | null;
+  /** NOT NULL no DB desde migration 039. */
+  lead_id: string;
   pipeline_id: string;
   stage_id: string;
   sort_order: number;

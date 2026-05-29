@@ -64,7 +64,7 @@ export async function createPipeline(
 
   if (withDefaultStages) {
     for (let i = 0; i < DEFAULT_STAGES.length; i++) {
-      await db.from("pipeline_stages").insert({
+      const { error: stageErr } = await db.from("pipeline_stages").insert({
         pipeline_id: created.id,
         organization_id: orgId,
         name: DEFAULT_STAGES[i].name,
@@ -72,6 +72,13 @@ export async function createPipeline(
         color: DEFAULT_STAGES[i].color,
         outcome: DEFAULT_STAGES[i].outcome,
       });
+      if (stageErr) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[createPipeline] falhou ao criar stage default "${DEFAULT_STAGES[i].name}":`,
+          stageErr.message,
+        );
+      }
     }
   }
 
@@ -120,8 +127,9 @@ export async function updatePipelineName(
 }
 
 /**
- * Deleta um pipeline em cascata: deals → stages → pipeline. Cada step
- * eh org-scoped pra prevenir delete cross-tenant em service-role.
+ * Deleta um pipeline em cascata (deals → stages → pipeline) via RPC
+ * atomica (migration 077). Tudo numa unica transacao — sem risco de
+ * stages/deals orfaos em caso de timeout.
  */
 export async function deletePipeline(
   ctx: CrmMutationContext,
@@ -129,47 +137,11 @@ export async function deletePipeline(
 ): Promise<void> {
   const { db, orgId } = ctx;
 
-  // Valida ownership antes de qualquer delete
-  const { data: pipeline } = await db
-    .from("pipelines")
-    .select("id")
-    .eq("id", pipelineId)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-
-  if (!pipeline) throw new Error("Pipeline nao encontrado nesta organizacao");
-
-  // 1. Pega ids de todas as stages (pra fazer delete em cascata nos deals)
-  const { data: stages } = await db
-    .from("pipeline_stages")
-    .select("id")
-    .eq("pipeline_id", pipelineId)
-    .eq("organization_id", orgId);
-
-  // 2. Delete deals de cada stage
-  if (stages) {
-    for (const stage of stages as { id: string }[]) {
-      await db
-        .from("deals")
-        .delete()
-        .eq("stage_id", stage.id)
-        .eq("organization_id", orgId);
-    }
-  }
-
-  // 3. Delete stages do pipeline
-  await db
-    .from("pipeline_stages")
-    .delete()
-    .eq("pipeline_id", pipelineId)
-    .eq("organization_id", orgId);
-
-  // 4. Delete pipeline
-  const { error } = await db
-    .from("pipelines")
-    .delete()
-    .eq("id", pipelineId)
-    .eq("organization_id", orgId);
+  if (!db.rpc) throw new Error("db.rpc required for deletePipeline");
+  const { error } = await db.rpc("delete_pipeline_cascade", {
+    p_org_id: orgId,
+    p_pipeline_id: pipelineId,
+  });
 
   if (error) throw sanitizeMutationError(error, "Erro ao excluir funil");
 }
@@ -268,9 +240,9 @@ export async function updateStage(
 }
 
 /**
- * Reordena multiplas stages de uma vez (drag-drop). Cada item do array
- * tem `id` e `position` (que vira sort_order). Updates serializados pra
- * evitar race em RLS — performance OK pra ate ~50 stages.
+ * Reordena multiplas stages de uma vez (drag-drop) via RPC atomica
+ * (migration 077). Todos os sort_orders mudam dentro de uma unica
+ * transacao — sem risco de estado parcial em timeout.
  */
 export async function updateStageOrder(
   ctx: CrmMutationContext,
@@ -278,13 +250,13 @@ export async function updateStageOrder(
 ): Promise<void> {
   const { db, orgId } = ctx;
 
-  for (const stage of stages) {
-    await db
-      .from("pipeline_stages")
-      .update({ sort_order: stage.position })
-      .eq("id", stage.id)
-      .eq("organization_id", orgId);
-  }
+  if (!db.rpc) throw new Error("db.rpc required for updateStageOrder");
+  const { error } = await db.rpc("reorder_stages", {
+    p_org_id: orgId,
+    p_stages: stages,
+  });
+
+  if (error) throw sanitizeMutationError(error, "Erro ao reordenar etapas");
 }
 
 /**
