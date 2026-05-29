@@ -26,6 +26,7 @@ import {
   listStagesForPipeline,
   moveLeadStage,
   moveLeadToPipeline,
+  refreshLeadAvatar,
   updateDealMeta,
 } from "@/actions/leads-kanban";
 import {
@@ -120,6 +121,8 @@ export const crmLeadsActions: LeadsActions = {
       };
     }
   },
+  // mai/2026: re-fetch da foto WhatsApp (action manual no kebab)
+  refreshLeadAvatar: (leadId) => refreshLeadAvatar(leadId),
   createDealForLead,
   updateDealMeta,
   deleteDeal: deleteDealForLead,
