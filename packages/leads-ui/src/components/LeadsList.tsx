@@ -88,6 +88,7 @@ import {
 import type { LeadWithTags } from "@persia/shared/crm";
 
 import { DataTable, type ColumnDef } from "./DataTable";
+import { LeadAvatar } from "./LeadAvatar";
 import { LeadForm } from "./LeadForm";
 import { useLeadsActions } from "../context";
 import type { OrgTag } from "../actions";
@@ -524,39 +525,14 @@ export function LeadsList({
       sortable: true,
       render: (row) => {
         const name = row.name?.trim() || "Sem nome";
-        const initials = name
-          .split(/\s+/)
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((p) => p[0])
-          .join("")
-          .toUpperCase();
-        // Hash → cor saturada (8 paletas) — mesmo padrao do KanbanBoard.
-        // NOTA: paleta intencional, nao hardcode visual a corrigir.
-        // 8 cores distintas exigem variedade alem dos 4 outcome tokens
-        // do design system. Identidade visual, nao semantica.
-        const palette = [
-          "bg-blue-500",
-          "bg-emerald-500",
-          "bg-amber-500",
-          "bg-rose-500",
-          "bg-violet-500",
-          "bg-cyan-500",
-          "bg-orange-500",
-          "bg-pink-500",
-        ];
-        const seed = name
-          .split("")
-          .reduce((a, c) => a + c.charCodeAt(0), 0);
-        const avatarColor = palette[seed % palette.length];
         return (
           <div className="flex items-center gap-2.5">
-            <span
-              className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm ${avatarColor}`}
-              aria-hidden
-            >
-              {initials || "?"}
-            </span>
+            <LeadAvatar
+              name={name}
+              avatarUrl={row.avatar_url}
+              size="sm"
+              className="shadow-sm"
+            />
             <span className="font-semibold text-sm text-foreground">{name}</span>
           </div>
         );
