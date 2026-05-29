@@ -485,36 +485,66 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
     });
   };
 
+  // Fix mai/2026: helpers que explicam comportamento real do runtime.
+  // Antes a UI dizia "A IA segue essas instruções + o prompt geral" mas
+  // o cliente nao percebia que o campo era OPCIONAL e tentava colar o
+  // prompt geral aqui (confusao reportada testando o template).
+  // Agora o helper text reflete dinamicamente o estado:
+  //   - vazio → "Usando o prompt geral do agente" (verde, claro)
+  //   - preenchido → "Soma ao prompt geral nesta etapa"
+  const systemPromptValue = (draft.system_prompt as string) ?? "";
+  const hasLocalPrompt = systemPromptValue.trim().length > 0;
+
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="ai-label">Nome do node</Label>
+        <Label htmlFor="ai-label">Nome da etapa</Label>
         <Input
           id="ai-label"
           value={(draft.label as string) ?? ""}
           onChange={(e) => setDraft((d) => ({ ...d, label: e.target.value }))}
-          placeholder="Conversar com IA"
+          placeholder="Ex: Qualificação inicial"
         />
+        <p className="text-xs text-muted-foreground">
+          Rótulo que aparece no card. Só pra você se organizar — a IA não vê.
+        </p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="ai-prompt">Instruções pra IA</Label>
+        <div className="flex items-center gap-2">
+          <Label htmlFor="ai-prompt">Instrução desta etapa</Label>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+            Opcional
+          </span>
+        </div>
         <Textarea
           id="ai-prompt"
-          value={(draft.system_prompt as string) ?? ""}
+          value={systemPromptValue}
           onChange={(e) =>
             setDraft((d) => ({ ...d, system_prompt: e.target.value }))
           }
-          placeholder="Descreva o que a IA deve fazer aqui (ex: 'Pergunte sobre o problema do lead, orçamento, prazo e quem decide. Depois marque como qualificado')."
-          rows={8}
-          className="font-mono text-xs"
+          placeholder="Deixe vazio pra usar só o prompt geral do agente.&#10;&#10;Preencha pra especializar a IA NESTA etapa do funil. Ex: 'Aqui descubra o orçamento do lead. Não fale de preço ainda — só pergunte qual a faixa que ele tem em mente'."
+          rows={6}
+          className="text-xs"
         />
-        <p className="text-xs text-muted-foreground">
-          A IA segue essas instruções + o prompt geral do agente.
-        </p>
+        {hasLocalPrompt ? (
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Nesta etapa</span> a
+            IA usa o <span className="font-medium">prompt geral do agente +
+            esta instrução</span> juntos.
+          </p>
+        ) : (
+          <p className="text-xs text-success flex items-center gap-1">
+            <span aria-hidden>✓</span>
+            <span>
+              Usando o <span className="font-medium">prompt geral</span> do
+              agente (Configurações → Comportamento).
+            </span>
+          </p>
+        )}
       </div>
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Eventos de saída</Label>
+          <Label>Próximos passos do fluxo</Label>
           <Button
             type="button"
             variant="ghost"
@@ -522,17 +552,18 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
             onClick={addInstruction}
           >
             <Plus className="size-3.5 mr-1" />
-            Adicionar evento
+            Adicionar saída
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Defina eventos que a IA pode sinalizar (ex: "lead_qualificado",
-          "agendou_reuniao"). Cada evento vira uma saída do node — você
-          conecta a uma ação no canvas.
+          Cada saída vira um caminho no canvas. Quando a IA atender o
+          critério que você descreve abaixo, ela sinaliza essa saída e o
+          fluxo segue por ela.
         </p>
         {instructions.length === 0 ? (
           <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
-            Sem eventos cadastrados. A IA usa a saída padrão.
+            Sem saídas configuradas. A IA continua pelo caminho padrão
+            (handle "continua" do card) toda vez que responder.
           </div>
         ) : (
           <div className="space-y-2">
@@ -542,7 +573,7 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
                 className="rounded-md border border-border bg-card p-2.5 space-y-2"
               >
                 <div className="flex items-center justify-between">
-                  <Label className="text-[11px]">Evento #{idx + 1}</Label>
+                  <Label className="text-[11px]">Saída #{idx + 1}</Label>
                   <Button
                     type="button"
                     variant="ghost"
@@ -553,23 +584,42 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
                     <Trash2 className="size-3" />
                   </Button>
                 </div>
-                <Input
-                  value={ins.output_handle}
-                  onChange={(e) =>
-                    updateInstruction(idx, { output_handle: e.target.value })
-                  }
-                  placeholder="nome_do_evento"
-                  className="h-7 text-xs font-mono"
-                />
-                <Textarea
-                  value={ins.description}
-                  onChange={(e) =>
-                    updateInstruction(idx, { description: e.target.value })
-                  }
-                  placeholder="Quando a IA deve sinalizar este evento? (ex: 'quando coletou os 4 dados de qualificação')"
-                  rows={2}
-                  className="text-xs"
-                />
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Nome técnico
+                  </Label>
+                  <Input
+                    value={ins.output_handle}
+                    onChange={(e) =>
+                      updateInstruction(idx, { output_handle: e.target.value })
+                    }
+                    placeholder="qualificado"
+                    className="h-7 text-xs font-mono"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Identificador interno. Use letras minúsculas e _ (ex:
+                    qualificado, agendou, recusou).
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Quando a IA deve disparar esta saída?{" "}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Textarea
+                    value={ins.description}
+                    onChange={(e) =>
+                      updateInstruction(idx, { description: e.target.value })
+                    }
+                    placeholder="Ex: 'Quando o lead confirmar interesse + informar prazo + responder pelo menos 3 mensagens.'"
+                    rows={2}
+                    className="text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Critério que a IA usa pra decidir. Sem descrição clara, a
+                    IA nunca sai desta etapa.
+                  </p>
+                </div>
               </div>
             ))}
           </div>
@@ -619,34 +669,11 @@ export function ActionForm({
       )}
 
       {actionType === "move_pipeline_stage" && (
-        // Backlog #11 Auditoria (mai/2026): endereca rodada 3 #4 +
-        // rodada 4 matriz. Antes:
-        //   - Salvava stage_name (nome global, sem pipeline).
-        //   - Handler resolvia "stage_name" dentro do funil ATUAL do
-        //     lead — selecao com mesmo nome em outro funil falhava em
-        //     runtime ("etapa nao pertence ao funil do lead").
-        // Agora:
-        //   - Salva stage_id (UUID — unico).
-        //   - Label inclui nome do funil pra desambiguar etapas
-        //     homonimas ("Comercial > Qualificado" vs "Suporte > Qualificado").
-        //   - Handler ja aceita stage_id direto + valida funil — em runtime
-        //     reporta erro claro se admin escolher etapa de outro funil
-        //     que o lead atualmente nao esta.
-        <CatalogSelect
-          label="Etapa do funil"
+        <PipelineStagePicker
           loading={catalogsLoading}
-          value={(config.stage_id as string) ?? ""}
+          stageId={(config.stage_id as string) ?? ""}
+          stages={catalogs.pipeline_stages}
           onChange={(v) => updateConfig({ stage_id: v })}
-          options={catalogs.pipeline_stages.map((s) => ({
-            value: s.id,
-            // Quando pipeline_name esta vazio (defensive caso o catalogo
-            // retorne sem JOIN), mostra so o nome da etapa.
-            label: s.pipeline_name
-              ? `${s.pipeline_name} › ${s.name}`
-              : s.name,
-          }))}
-          emptyLabel="Nenhuma etapa de funil disponível."
-          placeholder="Selecione uma etapa"
         />
       )}
 
@@ -1040,4 +1067,156 @@ function labelForMediaCategory(category: string): string {
     default:
       return "arquivo";
   }
+}
+
+interface PipelineStagePickerProps {
+  loading?: boolean;
+  stageId: string;
+  stages: FlowCatalogs["pipeline_stages"];
+  onChange: (stageId: string) => void;
+}
+
+/**
+ * Picker hierarquico Funil > Etapa. Substitui o select unico de "todas
+ * as etapas" que ficava bagunçado com 4+ funis (cada etapa repetia o
+ * nome do funil no label, lista crescia em N*M e era dificil escanear).
+ *
+ * Pattern inspirado nas ferramentas similares (Jordan, ManyChat):
+ *   1) Cliente escolhe o Funil
+ *   2) Etapa carrega filtrada apenas pelas stages daquele funil
+ *
+ * Persiste so o `stage_id` (mesmo schema de antes). O pipelineId
+ * exibido eh derivado consultando a stage selecionada no catalogo.
+ * Trocar de funil zera o stage_id (estado fica consistente).
+ */
+function PipelineStagePicker({
+  loading,
+  stageId,
+  stages,
+  onChange,
+}: PipelineStagePickerProps) {
+  // Deriva pipelines unicos do catalogo de stages (mantem ordem original
+  // — o catalogo ja vem ordenado por nome do pipeline).
+  const pipelines = React.useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const stage of stages) {
+      if (!seen.has(stage.pipeline_id)) {
+        seen.set(stage.pipeline_id, stage.pipeline_name || "(sem nome)");
+      }
+    }
+    return Array.from(seen, ([id, name]) => ({ id, name }));
+  }, [stages]);
+
+  // Pipeline selecionado: deriva do stageId quando existe (1a render
+  // ou retomada de draft), com fallback pra null quando cliente nao
+  // escolheu nada ainda.
+  const selectedStage = stages.find((s) => s.id === stageId);
+  const [pipelineId, setPipelineId] = React.useState<string>(
+    selectedStage?.pipeline_id ?? "",
+  );
+
+  // Se stageId externo mudar (ex: cliente trocou de node no canvas),
+  // re-deriva o pipelineId. Sem isso, o select de Funil fica "preso"
+  // no antigo pipeline ate o cliente clicar nele.
+  React.useEffect(() => {
+    if (selectedStage && selectedStage.pipeline_id !== pipelineId) {
+      setPipelineId(selectedStage.pipeline_id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stageId]);
+
+  const filteredStages = React.useMemo(
+    () => stages.filter((s) => s.pipeline_id === pipelineId),
+    [stages, pipelineId],
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label>Funil</Label>
+          <div className="h-9 rounded-md bg-muted animate-pulse" />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Etapa do funil</Label>
+          <div className="h-9 rounded-md bg-muted animate-pulse" />
+        </div>
+      </div>
+    );
+  }
+
+  if (pipelines.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+        Nenhum funil configurado. Crie um funil em CRM → Configurações.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label>Funil</Label>
+        <Select
+          value={pipelineId || undefined}
+          onValueChange={(v) => {
+            const next = v ?? "";
+            setPipelineId(next);
+            // Trocar de funil zera o stage_id — etapa antiga nao pertence
+            // ao novo funil. Cliente precisa escolher de novo.
+            if (next !== selectedStage?.pipeline_id) {
+              onChange("");
+            }
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione o funil">
+              {pipelines.find((p) => p.id === pipelineId)?.name ?? "Selecione o funil"}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {pipelines.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Etapa do funil</Label>
+        {!pipelineId ? (
+          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+            Escolha um funil acima primeiro.
+          </div>
+        ) : filteredStages.length === 0 ? (
+          <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+            Esse funil não tem etapas cadastradas.
+          </div>
+        ) : (
+          <Select
+            value={stageId || undefined}
+            onValueChange={(v) => onChange(v ?? "")}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione a etapa">
+                {filteredStages.find((s) => s.id === stageId)?.name ?? "Selecione a etapa"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {filteredStages.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <p className="text-xs text-muted-foreground">
+          A IA precisa que o lead já esteja neste funil pra mover a etapa
+          dar certo.
+        </p>
+      </div>
+    </div>
+  );
 }
