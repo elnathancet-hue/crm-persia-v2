@@ -242,13 +242,33 @@ export function NodeShell({
           definido. Renderiza dentro do próprio card em vez de Sheet
           lateral. PR 23: layout "wide" libera mais altura — IA tem
           muitos campos e cliente pediu pra ver todos sem precisar
-          recolher seções. */}
+          recolher seções.
+
+          Fix mai/2026 (cont. PR #390): isolation ReactFlow no SLOT
+          expandido. Antes era só no InlineFormPanel (filho), mas
+          ReactFlow captura pointerdown/mousedown no wrapper externo
+          do node ANTES do bubble subir até o panel. Resultado: input
+          perdia focus porque o canvas iniciava drag/pan.
+
+          Classes + handlers no SLOT (não no root) preservam drag pelo
+          header do card (que NÃO tem .nodrag) — cliente continua
+          arrastando o node pegando pelo header. Só o corpo expandido
+          fica isolado pra digitação. */}
       {isExpanded ? (
         <div
           className={cn(
             "border-t border-border/60 px-3 py-3 bg-muted/20 overflow-y-auto",
+            "nodrag nopan nowheel",
             isWide ? "max-h-[80vh]" : "max-h-[480px]",
           )}
+          // ReactFlow escuta pointer/mouse, não click. stopPropagation
+          // aqui garante que NENHUM handler do canvas dispare quando
+          // cliente interage com inputs/textareas/selects dentro do
+          // form inline. NÃO usa preventDefault — isso quebraria o
+          // focus nativo do browser nos campos.
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           {expandedContent}
         </div>
