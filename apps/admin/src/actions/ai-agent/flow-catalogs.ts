@@ -13,6 +13,7 @@ import type {
   FlowCatalogs,
   FlowCatalogAgent,
   FlowCatalogAgendaService,
+  FlowCatalogMedia,
   FlowCatalogNotificationTemplate,
 } from "@persia/ai-agent-ui";
 import { assertConfigBelongsToOrg, requireAdminAgentOrg } from "./utils";
@@ -38,6 +39,7 @@ export async function getFlowCatalogs(
     agentsRes,
     segmentsRes,
     customFieldsRes,
+    mediaRes,
   ] = await Promise.allSettled([
     listTags(ctx, { orderBy: "name" }),
     // Backlog #5 Auditoria (mai/2026): rodada 2 #3 — admin precisa
@@ -72,6 +74,14 @@ export async function getFlowCatalogs(
       .select("id, name, field_key, field_type")
       .eq("organization_id", orgId)
       .order("sort_order", { ascending: true }),
+    // mai/2026: media library (automation_tools) pra picker em
+    // send_media. Paridade com CRM.
+    fromAny(db, "automation_tools")
+      .select("id, slug, name, file_type, category")
+      .eq("organization_id", orgId)
+      .eq("is_active", true)
+      .not("slug", "is", null)
+      .order("name", { ascending: true }),
   ]);
 
   const pipelinesById = new Map(
@@ -133,6 +143,17 @@ export async function getFlowCatalogs(
             field_key: string;
             field_type: string;
           }>)
+        : [],
+    media_library:
+      mediaRes.status === "fulfilled" && !mediaRes.value.error
+        ? ((mediaRes.value.data ?? []) as Array<{
+            id: string;
+            slug: string | null;
+            name: string;
+            file_type: string;
+            category: string;
+          }>)
+            .filter((m): m is FlowCatalogMedia => typeof m.slug === "string" && m.slug.length > 0)
         : [],
   };
 }
