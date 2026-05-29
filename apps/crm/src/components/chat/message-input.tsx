@@ -523,9 +523,9 @@ export function MessageInput({
           disabled={(!content.trim() && !selectedFile) || sending || disabled || composerLocked}
           title={composerLocked ? "Fora da janela de 24h — use um template" : "Enviar"}
           aria-label="Enviar mensagem"
-          className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-40"
+          className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
           style={{
-            background: "var(--chat-send-bg)",
+            backgroundColor: "var(--chat-send-bg)",
             color: "var(--chat-send-fg)",
           }}
         >

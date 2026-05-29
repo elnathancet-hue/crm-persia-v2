@@ -227,6 +227,18 @@ export function LeadList(props: Props) {
     });
   };
 
+  const handleCountLeadsForExport = React.useCallback(
+    (filters: Parameters<typeof countLeadsForExport>[0]) =>
+      countLeadsForExport(filters),
+    [],
+  );
+
+  const handleFetchLeadsForExport = React.useCallback(
+    (filters: Parameters<typeof fetchLeadsForExport>[0]) =>
+      fetchLeadsForExport(filters),
+    [],
+  );
+
   return (
     <>
       {/* PR-CRMOPS3: hint de filtro ativo. Quando o usuario chega via
@@ -390,8 +402,8 @@ export function LeadList(props: Props) {
         open={exportOpen}
         onOpenChange={setExportOpen}
         initialFilters={{}}
-        countLeads={(filters) => countLeadsForExport(filters)}
-        fetchAllLeads={(filters) => fetchLeadsForExport(filters)}
+        countLeads={handleCountLeadsForExport}
+        fetchAllLeads={handleFetchLeadsForExport}
         onDownload={handleDownload}
         assignees={props.assignees ?? []}
         sources={knownSources}

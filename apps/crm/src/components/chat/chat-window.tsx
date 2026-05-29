@@ -42,6 +42,7 @@ import {
   Bot,
   Calendar,
   Check,
+  CheckCheck,
   FileText,
   Loader2,
   MessageSquare,
@@ -655,6 +656,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               size="sm"
               onClick={handleAssign}
               disabled={assigning}
+              className="border-border text-foreground hover:bg-muted hover:text-foreground"
             >
               {assigning ? (
                 <Loader2 className="mr-1.5 size-3.5 animate-spin" />
@@ -672,7 +674,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               size="icon-sm"
               onClick={handleResumeBot}
               disabled={assigning}
-              className="size-8 rounded-lg"
+              className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
               title="Retomar IA"
               aria-label="Retomar bot"
             >
@@ -690,7 +692,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               variant="ghost"
               size="icon-sm"
               onClick={() => setScheduleOpen(true)}
-              className="size-8 rounded-lg"
+              className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
               title="Agendar mensagem"
               aria-label="Agendar mensagem"
             >
@@ -704,7 +706,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               variant="ghost"
               size="icon-sm"
               onClick={() => setTransferOpen(true)}
-              className="size-8 rounded-lg"
+              className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
               title="Transferir conversa"
               aria-label="Transferir conversa"
             >
@@ -715,7 +717,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           {/* More options dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger>
-              <Button variant="ghost" size="icon-sm" className="size-8 rounded-lg" aria-label="Mais opções">
+              <Button variant="ghost" size="icon-sm" className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Mais opções">
                 <MoreHorizontal className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -1054,30 +1056,28 @@ function StatusIndicator({
     );
   }
   if (status === "read") {
-    // 2 checks azul WhatsApp (#53BDEB via --chat-checkmark-read).
     return (
       <span
-        className="inline-flex items-center"
-        style={{ color: "var(--chat-checkmark-read)" }}
         aria-label="Lido pelo destinatário"
         title="Lido"
       >
-        <Check className="size-3" />
-        <Check className="size-3 -ml-1.5" />
+        <CheckCheck
+          className="size-3.5"
+          style={{ color: "var(--chat-checkmark-read)" }}
+        />
       </span>
     );
   }
   if (status === "delivered") {
-    // 2 checks cinza sobrepostos (cinza do WhatsApp)
     return (
       <span
-        className="inline-flex items-center"
-        style={{ color: "var(--chat-checkmark-default)" }}
         aria-label="Entregue ao destinatário"
         title="Entregue"
       >
-        <Check className="size-3" />
-        <Check className="size-3 -ml-1.5" />
+        <CheckCheck
+          className="size-3.5"
+          style={{ color: "var(--chat-checkmark-default)" }}
+        />
       </span>
     );
   }
