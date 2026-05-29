@@ -48,6 +48,15 @@ export {
 // como prop (DI tambem).
 export { LeadInfoDrawer } from "./components/LeadInfoDrawer";
 
+// mai/2026: avatar reusable + variante com botao "Atualizar foto".
+// Usado no header do LeadInfoDrawer + disponivel pra outros componentes
+// (cards do Kanban, lista de leads, conversation list).
+export {
+  LeadAvatar,
+  LeadAvatarWithRefresh,
+  leadInitials,
+} from "./components/LeadAvatar";
+
 // PR-U2: hooks de realtime usados pelo drawer (subsumindo parte do
 // PR-S2). Recebem supabase como param.
 export {

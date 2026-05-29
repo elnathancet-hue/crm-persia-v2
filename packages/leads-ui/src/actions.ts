@@ -316,6 +316,20 @@ export interface LeadsActions {
   ) => Promise<ActionResult<void>>;
 
   /**
+   * mai/2026: re-fetch da foto WhatsApp pra um lead existente.
+   * Usado pelo item "Atualizar foto" no kebab do drawer — fluxo
+   * automatico so dispara pra leads NOVOS, entao leads antigos +
+   * casos onde a primeira tentativa retornou null ficavam sem
+   * avatar. Caller mostra toast com base em `updated`.
+   *
+   * Opcional pra retro-compat: admin pode nao implementar.
+   */
+  refreshLeadAvatar?: (leadId: string) => Promise<{
+    avatar_url: string | null;
+    updated: boolean;
+  }>;
+
+  /**
    * PR-K-CENTRIC (mai/2026): cria deal vinculado ao lead (tab Negocios
    * → botao '+ Novo negocio'). Deal vira opt-in agora.
    */

@@ -136,6 +136,94 @@ export async function moveLeadToPipeline(
 }
 
 // ============================================================
+// refreshLeadAvatar — busca foto do perfil WhatsApp pra um lead
+// EXISTENTE (action manual no kebab do drawer). mai/2026.
+//
+// Cliente reportou: "atualmente o lead nao puxa" foto. A causa:
+// fluxo automatico em incoming-pipeline.ts so dispara pra lead
+// NOVO. Leads antigos (criados antes do code de fetch) + qualquer
+// caso onde o fetch falhou silenciosamente ficam sem avatar.
+//
+// Esta action permite re-tentar manual. Reusa o provider.getContactProfilePic
+// existente — mesma logica, mas pra lead ja existente.
+//
+// Retorna { avatar_url, updated } pra UI decidir se mostra toast
+// "Foto atualizada" ou "Sem foto disponivel".
+// ============================================================
+
+export interface RefreshLeadAvatarResult {
+  avatar_url: string | null;
+  updated: boolean;
+}
+
+export async function refreshLeadAvatar(
+  leadId: string,
+): Promise<RefreshLeadAvatarResult> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Carrega o telefone do lead + valida que pertence a org.
+  const { data: lead, error: leadErr } = await supabase
+    .from("leads")
+    .select("id, phone, avatar_url")
+    .eq("id", leadId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (leadErr || !lead) {
+    throw new Error("Lead nao encontrado ou sem acesso");
+  }
+  if (!lead.phone || lead.phone.trim().length === 0) {
+    throw new Error("Lead sem telefone — nao da pra puxar foto");
+  }
+
+  // Busca a connection WhatsApp ativa da org. Sem connection, nao
+  // tem como bater na UAZAPI. (Meta Cloud retorna null sempre — a
+  // implementacao do provider trata.)
+  const { data: connection } = await supabase
+    .from("whatsapp_connections")
+    .select(
+      "provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token",
+    )
+    .eq("organization_id", orgId)
+    .eq("status", "connected")
+    .limit(1)
+    .single();
+
+  if (!connection) {
+    throw new Error("Nenhuma conexao WhatsApp ativa pra esta organizacao");
+  }
+
+  // Dynamic import pra nao incluir o provider no bundle dos selects.
+  // (createProvider vive em apps/crm, fora do shared, mas a action
+  // ja eh server-only.)
+  const { createProvider } = await import("@/lib/whatsapp/providers");
+  const provider = createProvider(connection);
+
+  // getContactProfilePic ja retorna null em falha — nao throw aqui.
+  const avatarUrl = await provider.getContactProfilePic(lead.phone);
+
+  // Se veio null OU igual ao que ja tinha, retorna sem UPDATE.
+  // Evita revalidacao desnecessaria de caches.
+  if (!avatarUrl || avatarUrl === lead.avatar_url) {
+    return { avatar_url: lead.avatar_url, updated: false };
+  }
+
+  const { error: updateErr } = await supabase
+    .from("leads")
+    .update({ avatar_url: avatarUrl })
+    .eq("id", leadId)
+    .eq("organization_id", orgId);
+
+  if (updateErr) {
+    throw new Error(`Falhou ao salvar nova foto: ${updateErr.message}`);
+  }
+
+  revalidateLeadCaches();
+  revalidatePath("/crm");
+  return { avatar_url: avatarUrl, updated: true };
+}
+
+// ============================================================
 // searchLeadsForKanban — busca leads pra aba "Existente" do "+"
 // do Kanban. mai/2026.
 //
