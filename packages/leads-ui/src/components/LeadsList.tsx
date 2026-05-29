@@ -75,6 +75,7 @@ import {
   Briefcase,
   MessageCircle,
   CalendarPlus,
+  GitBranch,
   ChevronDown,
   Check,
   Activity as ActivityIcon,
@@ -882,6 +883,17 @@ export function LeadsList({
               >
                 <CalendarPlus className="size-4" />
                 Agendar
+              </DropdownMenuItem>
+            )}
+            {canEdit && handleEdit && (
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEdit(row);
+                }}
+              >
+                <GitBranch className="size-4" />
+                Mover funil/etapa
               </DropdownMenuItem>
             )}
             {canEdit && handleEdit && (
