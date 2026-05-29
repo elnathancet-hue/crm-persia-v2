@@ -50,8 +50,22 @@ function configPreview(
     case "add_tag":
     case "remove_tag":
       return (config.tag_name as string) || "Sem tag selecionada";
-    case "move_pipeline_stage":
+    case "move_pipeline_stage": {
+      // Fix mai/2026: antes lia config.stage_name, mas a UI nova
+      // (PicketHierarquico do PR #397) persiste config.stage_id (UUID).
+      // Sem este fix, todo card de mover etapa ficava com "Sem etapa
+      // selecionada" + alerta amarelo mesmo quando configurado.
+      const stageId = (config.stage_id as string) || "";
+      const stage = catalogs?.pipeline_stages.find((s) => s.id === stageId);
+      if (stage) {
+        return stage.pipeline_name
+          ? `${stage.pipeline_name} › ${stage.name}`
+          : stage.name;
+      }
+      // Fallback pra flows legacy salvos antes do Backlog #11 que
+      // ainda guardam stage_name no banco.
       return (config.stage_name as string) || "Sem etapa selecionada";
+    }
     case "create_appointment": {
       const typeSlug = (config.type_slug as string) || "";
       const service = catalogs?.agenda_services.find((s) => s.slug === typeSlug);
@@ -105,7 +119,15 @@ function incompleteReasonFor(
       if (!(config.tag_name as string)?.trim()) return "Falta selecionar tag";
       return null;
     case "move_pipeline_stage":
-      if (!(config.stage_name as string)?.trim()) return "Falta etapa de destino";
+      // Fix mai/2026: UI nova persiste stage_id, nao stage_name.
+      // Considera valido se QUALQUER um estiver preenchido (fallback
+      // pra flows legacy).
+      if (
+        !(config.stage_id as string)?.trim() &&
+        !(config.stage_name as string)?.trim()
+      ) {
+        return "Falta etapa de destino";
+      }
       return null;
     case "trigger_notification":
       if (!(config.template_name as string)?.trim()) return "Falta template";
