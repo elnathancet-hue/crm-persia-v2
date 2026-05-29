@@ -289,6 +289,11 @@ export interface DealWithLead extends Deal {
     name: string;
     phone: string | null;
     email: string | null;
+    /** mai/2026: URL da foto do perfil WhatsApp (puxada via UAZAPI no
+     *  incoming-pipeline ou via action refreshLeadAvatar). null quando
+     *  lead nunca teve sucesso no fetch (sem WhatsApp, rate limit, etc).
+     *  Card do Kanban usa pro <LeadAvatar>. */
+    avatar_url?: string | null;
     /** ID do responsavel (auth.users.id) — opcional pra compat. */
     assigned_to?: string | null;
     lead_tags?: LeadTagJoin[];

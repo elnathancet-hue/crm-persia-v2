@@ -40,8 +40,10 @@ export async function listDeals(
         "updated_at",
         "created_at",
         "assigned_to",
-        // Embed do lead (com tags + responsavel) — necessario pro card
-        "leads(id, name, phone, email, status, assigned_to, lead_tags(tags(id, name, color)), assignee:profiles!leads_assigned_to_fkey(id, full_name))",
+        // Embed do lead (com tags + responsavel) — necessario pro card.
+        // mai/2026: + avatar_url pro <LeadAvatar> do card mostrar foto
+        // do WhatsApp quando houver, fallback iniciais coloridas.
+        "leads(id, name, phone, email, avatar_url, status, assigned_to, lead_tags(tags(id, name, color)), assignee:profiles!leads_assigned_to_fkey(id, full_name))",
       ].join(", "),
     )
     .eq("organization_id", orgId)
