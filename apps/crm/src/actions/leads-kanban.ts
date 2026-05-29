@@ -136,6 +136,81 @@ export async function moveLeadToPipeline(
 }
 
 // ============================================================
+// searchLeadsForKanban — busca leads pra aba "Existente" do "+"
+// do Kanban. mai/2026.
+//
+// Cliente reportou que o botao "+" do Kanban so cria lead novo —
+// nao tem opcao de puxar lead ja existente (criado por WhatsApp/
+// import). Esta action retorna leads da org que casam com a query
+// (nome/telefone/email), com indicacao se ja estao em algum funil.
+// ============================================================
+
+export interface KanbanLeadSearchResult {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  /** null = lead esta sem funil/etapa. Quando preenchido, mostra
+   *  ao cliente em qual funil/etapa o lead esta hoje pra ele
+   *  decidir se quer mover. */
+  current_pipeline_name: string | null;
+  current_stage_name: string | null;
+  current_pipeline_id: string | null;
+  current_stage_id: string | null;
+}
+
+export async function searchLeadsForKanban(
+  query: string,
+  limit: number = 20,
+): Promise<KanbanLeadSearchResult[]> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Normaliza query — remove espacos extras + escapa wildcards SQL.
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return [];
+  // Limita pra evitar full-table scan acidental. 200 e o cap do shared.
+  const safeLimit = Math.max(1, Math.min(50, limit));
+
+  // ILIKE com prefixo de % em ambos os lados pra match parcial em
+  // qualquer posicao. Performance: indices em (organization_id, name)
+  // ja existem; queries pequenas com LIMIT 50 sao OK.
+  const pattern = `%${trimmed.replace(/[%_]/g, "\\$&")}%`;
+
+  // Embed do pipeline/stage atual do lead pra UI mostrar contexto.
+  // Se o lead nao tiver pipeline_id, vem null e UI mostra "Sem funil".
+  const { data, error } = await supabase
+    .from("leads")
+    .select(
+      `id, name, phone, email, pipeline_id, stage_id,
+       pipeline:pipelines(id, name),
+       stage:pipeline_stages(id, name)`,
+    )
+    .eq("organization_id", orgId)
+    .or(`name.ilike.${pattern},phone.ilike.${pattern},email.ilike.${pattern}`)
+    .order("updated_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(`Erro ao buscar leads: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => {
+    const pipeline = row.pipeline as { id: string; name: string } | null;
+    const stage = row.stage as { id: string; name: string } | null;
+    return {
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      email: row.email,
+      current_pipeline_id: pipeline?.id ?? null,
+      current_pipeline_name: pipeline?.name ?? null,
+      current_stage_id: stage?.id ?? null,
+      current_stage_name: stage?.name ?? null,
+    };
+  });
+}
+
+// ============================================================
 // Bulks
 // ============================================================
 

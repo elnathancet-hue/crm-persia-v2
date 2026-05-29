@@ -31,6 +31,7 @@ import {
   createLeadInPipeline,
   moveLeadStage,
   moveLeadToPipeline,
+  searchLeadsForKanban,
 } from "@/actions/leads-kanban";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
 
@@ -41,6 +42,8 @@ export const crmKanbanActions: KanbanActions = {
     moveLeadStage(leadId, stageId, sortOrder),
   moveLeadToPipeline: (leadId, pipelineId, stageId) =>
     moveLeadToPipeline(leadId, pipelineId, stageId),
+  // mai/2026: aba "Selecionar existente" do "+" do Kanban
+  searchLeadsForKanban: (query, limit) => searchLeadsForKanban(query, limit),
   bulkMoveLeads: (leadIds, stageId) => bulkMoveLeads(leadIds, stageId),
   bulkMarkLeadsAsWon: (leadIds) => bulkMarkLeadsAsWon(leadIds),
   bulkMarkLeadsAsLost: (leadIds, input) =>
