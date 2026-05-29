@@ -83,6 +83,9 @@ export interface ExportLeadsDialogProps {
   availableColumns: ExportLeadColumn[];
 }
 
+const EMPTY_BASE_FILTERS: NonNullable<ExportLeadsDialogProps["baseFilters"]> =
+  {};
+
 export function ExportLeadsDialog({
   open,
   onOpenChange,
@@ -92,7 +95,7 @@ export function ExportLeadsDialog({
   onDownload,
   assignees,
   sources,
-  baseFilters = {},
+  baseFilters = EMPTY_BASE_FILTERS,
   availableColumns,
 }: ExportLeadsDialogProps) {
   const [filters, setFilters] = React.useState<LeadsAdvancedFiltersValue>(initialFilters);
@@ -114,12 +117,22 @@ export function ExportLeadsDialog({
   }, [open, initialFilters]);
 
   // Preview count com debounce 400ms — evita request a cada keystroke
+  const baseFiltersKey = React.useMemo(
+    () => JSON.stringify(baseFilters),
+    [baseFilters],
+  );
+  const stableBaseFilters = React.useMemo(
+    () => baseFilters,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseFiltersKey],
+  );
+
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setPreviewLoading(true);
     const timer = setTimeout(() => {
-      countLeads({ ...filters, ...baseFilters })
+      countLeads({ ...filters, ...stableBaseFilters })
         .then((n) => {
           if (!cancelled) setPreviewCount(n);
         })
@@ -134,7 +147,7 @@ export function ExportLeadsDialog({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, filters, baseFilters, countLeads]);
+  }, [open, filters, stableBaseFilters, countLeads]);
 
   const toggleColumn = (key: string) => {
     setSelectedKeys((prev) => {
