@@ -21,6 +21,7 @@ import {
   MessageCircle,
   Activity as ActivityIcon,
   Briefcase,
+  GitBranch,
   ExternalLink,
   Pencil,
   Trash2,
@@ -712,8 +713,8 @@ export function LeadInfoDrawer({
               currentUserId={currentUser?.user_id ?? null}
             />
           </div>
-          {currentStageObj ? (
-            <DialogDescription className="flex items-center gap-1.5 text-xs">
+          {false && currentStageObj ? (
+            <DialogDescription className="sr-only">
               <span className="text-muted-foreground">Etapa atual:</span>
               <Popover>
                 <PopoverTrigger
@@ -726,11 +727,15 @@ export function LeadInfoDrawer({
                       // bem_sucedido=success). Antes era text-cyan-600
                       // hardcoded — mesmo que a etapa fosse "Fechado",
                       // aparecia ciano. Agora usa o token semantico.
-                      className={`inline-flex items-center gap-1 font-medium hover:underline transition-colors ${OUTCOME_COLOR[currentStageObj.outcome] ?? "text-foreground"}`}
+                      className={`inline-flex items-center gap-1 font-medium hover:underline transition-colors ${
+                        OUTCOME_COLOR[
+                          currentStageObj?.outcome ?? "em_andamento"
+                        ] ?? "text-foreground"
+                      }`}
                     />
                   }
                 >
-                  <span>{currentStageObj.name}</span>
+                  <span>{currentStageObj?.name}</span>
                   <ChevronDown className="size-3" />
                 </PopoverTrigger>
                 <PopoverContent className="w-56 p-1" align="start">
@@ -824,13 +829,129 @@ export function LeadInfoDrawer({
             // Fallback display estatico (caller pode ainda passar
             // currentStageName mesmo sem deal aberto — ex: contexto
             // sem permissao de edicao).
-            <DialogDescription className="flex items-center gap-1.5 text-xs">
+            <DialogDescription className="sr-only">
               <span className="text-muted-foreground">Etapa atual:</span>
               <span className="font-medium text-foreground">
                 {currentStageName}
               </span>
             </DialogDescription>
           ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Posição no CRM</span>
+            {currentStageObj ? (
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={stageChangePending}
+                      className="h-8 rounded-md gap-1.5 px-2.5"
+                    />
+                  }
+                >
+                  <span className="text-muted-foreground">Etapa:</span>
+                  <span
+                    className={`font-semibold ${OUTCOME_COLOR[currentStageObj.outcome] ?? "text-foreground"}`}
+                  >
+                    {currentStageObj.name}
+                  </span>
+                  <ChevronDown className="size-3.5" />
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-1" align="start">
+                  {(["em_andamento", "falha", "bem_sucedido"] as StageOutcome[]).map(
+                    (outcome) => {
+                      const list = stagesByOutcome[outcome];
+                      if (list.length === 0) return null;
+                      return (
+                        <div key={outcome} className="py-1">
+                          <p
+                            className={`px-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider ${OUTCOME_COLOR[outcome]}`}
+                          >
+                            {OUTCOME_LABEL[outcome]}
+                          </p>
+                          {list.map((s) => {
+                            const isActive = s.id === currentDeal?.stage_id;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => handleChangeStage(s.id)}
+                                disabled={stageChangePending || isActive}
+                                className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors ${
+                                  isActive ? "bg-muted/40 font-medium" : ""
+                                }`}
+                              >
+                                <span className="truncate">{s.name}</span>
+                                {isActive ? (
+                                  <span
+                                    className="size-2 rounded-full"
+                                    style={{ backgroundColor: s.color }}
+                                  />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    },
+                  )}
+                </PopoverContent>
+              </Popover>
+            ) : currentStageName ? (
+              <span className="inline-flex h-8 items-center rounded-md border border-border px-2.5 font-medium text-foreground">
+                Etapa: {currentStageName}
+              </span>
+            ) : (
+              <span className="inline-flex h-8 items-center rounded-md border border-dashed border-border px-2.5 font-medium text-muted-foreground">
+                Sem funil definido
+              </span>
+            )}
+            {actions.moveLeadToPipeline && actions.listPipelines && (
+              <Popover onOpenChange={(o) => o && loadPipelinesList()}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={currentStageObj ? "secondary" : "default"}
+                      size="sm"
+                      disabled={stageChangePending}
+                      className="h-8 rounded-md gap-1.5 px-2.5"
+                    />
+                  }
+                >
+                  <GitBranch className="size-3.5" />
+                  {currentStageObj ? "Mudar funil/etapa" : "Colocar em funil"}
+                  <ChevronDown className="size-3.5" />
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-1" align="start">
+                  {pipelinesLoading ? (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">
+                      Carregando funis...
+                    </p>
+                  ) : pipelinesList.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">
+                      Nenhum funil cadastrado.
+                    </p>
+                  ) : (
+                    pipelinesList.map((p) => (
+                      <PipelinePicker
+                        key={p.id}
+                        pipeline={p}
+                        currentPipelineId={currentDeal?.pipeline_id ?? null}
+                        disabled={stageChangePending}
+                        onSelect={(stageId) =>
+                          handleChangePipeline(p.id, stageId)
+                        }
+                        listStages={actions.listStagesForPipeline}
+                      />
+                    ))
+                  )}
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
         </DialogHeader>
 
         {/* PR-D: header rico — 3 cards de stats (Negocios / Conversas /
