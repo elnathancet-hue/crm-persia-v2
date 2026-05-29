@@ -225,7 +225,7 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   // mutação estrutural. Usar SEMPRE antes de modificar nodes/edges.
   const snapshotBeforeMutation = React.useCallback(() => {
     history.push({ nodes: nodesRef.current, edges: edgesRef.current });
-  }, [history]);
+  }, [history.push]);
 
   // -- Load flow --
   React.useEffect(() => {
@@ -462,6 +462,23 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
     [nodes, snapshotBeforeMutation],
   );
 
+  // PR 39x (mai/2026): manter os componentes de `nodeTypes` estaveis.
+  // React Flow trata os valores de `nodeTypes` como tipos de componente.
+  // Se recriamos essas funcoes a cada update de nodes/history, o React
+  // desmonta/remonta o node inline e inputs perdem foco apos o debounce.
+  const handleNodePatchRef = React.useRef(handleNodePatch);
+  const handleNodeDeleteRef = React.useRef(handleNodeDelete);
+  const handleNodeDuplicateRef = React.useRef(handleNodeDuplicate);
+  React.useEffect(() => {
+    handleNodePatchRef.current = handleNodePatch;
+  }, [handleNodePatch]);
+  React.useEffect(() => {
+    handleNodeDeleteRef.current = handleNodeDelete;
+  }, [handleNodeDelete]);
+  React.useEffect(() => {
+    handleNodeDuplicateRef.current = handleNodeDuplicate;
+  }, [handleNodeDuplicate]);
+
   // PR 20 UX (mai/2026): deleta edge ao clicar no X dela (custom edge
   // renderiza o X no centro).
   // PR 24 (mai/2026): com snapshot pra undo.
@@ -491,8 +508,8 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           id={id}
-          onDelete={() => handleNodeDelete(id)}
-          onPatch={(newData) => handleNodePatch(id, newData)}
+          onDelete={() => handleNodeDeleteRef.current(id)}
+          onPatch={(newData) => handleNodePatchRef.current(id, newData)}
           catalogs={catalogs}
           catalogsLoading={catalogsLoading}
         />
@@ -502,9 +519,9 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           id={id}
-          onDelete={() => handleNodeDelete(id)}
-          onDuplicate={() => handleNodeDuplicate(id)}
-          onPatch={(newData) => handleNodePatch(id, newData)}
+          onDelete={() => handleNodeDeleteRef.current(id)}
+          onDuplicate={() => handleNodeDuplicateRef.current(id)}
+          onPatch={(newData) => handleNodePatchRef.current(id, newData)}
           catalogs={catalogs}
           catalogsLoading={catalogsLoading}
         />
@@ -514,9 +531,9 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           id={id}
-          onDelete={() => handleNodeDelete(id)}
-          onDuplicate={() => handleNodeDuplicate(id)}
-          onPatch={(newData) => handleNodePatch(id, newData)}
+          onDelete={() => handleNodeDeleteRef.current(id)}
+          onDuplicate={() => handleNodeDuplicateRef.current(id)}
+          onPatch={(newData) => handleNodePatchRef.current(id, newData)}
           catalogs={catalogs}
           catalogsLoading={catalogsLoading}
         />
@@ -526,15 +543,15 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
           data={data as never}
           selected={selected}
           id={id}
-          onDelete={() => handleNodeDelete(id)}
-          onDuplicate={() => handleNodeDuplicate(id)}
-          onPatch={(newData) => handleNodePatch(id, newData)}
+          onDelete={() => handleNodeDeleteRef.current(id)}
+          onDuplicate={() => handleNodeDuplicateRef.current(id)}
+          onPatch={(newData) => handleNodePatchRef.current(id, newData)}
           catalogs={catalogs}
           catalogsLoading={catalogsLoading}
         />
       ),
     }),
-    [handleNodeDelete, handleNodeDuplicate, handleNodePatch, catalogs, catalogsLoading],
+    [catalogs, catalogsLoading],
   );
 
   // PR 20 UX (mai/2026): edgeTypes com X no centro pra deletar
@@ -1010,8 +1027,6 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   const handleUndoRef = React.useRef(handleUndo);
   const handleRedoRef = React.useRef(handleRedo);
   const handleSaveRef = React.useRef(handleSave);
-  const handleNodeDeleteRef = React.useRef(handleNodeDelete);
-  const handleNodeDuplicateRef = React.useRef(handleNodeDuplicate);
   const handleCenterEntryRef = React.useRef(handleCenterEntry);
   const selectedNodeIdRef = React.useRef(selectedNodeId);
   const dirtyRef = React.useRef(dirty);
@@ -1027,12 +1042,6 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
   React.useEffect(() => {
     handleSaveRef.current = handleSave;
   }, [handleSave]);
-  React.useEffect(() => {
-    handleNodeDeleteRef.current = handleNodeDelete;
-  }, [handleNodeDelete]);
-  React.useEffect(() => {
-    handleNodeDuplicateRef.current = handleNodeDuplicate;
-  }, [handleNodeDuplicate]);
   React.useEffect(() => {
     selectedNodeIdRef.current = selectedNodeId;
   }, [selectedNodeId]);
