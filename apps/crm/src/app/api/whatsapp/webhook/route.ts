@@ -116,23 +116,37 @@ export async function POST(request: NextRequest) {
     // (sent → delivered → read). Precisa pra UI renderizar checkmarks
     // corretos. Espelha lógica do webhook Meta (route Meta linha 212-228).
     //
-    // Payload shape: UAZAPI v2 pode ser FLAT (campos no root) OU nested
-    // (campos em body.message). Verificamos os dois para robustez.
-    // EventType: aceita "EventType" e "eventType" (variações de case).
+    // Payload shape: UAZAPI pode ser:
+    //  (a) Nested: { EventType: "messages_update", message: { messageid, status }, ... }
+    //  (b) Flat: { messageid, status: "DELIVERY_ACK", fromMe: true, text: "", ... }
+    //       — sem EventType, campos direto na raiz (formato documentado em v2 skill)
     //
-    // Defensive parse — se shape mudar entre versões UAZAPI, log+ignore.
+    // Detectamos AMBOS os casos para robustez.
     const rawEventType = body.EventType ?? body.eventType;
-    if (typeof rawEventType === "string" && rawEventType.toLowerCase() === "messages_update") {
+    const isExplicitUpdate = typeof rawEventType === "string" && rawEventType.toLowerCase() === "messages_update";
+    // Flat heuristic: status não-vazio + messageid presente + sem conteúdo textual
+    // (distingue de mensagens recebidas normais que têm text/content)
+    const flatStatus = typeof body.status === "string" ? body.status.trim() : "";
+    const isFlatStatusUpdate =
+      !isExplicitUpdate &&
+      flatStatus !== "" &&
+      mapUazapiStatus(flatStatus) !== null &&
+      typeof body.messageid === "string" && body.messageid !== "";
+
+    if (isExplicitUpdate || isFlatStatusUpdate) {
       // Tenta nested (body.message) primeiro, fallback pro root (flat).
       const msgRaw = (typeof body.message === "object" && body.message !== null
         ? body.message
         : body) as Record<string, unknown>;
-      const messageId = typeof msgRaw.messageid === "string" ? msgRaw.messageid
-        : typeof body.messageid === "string" ? body.messageid
-        : null;
-      const rawStatus = typeof msgRaw.status === "string" ? msgRaw.status
-        : typeof body.status === "string" ? body.status
-        : null;
+      // Accept messageid (flat), messageId (camelCase), or MessageId (PascalCase)
+      const messageId =
+        (typeof msgRaw.messageid === "string" ? msgRaw.messageid : null) ??
+        (typeof (msgRaw as Record<string, unknown>).messageId === "string" ? (msgRaw as Record<string, unknown>).messageId as string : null) ??
+        (typeof body.messageid === "string" ? body.messageid : null) ??
+        null;
+      const rawStatus =
+        (typeof msgRaw.status === "string" && msgRaw.status ? msgRaw.status : null) ??
+        (flatStatus || null);
       const dbStatus = mapUazapiStatus(rawStatus);
       if (!messageId || !dbStatus) {
         logInfo("uazapi_webhook_messages_update_skipped", {
@@ -169,6 +183,7 @@ export async function POST(request: NextRequest) {
         route: "/api/whatsapp/webhook",
         message_id: messageId,
         db_status: dbStatus,
+        detected_via: isExplicitUpdate ? "EventType" : "flat_heuristic",
       });
       return NextResponse.json({ ok: true, status: dbStatus });
     }

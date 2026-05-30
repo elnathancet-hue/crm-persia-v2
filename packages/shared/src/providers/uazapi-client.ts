@@ -512,7 +512,8 @@ export class UazapiClient {
   }
 
   async markChatRead(number: string, read = true): Promise<void> {
-    await this.request("POST", "/chat/read", { number, read });
+    // /chat/read expects JID format (number@s.whatsapp.net), not bare phone
+    await this.request("POST", "/chat/read", { number: phoneToJid(number), read });
   }
 
   async setPresence(params: PresenceParams): Promise<void> {

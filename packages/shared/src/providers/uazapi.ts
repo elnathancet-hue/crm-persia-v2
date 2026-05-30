@@ -84,7 +84,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       number: opts.phone,
       text: opts.message,
     });
-    const id = result.messageId || result.MessageId || (result as { messageid?: string }).messageid || "";
+    const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
     return { messageId: String(id), success: true };
   }
 
@@ -97,7 +97,7 @@ export class UazapiAdapter implements WhatsAppProvider {
         caption: opts.caption,
         docName: opts.type === "document" ? (opts.fileName || "arquivo") : undefined,
       });
-      const id = result.messageId || result.MessageId || "";
+      const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
       return { messageId: String(id), success: true };
     } catch {
       let result: { MessageId: string };
