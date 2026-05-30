@@ -280,6 +280,10 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     }
   }
 
+  async markChatRead(_chatPhone: string): Promise<void> {
+    // Not supported in Cloud API. No-op.
+  }
+
   async setTyping(_phone: string, _typing: boolean): Promise<void> {
     // Not supported in Cloud API (as of v21). No-op to keep callers happy.
   }

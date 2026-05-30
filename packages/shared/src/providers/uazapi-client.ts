@@ -513,6 +513,10 @@ export class UazapiClient {
     });
   }
 
+  async markChatRead(number: string, read = true): Promise<void> {
+    await this.request("POST", "/chat/read", { number, read });
+  }
+
   async setPresence(params: PresenceParams): Promise<void> {
     await this.request("POST", "/message/presence", {
       number: params.number,

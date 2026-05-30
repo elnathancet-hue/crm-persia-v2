@@ -227,6 +227,7 @@ export interface WhatsAppProvider {
 
   // Actions
   markAsRead(messageIds: string[], chatPhone: string): Promise<void>;
+  markChatRead(chatPhone: string): Promise<void>;
   setTyping(phone: string, typing: boolean): Promise<void>;
 
   // Webhook

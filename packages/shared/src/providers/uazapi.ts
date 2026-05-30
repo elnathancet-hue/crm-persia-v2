@@ -247,6 +247,10 @@ export class UazapiAdapter implements WhatsAppProvider {
     }
   }
 
+  async markChatRead(chatPhone: string): Promise<void> {
+    await this.client.markChatRead(chatPhone).catch(() => {});
+  }
+
   async setTyping(phone: string, typing: boolean): Promise<void> {
     try {
       await this.client.setPresence({ number: phone, presence: typing ? "composing" : "paused" });

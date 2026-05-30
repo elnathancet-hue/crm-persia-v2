@@ -3,6 +3,7 @@
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
+import { createProvider } from "@/lib/whatsapp/providers";
 
 type RoleSupabase = Awaited<ReturnType<typeof requireRole>>["supabase"];
 
@@ -397,11 +398,36 @@ export async function closeConversation(conversationId: string) {
 export async function markConversationAsRead(conversationId: string) {
   const { supabase, orgId } = await requireRole("agent");
 
-  await supabase
-    .from("conversations")
-    .update({ unread_count: 0 })
-    .eq("id", conversationId)
-    .eq("organization_id", orgId);
+  const [, convResult] = await Promise.all([
+    supabase
+      .from("conversations")
+      .update({ unread_count: 0 })
+      .eq("id", conversationId)
+      .eq("organization_id", orgId),
+    supabase
+      .from("conversations")
+      .select("channel, leads(phone)")
+      .eq("id", conversationId)
+      .eq("organization_id", orgId)
+      .single(),
+  ]);
+
+  const conv = convResult.data;
+  const phone = (conv?.leads as { phone?: string } | null)?.phone;
+  if (phone && conv?.channel === "whatsapp") {
+    void (async () => {
+      try {
+        const { data: connection } = await supabase
+          .from("whatsapp_connections")
+          .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+          .eq("organization_id", orgId)
+          .eq("status", "connected")
+          .limit(1)
+          .single();
+        if (connection) await createProvider(connection).markChatRead(phone);
+      } catch { /* fire-and-forget */ }
+    })();
+  }
 }
 
 export async function generateConversationSummary(conversationId: string): Promise<{ summary: string; error?: string }> {
