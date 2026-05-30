@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
-import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, type Message } from "@/actions/messages";
+import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
@@ -52,6 +52,7 @@ import {
   Play,
   RotateCw,
   Sparkles,
+  Trash2,
   User,
   UserCheck,
   UserPlus,
@@ -366,6 +367,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [deleteConfirmMsgId, setDeleteConfirmMsgId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -440,6 +442,15 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     const result = await editWhatsAppMessage(msgId, trimmed);
     if (result.error) toast.error(result.error);
   }, [editText]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    const msgId = deleteConfirmMsgId;
+    if (!msgId) return;
+    setDeleteConfirmMsgId(null);
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, status: "deleted", content: null } : m)));
+    const result = await deleteWhatsAppMessage(msgId);
+    if (result.error) toast.error(result.error);
+  }, [deleteConfirmMsgId]);
 
   const withResolvedMediaUrl = useCallback(async (message: Message): Promise<Message> => {
     if (!shouldResolveMediaUrl(message.media_url)) return message;
@@ -941,6 +952,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                 >
                                   <Pencil className="size-3.5" />
                                 </button>
+                                <button
+                                  onClick={() => { setHoveredMsgId(null); setDeleteConfirmMsgId(msg.id); }}
+                                  className="rounded-full p-1 text-muted-foreground hover:text-destructive transition-colors"
+                                  title="Apagar mensagem"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
                               </>
                             )}
                           </div>
@@ -988,6 +1006,26 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                 Salvar
                               </button>
                             </div>
+                          </div>
+                        ) : msg.status === "deleted" ? (
+                          <div
+                            className={cn(
+                              "rounded-[7.5px] px-3 py-1.5 text-[13px] leading-5 shadow-sm italic",
+                              isLead ? "rounded-bl-sm" : "rounded-br-sm"
+                            )}
+                            style={
+                              isLead
+                                ? { background: "var(--chat-bubble-in)", color: "var(--chat-timestamp)" }
+                                : { background: "var(--chat-bubble-out)", color: "var(--chat-timestamp)" }
+                            }
+                          >
+                            🚫 Esta mensagem foi apagada
+                            <span
+                              className="text-[10px] float-right ml-2 mt-0.5 not-italic"
+                              style={{ color: "var(--chat-timestamp)" }}
+                            >
+                              {formatMessageTime(msg.created_at)}
+                            </span>
                           </div>
                         ) : (
                           <div
@@ -1144,6 +1182,24 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete message confirmation */}
+      <AlertDialog open={!!deleteConfirmMsgId} onOpenChange={(open) => { if (!open) setDeleteConfirmMsgId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar mensagem?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A mensagem será apagada para todos os participantes da conversa. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Apagar para todos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de confirmacao pra fechar conversa (kebab > "Fechar conversa"). */}
       {/* Reativa IA automaticamente — a proxima msg do lead cria conversation nova. */}

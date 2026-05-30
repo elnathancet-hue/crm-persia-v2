@@ -463,10 +463,8 @@ export class UazapiClient {
   }
 
   async deleteMessage(params: DeleteMessageParams): Promise<void> {
-    await this.request("POST", "/message/delete", {
-      number: params.number,
-      messageId: params.messageId,
-    });
+    // UAZAPI docs: only `id` required
+    await this.request("POST", "/message/delete", { id: params.messageId });
   }
 
   async editMessage(params: EditMessageParams): Promise<void> {

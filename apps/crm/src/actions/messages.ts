@@ -835,3 +835,26 @@ export async function reactToWhatsAppMessage(
 
   return {};
 }
+
+export async function deleteWhatsAppMessage(messageId: string): Promise<{ error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const ctx = await getWhatsAppContextForMessage(supabase, orgId, messageId);
+  if (!ctx) return { error: "Mensagem não encontrada ou WhatsApp não configurado" };
+
+  const { msg, phone, connection } = ctx;
+
+  try {
+    await createProvider(connection).deleteMessage(phone, msg.whatsapp_msg_id!);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao apagar mensagem" };
+  }
+
+  await supabase
+    .from("messages")
+    .update({ content: null, status: "deleted" })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+
+  return {};
+}
