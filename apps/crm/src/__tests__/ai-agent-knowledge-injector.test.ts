@@ -191,10 +191,12 @@ describe("buildKnowledgeBlock", () => {
     expect(result).toContain("Default content.");
   });
 
-  it("PR-2: modo 'full' manual com doc grande > 50KB cai pra 'rag'", async () => {
-    // Endereca rodada 6 #5 / rodada 8 #1: cliente forcando 'full' em UI
-    // com doc enorme nao tem cap. Hard-cap unificado (50KB) derruba pra
-    // rag automaticamente, evitando re-injetar 100KB+ a cada turn.
+  it("PR-2 + Backlog #10: modo 'full' manual com doc > 16k tokens cai pra 'rag'", async () => {
+    // Endereca rodada 6 #5 / rodada 8 #1 + rodada 8 #3: cliente forcando
+    // 'full' em UI com doc enorme nao tem cap. Hard-cap unificado em
+    // TOKENS (16000, ~48KB PT-BR a 3 char/token) derruba pra rag
+    // automaticamente. Substitui o cap antigo em bytes (50KB) que
+    // confundia bytes com tokens.
     vi.mocked(retrieveWithAttempt).mockResolvedValueOnce({
       success: true,
       hits: [
