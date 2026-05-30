@@ -374,6 +374,7 @@ export type TesterEventKind =
   | "set_typing_on"
   | "set_typing_off"
   | "send_media"
+  | "tool_result"
   | "skipped";
 
 export interface TesterEvent {

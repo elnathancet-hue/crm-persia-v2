@@ -643,6 +643,31 @@ function appendFaithfulTurns(
     prevTs = ev.ts;
   }
 
+  for (const ev of res.events) {
+    if (ev.kind !== "tool_result") continue;
+    const toolName = String(ev.payload.tool_name ?? "acao");
+    const via = String(ev.payload.via ?? "");
+    if (via !== "action_node") continue;
+    const success = ev.payload.success === true;
+    const sideEffects = Array.isArray(ev.payload.side_effects)
+      ? ev.payload.side_effects.map(String).filter(Boolean)
+      : [];
+    const error =
+      typeof ev.payload.error === "string" ? ev.payload.error : "";
+
+    newTurns.push({
+      kind: "system",
+      icon: success ? "info" : "error",
+      text: success
+        ? `Acao "${labelForTool(toolName)}" simulada: ${
+            sideEffects[0] ?? "handler retornou sucesso"
+          }`
+        : `Acao "${labelForTool(toolName)}" falhou: ${
+            error || "erro desconhecido"
+          }`,
+    });
+  }
+
   // Steps + transicao no fim
   if (res.steps.length > 0 || res.next_node_id) {
     newTurns.push({
@@ -662,6 +687,25 @@ function appendFaithfulTurns(
   }
 
   setTurns((prev) => [...prev, ...newTurns]);
+}
+
+function labelForTool(toolName: string): string {
+  switch (toolName) {
+    case "add_tag":
+      return "Adicionar tag";
+    case "remove_tag":
+      return "Remover tag";
+    case "move_pipeline_stage":
+      return "Mover etapa do funil";
+    case "send_media":
+      return "Enviar midia";
+    case "trigger_notification":
+      return "Disparar notificacao";
+    case "create_appointment":
+      return "Criar agendamento";
+    default:
+      return toolName;
+  }
 }
 
 function skipIcon(reason: TesterSkipReason): SystemTurn["icon"] {
