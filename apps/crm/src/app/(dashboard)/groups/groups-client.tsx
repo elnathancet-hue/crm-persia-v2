@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
+import { EmptyState } from "@persia/ui/empty-state";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
@@ -162,17 +163,18 @@ function GroupListPanel({
         {/* Category filter */}
         <div className="flex gap-1 mt-2 overflow-x-auto pb-0.5 no-scrollbar">
           {["todos", "geral", "aquecimento", "evento", "oferta", "alunos"].map((cat) => (
-            <button
+            <Button
               key={cat}
+              variant="ghost"
               onClick={() => onCategoryFilter(cat)}
-              className={`shrink-0 text-xs px-2.5 py-1 rounded-full transition-colors ${
+              className={`shrink-0 h-7 text-xs px-2.5 rounded-full transition-colors ${
                 categoryFilter === cat
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               }`}
             >
               {cat === "todos" ? "Todos" : CATEGORY_LABELS[cat]}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -191,10 +193,11 @@ function GroupListPanel({
           </div>
         ) : (
           filtered.map((group) => (
-            <button
+            <Button
               key={group.id}
+              variant="ghost"
               onClick={() => onSelect(group.id)}
-              className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-muted/50 transition-colors border-b border-border/30 ${
+              className={`w-full justify-start h-auto text-left px-4 py-3 rounded-none border-b border-border/30 hover:bg-muted/50 ${
                 selectedId === group.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
               }`}
             >
@@ -226,7 +229,7 @@ function GroupListPanel({
                   )}
                 </div>
               </div>
-            </button>
+            </Button>
           ))
         )}
       </div>
@@ -243,14 +246,13 @@ function GroupListPanel({
 
 function GroupEmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8">
-      <div className="size-16 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
-        <MessageSquare className="size-8 text-muted-foreground/40" />
-      </div>
-      <p className="font-semibold text-base">Selecione um grupo</p>
-      <p className="text-sm text-muted-foreground mt-1">
-        Escolha um grupo na lista para ver o chat
-      </p>
+    <div className="flex items-center justify-center h-full">
+      <EmptyState
+        variant="subtle"
+        icon={<MessageSquare />}
+        title="Selecione um grupo"
+        description="Escolha um grupo na lista para ver o chat"
+      />
     </div>
   );
 }
@@ -401,6 +403,20 @@ function GroupChatPanel({
     return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
 
+  function formatDateLabel(iso: string) {
+    const d = new Date(iso);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return "Hoje";
+    if (d.toDateString() === yesterday.toDateString()) return "Ontem";
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  }
+
+  function isSameDay(a: string, b: string) {
+    return new Date(a).toDateString() === new Date(b).toDateString();
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -437,10 +453,8 @@ function GroupChatPanel({
             <Settings className="size-4" />
           </Button>
           <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button variant="ghost" size="icon-sm">
-                <MoreHorizontal className="size-4" />
-              </Button>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+              <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => {
@@ -470,35 +484,48 @@ function GroupChatPanel({
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <MessageSquare className="size-8 text-muted-foreground/30 mb-2" />
-            <p className="text-sm text-muted-foreground">Nenhuma mensagem ainda</p>
-            <p className="text-xs text-muted-foreground/70 mt-1">Envie a primeira mensagem para o grupo</p>
+          <div className="flex items-center justify-center h-full">
+            <EmptyState
+              variant="subtle"
+              icon={<MessageSquare />}
+              title="Nenhuma mensagem ainda"
+              description="Envie a primeira mensagem para o grupo"
+            />
           </div>
         ) : (
-          messages.map((msg) => (
+          messages.map((msg, idx) => (
+            <React.Fragment key={msg.id}>
+              {(idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at)) && (
+                <div className="flex items-center justify-center my-3">
+                  <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                    {formatDateLabel(msg.created_at)}
+                  </span>
+                </div>
+              )}
             <div
-              key={msg.id}
               className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+                className={`max-w-[75%] px-3 py-2 text-sm shadow-sm ${
                   msg.direction === "outbound"
-                    ? "bg-[color:var(--chat-bubble-out)] text-[color:var(--chat-bubble-out-text)]"
-                    : "bg-[color:var(--chat-bubble-in)] text-[color:var(--chat-bubble-in-text)] border"
+                    ? "rounded-2xl rounded-br-sm bg-[color:var(--chat-bubble-out)] text-[color:var(--chat-bubble-out-text)]"
+                    : "rounded-2xl rounded-bl-sm bg-[color:var(--chat-bubble-in)] text-[color:var(--chat-bubble-in-text)] border"
                 }`}
               >
                 {msg.direction === "inbound" && msg.sender_name && (
                   <p className="text-xs font-semibold mb-1 text-primary">{msg.sender_name}</p>
                 )}
                 <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
-                <p className={`text-[10px] mt-1 text-right ${
-                  msg.direction === "outbound" ? "text-white/60" : "text-muted-foreground"
+                <p className={`text-[10px] mt-1 text-right opacity-60 ${
+                  msg.direction === "outbound"
+                    ? "text-[color:var(--chat-bubble-out-text)]"
+                    : "text-muted-foreground"
                 }`}>
                   {formatTime(msg.created_at)}
                 </p>
               </div>
             </div>
+            </React.Fragment>
           ))
         )}
         <div ref={messagesEndRef} />
@@ -562,7 +589,7 @@ function GroupChatPanel({
             <div className="space-y-2">
               <Label>Categoria</Label>
               <Select value={editCategory} onValueChange={(v) => setEditCategory(v ?? "geral")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue>{CATEGORY_LABELS[editCategory] ?? "Selecione"}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="geral">Geral</SelectItem>
                   <SelectItem value="aquecimento">Aquecimento</SelectItem>
@@ -766,7 +793,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
             <div className="space-y-2">
               <Label>Categoria</Label>
               <Select value={newCategory} onValueChange={(v) => setNewCategory(v ?? "geral")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue>{CATEGORY_LABELS[newCategory] ?? "Selecione"}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="geral">Geral</SelectItem>
                   <SelectItem value="aquecimento">Aquecimento</SelectItem>
