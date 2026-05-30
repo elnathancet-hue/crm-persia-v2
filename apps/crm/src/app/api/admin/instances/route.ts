@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { buildUazapiWebhookConfig } from "@persia/shared/providers/uazapi-webhook-config";
 
 const UAZAPI_BASE = process.env.UAZAPI_BASE_URL || "https://persia.uazapi.com";
 const ADMIN_TOKEN = process.env.UAZAPI_ADMIN_TOKEN || "";
@@ -79,11 +80,7 @@ export async function POST(request: NextRequest) {
             token: instanceToken,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            enabled: true,
-            url: `${appUrl}/api/whatsapp/webhook`,
-            events: ["messages", "connection"],
-          }),
+          body: JSON.stringify(buildUazapiWebhookConfig({ url: `${appUrl}/api/whatsapp/webhook` })),
         });
 
         // Setup default CRM fields map (fire and forget)
@@ -133,11 +130,7 @@ export async function POST(request: NextRequest) {
           token: instanceToken,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          enabled: true,
-          url: `${appUrl}/api/whatsapp/webhook`,
-          events: ["messages", "connection"],
-        }),
+        body: JSON.stringify(buildUazapiWebhookConfig({ url: `${appUrl}/api/whatsapp/webhook` })),
       });
       return NextResponse.json({ ok: true, webhookUrl: `${appUrl}/api/whatsapp/webhook` });
     }

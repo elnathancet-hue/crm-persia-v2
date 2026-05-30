@@ -43,7 +43,7 @@ export async function syncGroups() {
 
   try {
     const provider = createProvider(connection);
-    const groups = await provider.listGroups();
+    const groups = await provider.listGroups({ noParticipants: true });
 
     for (const g of groups) {
       await admin.from("whatsapp_groups").upsert(
@@ -93,15 +93,14 @@ async function getProvider() {
  * UAZAPI: POST /group/create (token) — { name, participants: [] }
  * Then: GET /group/invitelink (token) — { GroupJID } → returns InviteLink
  */
-export async function createGroup(name: string) {
+export async function createGroup(name: string, participants: string[] = []) {
   const { admin, orgId, provider } = await getProvider();
-  const result = await provider.createGroup(name);
+  const result = await provider.createGroup(name, participants);
 
   if (result.jid) {
-    const inviteLink = await provider.getGroupInviteLink(result.jid).catch(() => "");
     await admin.from("whatsapp_groups").insert({
-      organization_id: orgId, group_jid: result.jid, name, participant_count: 0,
-      invite_link: inviteLink,
+      organization_id: orgId, group_jid: result.jid, name, participant_count: result.participantCount,
+      invite_link: result.inviteLink || null,
     });
   }
   revalidatePath("/groups");
@@ -125,7 +124,7 @@ export async function getGroupInfo(groupJid: string) {
  */
 export async function getGroupInviteLink(groupJid: string) {
   const { provider } = await getProvider();
-  return provider.getGroupInviteLink(groupJid);
+  const info = await provider.getGroupInfo(groupJid, { getInviteLink: true }); return info.inviteLink || '';
 }
 
 /**

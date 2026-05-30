@@ -1,6 +1,7 @@
 import type {
   ConnectionResult,
   CreateCampaignOptions,
+  GroupInfo,
   IncomingMessage,
   LeadSyncData,
   MessageResult,
@@ -336,20 +337,28 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
 
   // ------------ Groups (not in Meta Cloud API scope) ------------
 
-  async listGroups(): Promise<Array<{ jid: string; name: string; participantCount: number }>> {
+  async listGroups(_opts?: { noParticipants?: boolean }): Promise<GroupInfo[]> {
     return [];
   }
 
-  async createGroup(_name: string): Promise<{ jid: string }> {
+  async createGroup(_name: string, _participants: string[]): Promise<GroupInfo> {
     throw new MetaCloudUnsupportedError("createGroup");
   }
 
-  async getGroupInfo(_jid: string): Promise<{ name: string; description: string; participantCount: number; announce: boolean }> {
+  async getGroupInfo(_jid: string, _opts?: { getInviteLink?: boolean }): Promise<GroupInfo> {
     throw new MetaCloudUnsupportedError("getGroupInfo");
   }
 
-  async getGroupInviteLink(_jid: string): Promise<string> {
-    throw new MetaCloudUnsupportedError("getGroupInviteLink");
+  async getGroupInviteInfo(_invitecode: string): Promise<GroupInfo> {
+    throw new MetaCloudUnsupportedError("getGroupInviteInfo");
+  }
+
+  async joinGroup(_invitecode: string): Promise<GroupInfo> {
+    throw new MetaCloudUnsupportedError("joinGroup");
+  }
+
+  async leaveGroup(_jid: string): Promise<void> {
+    throw new MetaCloudUnsupportedError("leaveGroup");
   }
 
   async updateGroupName(_jid: string, _name: string): Promise<void> {
@@ -360,8 +369,32 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     throw new MetaCloudUnsupportedError("updateGroupDescription");
   }
 
+  async updateGroupImage(_jid: string, _image: string): Promise<void> {
+    throw new MetaCloudUnsupportedError("updateGroupImage");
+  }
+
   async setGroupAnnounce(_jid: string, _announce: boolean): Promise<void> {
     throw new MetaCloudUnsupportedError("setGroupAnnounce");
+  }
+
+  async setGroupLocked(_jid: string, _locked: boolean): Promise<void> {
+    throw new MetaCloudUnsupportedError("setGroupLocked");
+  }
+
+  async setGroupJoinApproval(_jid: string, _required: boolean): Promise<void> {
+    throw new MetaCloudUnsupportedError("setGroupJoinApproval");
+  }
+
+  async setGroupMemberAddMode(_jid: string, _mode: "admin_add" | "all_member_add"): Promise<void> {
+    throw new MetaCloudUnsupportedError("setGroupMemberAddMode");
+  }
+
+  async setGroupEphemeral(_jid: string, _duration: "0" | "off" | "1d" | "7d" | "90d"): Promise<void> {
+    throw new MetaCloudUnsupportedError("setGroupEphemeral");
+  }
+
+  async updateGroupParticipants(_jid: string, _action: "add" | "remove" | "promote" | "demote" | "approve" | "reject", _participants: string[]): Promise<Array<{ jid: string; ok: boolean }>> {
+    throw new MetaCloudUnsupportedError("updateGroupParticipants");
   }
 
   async resetGroupInviteLink(_jid: string): Promise<string> {

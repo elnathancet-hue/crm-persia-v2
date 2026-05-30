@@ -189,7 +189,7 @@ describe("MetaCloudAdapter unsupported methods", () => {
     ).rejects.toThrow(/does not support: sendLocation/);
   });
   it("throws on createGroup", async () => {
-    await expect(adapter.createGroup("x")).rejects.toThrow(/does not support: createGroup/);
+    await expect(adapter.createGroup("x", [])).rejects.toThrow(/does not support: createGroup/);
   });
   it("getQRCode returns null (no QR pairing)", async () => {
     expect(await adapter.getQRCode()).toBeNull();

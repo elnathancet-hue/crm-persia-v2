@@ -11,6 +11,28 @@
 
 // ============ INTERFACE TYPES ============
 
+export interface GroupParticipant {
+  jid: string;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+}
+
+export interface GroupInfo {
+  jid: string;
+  name: string;
+  description: string;
+  participantCount: number;
+  participants: GroupParticipant[];
+  announce: boolean;
+  locked: boolean;
+  joinApprovalRequired: boolean;
+  memberAddMode: "admin_add" | "all_member_add" | string;
+  inviteLink: string | null;
+  ephemeralDuration: number;
+  ownerJid: string | null;
+  createdAt: string | null;
+}
+
 export interface SendTextOptions {
   phone: string;
   message: string;
@@ -257,13 +279,21 @@ export interface WhatsAppProvider {
   enableChatbot(phone: string): Promise<void>;
 
   // Groups
-  listGroups(): Promise<Array<{ jid: string; name: string; participantCount: number }>>;
-  createGroup(name: string): Promise<{ jid: string }>;
-  getGroupInfo(jid: string): Promise<{ name: string; description: string; participantCount: number; announce: boolean }>;
-  getGroupInviteLink(jid: string): Promise<string>;
+  listGroups(opts?: { noParticipants?: boolean }): Promise<Array<GroupInfo>>;
+  createGroup(name: string, participants: string[]): Promise<GroupInfo>;
+  getGroupInfo(jid: string, opts?: { getInviteLink?: boolean }): Promise<GroupInfo>;
+  getGroupInviteInfo(invitecode: string): Promise<GroupInfo>;
+  joinGroup(invitecode: string): Promise<GroupInfo>;
+  leaveGroup(jid: string): Promise<void>;
   updateGroupName(jid: string, name: string): Promise<void>;
   updateGroupDescription(jid: string, description: string): Promise<void>;
+  updateGroupImage(jid: string, image: string): Promise<void>;
   setGroupAnnounce(jid: string, announce: boolean): Promise<void>;
+  setGroupLocked(jid: string, locked: boolean): Promise<void>;
+  setGroupJoinApproval(jid: string, required: boolean): Promise<void>;
+  setGroupMemberAddMode(jid: string, mode: "admin_add" | "all_member_add"): Promise<void>;
+  setGroupEphemeral(jid: string, duration: "0" | "off" | "1d" | "7d" | "90d"): Promise<void>;
+  updateGroupParticipants(jid: string, action: "add" | "remove" | "promote" | "demote" | "approve" | "reject", participants: string[]): Promise<Array<{ jid: string; ok: boolean }>>;
   resetGroupInviteLink(jid: string): Promise<string>;
 
   // Parse incoming webhook payload into our standard format

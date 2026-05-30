@@ -254,6 +254,25 @@ interface QRCodeResponse {
 
 // ============ RESPONSE TYPES ============
 
+/** UAZAPI v2 group info shape (PascalCase fields from API). */
+export interface UazapiGroupInfo {
+  JID?: string;
+  Name?: string;
+  Topic?: string;
+  IsLocked?: boolean;
+  IsAnnounce?: boolean;
+  IsEphemeral?: boolean;
+  DisappearingTimer?: number;
+  IsJoinApprovalRequired?: boolean;
+  MemberAddMode?: string;
+  OwnerJID?: string;
+  OwnerPN?: string;
+  GroupCreated?: string;
+  Participants?: Array<{ JID?: string; IsAdmin?: boolean; IsSuperAdmin?: boolean; Error?: number }>;
+  invite_link?: string;
+  [key: string]: unknown;
+}
+
 interface MessageIdResponse {
   messageId?: string;
   MessageId?: string;
@@ -721,36 +740,93 @@ export class UazapiClient {
 
   // ============ GROUPS ============
 
-  async listGroups(): Promise<unknown[]> {
-    return this.request("GET", "/group/list");
+  // GET returns { groups: [] } per v2 docs
+  async listGroups(opts?: { noParticipants?: boolean; force?: boolean }): Promise<{ groups: UazapiGroupInfo[] }> {
+    const params = new URLSearchParams();
+    if (opts?.noParticipants) params.set("noparticipants", "true");
+    if (opts?.force) params.set("force", "true");
+    const qs = params.toString();
+    return this.request("GET", qs ? `/group/list?${qs}` : "/group/list");
   }
 
-  async createGroup(name: string, participants: string[]): Promise<{ GroupJID: string }> {
+  // POST /group/list with pagination/search
+  async listGroupsPaged(opts?: { limit?: number; offset?: number; search?: string; noParticipants?: boolean; force?: boolean }): Promise<{ groups: UazapiGroupInfo[]; pagination?: { totalRecords: number; limit: number; offset: number } }> {
+    return this.request("POST", "/group/list", (opts || {}) as Record<string, unknown>);
+  }
+
+  async createGroup(name: string, participants: string[]): Promise<UazapiGroupInfo> {
     return this.request("POST", "/group/create", { name, participants });
   }
 
-  async getGroupInfo(groupJid: string): Promise<unknown> {
-    return this.request("GET", "/group/info", { GroupJID: groupJid });
+  // POST /group/info — v2 API (was GET)
+  async getGroupInfo(groupJid: string, opts?: { getInviteLink?: boolean; getRequestsParticipants?: boolean; force?: boolean }): Promise<UazapiGroupInfo> {
+    return this.request("POST", "/group/info", { groupjid: groupJid, ...opts });
   }
 
-  async getGroupInviteLink(groupJid: string): Promise<{ InviteLink: string }> {
-    return this.request("GET", "/group/invitelink", { GroupJID: groupJid });
+  // POST /group/inviteInfo — get group info by invite code/URL
+  async getGroupInviteInfo(invitecode: string): Promise<UazapiGroupInfo> {
+    return this.request("POST", "/group/inviteInfo", { invitecode });
   }
 
-  async updateGroupName(groupJid: string, name: string): Promise<unknown> {
+  // POST /group/join
+  async joinGroup(invitecode: string): Promise<{ response: string; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/join", { invitecode });
+  }
+
+  // POST /group/leave
+  async leaveGroup(groupJid: string): Promise<{ response: string }> {
+    return this.request("POST", "/group/leave", { groupjid: groupJid });
+  }
+
+  async updateGroupName(groupJid: string, name: string): Promise<{ response: string; group: UazapiGroupInfo }> {
     return this.request("POST", "/group/updateName", { groupjid: groupJid, name });
   }
 
-  async updateGroupDescription(groupJid: string, description: string): Promise<unknown> {
+  async updateGroupDescription(groupJid: string, description: string): Promise<{ response: string; group: UazapiGroupInfo }> {
     return this.request("POST", "/group/updateDescription", { groupjid: groupJid, description });
   }
 
-  async updateGroupAnnounce(groupJid: string, announce: boolean): Promise<unknown> {
+  async updateGroupAnnounce(groupJid: string, announce: boolean): Promise<{ response: string; group: UazapiGroupInfo }> {
     return this.request("POST", "/group/updateAnnounce", { groupjid: groupJid, announce });
   }
 
-  async resetGroupInviteCode(groupJid: string): Promise<unknown> {
+  async updateGroupLocked(groupJid: string, locked: boolean): Promise<{ response: string; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/updateLocked", { groupjid: groupJid, locked });
+  }
+
+  async updateGroupImage(groupJid: string, image: string): Promise<{ response: string; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/updateImage", { groupjid: groupJid, image });
+  }
+
+  async updateGroupJoinApproval(groupJid: string, required: boolean): Promise<{ response: string; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/updateJoinApproval", { groupjid: groupJid, IsJoinApprovalRequired: required });
+  }
+
+  async updateGroupMemberAddMode(groupJid: string, mode: "admin_add" | "all_member_add"): Promise<{ response: string; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/updateMemberAddMode", { groupjid: groupJid, MemberAddMode: mode });
+  }
+
+  async updateGroupEphemeral(groupJid: string, duration: "0" | "off" | "1d" | "7d" | "90d"): Promise<{ response: string; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/ephemeral", { groupjid: groupJid, duration });
+  }
+
+  // POST /group/updateParticipants
+  async updateGroupParticipants(groupJid: string, action: "add" | "remove" | "promote" | "demote" | "approve" | "reject", participants: string[]): Promise<{ groupUpdated: Array<{ JID: string; Error: number }>; group: UazapiGroupInfo }> {
+    return this.request("POST", "/group/updateParticipants", { groupjid: groupJid, action, participants });
+  }
+
+  async resetGroupInviteCode(groupJid: string): Promise<{ InviteLink: string; group: UazapiGroupInfo }> {
     return this.request("POST", "/group/resetInviteCode", { groupjid: groupJid });
+  }
+
+  // ============ COMMUNITIES ============
+
+  async createCommunity(name: string): Promise<{ group: UazapiGroupInfo; failed: string[] }> {
+    return this.request("POST", "/community/create", { name });
+  }
+
+  async editCommunityGroups(community: string, action: "add" | "remove", groupjids: string[]): Promise<{ message: string; success: string[]; failed: string[] }> {
+    return this.request("POST", "/community/editgroups", { community, action, groupjids });
   }
 
   // ============ CRM SYNC ============

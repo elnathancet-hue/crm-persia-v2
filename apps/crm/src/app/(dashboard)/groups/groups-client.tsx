@@ -99,7 +99,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
     if (!name.trim()) return;
     setCreating(true);
     try {
-      const newGroup = await createGroup(name.trim(), category);
+      const newGroup = await createGroup(name.trim(), [], category);
       setGroups((prev) => [newGroup as Group, ...prev]);
       setCreateOpen(false);
       setName("");

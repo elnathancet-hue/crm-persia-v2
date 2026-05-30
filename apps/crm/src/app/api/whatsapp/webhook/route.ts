@@ -149,13 +149,17 @@ export async function POST(request: NextRequest) {
         (flatStatus || null);
       const dbStatus = mapUazapiStatus(rawStatus);
       if (!messageId || !dbStatus) {
-        logInfo("uazapi_webhook_messages_update_skipped", {
+        // Log payload keys para diagnóstico (sem expor conteúdo de msgs).
+        logWarn("uazapi_webhook_messages_update_skipped", {
           organization_id: matchedConn.organization_id,
           request_id: requestId,
           provider: "uazapi",
           route: "/api/whatsapp/webhook",
           reason: !messageId ? "missing_messageid" : "unmapped_status",
           raw_status: rawStatus,
+          detected_via: isExplicitUpdate ? "EventType" : isFlatStatusUpdate ? "flat_heuristic" : "unknown",
+          body_keys: Object.keys(body).sort().join(","),
+          message_keys: typeof body.message === "object" && body.message ? Object.keys(body.message as Record<string, unknown>).sort().join(",") : null,
         });
         return NextResponse.json({ ok: true, skipped: "messages_update_no_op" });
       }

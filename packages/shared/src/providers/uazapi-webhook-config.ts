@@ -3,17 +3,25 @@
 // "messages" (novas mensagens entrando) — confirmações de entrega
 // nunca chegavam, então UI mostrava só 1 check ad eternum.
 //
+// Bug B.2 fix (mai/2026): removido "wasSentByApi" do excludeMessages.
+// UAZAPI aplica esse filtro a TODOS os eventos, incluindo messages_update.
+// Como ACKs (delivery/read) são exatamente das msgs que enviamos via API
+// (wasSentByApi=true), o filtro suprimia todos os ACKs antes de chegar.
+// Sem o filtro, events de messages com fromMe=true chegam mas são descartados
+// pelo parseWebhook() (retorna null para fromMe=true) — sem risco de loop.
+//
 // IMPORTANTE: instâncias existentes JÁ conectadas precisam ter o
 // webhook reconfigurado (re-chamar provider.setWebhook). Sem isso,
-// o evento novo não é entregue. Ver script `scripts/uazapi-resync-webhooks.ts`.
+// as mudanças não são entregues. Ver script `scripts/uazapi-resync-webhooks.ts`.
 export const UAZAPI_DEFAULT_WEBHOOK_EVENTS = [
   "messages",
   "messages_update",
 ] as const;
-export const UAZAPI_DEFAULT_EXCLUDED_MESSAGES = ["wasSentByApi"] as const;
+export const UAZAPI_DEFAULT_EXCLUDED_MESSAGES = [] as const;
 
 export type UazapiWebhookEvent = (typeof UAZAPI_DEFAULT_WEBHOOK_EVENTS)[number] | "connection";
-export type UazapiWebhookExcludedMessage = (typeof UAZAPI_DEFAULT_EXCLUDED_MESSAGES)[number];
+// Known filter values; kept as string for forward-compat with future UAZAPI values.
+export type UazapiWebhookExcludedMessage = "wasSentByApi" | "wasNotSentByApi" | "fromMeYes" | "fromMeNo" | "isGroupYes" | "isGroupNo" | string;
 
 export interface UazapiWebhookConfig {
   enabled: boolean;

@@ -1,8 +1,11 @@
 import { UazapiClient, phoneToJid } from "./uazapi-client";
+import type { UazapiGroupInfo } from "./uazapi-client";
 import { buildUazapiWebhookConfig } from "./uazapi-webhook-config";
 import type {
   ConnectionResult,
   CreateCampaignOptions,
+  GroupInfo,
+  GroupParticipant,
   IncomingMessage,
   LeadSyncData,
   MessageResult,
@@ -372,33 +375,56 @@ export class UazapiAdapter implements WhatsAppProvider {
 
   // ---- Groups ----
 
-  async listGroups(): Promise<Array<{ jid: string; name: string; participantCount: number }>> {
-    const groups = await this.client.listGroups() as Array<Record<string, unknown>>;
-    return (groups || []).map((g) => ({
-      jid: String(g.GroupJID || g.JID || g.jid || ""),
-      name: String(g.Name || g.name || g.GroupName || ""),
-      participantCount: Number(g.ParticipantCount || (Array.isArray(g.Participants) ? g.Participants.length : 0)) || 0,
+  private mapGroupInfo(g: UazapiGroupInfo): GroupInfo {
+    const participants: GroupParticipant[] = (g.Participants || []).map(p => ({
+      jid: p.JID || "",
+      isAdmin: p.IsAdmin === true,
+      isSuperAdmin: p.IsSuperAdmin === true,
     }));
-  }
-
-  async createGroup(name: string): Promise<{ jid: string }> {
-    const result = await this.client.createGroup(name, []);
-    return { jid: result.GroupJID || "" };
-  }
-
-  async getGroupInfo(jid: string): Promise<{ name: string; description: string; participantCount: number; announce: boolean }> {
-    const info = await this.client.getGroupInfo(jid) as Record<string, unknown>;
     return {
-      name: String(info.Name || info.name || info.GroupName || ""),
-      description: String(info.Description || info.description || info.Topic || ""),
-      participantCount: Number(info.ParticipantCount || (Array.isArray(info.Participants) ? info.Participants.length : 0)) || 0,
-      announce: Boolean(info.IsAnnounce || info.announce || false),
+      jid: g.JID || "",
+      name: g.Name || "",
+      description: g.Topic || "",
+      participantCount: participants.length,
+      participants,
+      announce: g.IsAnnounce === true,
+      locked: g.IsLocked === true,
+      joinApprovalRequired: g.IsJoinApprovalRequired === true,
+      memberAddMode: (g.MemberAddMode as "admin_add" | "all_member_add") || "admin_add",
+      inviteLink: g.invite_link || null,
+      ephemeralDuration: g.DisappearingTimer || 0,
+      ownerJid: g.OwnerJID || null,
+      createdAt: g.GroupCreated || null,
     };
   }
 
-  async getGroupInviteLink(jid: string): Promise<string> {
-    const result = await this.client.getGroupInviteLink(jid);
-    return result.InviteLink || "";
+  async listGroups(opts?: { noParticipants?: boolean }): Promise<GroupInfo[]> {
+    const result = await this.client.listGroups({ noParticipants: opts?.noParticipants });
+    return (result.groups || []).map(g => this.mapGroupInfo(g));
+  }
+
+  async createGroup(name: string, participants: string[]): Promise<GroupInfo> {
+    const g = await this.client.createGroup(name, participants);
+    return this.mapGroupInfo(g);
+  }
+
+  async getGroupInfo(jid: string, opts?: { getInviteLink?: boolean }): Promise<GroupInfo> {
+    const g = await this.client.getGroupInfo(jid, { getInviteLink: opts?.getInviteLink });
+    return this.mapGroupInfo(g);
+  }
+
+  async getGroupInviteInfo(invitecode: string): Promise<GroupInfo> {
+    const g = await this.client.getGroupInviteInfo(invitecode);
+    return this.mapGroupInfo(g);
+  }
+
+  async joinGroup(invitecode: string): Promise<GroupInfo> {
+    const result = await this.client.joinGroup(invitecode);
+    return this.mapGroupInfo(result.group);
+  }
+
+  async leaveGroup(jid: string): Promise<void> {
+    await this.client.leaveGroup(jid);
   }
 
   async updateGroupName(jid: string, name: string): Promise<void> {
@@ -409,13 +435,40 @@ export class UazapiAdapter implements WhatsAppProvider {
     await this.client.updateGroupDescription(jid, description);
   }
 
+  async updateGroupImage(jid: string, image: string): Promise<void> {
+    await this.client.updateGroupImage(jid, image);
+  }
+
   async setGroupAnnounce(jid: string, announce: boolean): Promise<void> {
     await this.client.updateGroupAnnounce(jid, announce);
   }
 
+  async setGroupLocked(jid: string, locked: boolean): Promise<void> {
+    await this.client.updateGroupLocked(jid, locked);
+  }
+
+  async setGroupJoinApproval(jid: string, required: boolean): Promise<void> {
+    await this.client.updateGroupJoinApproval(jid, required);
+  }
+
+  async setGroupMemberAddMode(jid: string, mode: "admin_add" | "all_member_add"): Promise<void> {
+    await this.client.updateGroupMemberAddMode(jid, mode);
+  }
+
+  async setGroupEphemeral(jid: string, duration: "0" | "off" | "1d" | "7d" | "90d"): Promise<void> {
+    await this.client.updateGroupEphemeral(jid, duration);
+  }
+
+  async updateGroupParticipants(jid: string, action: "add" | "remove" | "promote" | "demote" | "approve" | "reject", participants: string[]): Promise<Array<{ jid: string; ok: boolean }>> {
+    const result = await this.client.updateGroupParticipants(jid, action, participants);
+    return (result.groupUpdated || []).map(p => ({
+      jid: p.JID || "",
+      ok: p.Error === 0,
+    }));
+  }
+
   async resetGroupInviteLink(jid: string): Promise<string> {
-    await this.client.resetGroupInviteCode(jid);
-    const result = await this.client.getGroupInviteLink(jid);
+    const result = await this.client.resetGroupInviteCode(jid);
     return result.InviteLink || "";
   }
 }
