@@ -379,6 +379,17 @@ async function executeAIAgentNode(
   // a tool emit_event(handle_name).
   const systemParts: string[] = [];
   if (node.data.system_prompt.trim()) systemParts.push(node.data.system_prompt.trim());
+  if (agentConfig.system_prompt.trim()) systemParts.push(agentConfig.system_prompt.trim());
+  // Knowledge inject (mai/2026): bloco "BASE DE CONHECIMENTO" entra
+  // logo após o prompt-base do agente — assim a IA já leu persona +
+  // regras gerais e agora ganha contexto factual antes de pensar.
+  // Buildado em paralelo com agentConfig/tools acima.
+  if (knowledgeBlock) systemParts.push(knowledgeBlock);
+  // PR-EMIT-FIX (mai/2026): EVENTS TO EMIT movido pro FIM do system prompt.
+  // Antes ficava antes do prompt-base do agente e era "enterrado" pelo
+  // contexto longo de persona/regras. No final, entra com máxima
+  // proeminência — LLM processa em último antes de gerar a resposta.
+  // Wording mais imperativo: "MUST call emit_event in THIS turn".
   if (node.data.instructions.length > 0) {
     const list = node.data.instructions
       .map((i, idx) =>
@@ -386,15 +397,9 @@ async function executeAIAgentNode(
       )
       .join("\n");
     systemParts.push(
-      `EVENTS TO EMIT (call emit_event with the matching handle when the condition is met):\n${list}`,
+      `ROUTING EVENTS — you MUST call emit_event in THIS same message turn when a condition below is satisfied. Do NOT wait for the next message.\n${list}`,
     );
   }
-  if (agentConfig.system_prompt.trim()) systemParts.push(agentConfig.system_prompt.trim());
-  // Knowledge inject (mai/2026): bloco "BASE DE CONHECIMENTO" entra
-  // logo após o prompt-base do agente — assim a IA já leu persona +
-  // regras gerais e agora ganha contexto factual antes de pensar.
-  // Buildado em paralelo com agentConfig/tools acima.
-  if (knowledgeBlock) systemParts.push(knowledgeBlock);
   // Bug D fix (mai/2026): warning explícito pra evitar vazamento de
   // tool call como texto. Modelos novos (gpt-5*, gpt-4o*) às vezes
   // retornam `tool_calls` E `content` no mesmo turno — o content
@@ -799,6 +804,40 @@ async function executeAIAgentNode(
       } else {
         result.tool_calls_failed++;
       }
+    }
+
+    // PR-EMIT-FIX (mai/2026): se emit_event foi chamado nesta iteração,
+    // NÃO chamar o LLM de novo (iter+1). O texto de iter+1 seria uma
+    // "confirmação de routing" enviada ao lead no lugar da resposta real.
+    // Em vez disso: envia o texto desta iteração (resposta real do LLM)
+    // e sai do loop — o edge-dispatch abaixo cuida do próximo node.
+    if (emittedHandleName) {
+      const iterText = (llmOutput.text ?? "").trim();
+      if (iterText) {
+        const { cleaned: iterCleaned, leakedPatterns: iterLeaks } =
+          stripToolCallLeaks(iterText);
+        if (iterLeaks.length > 0) {
+          ctx.provider.emit({
+            kind: "guardrail",
+            payload: {
+              reason: "tool_call_leak_stripped",
+              count: iterLeaks.length,
+              patterns: iterLeaks,
+              node_id: node.id,
+            },
+          });
+        }
+        if (iterCleaned) {
+          result.assistant_reply += result.assistant_reply
+            ? "\n" + iterCleaned
+            : iterCleaned;
+          ctx.provider.emit({
+            kind: "send_text",
+            payload: { message: iterCleaned },
+          });
+        }
+      }
+      break;
     }
   }
 
