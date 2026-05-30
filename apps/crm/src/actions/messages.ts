@@ -858,3 +858,14 @@ export async function deleteWhatsAppMessage(messageId: string): Promise<{ error?
 
   return {};
 }
+
+// Hide message locally (no WhatsApp API call — "Apagar para mim" only)
+export async function hideMessage(messageId: string): Promise<{ error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+  await supabase
+    .from("messages")
+    .update({ content: null, status: "deleted" })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+  return {};
+}

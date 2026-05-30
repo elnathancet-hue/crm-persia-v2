@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
-import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, type Message } from "@/actions/messages";
+import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
+// AlertDialog kept for conversation close confirm only
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,8 @@ import {
   Calendar,
   Check,
   CheckCheck,
+  ChevronDown,
+  Copy,
   FileText,
   Loader2,
   MessageSquare,
@@ -51,6 +54,7 @@ import {
   Phone,
   Play,
   RotateCw,
+  Smile,
   Sparkles,
   Trash2,
   User,
@@ -364,10 +368,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryText, setSummaryText] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
-  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
-  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
-  const [deleteConfirmMsgId, setDeleteConfirmMsgId] = useState<string | null>(null);
+  const [reactionPickerMsgId, setReactionPickerMsgId] = useState<string | null>(null);
+  const [editDialogMsgId, setEditDialogMsgId] = useState<string | null>(null);
+  const [editDialogText, setEditDialogText] = useState("");
+  const [deleteDialogMsgId, setDeleteDialogMsgId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -402,7 +406,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   }, []);
 
   const handleReact = useCallback(async (msgId: string, emoji: string) => {
-    setHoveredMsgId(null);
+    setReactionPickerMsgId(null);
     // Optimistic update — metadata updated in DB by server action, Realtime confirms
     setMessages((prev) =>
       prev.map((m) => {
@@ -422,16 +426,17 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   }, []);
 
   const startEdit = useCallback((msgId: string, currentText: string) => {
-    setEditingMsgId(msgId);
-    setEditText(currentText);
-    setHoveredMsgId(null);
+    setEditDialogMsgId(msgId);
+    setEditDialogText(currentText);
   }, []);
 
-  const handleEditSave = useCallback(async (msgId: string) => {
-    const trimmed = editText.trim();
+  const handleEditSave = useCallback(async () => {
+    const msgId = editDialogMsgId;
+    if (!msgId) return;
+    const trimmed = editDialogText.trim();
     if (!trimmed) return;
-    setEditingMsgId(null);
-    // Optimistic update — content + edited_at updated in DB by server action, Realtime confirms
+    setEditDialogMsgId(null);
+    // Optimistic update
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== msgId) return m;
@@ -441,16 +446,25 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     );
     const result = await editWhatsAppMessage(msgId, trimmed);
     if (result.error) toast.error(result.error);
-  }, [editText]);
+  }, [editDialogMsgId, editDialogText]);
 
-  const handleDeleteConfirm = useCallback(async () => {
-    const msgId = deleteConfirmMsgId;
+  const handleDeleteForEveryone = useCallback(async () => {
+    const msgId = deleteDialogMsgId;
     if (!msgId) return;
-    setDeleteConfirmMsgId(null);
+    setDeleteDialogMsgId(null);
     setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, status: "deleted", content: null } : m)));
     const result = await deleteWhatsAppMessage(msgId);
     if (result.error) toast.error(result.error);
-  }, [deleteConfirmMsgId]);
+  }, [deleteDialogMsgId]);
+
+  const handleDeleteForMe = useCallback(async () => {
+    const msgId = deleteDialogMsgId;
+    if (!msgId) return;
+    setDeleteDialogMsgId(null);
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, status: "deleted", content: null } : m)));
+    const result = await hideMessage(msgId);
+    if (result.error) toast.error(result.error);
+  }, [deleteDialogMsgId]);
 
   const withResolvedMediaUrl = useCallback(async (message: Message): Promise<Message> => {
     if (!shouldResolveMediaUrl(message.media_url)) return message;
@@ -871,64 +885,30 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 )}
 
                 {/* Message bubble - Lead LEFT, IA+Agent RIGHT */}
-                <div
-                  className={cn(
-                    "flex max-w-[86%] flex-col gap-0.5 sm:max-w-[72%] lg:max-w-[62%]",
-                    isLead ? "items-start" : "ml-auto items-end"
-                  )}
-                  onMouseEnter={() => setHoveredMsgId(msg.id)}
-                  onMouseLeave={() => { if (editingMsgId !== msg.id) setHoveredMsgId(null); }}
-                >
-                  {/* Sender label */}
-                  {isAi && (
-                    <div
-                      className="flex items-center gap-1 text-[11px] px-1"
-                      style={{ color: "var(--chat-checkmark-read)" }}
-                    >
-                      <Bot className="size-3" />
-                      <span className="font-medium">IA</span>
-                    </div>
-                  )}
-                  {isAgent && (
-                    <div
-                      className="flex items-center gap-1 text-[11px] px-1"
-                      style={{ color: "var(--chat-timestamp)" }}
-                    >
-                      <UserCheck className="size-3" />
-                      <span className="font-medium">Você</span>
-                    </div>
-                  )}
-                  {isLead && (
-                    <div
-                      className="flex items-center gap-1 text-[11px] px-1"
-                      style={{ color: "var(--chat-timestamp)" }}
-                    >
-                      <User className="size-3" />
-                      <span>
-                        {(lead?.name as string) ||
-                          (lead?.phone as string) ||
-                          "Lead"}
-                      </span>
-                    </div>
-                  )}
+                {(() => {
+                  const meta = msg.metadata as { reactions?: Array<{ emoji: string; by: string }>; edited_at?: string } | null;
+                  const msgReactions = meta?.reactions?.filter((r) => r.emoji) ?? [];
+                  const isEdited = !!meta?.edited_at;
+                  const hasReactions = msgReactions.length > 0;
+                  const canModify = !isLead && !!msg.whatsapp_msg_id && msg.status !== "deleted";
 
-                  {/* Bubble wrapper */}
-                  {(() => {
-                    const meta = msg.metadata as { reactions?: Array<{ emoji: string; by: string }>; edited_at?: string } | null;
-                    const msgReactions = meta?.reactions?.filter((r) => r.emoji) ?? [];
-                    const isEdited = !!meta?.edited_at;
-                    const hasReactions = msgReactions.length > 0;
-                    return (
-                      <div
-                        className="relative"
-                        style={{ marginBottom: hasReactions ? "14px" : undefined }}
-                      >
-                        {/* Action bar — appears ABOVE bubble on hover, WhatsApp-style pill */}
-                        {hoveredMsgId === msg.id && editingMsgId !== msg.id && (
+                  // Controls: 😊 + ⌄ — shown on group-hover
+                  const msgControls = (
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-end mb-1">
+                      {/* Reaction picker trigger */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id)}
+                          className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                          title="Reagir"
+                        >
+                          <Smile className="size-4" />
+                        </button>
+                        {reactionPickerMsgId === msg.id && (
                           <div
                             className={cn(
-                              "absolute bottom-full mb-1 z-20",
-                              "flex items-center rounded-full border border-border bg-background px-2 py-1 shadow-lg",
+                              "absolute bottom-full mb-1 z-30",
+                              "flex items-center rounded-full border border-border bg-background px-2 py-1.5 shadow-lg gap-0.5",
                               isLead ? "left-0" : "right-0"
                             )}
                           >
@@ -936,186 +916,217 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                               <button
                                 key={emoji}
                                 onClick={() => handleReact(msg.id, emoji)}
-                                className="px-0.5 text-[18px] leading-none hover:scale-125 transition-transform"
-                                title={`Reagir com ${emoji}`}
+                                className="text-[20px] leading-none hover:scale-125 transition-transform px-0.5"
                               >
                                 {emoji}
                               </button>
                             ))}
-                            {!isLead && msg.whatsapp_msg_id && (
-                              <>
-                                <span className="mx-1 h-4 w-px bg-border" />
-                                <button
-                                  onClick={() => startEdit(msg.id, msg.content || "")}
-                                  className="rounded-full p-1 text-muted-foreground hover:text-foreground transition-colors"
-                                  title="Editar mensagem"
-                                >
-                                  <Pencil className="size-3.5" />
-                                </button>
-                                <button
-                                  onClick={() => { setHoveredMsgId(null); setDeleteConfirmMsgId(msg.id); }}
-                                  className="rounded-full p-1 text-muted-foreground hover:text-destructive transition-colors"
-                                  title="Apagar mensagem"
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Bubble */}
-                        {editingMsgId === msg.id ? (
-                          <div
-                            className={cn(
-                              "rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
-                              isLead ? "rounded-bl-sm" : "rounded-br-sm"
-                            )}
-                            style={
-                              isLead
-                                ? { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
-                                : { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
-                            }
-                          >
-                            <textarea
-                              // eslint-disable-next-line jsx-a11y/no-autofocus
-                              autoFocus
-                              value={editText}
-                              onChange={(e) => setEditText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                  e.preventDefault();
-                                  void handleEditSave(msg.id);
-                                }
-                                if (e.key === "Escape") setEditingMsgId(null);
-                              }}
-                              className="w-full min-w-[180px] resize-none bg-transparent outline-none text-[14.2px] leading-5 break-words"
-                              rows={Math.max(1, (editText.match(/\n/g) || []).length + 1)}
-                            />
-                            <div className="mt-1 flex justify-end gap-1.5">
-                              <button
-                                onClick={() => setEditingMsgId(null)}
-                                className="rounded px-2 py-0.5 text-[11px] opacity-70 hover:opacity-100"
-                              >
-                                Cancelar
-                              </button>
-                              <button
-                                onClick={() => void handleEditSave(msg.id)}
-                                className="rounded bg-primary/20 px-2 py-0.5 text-[11px] hover:bg-primary/30"
-                              >
-                                Salvar
-                              </button>
-                            </div>
-                          </div>
-                        ) : msg.status === "deleted" ? (
-                          <div
-                            className={cn(
-                              "rounded-[7.5px] px-3 py-1.5 text-[13px] leading-5 shadow-sm italic",
-                              isLead ? "rounded-bl-sm" : "rounded-br-sm"
-                            )}
-                            style={
-                              isLead
-                                ? { background: "var(--chat-bubble-in)", color: "var(--chat-timestamp)" }
-                                : { background: "var(--chat-bubble-out)", color: "var(--chat-timestamp)" }
-                            }
-                          >
-                            🚫 Esta mensagem foi apagada
-                            <span
-                              className="text-[10px] float-right ml-2 mt-0.5 not-italic"
-                              style={{ color: "var(--chat-timestamp)" }}
-                            >
-                              {formatMessageTime(msg.created_at)}
-                            </span>
-                          </div>
-                        ) : (
-                          <div
-                            className={cn(
-                              "relative rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
-                              isAgent && msg.status === "failed"
-                                ? "rounded-br-sm bg-failure/90 text-failure-foreground border border-failure"
-                                : isAgent && "rounded-br-sm",
-                              isAi && "rounded-br-sm",
-                              isLead && "rounded-bl-sm",
-                              isAgent && msg.status === "sending" && "opacity-70"
-                            )}
-                            style={
-                              isAgent && msg.status === "failed"
-                                ? undefined
-                                : isLead
-                                  ? { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
-                                  : { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
-                            }
-                          >
-                            {msg.media_url && msg.type === "image" && (
-                              <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
-                              </a>
-                            )}
-                            {msg.media_url && msg.type === "audio" && (
-                              <audio controls className="max-w-[250px] h-10 mb-1">
-                                <source src={msg.media_url} />
-                              </audio>
-                            )}
-                            {msg.media_url && msg.type === "video" && (
-                              <video controls className="max-h-64 rounded-xl mb-1">
-                                <source src={msg.media_url} />
-                              </video>
-                            )}
-                            {msg.media_url && msg.type === "document" && (
-                              <a
-                                href={msg.media_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-xs text-primary hover:underline mb-1"
-                              >
-                                <FileText className="size-4" />
-                                <span>Abrir documento</span>
-                              </a>
-                            )}
-                            {msg.content && (
-                              <p className="whitespace-pre-wrap break-words">{msg.content}</p>
-                            )}
-                            {/* Time + "Editada" + status - WhatsApp style */}
-                            <span
-                              className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-1"
-                              style={{ color: "var(--chat-timestamp)" }}
-                            >
-                              {isEdited && <span className="italic">Editada ·</span>}
-                              {formatMessageTime(msg.created_at)}
-                              {(isAgent || isAi) && (
-                                <StatusIndicator
-                                  status={msg.status}
-                                  onRetry={msg.status === "failed" ? () => handleRetry(msg.id) : undefined}
-                                  isRetrying={retryingIds.has(msg.id)}
-                                />
-                              )}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Reaction badge — overlaps bottom edge of bubble, WhatsApp-style */}
-                        {hasReactions && (
-                          <div
-                            className={cn(
-                              "absolute -bottom-3.5 flex gap-0.5",
-                              isLead ? "left-2" : "right-2"
-                            )}
-                          >
-                            {msgReactions.map((r, i) => (
-                              <span
-                                key={i}
-                                className="rounded-full border border-border bg-background px-1.5 py-0.5 text-sm leading-none shadow-sm"
-                              >
-                                {r.emoji}
-                              </span>
-                            ))}
                           </div>
                         )}
                       </div>
-                    );
-                  })()}
-                </div>
+                      {/* Context menu */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors" title="Mais opções">
+                          <ChevronDown className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align={isLead ? "start" : "end"} className="min-w-[160px]">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (msg.content) navigator.clipboard.writeText(msg.content);
+                            }}
+                          >
+                            <Copy className="size-4" />
+                            Copiar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id)}
+                          >
+                            <Smile className="size-4" />
+                            Reagir
+                          </DropdownMenuItem>
+                          {canModify && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => startEdit(msg.id, msg.content || "")}
+                              >
+                                <Pencil className="size-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => setDeleteDialogMsgId(msg.id)}
+                              >
+                                <Trash2 className="size-4" />
+                                Apagar
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  );
+
+                  return (
+                    <div
+                      className={cn(
+                        "group flex max-w-[86%] items-end gap-1 sm:max-w-[72%] lg:max-w-[62%]",
+                        isLead ? "flex-row" : "ml-auto flex-row-reverse"
+                      )}
+                    >
+                      {/* Hover controls */}
+                      {msgControls}
+
+                      {/* Bubble column */}
+                      <div className={cn("flex flex-col gap-0.5", isLead ? "items-start" : "items-end")}>
+                        {/* Sender label */}
+                        {isAi && (
+                          <div
+                            className="flex items-center gap-1 text-[11px] px-1"
+                            style={{ color: "var(--chat-checkmark-read)" }}
+                          >
+                            <Bot className="size-3" />
+                            <span className="font-medium">IA</span>
+                          </div>
+                        )}
+                        {isAgent && (
+                          <div
+                            className="flex items-center gap-1 text-[11px] px-1"
+                            style={{ color: "var(--chat-timestamp)" }}
+                          >
+                            <UserCheck className="size-3" />
+                            <span className="font-medium">Você</span>
+                          </div>
+                        )}
+                        {isLead && (
+                          <div
+                            className="flex items-center gap-1 text-[11px] px-1"
+                            style={{ color: "var(--chat-timestamp)" }}
+                          >
+                            <User className="size-3" />
+                            <span>
+                              {(lead?.name as string) ||
+                                (lead?.phone as string) ||
+                                "Lead"}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Bubble + reaction badge */}
+                        <div
+                          className="relative"
+                          style={{ marginBottom: hasReactions ? "14px" : undefined }}
+                        >
+                          {msg.status === "deleted" ? (
+                            <div
+                              className={cn(
+                                "rounded-[7.5px] px-3 py-1.5 text-[13px] leading-5 shadow-sm italic",
+                                isLead ? "rounded-bl-sm" : "rounded-br-sm"
+                              )}
+                              style={
+                                isLead
+                                  ? { background: "var(--chat-bubble-in)", color: "var(--chat-timestamp)" }
+                                  : { background: "var(--chat-bubble-out)", color: "var(--chat-timestamp)" }
+                              }
+                            >
+                              🚫 Esta mensagem foi apagada
+                              <span
+                                className="text-[10px] float-right ml-2 mt-0.5 not-italic"
+                                style={{ color: "var(--chat-timestamp)" }}
+                              >
+                                {formatMessageTime(msg.created_at)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div
+                              className={cn(
+                                "relative rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
+                                isAgent && msg.status === "failed"
+                                  ? "rounded-br-sm bg-failure/90 text-failure-foreground border border-failure"
+                                  : isAgent && "rounded-br-sm",
+                                isAi && "rounded-br-sm",
+                                isLead && "rounded-bl-sm",
+                                isAgent && msg.status === "sending" && "opacity-70"
+                              )}
+                              style={
+                                isAgent && msg.status === "failed"
+                                  ? undefined
+                                  : isLead
+                                    ? { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
+                                    : { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
+                              }
+                            >
+                              {msg.media_url && msg.type === "image" && (
+                                <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
+                                </a>
+                              )}
+                              {msg.media_url && msg.type === "audio" && (
+                                <audio controls className="max-w-[250px] h-10 mb-1">
+                                  <source src={msg.media_url} />
+                                </audio>
+                              )}
+                              {msg.media_url && msg.type === "video" && (
+                                <video controls className="max-h-64 rounded-xl mb-1">
+                                  <source src={msg.media_url} />
+                                </video>
+                              )}
+                              {msg.media_url && msg.type === "document" && (
+                                <a
+                                  href={msg.media_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 text-xs text-primary hover:underline mb-1"
+                                >
+                                  <FileText className="size-4" />
+                                  <span>Abrir documento</span>
+                                </a>
+                              )}
+                              {msg.content && (
+                                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                              )}
+                              {/* Time + "Editada" + status - WhatsApp style */}
+                              <span
+                                className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-1"
+                                style={{ color: "var(--chat-timestamp)" }}
+                              >
+                                {isEdited && <span className="italic">Editada ·</span>}
+                                {formatMessageTime(msg.created_at)}
+                                {(isAgent || isAi) && (
+                                  <StatusIndicator
+                                    status={msg.status}
+                                    onRetry={msg.status === "failed" ? () => handleRetry(msg.id) : undefined}
+                                    isRetrying={retryingIds.has(msg.id)}
+                                  />
+                                )}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Reaction badge — overlaps bottom edge of bubble, WhatsApp-style */}
+                          {hasReactions && (
+                            <div
+                              className={cn(
+                                "absolute -bottom-3.5 flex gap-0.5",
+                                isLead ? "left-2" : "right-2"
+                              )}
+                            >
+                              {msgReactions.map((r, i) => (
+                                <span
+                                  key={i}
+                                  className="rounded-full border border-border bg-background px-1.5 py-0.5 text-sm leading-none shadow-sm"
+                                >
+                                  {r.emoji}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
@@ -1183,23 +1194,78 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Delete message confirmation */}
-      <AlertDialog open={!!deleteConfirmMsgId} onOpenChange={(open) => { if (!open) setDeleteConfirmMsgId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Apagar mensagem?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A mensagem será apagada para todos os participantes da conversa. Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+      {/* Edit message modal — WhatsApp style */}
+      <Dialog open={!!editDialogMsgId} onOpenChange={(open) => { if (!open) setEditDialogMsgId(null); }}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle>Editar mensagem</DialogTitle>
+          </DialogHeader>
+          {/* Preview bubble */}
+          <div className="wa-chat-wallpaper px-4 py-3">
+            <div className="ml-auto max-w-[80%] rounded-[7.5px] rounded-br-sm px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm"
+              style={{ background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }}
+            >
+              <p className="whitespace-pre-wrap break-words opacity-50 text-sm">{editDialogText || "..."}</p>
+            </div>
+          </div>
+          {/* Edit input */}
+          <div className="flex items-end gap-2 px-4 pb-4 pt-2">
+            <textarea
+              // eslint-disable-next-line jsx-a11y/no-autofocus
+              autoFocus
+              value={editDialogText}
+              onChange={(e) => setEditDialogText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleEditSave(); }
+                if (e.key === "Escape") setEditDialogMsgId(null);
+              }}
+              placeholder="Editar mensagem..."
+              className="flex-1 min-h-[44px] max-h-[120px] resize-none rounded-lg border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary"
+              rows={Math.max(1, (editDialogText.match(/\n/g) || []).length + 1)}
+            />
+            <button
+              onClick={() => void handleEditSave()}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              title="Salvar edição"
+            >
+              <Check className="size-4" />
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete message confirmation — WhatsApp style with 3 options */}
+      <Dialog open={!!deleteDialogMsgId} onOpenChange={(open) => { if (!open) setDeleteDialogMsgId(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Deseja apagar a mensagem?</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-destructive hover:text-destructive"
+              onClick={() => void handleDeleteForEveryone()}
+            >
+              <Trash2 className="size-4 mr-2" />
               Apagar para todos
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => void handleDeleteForMe()}
+            >
+              Apagar para mim
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => setDeleteDialogMsgId(null)}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de confirmacao pra fechar conversa (kebab > "Fechar conversa"). */}
       {/* Reativa IA automaticamente — a proxima msg do lead cria conversation nova. */}
