@@ -1,8 +1,11 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { createHash } from "crypto";
 
 async function getProvider(supabase: any, orgId: string) {
   const { data: connection } = await supabase
@@ -383,4 +386,283 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     .limit(limit);
 
   return (data || []) as Array<{ id: string; direction: string; text: string | null; sender_name: string | null; created_at: string }>;
+}
+
+// ─── Group Campaigns ──────────────────────────────────────────────────────────
+
+export interface GroupCampaign {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  distribution_mode: "sequential" | "balanced";
+  fallback_url: string | null;
+  fallback_message: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getGroupCampaigns() {
+  const { supabase, orgId } = await requireRole("admin");
+  const { data, error } = await (supabase as any)
+    .from("group_campaigns")
+    .select("*")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as GroupCampaign[];
+}
+
+export async function createGroupCampaign(input: {
+  name: string;
+  slug: string;
+  description?: string;
+  distribution_mode?: "sequential" | "balanced";
+  fallback_url?: string;
+}) {
+  const { supabase, orgId } = await requireRole("admin");
+  const slug = input.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  const { data, error } = await (supabase as any)
+    .from("group_campaigns")
+    .insert({
+      organization_id: orgId,
+      name: input.name.trim(),
+      slug,
+      description: input.description?.trim() || null,
+      distribution_mode: input.distribution_mode || "balanced",
+      fallback_url: input.fallback_url?.trim() || null,
+    })
+    .select()
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error("Slug já em uso nesta organização");
+    throw new Error(error.message);
+  }
+  revalidatePath("/groups");
+  return data as GroupCampaign;
+}
+
+export async function updateGroupCampaign(
+  id: string,
+  input: Partial<Pick<GroupCampaign, "name" | "slug" | "description" | "distribution_mode" | "fallback_url" | "fallback_message" | "is_active">>
+) {
+  const { supabase, orgId } = await requireRole("admin");
+  const update: Record<string, unknown> = { ...input, updated_at: new Date().toISOString() };
+  if (input.slug) {
+    update.slug = input.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  }
+  const { error } = await (supabase as any)
+    .from("group_campaigns")
+    .update(update)
+    .eq("id", id)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/groups");
+}
+
+export async function deleteGroupCampaign(id: string) {
+  const { supabase, orgId } = await requireRole("admin");
+  // Unlink groups first
+  await (supabase as any)
+    .from("whatsapp_groups")
+    .update({ campaign_id: null })
+    .eq("campaign_id", id)
+    .eq("organization_id", orgId);
+  const { error } = await (supabase as any)
+    .from("group_campaigns")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/groups");
+}
+
+export async function linkGroupToCampaign(groupId: string, campaignId: string | null) {
+  const { supabase, orgId } = await requireRole("admin");
+  const { error } = await (supabase as any)
+    .from("whatsapp_groups")
+    .update({ campaign_id: campaignId, updated_at: new Date().toISOString() })
+    .eq("id", groupId)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/groups");
+}
+
+export async function setGroupCapacity(groupId: string, maxParticipants: number, isAccepting: boolean) {
+  const { supabase, orgId } = await requireRole("admin");
+  const { error } = await (supabase as any)
+    .from("whatsapp_groups")
+    .update({ max_participants: maxParticipants, is_accepting: isAccepting, updated_at: new Date().toISOString() })
+    .eq("id", groupId)
+    .eq("organization_id", orgId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/groups");
+}
+
+// ─── Smart link (public — uses admin client, no user auth) ───────────────────
+
+export interface SmartLinkResolution {
+  status: "ok" | "full" | "inactive";
+  organizationId: string;
+  campaign: { id: string; name: string; description: string | null; fallback_url: string | null; fallback_message: string | null };
+  organization: { name: string; logo_url: string | null };
+  group?: { id: string; invite_link: string; name: string };
+}
+
+export async function resolveSmartLink(orgSlug: string, campaignSlug: string): Promise<SmartLinkResolution | null> {
+  const db = createAdminClient() as any;
+
+  // Find org by slug
+  const { data: org } = await db
+    .from("organizations")
+    .select("id, name, logo_url")
+    .eq("slug", orgSlug)
+    .maybeSingle();
+  if (!org) return null;
+
+  // Find active campaign
+  const { data: campaign } = await db
+    .from("group_campaigns")
+    .select("id, name, description, distribution_mode, fallback_url, fallback_message, is_active")
+    .eq("organization_id", org.id)
+    .eq("slug", campaignSlug)
+    .maybeSingle();
+  if (!campaign) return null;
+
+  const campaignMeta = {
+    id: campaign.id,
+    name: campaign.name,
+    description: campaign.description,
+    fallback_url: campaign.fallback_url,
+    fallback_message: campaign.fallback_message,
+  };
+  const orgMeta = { name: org.name, logo_url: org.logo_url };
+
+  if (!campaign.is_active) {
+    return { status: "inactive", organizationId: org.id, campaign: campaignMeta, organization: orgMeta };
+  }
+
+  // Find available groups for this campaign
+  const { data: groups } = await db
+    .from("whatsapp_groups")
+    .select("id, name, invite_link, participant_count, max_participants, is_accepting")
+    .eq("organization_id", org.id)
+    .eq("campaign_id", campaign.id)
+    .eq("is_accepting", true)
+    .not("invite_link", "is", null);
+
+  if (!groups || groups.length === 0) {
+    return { status: "full", organizationId: org.id, campaign: campaignMeta, organization: orgMeta };
+  }
+
+  // Filter actually available (below capacity)
+  const available = groups.filter(
+    (g: any) => (g.participant_count ?? 0) < (g.max_participants ?? 256)
+  );
+
+  if (available.length === 0) {
+    return { status: "full", organizationId: org.id, campaign: campaignMeta, organization: orgMeta };
+  }
+
+  let chosen: any;
+  if (campaign.distribution_mode === "sequential") {
+    // Fill groups in order — pick the one with fewest remaining spots that still has space
+    // (i.e. most full, but not yet over capacity)
+    chosen = available.sort(
+      (a: any, b: any) =>
+        ((b.participant_count ?? 0) / (b.max_participants ?? 256)) -
+        ((a.participant_count ?? 0) / (a.max_participants ?? 256))
+    )[0];
+  } else {
+    // Balanced — pick the group with most remaining capacity
+    chosen = available.sort(
+      (a: any, b: any) =>
+        ((a.participant_count ?? 0) / (a.max_participants ?? 256)) -
+        ((b.participant_count ?? 0) / (b.max_participants ?? 256))
+    )[0];
+  }
+
+  return {
+    status: "ok",
+    organizationId: org.id,
+    campaign: campaignMeta,
+    organization: orgMeta,
+    group: { id: chosen.id, invite_link: chosen.invite_link, name: chosen.name },
+  };
+}
+
+export async function recordGroupJoin(input: {
+  organizationId: string;
+  groupId: string;
+  campaignId: string;
+  phone?: string;
+  name?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  utmTerm?: string;
+}) {
+  const db = createAdminClient() as any;
+  const hdrs = await headers();
+  const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || hdrs.get("x-real-ip") || "";
+  const ipHash = ip ? createHash("sha256").update(ip).digest("hex") : null;
+
+  // Normalize phone (remove non-digits, add +55 if BR 10-11 digit)
+  let phone: string | null = null;
+  if (input.phone) {
+    const digits = input.phone.replace(/\D/g, "");
+    if (digits.startsWith("55") && digits.length >= 12) {
+      phone = `+${digits}`;
+    } else if (digits.length >= 10 && digits.length <= 11) {
+      phone = `+55${digits}`;
+    } else if (digits.length > 0) {
+      phone = `+${digits}`;
+    }
+  }
+
+  // Upsert membership (ON CONFLICT on phone+group → update joined_at)
+  await db.from("group_memberships").upsert(
+    {
+      organization_id: input.organizationId,
+      group_id: input.groupId,
+      campaign_id: input.campaignId,
+      phone,
+      name: input.name?.trim() || null,
+      joined_at: new Date().toISOString(),
+      source: "smart_link",
+      utm_source: input.utmSource || null,
+      utm_medium: input.utmMedium || null,
+      utm_campaign: input.utmCampaign || null,
+      utm_content: input.utmContent || null,
+      utm_term: input.utmTerm || null,
+      ip_hash: ipHash,
+    },
+    { onConflict: "organization_id,group_id,phone", ignoreDuplicates: false }
+  );
+
+  // Link to existing lead if phone matches
+  if (phone) {
+    const { data: lead } = await db
+      .from("leads")
+      .select("id")
+      .eq("organization_id", input.organizationId)
+      .eq("phone", phone)
+      .maybeSingle();
+    if (lead) {
+      await db
+        .from("group_memberships")
+        .update({ lead_id: lead.id })
+        .eq("organization_id", input.organizationId)
+        .eq("group_id", input.groupId)
+        .eq("phone", phone);
+    }
+  }
+
+  // Increment participant_count optimistically
+  await db.rpc("increment_group_participant_count", { p_group_id: input.groupId }).catch(() => {
+    // RPC optional — participant_count also updated on sync
+  });
 }

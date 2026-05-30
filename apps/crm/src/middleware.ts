@@ -12,6 +12,7 @@ export async function middleware(request: NextRequest) {
     "/reset-password",
     "/lp",
     "/agendar", // booking publico — lead acessa anonimo
+    "/g",       // smart link grupos — lead acessa anonimo
   ];
   const isPublicRoute = publicRoutes.some((route) => pathname.startsWith(route));
   const isApiRoute = pathname.startsWith("/api");

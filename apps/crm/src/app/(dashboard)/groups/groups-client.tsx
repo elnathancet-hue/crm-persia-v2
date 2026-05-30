@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   ArrowLeft,
   Copy,
+  ExternalLink,
   Loader2,
   Megaphone,
   MessageSquare,
@@ -16,6 +17,7 @@ import {
   Users,
   Link2,
   Save,
+  Zap,
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
@@ -61,6 +63,13 @@ import {
   getInviteLink,
   updateGroup,
   sendInviteToLead,
+  getGroupCampaigns,
+  createGroupCampaign,
+  updateGroupCampaign,
+  deleteGroupCampaign,
+  linkGroupToCampaign,
+  setGroupCapacity,
+  type GroupCampaign,
 } from "@/actions/groups";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
@@ -73,8 +82,11 @@ interface Group {
   description: string | null;
   invite_link: string | null;
   participant_count: number;
+  max_participants: number;
+  is_accepting: boolean;
   is_announce: boolean;
   category: string;
+  campaign_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +124,7 @@ function GroupListPanel({
   onCreateOpen,
   onSync,
   syncing,
+  onCampaignOpen,
   search,
   onSearch,
   categoryFilter,
@@ -123,6 +136,7 @@ function GroupListPanel({
   onCreateOpen: () => void;
   onSync: () => void;
   syncing: boolean;
+  onCampaignOpen: () => void;
   search: string;
   onSearch: (v: string) => void;
   categoryFilter: string;
@@ -141,6 +155,9 @@ function GroupListPanel({
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-base">Grupos WhatsApp</h2>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon-sm" onClick={onCampaignOpen} title="Campanhas / Link Inteligente">
+              <Zap className="size-4" />
+            </Button>
             <Button variant="ghost" size="icon-sm" onClick={onSync} disabled={syncing} title="Sincronizar">
               {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             </Button>
@@ -210,16 +227,20 @@ function GroupListPanel({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold truncate">{group.name}</p>
-                  <Badge
-                    variant="secondary"
-                    className={`text-[10px] px-1.5 shrink-0 ${CATEGORY_COLORS[group.category] || ""}`}
-                  >
-                    {CATEGORY_LABELS[group.category] || group.category}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {group.campaign_id && <Link2 className="size-3 text-primary" />}
+                    {!group.is_accepting && <span className="text-[10px] text-destructive font-medium">Fechado</span>}
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] px-1.5 ${CATEGORY_COLORS[group.category] || ""}`}
+                    >
+                      {CATEGORY_LABELS[group.category] || group.category}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
                   <Users className="size-3 shrink-0" />
-                  <span>{group.participant_count} membros</span>
+                  <span>{group.participant_count}/{group.max_participants}</span>
                   {group.is_announce && (
                     <>
                       <span>·</span>
@@ -227,6 +248,13 @@ function GroupListPanel({
                       <span>Anuncio</span>
                     </>
                   )}
+                </div>
+                {/* Capacity bar */}
+                <div className="mt-1.5 h-1 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all bg-primary"
+                    style={{ width: `${Math.min(100, Math.round(((group.participant_count ?? 0) / (group.max_participants || 256)) * 100))}%` }}
+                  />
                 </div>
               </div>
             </Button>
@@ -654,18 +682,245 @@ interface Lead {
   phone: string | null;
 }
 
+// ─── Campaign Manager Sheet ───────────────────────────────────────────────────
+
+function CampaignManagerSheet({
+  open,
+  onOpenChange,
+  campaigns,
+  groups,
+  orgSlug,
+  onCampaignsChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  campaigns: GroupCampaign[];
+  groups: Group[];
+  orgSlug: string;
+  onCampaignsChange: (campaigns: GroupCampaign[]) => void;
+}) {
+  const [creating, setCreating] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [newSlug, setNewSlug] = React.useState("");
+  const [newMode, setNewMode] = React.useState<"balanced" | "sequential">("balanced");
+  const [saving, setSaving] = React.useState(false);
+
+  function autoSlug(name: string) {
+    return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  async function handleCreate() {
+    if (!newName.trim() || !newSlug.trim()) return;
+    setSaving(true);
+    try {
+      const c = await createGroupCampaign({ name: newName.trim(), slug: newSlug, distribution_mode: newMode });
+      onCampaignsChange([c, ...campaigns]);
+      setCreating(false);
+      setNewName("");
+      setNewSlug("");
+      toast.success("Campanha criada");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar campanha");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggleActive(campaign: GroupCampaign) {
+    try {
+      await updateGroupCampaign(campaign.id, { is_active: !campaign.is_active });
+      onCampaignsChange(campaigns.map((c) => c.id === campaign.id ? { ...c, is_active: !c.is_active } : c));
+    } catch (err: any) {
+      toast.error(err.message || "Erro");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteGroupCampaign(id);
+      onCampaignsChange(campaigns.filter((c) => c.id !== id));
+      toast.success("Campanha removida");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover");
+    }
+  }
+
+  async function handleLinkGroup(groupId: string, campaignId: string | null) {
+    try {
+      await linkGroupToCampaign(groupId, campaignId);
+      toast.success(campaignId ? "Grupo vinculado" : "Vínculo removido");
+    } catch (err: any) {
+      toast.error(err.message || "Erro");
+    }
+  }
+
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:w-[500px] overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Campanhas / Link Inteligente</SheetTitle>
+          <SheetDescription>
+            Crie uma campanha com link único que distribui leads entre grupos automaticamente.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-5 mt-6">
+          {/* Create campaign */}
+          {!creating ? (
+            <Button variant="outline" onClick={() => setCreating(true)} className="w-full">
+              <Plus className="size-4" /> Nova Campanha
+            </Button>
+          ) : (
+            <div className="rounded-xl border p-4 space-y-3">
+              <p className="text-sm font-semibold">Nova Campanha</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nome</Label>
+                <Input
+                  placeholder="Ex: Lançamento ICBID"
+                  value={newName}
+                  onChange={(e) => { setNewName(e.target.value); setNewSlug(autoSlug(e.target.value)); }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Slug da URL</Label>
+                <Input
+                  placeholder="Ex: icbid"
+                  value={newSlug}
+                  onChange={(e) => setNewSlug(e.target.value)}
+                  className="font-mono text-xs"
+                />
+                {newSlug && orgSlug && (
+                  <p className="text-[11px] text-muted-foreground font-mono">
+                    {baseUrl}/g/{orgSlug}/{newSlug}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Distribuição</Label>
+                <Select value={newMode} onValueChange={(v) => setNewMode(v as "balanced" | "sequential")}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue>{newMode === "balanced" ? "Balanceado" : "Sequencial"}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="balanced">Balanceado — distribui igualmente</SelectItem>
+                    <SelectItem value="sequential">Sequencial — enche um por vez</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button onClick={handleCreate} disabled={saving || !newName.trim() || !newSlug.trim()} size="sm">
+                  {saving ? <Loader2 className="size-3 animate-spin" /> : "Criar"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCreating(false)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Campaign list */}
+          {campaigns.length === 0 && !creating && (
+            <EmptyState variant="subtle" icon={<Zap />} title="Nenhuma campanha" description="Crie uma campanha para gerar links inteligentes" />
+          )}
+
+          {campaigns.map((campaign) => {
+            const linkedGroups = groups.filter((g) => g.campaign_id === campaign.id);
+            const smartLink = `${baseUrl}/g/${orgSlug}/${campaign.slug}`;
+            return (
+              <div key={campaign.id} className="rounded-xl border p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold truncate">{campaign.name}</p>
+                      <Badge variant={campaign.is_active ? "default" : "secondary"} className="text-[10px]">
+                        {campaign.is_active ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {campaign.distribution_mode === "balanced" ? "Balanceado" : "Sequencial"}
+                      {" · "}{linkedGroups.length} grupos vinculados
+                    </p>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                      <MoreHorizontal className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleToggleActive(campaign)}>
+                        {campaign.is_active ? "Desativar" : "Ativar"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem variant="destructive" onClick={() => handleDelete(campaign.id)}>
+                        <Trash2 className="size-4" /> Remover
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Smart link */}
+                <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2">
+                  <Link2 className="size-3.5 text-muted-foreground shrink-0" />
+                  <p className="text-[11px] font-mono text-muted-foreground truncate flex-1">{smartLink}</p>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="size-6 shrink-0"
+                    onClick={() => { navigator.clipboard.writeText(smartLink); toast.success("Link copiado!"); }}
+                  >
+                    <Copy className="size-3" />
+                  </Button>
+                  <a href={smartLink} target="_blank" rel="noopener noreferrer">
+                    <Button variant="ghost" size="icon-sm" className="size-6 shrink-0">
+                      <ExternalLink className="size-3" />
+                    </Button>
+                  </a>
+                </div>
+
+                {/* Link groups */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Grupos vinculados</p>
+                  {groups.map((g) => (
+                    <div key={g.id} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`size-2 rounded-full shrink-0 ${g.campaign_id === campaign.id ? "bg-primary" : "bg-muted"}`} />
+                        <p className="text-xs truncate">{g.name}</p>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{g.participant_count}/{g.max_participants}</span>
+                      </div>
+                      <Switch
+                        checked={g.campaign_id === campaign.id}
+                        onCheckedChange={(checked) => handleLinkGroup(g.id, checked ? campaign.id : null)}
+                      />
+                    </div>
+                  ))}
+                  {groups.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Nenhum grupo disponível</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ─── Main page component ──────────────────────────────────────────────────────
 
 export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const [groups, setGroups] = React.useState<Group[]>(initialGroups);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [leads, setLeads] = React.useState<Lead[]>([]);
+  const [campaigns, setCampaigns] = React.useState<GroupCampaign[]>([]);
+  const [orgSlug, setOrgSlug] = React.useState("");
 
   // Create dialog
   const [createOpen, setCreateOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
   const [newName, setNewName] = React.useState("");
   const [newCategory, setNewCategory] = React.useState("geral");
+
+  // Campaign manager
+  const [campaignOpen, setCampaignOpen] = React.useState(false);
 
   // Sync
   const [syncing, setSyncing] = React.useState(false);
@@ -686,6 +941,14 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .order("name")
       .limit(200)
       .then(({ data }) => setLeads((data || []) as Lead[]));
+  }, []);
+
+  // Load campaigns + org slug
+  React.useEffect(() => {
+    getGroupCampaigns().then(setCampaigns, () => {});
+    const supabase = createClient();
+    supabase.from("organizations").select("slug").limit(1).single()
+      .then(({ data }) => { if (data?.slug) setOrgSlug(data.slug as string); }, () => {});
   }, []);
 
   async function handleSync() {
@@ -746,6 +1009,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           onCreateOpen={() => setCreateOpen(true)}
           onSync={handleSync}
           syncing={syncing}
+          onCampaignOpen={() => setCampaignOpen(true)}
           search={search}
           onSearch={setSearch}
           categoryFilter={categoryFilter}
@@ -772,6 +1036,16 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           <GroupEmptyState />
         )}
       </div>
+
+      {/* Campaign Manager Sheet */}
+      <CampaignManagerSheet
+        open={campaignOpen}
+        onOpenChange={setCampaignOpen}
+        campaigns={campaigns}
+        groups={groups}
+        orgSlug={orgSlug}
+        onCampaignsChange={setCampaigns}
+      />
 
       {/* Create Group Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
