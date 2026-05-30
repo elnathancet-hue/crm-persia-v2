@@ -776,9 +776,17 @@ export async function editWhatsAppMessage(
     return { error: e instanceof Error ? e.message : "Erro ao editar mensagem no WhatsApp" };
   }
 
+  // Persist content + edited_at timestamp in metadata so UI can show "Editada"
+  const { data: currentMsg } = await supabase
+    .from("messages")
+    .select("metadata")
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .single();
+  const currentMeta = (currentMsg?.metadata as Record<string, unknown>) ?? {};
   await supabase
     .from("messages")
-    .update({ content: newText })
+    .update({ content: newText, metadata: { ...currentMeta, edited_at: new Date().toISOString() } })
     .eq("id", messageId)
     .eq("organization_id", orgId);
 
@@ -801,6 +809,29 @@ export async function reactToWhatsAppMessage(
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Erro ao reagir à mensagem" };
   }
+
+  // Persist reaction in message metadata so it survives page reload
+  const { data: currentMsg } = await supabase
+    .from("messages")
+    .select("metadata")
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .single();
+  const currentMeta = (currentMsg?.metadata as Record<string, unknown>) ?? {};
+  const existing = Array.isArray(currentMeta.reactions)
+    ? (currentMeta.reactions as Array<{ emoji: string; by: string }>)
+    : [];
+  await supabase
+    .from("messages")
+    .update({
+      metadata: {
+        ...currentMeta,
+        // Replace any existing agent reaction for this message
+        reactions: [...existing.filter((r) => r.by !== "agent"), { emoji, by: "agent" }],
+      },
+    })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
 
   return {};
 }
