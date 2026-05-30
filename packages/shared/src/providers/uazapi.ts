@@ -340,7 +340,7 @@ export class UazapiAdapter implements WhatsAppProvider {
   parseWebhook(body: unknown): IncomingMessage | null {
     const raw = body as Record<string, unknown>;
 
-    if (raw.fromMe === true || raw.isGroup === true) return null;
+    if (raw.fromMe === true) return null;
 
     const chatid = String(raw.chatid || "");
     const phone = chatid.replace(/@s\.whatsapp\.net$/, "").replace(/@.*$/, "");
@@ -365,6 +365,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       text,
       type,
       isGroup: raw.isGroup === true,
+      groupJid: raw.isGroup === true ? chatid : undefined,
       isFromMe: raw.fromMe === true,
       timestamp: Number(raw.messageTimestamp) || Date.now(),
       mediaUrl: String(raw.fileURL || "") || undefined,

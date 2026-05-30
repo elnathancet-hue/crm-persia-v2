@@ -357,5 +357,30 @@ export async function sendMessageToGroup(groupId: string, message: string) {
 
   await provider.sendText({ phone: group.group_jid, message });
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("group_messages").insert({
+    organization_id: orgId,
+    group_id: groupId,
+    direction: "outbound",
+    text: message,
+    sender_name: null,
+    whatsapp_msg_id: null,
+  });
+
   return { sent: true };
+}
+
+export async function getGroupMessages(groupId: string, limit = 50) {
+  const { supabase, orgId } = await requireRole("agent");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data } = await (supabase as any)
+    .from("group_messages")
+    .select("id, direction, text, sender_name, created_at")
+    .eq("organization_id", orgId)
+    .eq("group_id", groupId)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  return (data || []) as Array<{ id: string; direction: string; text: string | null; sender_name: string | null; created_at: string }>;
 }

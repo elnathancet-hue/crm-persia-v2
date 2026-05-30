@@ -39,7 +39,22 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
     .order("name")
     .limit(200);
 
+  // Initial group messages (last 50).
+  // Cast to any: group_messages type will be present after migration 078 is pushed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: messages } = await (supabase as any)
+    .from("group_messages")
+    .select("id, direction, text, sender_name, created_at")
+    .eq("organization_id", member.organization_id)
+    .eq("group_id", id)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
   return (
-    <GroupDetailClient group={group as never} leads={(leads || []) as never} />
+    <GroupDetailClient
+      group={group as never}
+      leads={(leads || []) as never}
+      initialMessages={(messages || []) as never}
+    />
   );
 }

@@ -207,7 +207,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no processable message" });
     }
 
-    // 3. UAZAPI-specific: fetch media URL via POST /message/download.
+    // 3. Group message branch — save to group_messages, skip lead pipeline.
+    if (msg.isGroup && msg.groupJid) {
+      const { data: grp } = await supabase
+        .from("whatsapp_groups")
+        .select("id")
+        .eq("organization_id", matchedConn.organization_id)
+        .eq("group_jid", msg.groupJid)
+        .maybeSingle();
+
+      if (grp) {
+        await supabase.from("group_messages").insert({
+          organization_id: matchedConn.organization_id,
+          group_id: grp.id,
+          direction: "inbound",
+          text: msg.text,
+          sender_name: msg.pushName || null,
+          whatsapp_msg_id: msg.messageId || null,
+        });
+      }
+      return NextResponse.json({ ok: true, skipped: "group_message_saved" });
+    }
+
+    // 4. UAZAPI-specific: fetch media URL via POST /message/download.
     //    (UAZAPI does not include fileURL in the webhook for media messages.)
     const isMediaType = msg.type !== "text" && msg.type !== "sticker";
     if (isMediaType && !msg.mediaUrl && msg.messageId) {
@@ -232,7 +254,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 4. Native AI Agent router. Any miss or failure falls through to legacy.
+    // 5. Native AI Agent router. Any miss or failure falls through to legacy.
     const nativeOutcome = await tryEnqueueForNativeAgent({
       supabase,
       orgId: matchedConn.organization_id,
@@ -259,7 +281,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(nativeOutcome.response);
     }
 
-    // 5. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
+    // 6. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
     const result = await processIncomingMessage({
       supabase,
       orgId: matchedConn.organization_id,

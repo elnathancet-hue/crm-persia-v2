@@ -132,6 +132,7 @@ export interface IncomingMessage {
   text: string | null;
   type: "text" | "image" | "audio" | "video" | "document" | "location" | "contact" | "sticker";
   isGroup: boolean;
+  groupJid?: string;
   isFromMe: boolean;
   timestamp: number;
   mediaUrl?: string;

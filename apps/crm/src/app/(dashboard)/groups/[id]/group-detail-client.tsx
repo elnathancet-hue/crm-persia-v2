@@ -37,6 +37,7 @@ import {
   DialogClose,
 } from "@persia/ui/dialog";
 import { updateGroup, getInviteLink, sendInviteToLead, sendMessageToGroup } from "@/actions/groups";
+import { createBrowserClient } from "@supabase/ssr";
 import { toast } from "sonner";
 
 interface Group {
@@ -56,6 +57,14 @@ interface Lead {
   phone: string | null;
 }
 
+interface GroupMessage {
+  id: string;
+  direction: "inbound" | "outbound";
+  text: string | null;
+  sender_name: string | null;
+  created_at: string;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
   aquecimento: "Aquecimento",
@@ -64,7 +73,15 @@ const CATEGORY_LABELS: Record<string, string> = {
   alunos: "Alunos",
 };
 
-export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[] }) {
+export function GroupDetailClient({
+  group,
+  leads,
+  initialMessages,
+}: {
+  group: Group;
+  leads: Lead[];
+  initialMessages: GroupMessage[];
+}) {
   const [name, setName] = React.useState(group.name);
   const [description, setDescription] = React.useState(group.description || "");
   const [isAnnounce, setIsAnnounce] = React.useState(group.is_announce);
@@ -78,10 +95,48 @@ export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[
   const [selectedLeadId, setSelectedLeadId] = React.useState("");
   const [sendingInvite, setSendingInvite] = React.useState(false);
 
-  // Send message dialog
-  const [messageOpen, setMessageOpen] = React.useState(false);
-  const [groupMessage, setGroupMessage] = React.useState("");
+  // Chat state
+  const [messages, setMessages] = React.useState<GroupMessage[]>(initialMessages);
+  const [chatInput, setChatInput] = React.useState("");
   const [sendingMessage, setSendingMessage] = React.useState(false);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom on new messages
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Supabase Realtime subscription for new group messages
+  React.useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+
+    const channel = supabase
+      .channel(`group_messages:${group.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "group_messages",
+          filter: `group_id=eq.${group.id}`,
+        },
+        (payload) => {
+          const row = payload.new as GroupMessage;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === row.id)) return prev;
+            return [...prev, row];
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [group.id]);
 
   async function handleSave() {
     setSaving(true);
@@ -134,18 +189,29 @@ export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[
   }
 
   async function handleSendMessage() {
-    if (!groupMessage.trim()) return;
+    const text = chatInput.trim();
+    if (!text) return;
     setSendingMessage(true);
+    setChatInput("");
     try {
-      await sendMessageToGroup(group.id, groupMessage.trim());
-      toast.success("Mensagem enviada ao grupo!");
-      setMessageOpen(false);
-      setGroupMessage("");
+      await sendMessageToGroup(group.id, text);
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mensagem");
+      setChatInput(text);
     } finally {
       setSendingMessage(false);
     }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  }
+
+  function formatTime(iso: string) {
+    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
 
   return (
@@ -176,6 +242,78 @@ export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[
           </div>
         </div>
       </div>
+
+      {/* Chat */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Send className="size-4" />
+            Chat do Grupo
+          </CardTitle>
+          <CardDescription>Mensagens enviadas e recebidas no grupo</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {/* Message list */}
+          <div className="h-72 overflow-y-auto px-4 py-3 space-y-2 bg-muted/30">
+            {messages.length === 0 && (
+              <p className="text-center text-xs text-muted-foreground pt-8">
+                Nenhuma mensagem ainda. Envie a primeira!
+              </p>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                    msg.direction === "outbound"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background border"
+                  }`}
+                >
+                  {msg.direction === "inbound" && msg.sender_name && (
+                    <p className="text-xs font-semibold mb-1 text-primary">{msg.sender_name}</p>
+                  )}
+                  <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                  <p
+                    className={`text-[10px] mt-1 text-right ${
+                      msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"
+                    }`}
+                  >
+                    {formatTime(msg.created_at)}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input bar */}
+          <div className="flex items-end gap-2 px-4 py-3 border-t">
+            <Textarea
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Digite uma mensagem... (Enter para enviar)"
+              className="min-h-[40px] max-h-32 resize-none"
+              rows={1}
+              disabled={sendingMessage}
+            />
+            <Button
+              size="icon"
+              onClick={handleSendMessage}
+              disabled={sendingMessage || !chatInput.trim()}
+            >
+              {sendingMessage ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Invite Link Card */}
       <Card>
@@ -209,19 +347,6 @@ export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[
               Enviar convite para lead
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ações</CardTitle>
-        </CardHeader>
-        <CardContent className="flex gap-3">
-          <Button variant="outline" onClick={() => setMessageOpen(true)}>
-            <Send className="size-4" />
-            Enviar mensagem no grupo
-          </Button>
         </CardContent>
       </Card>
 
@@ -313,35 +438,6 @@ export function GroupDetailClient({ group, leads }: { group: Group; leads: Lead[
             </DialogClose>
             <Button onClick={handleSendInvite} disabled={sendingInvite || !selectedLeadId}>
               {sendingInvite ? "Enviando..." : "Enviar Convite"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Send Message Dialog */}
-      <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Enviar Mensagem no Grupo</DialogTitle>
-            <DialogDescription>
-              A mensagem sera enviada para todos os membros do grupo.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label>Mensagem</Label>
-            <Textarea
-              value={groupMessage}
-              onChange={(e) => setGroupMessage(e.target.value)}
-              placeholder="Digite sua mensagem..."
-              className="min-h-24"
-            />
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button onClick={handleSendMessage} disabled={sendingMessage || !groupMessage.trim()}>
-              {sendingMessage ? "Enviando..." : "Enviar"}
             </Button>
           </DialogFooter>
         </DialogContent>
