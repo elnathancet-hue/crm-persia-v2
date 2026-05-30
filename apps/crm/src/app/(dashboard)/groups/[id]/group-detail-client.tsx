@@ -37,7 +37,7 @@ import {
   DialogClose,
 } from "@persia/ui/dialog";
 import { updateGroup, getInviteLink, sendInviteToLead, sendMessageToGroup } from "@/actions/groups";
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 interface Group {
@@ -108,10 +108,7 @@ export function GroupDetailClient({
 
   // Supabase Realtime subscription for new group messages
   React.useEffect(() => {
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    );
+    const supabase = createClient();
 
     const channel = supabase
       .channel(`group_messages:${group.id}`)

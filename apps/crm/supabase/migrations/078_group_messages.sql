@@ -38,3 +38,6 @@ CREATE POLICY "org_members_insert_group_messages"
       WHERE user_id = auth.uid() AND is_active = TRUE
     )
   );
+
+-- Enable Realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE public.group_messages;
