@@ -270,15 +270,22 @@ async function loadEnabledTools(
   });
   const hasEmitEvent = tools.some((t) => t.native_handler === "emit_event");
   if (needsEmitEvent && !hasEmitEvent) {
-    const { data, error } = await db
-      .from("agent_tools")
-      .select(ToolSelect)
-      .eq("organization_id", ctx.organizationId)
-      .eq("config_id", ctx.agentConfigId)
-      .eq("native_handler", "emit_event")
-      .maybeSingle();
-    if (!error && data) {
-      tools.push(data as LoadedToolRow & { is_enabled: boolean });
+    // Fix: usa preset em memoria em vez de buscar no DB.
+    // Antes: buscava row em agent_tools — se o cliente nao tinha adicionado
+    // a tool ao config, o query retornava null e o LLM nao recebia emit_event,
+    // fazendo os branches de instrucao morrerem silenciosamente (lead nao movia
+    // de etapa mesmo que a IA respondesse corretamente).
+    const preset = getPreset("emit_event");
+    if (preset) {
+      tools.push({
+        id: "auto:emit_event",
+        name: "emit_event",
+        description: preset.description,
+        input_schema: preset.input_schema as unknown as Record<string, unknown>,
+        execution_mode: "native",
+        native_handler: "emit_event",
+        is_enabled: true,
+      });
     }
   }
 
