@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { Users, MessageCircle, Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import { recordGroupJoin, type SmartLinkResolution } from "@/actions/groups";
 
 interface Props {
@@ -72,12 +76,9 @@ export function SmartLinkClient({ resolution, utms }: Props) {
         description={campaign.fallback_message ?? "Todos os grupos estão lotados no momento."}
         action={
           campaign.fallback_url ? (
-            <a
-              href={campaign.fallback_url}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
-            >
+            <Button className="rounded-full" render={<a href={campaign.fallback_url} />}>
               Continuar <ArrowRight className="size-4" />
-            </a>
+            </Button>
           ) : undefined
         }
         org={organization}
@@ -103,9 +104,11 @@ export function SmartLinkClient({ resolution, utms }: Props) {
         {/* Org branding */}
         <div className="flex flex-col items-center mb-8 text-center">
           {organization.logo_url ? (
-            <img
+            <Image
               src={organization.logo_url}
               alt={organization.name}
+              width={64}
+              height={64}
               className="size-16 rounded-2xl object-cover mb-3 shadow-sm"
             />
           ) : (
@@ -133,29 +136,29 @@ export function SmartLinkClient({ resolution, utms }: Props) {
 
         {/* Form */}
         <form onSubmit={handleJoin} className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Seu nome <span className="text-muted-foreground/60">(opcional)</span>
-            </label>
-            <input
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Seu nome <span className="opacity-60">(opcional)</span>
+            </Label>
+            <Input
               type="text"
+              name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Maria Silva"
-              className="w-full rounded-xl border bg-card px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
               autoComplete="name"
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-              Seu WhatsApp <span className="text-muted-foreground/60">(opcional)</span>
-            </label>
-            <input
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">
+              Seu WhatsApp <span className="opacity-60">(opcional)</span>
+            </Label>
+            <Input
               type="tel"
+              name="phone"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(11) 99999-9999"
-              className="w-full rounded-xl border bg-card px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-shadow"
               autoComplete="tel"
               inputMode="tel"
             />
@@ -163,10 +166,11 @@ export function SmartLinkClient({ resolution, utms }: Props) {
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 rounded-full bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-60 transition-opacity mt-2"
+            className="w-full rounded-full mt-2"
+            size="lg"
           >
             {loading ? (
               <Loader2 className="size-4 animate-spin" />
@@ -175,16 +179,17 @@ export function SmartLinkClient({ resolution, utms }: Props) {
                 Entrar no Grupo <ArrowRight className="size-4" />
               </>
             )}
-          </button>
+          </Button>
         </form>
 
         {/* Skip form */}
-        <button
+        <Button
+          variant="ghost"
           onClick={handleDirectJoin}
-          className="w-full mt-3 text-center text-xs text-muted-foreground underline underline-offset-2"
+          className="w-full mt-3 text-xs text-muted-foreground underline underline-offset-2"
         >
           Entrar sem informar dados
-        </button>
+        </Button>
 
         <p className="text-center text-[11px] text-muted-foreground/60 mt-6 leading-relaxed">
           Ao entrar, você concorda em participar do grupo e receber mensagens relacionadas a este produto/serviço.
