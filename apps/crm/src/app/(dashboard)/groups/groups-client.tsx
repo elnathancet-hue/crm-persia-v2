@@ -170,6 +170,7 @@ function GroupListPanel({
         {/* Search */}
         <div className="relative">
           <Input
+            name="search"
             placeholder="Buscar grupo..."
             value={search}
             onChange={(e) => onSearch(e.target.value)}
@@ -199,14 +200,17 @@ function GroupListPanel({
       {/* Group list */}
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-12 text-center px-4">
-            <Users className="size-8 text-muted-foreground/40 mb-3" />
-            <p className="text-sm font-medium">Nenhum grupo</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {search || categoryFilter !== "todos"
-                ? "Tente outro filtro"
-                : "Crie ou sincronize grupos do WhatsApp"}
-            </p>
+          <div className="flex items-center justify-center h-full">
+            <EmptyState
+              variant="subtle"
+              icon={<Users />}
+              title="Nenhum grupo"
+              description={
+                search || categoryFilter !== "todos"
+                  ? "Tente outro filtro"
+                  : "Crie ou sincronize grupos do WhatsApp"
+              }
+            />
           </div>
         ) : (
           filtered.map((group) => (
@@ -594,7 +598,7 @@ function GroupChatPanel({
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Link de Convite</Label>
               <div className="flex gap-2">
-                <Input value={inviteLink} readOnly placeholder="Clique em obter..." className="font-mono text-xs" />
+                <Input name="invite-link" value={inviteLink} readOnly placeholder="Clique em obter..." className="font-mono text-xs" />
                 <Button variant="outline" size="icon-sm" onClick={() => {
                   if (inviteLink) { navigator.clipboard.writeText(inviteLink); toast.success("Copiado!"); }
                 }} disabled={!inviteLink}>
@@ -608,7 +612,7 @@ function GroupChatPanel({
 
             <div className="space-y-2">
               <Label>Nome</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+              <Input name="group-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Descrição</Label>
@@ -652,7 +656,11 @@ function GroupChatPanel({
           <div className="space-y-2">
             <Label>Lead</Label>
             <Select value={selectedLeadId} onValueChange={(v) => setSelectedLeadId(v ?? "")}>
-              <SelectTrigger><SelectValue placeholder="Selecione um lead..." /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue>
+                  {leads.find((l) => l.id === selectedLeadId)?.name ?? "Selecione um lead..."}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 {leads.map((lead) => (
                   <SelectItem key={lead.id} value={lead.id}>
@@ -778,6 +786,7 @@ function CampaignManagerSheet({
               <div className="space-y-1.5">
                 <Label className="text-xs">Nome</Label>
                 <Input
+                  name="campaign-name"
                   placeholder="Ex: Lançamento ICBID"
                   value={newName}
                   onChange={(e) => { setNewName(e.target.value); setNewSlug(autoSlug(e.target.value)); }}
@@ -786,6 +795,7 @@ function CampaignManagerSheet({
               <div className="space-y-1.5">
                 <Label className="text-xs">Slug da URL</Label>
                 <Input
+                  name="campaign-slug"
                   placeholder="Ex: icbid"
                   value={newSlug}
                   onChange={(e) => setNewSlug(e.target.value)}
@@ -1058,6 +1068,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
             <div className="space-y-2">
               <Label>Nome do Grupo</Label>
               <Input
+                name="group-name"
                 placeholder="Ex: Grupo VIP - Lançamento X"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
