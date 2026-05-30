@@ -457,8 +457,8 @@ export class UazapiClient {
   async reactToMessage(params: ReactParams): Promise<void> {
     await this.request("POST", "/message/react", {
       number: params.number,
-      messageId: params.messageId,
-      reaction: params.reaction,
+      text: params.reaction,  // UAZAPI docs: field name is "text" (the emoji)
+      id: params.messageId,   // UAZAPI docs: field name is "id"
     });
   }
 
@@ -470,9 +470,9 @@ export class UazapiClient {
   }
 
   async editMessage(params: EditMessageParams): Promise<void> {
+    // UAZAPI docs: only `id` and `text` — no `number` required
     await this.request("POST", "/message/edit", {
-      number: params.number,
-      messageId: params.messageId,
+      id: params.messageId,
       text: params.text,
     });
   }

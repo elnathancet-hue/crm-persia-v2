@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
-import { getMessages, resendMessage, resolveMessageMediaUrl, type Message } from "@/actions/messages";
+import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
@@ -47,6 +47,7 @@ import {
   Loader2,
   MessageSquare,
   MoreHorizontal,
+  Pencil,
   Phone,
   Play,
   RotateCw,
@@ -56,6 +57,8 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -360,6 +363,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryText, setSummaryText] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -392,6 +398,30 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       });
     }
   }, []);
+
+  const handleReact = useCallback(async (msgId: string, emoji: string) => {
+    setHoveredMsgId(null);
+    const result = await reactToWhatsAppMessage(msgId, emoji);
+    if (result.error) toast.error(result.error);
+  }, []);
+
+  const startEdit = useCallback((msgId: string, currentText: string) => {
+    setEditingMsgId(msgId);
+    setEditText(currentText);
+    setHoveredMsgId(null);
+  }, []);
+
+  const handleEditSave = useCallback(async (msgId: string) => {
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    setEditingMsgId(null);
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, content: trimmed } : m)));
+    const result = await editWhatsAppMessage(msgId, trimmed);
+    if (result.error) {
+      toast.error(result.error);
+      // Realtime will restore the original on next UPDATE from DB
+    }
+  }, [editText]);
 
   const withResolvedMediaUrl = useCallback(async (message: Message): Promise<Message> => {
     if (!shouldResolveMediaUrl(message.media_url)) return message;
@@ -817,6 +847,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                     "flex max-w-[86%] flex-col gap-0.5 sm:max-w-[72%] lg:max-w-[62%]",
                     isLead ? "items-start" : "ml-auto items-end"
                   )}
+                  onMouseEnter={() => setHoveredMsgId(msg.id)}
+                  onMouseLeave={() => { if (editingMsgId !== msg.id) setHoveredMsgId(null); }}
                 >
                   {/* Sender label */}
                   {isAi && (
@@ -851,75 +883,152 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                     </div>
                   )}
 
-                  {/* Bubble - WhatsApp style */}
-                  <div
-                    className={cn(
-                      "relative rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
-                      isAgent && msg.status === "failed"
-                        ? "rounded-br-sm bg-failure/90 text-failure-foreground border border-failure"
-                        : isAgent && "rounded-br-sm",
-                      isAi && "rounded-br-sm",
-                      isLead && "rounded-bl-sm",
-                      isAgent && msg.status === "sending" && "opacity-70"
-                    )}
-                    style={
-                      isAgent && msg.status === "failed"
-                        ? undefined
-                        : isLead
-                          ? {
-                              background: "var(--chat-bubble-in)",
-                              color: "var(--chat-bubble-in-text)",
-                            }
-                          : {
-                              background: "var(--chat-bubble-out)",
-                              color: "var(--chat-bubble-out-text)",
-                            }
-                    }
-                  >
-                    {msg.media_url && msg.type === "image" && (
-                      <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={msg.media_url}
-                          alt=""
-                          className="max-h-64 rounded-xl object-cover mb-1"
-                        />
-                      </a>
-                    )}
-                    {msg.media_url && msg.type === "audio" && (
-                      <audio controls className="max-w-[250px] h-10 mb-1">
-                        <source src={msg.media_url} />
-                      </audio>
-                    )}
-                    {msg.media_url && msg.type === "video" && (
-                      <video controls className="max-h-64 rounded-xl mb-1">
-                        <source src={msg.media_url} />
-                      </video>
-                    )}
-                    {msg.media_url && msg.type === "document" && (
-                      <a
-                        href={msg.media_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 text-xs text-primary hover:underline mb-1"
+                  {/* Bubble wrapper — relative so we can float the action bar */}
+                  <div className="relative">
+                    {/* Floating action bar on hover */}
+                    {hoveredMsgId === msg.id && editingMsgId !== msg.id && (
+                      <div
+                        className={cn(
+                          "absolute top-0 z-10 flex items-center gap-0.5 rounded-full border border-border bg-popover px-1.5 py-1 shadow-md",
+                          isLead ? "left-full ml-1.5" : "right-full mr-1.5"
+                        )}
                       >
-                        <FileText className="size-4" />
-                        <span>Abrir documento</span>
-                      </a>
+                        {QUICK_REACTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReact(msg.id, emoji)}
+                            className="rounded-full px-0.5 text-base leading-none hover:scale-125 transition-transform"
+                            title={`Reagir com ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {!isLead && msg.whatsapp_msg_id && (
+                          <button
+                            onClick={() => startEdit(msg.id, msg.content || "")}
+                            className="ml-0.5 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                            title="Editar mensagem"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
-                    {msg.content && (
-                      <p className="whitespace-pre-wrap break-words">
-                        {msg.content}
-                      </p>
+
+                    {/* Bubble - WhatsApp style */}
+                    {editingMsgId === msg.id ? (
+                      <div
+                        className={cn(
+                          "rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
+                          isLead ? "rounded-bl-sm" : "rounded-br-sm"
+                        )}
+                        style={
+                          isLead
+                            ? { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
+                            : { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
+                        }
+                      >
+                        <textarea
+                          // eslint-disable-next-line jsx-a11y/no-autofocus
+                          autoFocus
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              void handleEditSave(msg.id);
+                            }
+                            if (e.key === "Escape") setEditingMsgId(null);
+                          }}
+                          className="w-full min-w-[180px] resize-none bg-transparent outline-none text-[14.2px] leading-5 break-words"
+                          rows={Math.max(1, (editText.match(/\n/g) || []).length + 1)}
+                        />
+                        <div className="mt-1 flex justify-end gap-1.5">
+                          <button
+                            onClick={() => setEditingMsgId(null)}
+                            className="rounded px-2 py-0.5 text-[11px] opacity-70 hover:opacity-100"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => void handleEditSave(msg.id)}
+                            className="rounded bg-primary/20 px-2 py-0.5 text-[11px] hover:bg-primary/30"
+                          >
+                            Salvar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          "relative rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm",
+                          isAgent && msg.status === "failed"
+                            ? "rounded-br-sm bg-failure/90 text-failure-foreground border border-failure"
+                            : isAgent && "rounded-br-sm",
+                          isAi && "rounded-br-sm",
+                          isLead && "rounded-bl-sm",
+                          isAgent && msg.status === "sending" && "opacity-70"
+                        )}
+                        style={
+                          isAgent && msg.status === "failed"
+                            ? undefined
+                            : isLead
+                              ? {
+                                  background: "var(--chat-bubble-in)",
+                                  color: "var(--chat-bubble-in-text)",
+                                }
+                              : {
+                                  background: "var(--chat-bubble-out)",
+                                  color: "var(--chat-bubble-out-text)",
+                                }
+                        }
+                      >
+                        {msg.media_url && msg.type === "image" && (
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={msg.media_url}
+                              alt=""
+                              className="max-h-64 rounded-xl object-cover mb-1"
+                            />
+                          </a>
+                        )}
+                        {msg.media_url && msg.type === "audio" && (
+                          <audio controls className="max-w-[250px] h-10 mb-1">
+                            <source src={msg.media_url} />
+                          </audio>
+                        )}
+                        {msg.media_url && msg.type === "video" && (
+                          <video controls className="max-h-64 rounded-xl mb-1">
+                            <source src={msg.media_url} />
+                          </video>
+                        )}
+                        {msg.media_url && msg.type === "document" && (
+                          <a
+                            href={msg.media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-xs text-primary hover:underline mb-1"
+                          >
+                            <FileText className="size-4" />
+                            <span>Abrir documento</span>
+                          </a>
+                        )}
+                        {msg.content && (
+                          <p className="whitespace-pre-wrap break-words">
+                            {msg.content}
+                          </p>
+                        )}
+                        {/* Time + status inside bubble - WhatsApp style */}
+                        <span
+                          className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-1"
+                          style={{ color: "var(--chat-timestamp)" }}
+                        >
+                          {formatMessageTime(msg.created_at)}
+                          {(isAgent || isAi) && <StatusIndicator status={msg.status} onRetry={msg.status === "failed" ? () => handleRetry(msg.id) : undefined} isRetrying={retryingIds.has(msg.id)} />}
+                        </span>
+                      </div>
                     )}
-                    {/* Time + status inside bubble - WhatsApp style */}
-                    <span
-                      className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-1"
-                      style={{ color: "var(--chat-timestamp)" }}
-                    >
-                      {formatMessageTime(msg.created_at)}
-                      {(isAgent || isAi) && <StatusIndicator status={msg.status} onRetry={msg.status === "failed" ? () => handleRetry(msg.id) : undefined} isRetrying={retryingIds.has(msg.id)} />}
-                    </span>
                   </div>
                 </div>
               </div>

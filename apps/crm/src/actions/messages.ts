@@ -725,3 +725,82 @@ export async function getLeadLastMessage(
   const { supabase, orgId } = await requireRole("agent");
   return findLastMessageForLeadShared({ db: supabase, orgId }, leadId);
 }
+
+type SupabaseClient = Awaited<ReturnType<typeof requireRole>>["supabase"];
+
+async function getWhatsAppContextForMessage(
+  supabase: SupabaseClient,
+  orgId: string,
+  messageId: string,
+) {
+  const { data: msg } = await supabase
+    .from("messages")
+    .select("id, sender, whatsapp_msg_id, conversations(channel, leads(phone))")
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .single();
+  if (!msg || !msg.whatsapp_msg_id) return null;
+  const conv = msg.conversations as Record<string, unknown> | null;
+  if (!conv || conv.channel !== "whatsapp") return null;
+  const lead = conv.leads as Record<string, unknown> | null;
+  const phone = lead?.phone as string | null;
+  if (!phone) return null;
+  const { data: connection } = await supabase
+    .from("whatsapp_connections")
+    .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+    .eq("organization_id", orgId)
+    .eq("status", "connected")
+    .limit(1)
+    .single();
+  if (!connection) return null;
+  return { msg, phone, connection };
+}
+
+export async function editWhatsAppMessage(
+  messageId: string,
+  newText: string,
+): Promise<{ error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const ctx = await getWhatsAppContextForMessage(supabase, orgId, messageId);
+  if (!ctx) return { error: "Mensagem não encontrada ou WhatsApp não configurado" };
+
+  const { msg, phone, connection } = ctx;
+  if (msg.sender !== "agent" && msg.sender !== "ai") {
+    return { error: "Só é possível editar mensagens enviadas pelo agente" };
+  }
+
+  try {
+    await createProvider(connection).editMessage(phone, msg.whatsapp_msg_id!, newText);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao editar mensagem no WhatsApp" };
+  }
+
+  await supabase
+    .from("messages")
+    .update({ content: newText })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+
+  return {};
+}
+
+export async function reactToWhatsAppMessage(
+  messageId: string,
+  emoji: string,
+): Promise<{ error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const ctx = await getWhatsAppContextForMessage(supabase, orgId, messageId);
+  if (!ctx) return { error: "Mensagem não encontrada ou WhatsApp não configurado" };
+
+  const { msg, phone, connection } = ctx;
+
+  try {
+    await createProvider(connection).reactToMessage(phone, msg.whatsapp_msg_id!, emoji);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao reagir à mensagem" };
+  }
+
+  return {};
+}
