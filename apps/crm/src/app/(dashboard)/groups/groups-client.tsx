@@ -178,19 +178,16 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {groups.map((group) => (
+            <Link key={group.id} href={`/groups/${group.id}`} className="block">
             <Card
-              key={group.id}
-              className="hover:border-primary/30 transition-colors"
+              className="hover:border-primary/30 transition-colors cursor-pointer"
             >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <Link
-                      href={`/groups/${group.id}`}
-                      className="font-semibold text-sm hover:text-primary transition-colors truncate block"
-                    >
+                    <p className="font-semibold text-sm truncate">
                       {group.name}
-                    </Link>
+                    </p>
                     <div className="flex items-center gap-2 mt-1.5">
                       <Badge
                         variant="secondary"
@@ -208,7 +205,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
                   </div>
 
                   <DropdownMenu>
-                    <DropdownMenuTrigger>
+                    <DropdownMenuTrigger onClick={(e) => e.preventDefault()}>
                       <Button variant="ghost" size="icon-sm" className="size-7">
                         <MoreHorizontal className="size-4" />
                       </Button>
@@ -247,6 +244,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
                 </div>
               </CardContent>
             </Card>
+            </Link>
           ))}
         </div>
       )}
