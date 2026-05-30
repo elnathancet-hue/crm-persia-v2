@@ -397,7 +397,7 @@ async function executeAIAgentNode(
       )
       .join("\n");
     systemParts.push(
-      `ROUTING EVENTS — you MUST call emit_event in THIS same message turn when a condition below is satisfied. Do NOT wait for the next message.\n${list}`,
+      `ROUTING EVENTS — always respond to the user with text. If a condition below is also satisfied in THIS turn, additionally call emit_event(handle_name) alongside your response:\n${list}`,
     );
   }
   // Bug D fix (mai/2026): warning explícito pra evitar vazamento de
@@ -528,6 +528,16 @@ async function executeAIAgentNode(
   // o runner sobrescreve a edge a seguir pelo `<handle>` (não pelo
   // tool_success:emit_event). Captura aqui pra usar depois do loop.
   let emittedHandleName: string | null = null;
+  // PR-EMIT-FIX (mai/2026): flag de "routing capturado sem texto".
+  // Quando LLM chama emit_event sem texto (só tool call), não quebramos
+  // o loop — deixamos iter+1 gerar a resposta textual. Mas removemos
+  // emit_event das tools de iter+1 pra IA não re-emitir e poder
+  // responder naturalmente.
+  let emitEventRoutingDone = false;
+  // tools sem emit_event pra usar em iter+1 quando routing já foi capturado.
+  const adapterToolsNoEmitEvent = adapterTools.filter(
+    (t) => t.name !== "emit_event",
+  );
 
   // PR-2 Auditoria (mai/2026): cache de limites entre ping-pongs.
   // assertWithinCostLimits re-carregaria agent_cost_limits + agent_usage_daily
@@ -557,7 +567,9 @@ async function executeAIAgentNode(
       // (Responses) — caller não precisa duplicar.
       system: extractSystem(messages),
       messages: messages.filter((m) => m.role !== "system"),
-      tools: adapterTools,
+      // PR-EMIT-FIX: se routing já foi capturado sem texto, remove emit_event
+      // das tools — LLM responde naturalmente sem tentar re-emitir.
+      tools: emitEventRoutingDone ? adapterToolsNoEmitEvent : adapterTools,
       maxOutputTokens: 4096,
       // Responses ping-pong: passa items pendentes (function_call retornados +
       // function_call_output gerados nos handlers da iteração anterior).
@@ -774,11 +786,18 @@ async function executeAIAgentNode(
         side_effects: handlerResult.side_effects,
       };
       ctx.provider.emit({ kind: "tool_result", payload: resultPayload });
-      const toolReplyContent = {
-        success: handlerResult.success,
-        output: handlerResult.output,
-        error: handlerResult.error,
-      };
+      // PR-EMIT-FIX: emit_event é routing silencioso — o resultado não deve
+      // expor o handle_name ao LLM (iter+1 veria "handle_name: evento_1" e
+      // poderia gerar texto de confirmação de routing). Omitimos o output
+      // real; LLM recebe apenas { ok: true } e responde naturalmente.
+      const toolReplyContent =
+        call.name === "emit_event" && handlerResult.success
+          ? { success: true, output: {} }
+          : {
+              success: handlerResult.success,
+              output: handlerResult.output,
+              error: handlerResult.error,
+            };
       if (apiMode === "chat") {
         messages.push({
           role: "tool",
@@ -806,14 +825,22 @@ async function executeAIAgentNode(
       }
     }
 
-    // PR-EMIT-FIX (mai/2026): se emit_event foi chamado nesta iteração,
-    // NÃO chamar o LLM de novo (iter+1). O texto de iter+1 seria uma
-    // "confirmação de routing" enviada ao lead no lugar da resposta real.
-    // Em vez disso: envia o texto desta iteração (resposta real do LLM)
-    // e sai do loop — o edge-dispatch abaixo cuida do próximo node.
+    // PR-EMIT-FIX (mai/2026): se emit_event foi chamado nesta iteração:
+    //
+    //   Caso A — LLM respondeu COM texto nesta mesma iteração:
+    //     Envia o texto (resposta real) e quebra o loop. iter+1 não roda,
+    //     evitando que o LLM gere "confirmação de routing" que substituiria
+    //     a resposta real.
+    //
+    //   Caso B — LLM APENAS chamou emit_event, sem texto:
+    //     Não quebramos — deixamos iter+1 gerar a resposta textual.
+    //     emitEventRoutingDone = true remove emit_event das tools de iter+1
+    //     (não pode re-emitir) e o toolReplyContent acima já foi sanitizado
+    //     ({ ok: true }) pra LLM não gerar texto de "confirmação".
     if (emittedHandleName) {
       const iterText = (llmOutput.text ?? "").trim();
       if (iterText) {
+        // Caso A: texto presente → envia e para o loop.
         const { cleaned: iterCleaned, leakedPatterns: iterLeaks } =
           stripToolCallLeaks(iterText);
         if (iterLeaks.length > 0) {
@@ -836,8 +863,10 @@ async function executeAIAgentNode(
             payload: { message: iterCleaned },
           });
         }
+        break;
       }
-      break;
+      // Caso B: sem texto — sinaliza pra iter+1 usar tools sem emit_event.
+      emitEventRoutingDone = true;
     }
   }
 
