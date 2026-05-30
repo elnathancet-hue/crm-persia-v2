@@ -35,7 +35,17 @@ interface StageRow {
 }
 
 export const movePipelineStageHandler: NativeHandler = async (context, input) => {
-  const parsed = moveStageSchema.safeParse(input);
+  // Sanitize: node.data.config usa "" como default (não null/undefined),
+  // mas Zod rejeita "" em campos uuid/min(1). Converte strings vazias
+  // pra undefined antes de validar.
+  const raw = input as Record<string, unknown>;
+  const sanitized = {
+    stage_name: raw.stage_name || undefined,
+    stage_id: raw.stage_id || undefined,
+    pipeline_id: raw.pipeline_id || undefined,
+    reason: raw.reason || undefined,
+  };
+  const parsed = moveStageSchema.safeParse(sanitized);
   if (!parsed.success) {
     return failureResult("invalid tool input", {
       issues: parsed.error.issues.map((issue) => issue.message),
