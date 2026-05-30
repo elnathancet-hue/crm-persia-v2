@@ -1171,6 +1171,7 @@ async function executeActionNode(
       success: handlerResult.success,
       output: handlerResult.output,
       error: handlerResult.error,
+      side_effects: handlerResult.side_effects ?? [],
       via: "action_node",
     },
   });
