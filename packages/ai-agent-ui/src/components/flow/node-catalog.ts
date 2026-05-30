@@ -168,7 +168,7 @@ const ACTION_ITEMS: FlowSidebarItem[] = [
     default_data: {
       label: "Mover etapa do funil",
       action_type: "move_pipeline_stage" satisfies FlowActionType,
-      config: { stage_name: "" },
+      config: { pipeline_id: "", stage_id: "" },
     },
   },
   {

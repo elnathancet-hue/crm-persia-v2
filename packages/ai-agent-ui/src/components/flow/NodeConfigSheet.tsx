@@ -778,7 +778,9 @@ export function ActionForm({
           loading={catalogsLoading}
           stageId={(config.stage_id as string) ?? ""}
           stages={catalogs.pipeline_stages}
-          onChange={(v) => updateConfig({ stage_id: v })}
+          onChange={(stageId, pipelineId) =>
+            updateConfig({ stage_id: stageId, pipeline_id: pipelineId })
+          }
         />
       )}
 
@@ -1327,7 +1329,7 @@ interface PipelineStagePickerProps {
   loading?: boolean;
   stageId: string;
   stages: FlowCatalogs["pipeline_stages"];
-  onChange: (stageId: string) => void;
+  onChange: (stageId: string, pipelineId: string) => void;
 }
 
 /**
@@ -1419,7 +1421,7 @@ function PipelineStagePicker({
               // Trocar de funil zera o stage_id — etapa antiga nao pertence
               // ao novo funil. Cliente precisa escolher de novo.
               if (next !== selectedStage?.pipeline_id) {
-                onChange("");
+                onChange("", next);
               }
             }}
           >
@@ -1459,7 +1461,11 @@ function PipelineStagePicker({
         ) : (
           <Select
             value={stageId || undefined}
-            onValueChange={(v) => onChange(v ?? "")}
+            onValueChange={(v) => {
+              const nextStageId = v ?? "";
+              const nextStage = stages.find((s) => s.id === nextStageId);
+              onChange(nextStageId, nextStage?.pipeline_id ?? pipelineId);
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder="Selecione a etapa">
