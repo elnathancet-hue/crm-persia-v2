@@ -330,3 +330,25 @@ export async function disconnectWhatsApp(): Promise<{ error?: string }> {
     return { error: "Erro ao desconectar. Tente novamente." };
   }
 }
+
+export async function resyncWhatsAppWebhook(): Promise<{ error?: string }> {
+  try {
+    const { orgId } = await requireRole("admin");
+    const ctx = await getConnectionForOrg(orgId);
+    if (!ctx) return { error: "WhatsApp não configurado" };
+    if (ctx.connection.provider !== "uazapi") return { error: "Resync disponível apenas para UAZAPI" };
+
+    if (!ctx.connection.instance_url || !ctx.connection.instance_token) {
+      return { error: "Credenciais da instância UAZAPI não encontradas" };
+    }
+    const webhookRes = await configureUazapiWebhook({
+      baseUrl: ctx.connection.instance_url,
+      token: ctx.connection.instance_token,
+      url: CRM_WEBHOOK_URL,
+    });
+    if (!webhookRes.ok) return { error: "Falha ao reconfigurar webhook no UAZAPI" };
+    return {};
+  } catch (e: unknown) {
+    return { error: e instanceof Error ? e.message : "Erro inesperado" };
+  }
+}

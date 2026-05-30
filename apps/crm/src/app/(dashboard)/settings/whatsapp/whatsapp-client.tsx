@@ -16,7 +16,7 @@ import {
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
-import { getWhatsAppStatus, connectWhatsApp, getQRCode, disconnectWhatsApp } from "@/actions/whatsapp-status";
+import { getWhatsAppStatus, connectWhatsApp, getQRCode, disconnectWhatsApp, resyncWhatsAppWebhook } from "@/actions/whatsapp-status";
 import { toast } from "sonner";
 
 type Status = "loading" | "not_configured" | "connected" | "disconnected" | "unreachable";
@@ -30,6 +30,7 @@ export function WhatsAppSettingsClient() {
   const [qrExpired, setQrExpired] = React.useState(false);
   const [connecting, setConnecting] = React.useState(false);
   const [disconnecting, setDisconnecting] = React.useState(false);
+  const [resyncing, setResyncing] = React.useState(false);
   const qrIntervalRef = React.useRef<ReturnType<typeof setInterval>>(undefined);
   const qrRetryCountRef = React.useRef(0);
 
@@ -132,6 +133,21 @@ export function WhatsAppSettingsClient() {
     }
   }
 
+  async function handleResync() {
+    setResyncing(true);
+    try {
+      const { error } = await resyncWhatsAppWebhook();
+      if (error) {
+        toast.error(error);
+      } else {
+        toast.success("Webhook reconfigurado — confirmações de entrega ativadas");
+      }
+    } catch {
+      toast.error("Erro ao reconfigurar webhook.");
+    }
+    setResyncing(false);
+  }
+
   async function handleDisconnect() {
     if (!confirm("Tem certeza que deseja desconectar o WhatsApp? A IA parara de funcionar.")) return;
     setDisconnecting(true);
@@ -224,10 +240,16 @@ export function WhatsAppSettingsClient() {
             )}
 
             {isConnected && (
-              <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
-                {disconnecting ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
-                Desconectar
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={handleResync} disabled={resyncing}>
+                  {resyncing ? <Loader2 className="size-4 animate-spin" /> : <Wifi className="size-4" />}
+                  Sincronizar webhook
+                </Button>
+                <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
+                  {disconnecting ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+                  Desconectar
+                </Button>
+              </>
             )}
           </div>
         </CardContent>
