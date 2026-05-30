@@ -116,17 +116,24 @@ export async function POST(request: NextRequest) {
     // (sent → delivered → read). Precisa pra UI renderizar checkmarks
     // corretos. Espelha lógica do webhook Meta (route Meta linha 212-228).
     //
-    // Payload shape esperado (UAZAPI v2):
-    //   { EventType: "messages_update", owner: "...", message: {
-    //       messageid: "<wamid>", status: "DELIVERY_ACK" | "READ" | ...,
-    //       chatid: "...@s.whatsapp.net", ...
-    //     } }
+    // Payload shape: UAZAPI v2 pode ser FLAT (campos no root) OU nested
+    // (campos em body.message). Verificamos os dois para robustez.
+    // EventType: aceita "EventType" e "eventType" (variações de case).
     //
     // Defensive parse — se shape mudar entre versões UAZAPI, log+ignore.
-    if (body.EventType === "messages_update") {
-      const msgRaw = (body.message ?? {}) as Record<string, unknown>;
-      const messageId = typeof msgRaw.messageid === "string" ? msgRaw.messageid : null;
-      const dbStatus = mapUazapiStatus(msgRaw.status);
+    const rawEventType = body.EventType ?? body.eventType;
+    if (typeof rawEventType === "string" && rawEventType.toLowerCase() === "messages_update") {
+      // Tenta nested (body.message) primeiro, fallback pro root (flat).
+      const msgRaw = (typeof body.message === "object" && body.message !== null
+        ? body.message
+        : body) as Record<string, unknown>;
+      const messageId = typeof msgRaw.messageid === "string" ? msgRaw.messageid
+        : typeof body.messageid === "string" ? body.messageid
+        : null;
+      const rawStatus = typeof msgRaw.status === "string" ? msgRaw.status
+        : typeof body.status === "string" ? body.status
+        : null;
+      const dbStatus = mapUazapiStatus(rawStatus);
       if (!messageId || !dbStatus) {
         logInfo("uazapi_webhook_messages_update_skipped", {
           organization_id: matchedConn.organization_id,
@@ -134,7 +141,7 @@ export async function POST(request: NextRequest) {
           provider: "uazapi",
           route: "/api/whatsapp/webhook",
           reason: !messageId ? "missing_messageid" : "unmapped_status",
-          raw_status: typeof msgRaw.status === "string" ? msgRaw.status : null,
+          raw_status: rawStatus,
         });
         return NextResponse.json({ ok: true, skipped: "messages_update_no_op" });
       }
