@@ -325,13 +325,17 @@ export async function linkGroupMembership(
       }
     }
   } else {
-    // Sem phone: insert simples (não há índice único sem phone)
-    const { data: inserted } = await db
-      .from("group_memberships")
-      .insert(membershipPayload)
-      .select("id")
-      .single();
-    if (inserted) membershipId = inserted.id as string;
+    // Sem phone: só insere se vier de smart_link (tem UTMs/campaign = valor de negócio).
+    // Webhook sem phone = participante não identificável = sem valor, e geraria
+    // duplicatas a cada retry do UAZAPI para o mesmo evento.
+    if (source === "smart_link" || source === "manual") {
+      const { data: inserted } = await db
+        .from("group_memberships")
+        .insert(membershipPayload)
+        .select("id")
+        .single();
+      if (inserted) membershipId = inserted.id as string;
+    }
   }
 
   // 4. Criar lead_activity se encontrou lead
