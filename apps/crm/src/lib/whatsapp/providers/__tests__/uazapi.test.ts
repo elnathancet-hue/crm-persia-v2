@@ -8,10 +8,11 @@ describe("UazapiAdapter.parseWebhook", () => {
     expect(adapter.parseWebhook({ fromMe: true, chatid: "5511@s.whatsapp.net" })).toBeNull();
   });
 
-  it("returns null for group messages", () => {
-    expect(
-      adapter.parseWebhook({ isGroup: true, chatid: "5511-group@g.us" }),
-    ).toBeNull();
+  it("parses group messages with isGroup: true (not filtered — group chat feature)", () => {
+    const msg = adapter.parseWebhook({ isGroup: true, chatid: "5511-group@g.us" });
+    expect(msg).not.toBeNull();
+    expect(msg!.isGroup).toBe(true);
+    expect(msg!.groupJid).toBe("5511-group@g.us");
   });
 
   it("returns null when no phone can be extracted", () => {
