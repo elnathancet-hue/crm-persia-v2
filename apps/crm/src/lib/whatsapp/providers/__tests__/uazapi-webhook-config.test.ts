@@ -6,11 +6,13 @@ import {
 
 describe("UAZAPI webhook config", () => {
   it("keeps the production webhook payload compatible with UAZAPI docs", () => {
+    // excludeMessages intentionally omitted: removing "wasSentByApi" allows ACK delivery
+    // (messages_update events for our outbound msgs). Loop prevention is handled by
+    // parseWebhook() returning null for fromMe=true. See b20c003 for full rationale.
     expect(buildUazapiWebhookConfig({ url: "https://crm.funilpersia.top/api/whatsapp/webhook" })).toEqual({
       enabled: true,
       url: "https://crm.funilpersia.top/api/whatsapp/webhook",
       events: ["messages", "messages_update"],
-      excludeMessages: ["wasSentByApi"],
     });
   });
 
@@ -34,7 +36,6 @@ describe("UAZAPI webhook config", () => {
         enabled: true,
         url: "https://crm.funilpersia.top/api/whatsapp/webhook",
         events: ["messages", "messages_update"],
-        excludeMessages: ["wasSentByApi"],
       }),
     });
   });
