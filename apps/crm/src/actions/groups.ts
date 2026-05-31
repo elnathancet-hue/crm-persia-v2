@@ -699,6 +699,7 @@ export async function getLeadGroups(leadId: string) {
   if (!memberships || memberships.length === 0) return [];
 
   const groupIds: string[] = memberships.map((m: any) => m.group_id as string);
+  const joinedAts: string[] = memberships.map((m: any) => m.joined_at as string);
 
   // Fetch campaign names via group_campaigns join on whatsapp_groups
   const { data: groupsWithCampaign } = await db
@@ -712,23 +713,19 @@ export async function getLeadGroups(leadId: string) {
     campaignByGroup.set(g.id as string, (g.group_campaigns as { name?: string } | null)?.name ?? null);
   }
 
-  // Fetch message stats per group (inbound messages since lead joined)
-  const messageStats = new Map<string, { count: number; last_message: string | null; last_message_at: string | null }>();
-  for (const m of memberships as any[]) {
-    const { data: msgs, count } = await db
-      .from("group_messages")
-      .select("text, created_at", { count: "exact" })
-      .eq("organization_id", orgId)
-      .eq("group_id", m.group_id)
-      .eq("direction", "inbound")
-      .gte("created_at", m.joined_at)
-      .order("created_at", { ascending: false })
-      .limit(1);
+  // Fetch message stats — single RPC instead of N queries (migration 080)
+  const { data: statsRows } = await db.rpc("get_group_message_stats", {
+    p_org_id: orgId,
+    p_group_ids: groupIds,
+    p_joined_ats: joinedAts,
+  });
 
-    messageStats.set(m.group_id as string, {
-      count: count ?? 0,
-      last_message: (msgs as any[])?.[0]?.text ?? null,
-      last_message_at: (msgs as any[])?.[0]?.created_at ?? null,
+  const messageStats = new Map<string, { count: number; last_message: string | null; last_message_at: string | null }>();
+  for (const row of (statsRows || []) as any[]) {
+    messageStats.set(row.group_id as string, {
+      count: Number(row.message_count ?? 0),
+      last_message: (row.last_message as string | null) ?? null,
+      last_message_at: (row.last_message_at as string | null) ?? null,
     });
   }
 
@@ -785,6 +782,17 @@ export async function removeLeadFromGroup(membershipId: string) {
     .eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
+
+  // Decrement participant_count now that the member was removed
+  const groupId = (membership as any).group_id as string | undefined;
+  if (groupId) {
+    await db
+      .rpc("decrement_group_participant_count", { p_group_id: groupId })
+      .catch((err: unknown) => {
+        console.error("[removeLeadFromGroup] decrement_group_participant_count falhou:", err);
+      });
+  }
+
   return { success: true };
 }
 
@@ -835,8 +843,10 @@ export async function recordGroupJoin(input: {
     },
   });
 
-  // Increment participant_count optimistically
-  await db.rpc("increment_group_participant_count", { p_group_id: input.groupId }).catch(() => {
-    // RPC optional — participant_count also updated on sync
-  });
+  // Increment participant_count (RPC criado na migration 080)
+  await db
+    .rpc("increment_group_participant_count", { p_group_id: input.groupId })
+    .catch((err: unknown) => {
+      console.error("[recordGroupJoin] increment_group_participant_count falhou:", err);
+    });
 }
