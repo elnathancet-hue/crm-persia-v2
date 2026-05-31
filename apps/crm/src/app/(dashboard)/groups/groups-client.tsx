@@ -584,8 +584,8 @@ function GroupChatPanel({
       </div>
 
       {/* Messages — WhatsApp wallpaper + bubble styling */}
-      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-3 sm:px-8 lg:px-12 xl:px-16">
-        <div className="mx-auto flex max-w-[860px] flex-col gap-1 py-4">
+      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
+        <div className="flex flex-col gap-1 py-4">
           {loadingMsgs ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -678,7 +678,7 @@ function GroupChatPanel({
       </div>
 
       {/* Input bar — matching MessageInput style */}
-      <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2 sm:px-5 lg:px-8 xl:px-12">
+      <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2">
         <div className="flex items-end gap-1">
           <Button
             variant="ghost"
@@ -1034,7 +1034,7 @@ function CampaignManagerSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:w-[500px] overflow-y-auto">
+      <SheetContent side="right" className="w-full max-w-[520px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Campanhas / Link Inteligente</SheetTitle>
           <SheetDescription>
