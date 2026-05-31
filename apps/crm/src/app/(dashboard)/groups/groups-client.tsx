@@ -4,9 +4,11 @@ import * as React from "react";
 import {
   ArrowLeft,
   ChevronDown,
+  Clock,
   Copy,
   ExternalLink,
   Loader2,
+  LogOut,
   Megaphone,
   MessageSquare,
   MoreHorizontal,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   Send,
   Settings,
+  ShieldCheck,
   Smile,
   Trash2,
   Users,
@@ -63,6 +66,8 @@ import {
   deleteGroup,
   sendMessageToGroup,
   getInviteLink,
+  resetInviteLink,
+  leaveGroup,
   updateGroup,
   sendInviteToLead,
   getGroupCampaigns,
@@ -298,11 +303,13 @@ function GroupChatPanel({
   leads,
   onBack,
   onDelete,
+  onLeave,
 }: {
   group: Group;
   leads: Lead[];
   onBack: () => void;
   onDelete: (id: string) => void;
+  onLeave: (id: string) => void;
 }) {
   const [messages, setMessages] = React.useState<GroupMessage[]>([]);
   const [loadingMsgs, setLoadingMsgs] = React.useState(true);
@@ -318,6 +325,12 @@ function GroupChatPanel({
   const [editCategory, setEditCategory] = React.useState(group.category);
   const [saving, setSaving] = React.useState(false);
   const [inviteLink, setInviteLink] = React.useState(group.invite_link || "");
+  const [resettingLink, setResettingLink] = React.useState(false);
+  const [editLocked, setEditLocked] = React.useState(false);
+  const [editJoinApproval, setEditJoinApproval] = React.useState(false);
+  const [editMemberAddMode, setEditMemberAddMode] = React.useState<"all_member_add" | "admin_add">("all_member_add");
+  const [editEphemeral, setEditEphemeral] = React.useState<"off" | "1d" | "7d" | "90d">("off");
+  const [leavingGroup, setLeavingGroup] = React.useState(false);
 
   // Invite dialog
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -397,6 +410,10 @@ function GroupChatPanel({
         name: editName.trim(),
         description: editDescription.trim(),
         is_announce: editAnnounce,
+        locked: editLocked,
+        join_approval_required: editJoinApproval,
+        member_add_mode: editMemberAddMode,
+        ephemeral_duration: editEphemeral,
         category: editCategory,
       });
       toast.success("Grupo atualizado");
@@ -430,6 +447,33 @@ function GroupChatPanel({
       toast.error(err.message || "Erro ao enviar convite");
     } finally {
       setSendingInvite(false);
+    }
+  }
+
+  async function handleResetInviteLink() {
+    setResettingLink(true);
+    try {
+      const link = await resetInviteLink(group.id);
+      setInviteLink(link);
+      toast.success("Link de convite renovado");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao renovar link");
+    } finally {
+      setResettingLink(false);
+    }
+  }
+
+  async function handleLeaveGroup() {
+    if (!confirm(`Sair do grupo "${group.name}"? O grupo será removido do CRM.`)) return;
+    setLeavingGroup(true);
+    try {
+      await leaveGroup(group.id);
+      toast.success("Saiu do grupo");
+      setSettingsOpen(false);
+      onLeave(group.id);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao sair do grupo");
+      setLeavingGroup(false);
     }
   }
 
@@ -639,28 +683,34 @@ function GroupChatPanel({
 
       {/* Settings Sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="right" className="w-[360px] sm:w-[400px] overflow-y-auto">
+        <SheetContent side="right" className="w-[360px] sm:w-[420px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Configurações do Grupo</SheetTitle>
-            <SheetDescription>Edite nome, descrição, categoria e modo do grupo.</SheetDescription>
+            <SheetDescription>Edite nome, descrição, categoria e comportamento do grupo.</SheetDescription>
           </SheetHeader>
           <div className="space-y-5 mt-6">
-            {/* Invite link */}
+
+            {/* ── Invite link ── */}
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Link de Convite</Label>
               <div className="flex gap-2">
                 <Input name="invite-link" value={inviteLink} readOnly placeholder="Clique em obter..." className="font-mono text-xs" />
-                <Button variant="outline" size="icon-sm" onClick={() => {
+                <Button variant="outline" size="icon-sm" title="Copiar link" onClick={() => {
                   if (inviteLink) { navigator.clipboard.writeText(inviteLink); toast.success("Copiado!"); }
                 }} disabled={!inviteLink}>
                   <Copy className="size-4" />
                 </Button>
-                <Button variant="outline" size="icon-sm" onClick={handleGetInviteLink}>
+                <Button variant="outline" size="icon-sm" title="Obter link atual" onClick={handleGetInviteLink}>
                   <RefreshCw className="size-4" />
                 </Button>
+                <Button variant="outline" size="icon-sm" title="Revogar e gerar novo link" onClick={handleResetInviteLink} disabled={resettingLink}>
+                  {resettingLink ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
+                </Button>
               </div>
+              <p className="text-[11px] text-muted-foreground">Revogar invalida o link atual e gera um novo.</p>
             </div>
 
+            {/* ── Identidade ── */}
             <div className="space-y-2">
               <Label>Nome</Label>
               <Input name="group-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
@@ -682,17 +732,98 @@ function GroupChatPanel({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <p className="text-sm font-medium">Modo Anuncio</p>
-                <p className="text-xs text-muted-foreground">Só admins enviam mensagens</p>
+
+            {/* ── Mensagens temporárias ── */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Clock className="size-4 text-muted-foreground" />
+                <Label>Mensagens temporárias</Label>
               </div>
-              <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
+              <Select value={editEphemeral} onValueChange={(v) => setEditEphemeral((v ?? "off") as typeof editEphemeral)}>
+                <SelectTrigger>
+                  <SelectValue>
+                    {{ off: "Desativado", "1d": "Sumem em 1 dia", "7d": "Sumem em 7 dias", "90d": "Sumem em 90 dias" }[editEphemeral]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">Desativado</SelectItem>
+                  <SelectItem value="1d">Sumem em 1 dia</SelectItem>
+                  <SelectItem value="7d">Sumem em 7 dias</SelectItem>
+                  <SelectItem value="90d">Sumem em 90 dias</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {/* ── Controles de acesso ── */}
+            <div className="rounded-lg border divide-y">
+              <div className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-2">
+                  <Megaphone className="size-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Modo Anúncio</p>
+                    <p className="text-xs text-muted-foreground">Só admins enviam mensagens</p>
+                  </div>
+                </div>
+                <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
+              </div>
+              <div className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="size-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Bloquear grupo</p>
+                    <p className="text-xs text-muted-foreground">Só admins editam info do grupo</p>
+                  </div>
+                </div>
+                <Switch checked={editLocked} onCheckedChange={setEditLocked} />
+              </div>
+              <div className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Aprovação para entrar</p>
+                    <p className="text-xs text-muted-foreground">Admin aprova cada novo membro</p>
+                  </div>
+                </div>
+                <Switch checked={editJoinApproval} onCheckedChange={setEditJoinApproval} />
+              </div>
+            </div>
+
+            {/* ── Quem pode adicionar membros ── */}
+            <div className="space-y-2">
+              <Label>Quem pode adicionar membros</Label>
+              <Select value={editMemberAddMode} onValueChange={(v) => setEditMemberAddMode((v ?? "all_member_add") as typeof editMemberAddMode)}>
+                <SelectTrigger>
+                  <SelectValue>
+                    {{ all_member_add: "Todos os membros", admin_add: "Somente admins" }[editMemberAddMode]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all_member_add">Todos os membros</SelectItem>
+                  <SelectItem value="admin_add">Somente admins</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              {saving ? "Salvando..." : "Salvar"}
+              {saving ? "Salvando..." : "Salvar alterações"}
             </Button>
+
+            {/* ── Zona de perigo ── */}
+            <div className="pt-2 border-t">
+              <Button
+                variant="outline"
+                className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={handleLeaveGroup}
+                disabled={leavingGroup}
+              >
+                {leavingGroup ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+                {leavingGroup ? "Saindo..." : "Sair do grupo"}
+              </Button>
+              <p className="text-[11px] text-muted-foreground text-center mt-1.5">
+                Remove o número do WhatsApp do grupo e o exclui do CRM.
+              </p>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
@@ -1053,6 +1184,11 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .catch((err: any) => toast.error(err.message || "Erro ao remover"));
   }
 
+  function handleLeave(id: string) {
+    setGroups((prev) => prev.filter((g) => g.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  }
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-[color:var(--chat-bg)]">
       {/* Left panel */}
@@ -1092,6 +1228,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
             leads={leads}
             onBack={() => setSelectedId(null)}
             onDelete={handleDelete}
+            onLeave={handleLeave}
           />
         ) : (
           <GroupEmptyState />
