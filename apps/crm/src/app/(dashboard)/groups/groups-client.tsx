@@ -716,7 +716,7 @@ function GroupChatPanel({
 
       {/* Members / contact panel — Sheet overlay, não empurra o layout */}
       <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); } }}>
-        <SheetContent side="right" showCloseButton={false} className="w-[380px] sm:w-[440px] p-0 overflow-hidden">
+        <SheetContent side="right" showCloseButton={false} className="w-full max-w-[440px] p-0 overflow-hidden">
           {selectedMember ? (
             <LeadContactPanel
               lead={selectedMember.lead}
@@ -769,7 +769,7 @@ function GroupChatPanel({
 
       {/* Settings Sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="right" className="w-[380px] sm:w-[480px] overflow-y-auto">
+        <SheetContent side="right" className="w-full max-w-[480px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Configurações do Grupo</SheetTitle>
             <SheetDescription>Edite nome, descrição, categoria e comportamento do grupo.</SheetDescription>
