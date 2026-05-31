@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   ArrowLeft,
+  ChevronDown,
   Copy,
   ExternalLink,
   Loader2,
@@ -13,6 +14,7 @@ import {
   RefreshCw,
   Send,
   Settings,
+  Smile,
   Trash2,
   Users,
   Link2,
@@ -540,17 +542,24 @@ function GroupChatPanel({
                       isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {/* Copy button — visible on hover */}
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity self-end mb-1 shrink-0">
-                      <button
-                        onClick={() => {
-                          if (msg.text) { navigator.clipboard.writeText(msg.text); toast.success("Copiado!"); }
-                        }}
-                        className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
-                        title="Copiar mensagem"
-                      >
-                        <Copy className="size-3.5" />
-                      </button>
+                    {/* Context menu — visible on hover */}
+                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity self-end mb-1 shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                          title="Mais opções"
+                        >
+                          <ChevronDown className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align={isOutbound ? "end" : "start"} className="min-w-[140px]">
+                          <DropdownMenuItem onClick={() => {
+                            if (msg.text) { navigator.clipboard.writeText(msg.text); toast.success("Copiado!"); }
+                          }}>
+                            <Copy className="size-4" />
+                            Copiar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
                     {/* Bubble column */}
@@ -591,27 +600,41 @@ function GroupChatPanel({
         </div>
       </div>
 
-      {/* Input bar */}
-      <div className="shrink-0 flex items-end gap-2 px-4 py-3 border-t bg-background">
-        <Textarea
-          value={chatInput}
-          onChange={(e) => setChatInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
-          }}
-          placeholder="Digite uma mensagem..."
-          className="min-h-[40px] max-h-32 resize-none"
-          rows={1}
-          disabled={sendingMessage}
-        />
-        <Button
-          size="icon"
-          onClick={handleSendMessage}
-          disabled={sendingMessage || !chatInput.trim()}
-          className="shrink-0"
-        >
-          {sendingMessage ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-        </Button>
+      {/* Input bar — matching MessageInput style */}
+      <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2 sm:px-5 lg:px-8 xl:px-12">
+        <div className="flex items-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-10 shrink-0 rounded-full hover:bg-transparent"
+            style={{ color: "var(--chat-header-fg)" }}
+            tabIndex={-1}
+            disabled
+          >
+            <Smile className="size-5" />
+          </Button>
+          <Textarea
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+            }}
+            placeholder="Digite uma mensagem..."
+            className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
+            style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none", boxShadow: "none" }}
+            rows={1}
+            disabled={sendingMessage}
+          />
+          <Button
+            size="icon"
+            onClick={handleSendMessage}
+            disabled={sendingMessage || !chatInput.trim()}
+            className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
+            style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+          >
+            {sendingMessage ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          </Button>
+        </div>
       </div>
 
       {/* Settings Sheet */}
