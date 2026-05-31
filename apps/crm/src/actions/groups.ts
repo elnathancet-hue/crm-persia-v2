@@ -20,6 +20,93 @@ async function getProvider(supabase: any, orgId: string) {
   return createProvider(connection);
 }
 
+// ── GroupOverview type (enriquecido com stats de membros) ─────────────────────
+export interface GroupOverview {
+  id: string;
+  name: string;
+  description: string | null;
+  group_jid: string;
+  participant_count: number;
+  max_participants: number;
+  is_accepting: boolean;
+  is_announce: boolean;
+  category: string;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  invite_link: string | null;
+  identified_leads: number;
+  duplicates: number;
+  created_at: string;
+}
+
+// ---- Groups overview with membership stats ----
+export async function getGroupsOverview(): Promise<GroupOverview[]> {
+  const { supabase, orgId } = await requireRole("admin");
+
+  const db = supabase as any; // migration 079 tables not in generated types yet
+
+  const { data: groups, error } = await db
+    .from("whatsapp_groups")
+    .select("*, group_campaigns(name)")
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!groups || groups.length === 0) return [];
+
+  const groupIds = (groups as { id: string }[]).map((g) => g.id);
+
+  // Get memberships linked to leads (table added in migration 079, not in generated types)
+  const { data: memberships } = await db
+    .from("group_memberships")
+    .select("group_id, lead_id")
+    .eq("organization_id", orgId)
+    .in("group_id", groupIds)
+    .not("lead_id", "is", null);
+
+  const allMemberships = (memberships || []) as { group_id: string; lead_id: string }[];
+
+  // Identified leads per group
+  const identifiedByGroup = new Map<string, Set<string>>();
+  for (const m of allMemberships) {
+    if (!identifiedByGroup.has(m.group_id)) identifiedByGroup.set(m.group_id, new Set());
+    identifiedByGroup.get(m.group_id)!.add(m.lead_id);
+  }
+
+  // Duplicate detection: leads present in >1 group
+  const leadGroups = new Map<string, Set<string>>();
+  for (const m of allMemberships) {
+    if (!leadGroups.has(m.lead_id)) leadGroups.set(m.lead_id, new Set());
+    leadGroups.get(m.lead_id)!.add(m.group_id);
+  }
+  const duplicatesByGroup = new Map<string, number>();
+  for (const [, gSet] of leadGroups.entries()) {
+    if (gSet.size > 1) {
+      for (const gid of gSet) {
+        duplicatesByGroup.set(gid, (duplicatesByGroup.get(gid) || 0) + 1);
+      }
+    }
+  }
+
+  return (groups as any[]).map((g) => ({
+    id: g.id as string,
+    name: g.name as string,
+    description: g.description as string | null,
+    group_jid: g.group_jid as string,
+    participant_count: (g.participant_count as number) || 0,
+    max_participants: (g.max_participants as number) || 256,
+    is_accepting: g.is_accepting as boolean,
+    is_announce: g.is_announce as boolean,
+    category: g.category as string,
+    campaign_id: g.campaign_id as string | null,
+    campaign_name: (g.group_campaigns as { name?: string } | null)?.name ?? null,
+    invite_link: g.invite_link as string | null,
+    identified_leads: identifiedByGroup.get(g.id as string)?.size ?? 0,
+    duplicates: duplicatesByGroup.get(g.id as string) ?? 0,
+    created_at: g.created_at as string,
+  }));
+}
+
 // ---- List groups from DB ----
 export async function getGroups() {
   const { supabase, orgId } = await requireRole("admin");

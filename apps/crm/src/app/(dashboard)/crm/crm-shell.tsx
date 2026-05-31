@@ -27,6 +27,7 @@ import {
   Activity,
   Filter as FilterIcon,
   Kanban,
+  MessageSquare,
   Plus,
   Tag as TagIcon,
   Users,
@@ -57,6 +58,7 @@ import type { KanbanAgentSummary } from "@persia/shared/ai-agent";
 import type { LeadListItemStats } from "@/actions/leads";
 
 import { CrmClient } from "./crm-client";
+import { GroupsTab } from "./groups-tab";
 import { LeadList } from "@/components/leads/lead-list";
 // PR-V1c: ActivitiesTab agora vive em @persia/crm-ui (compartilhado com admin).
 import { ActivitiesTab } from "@persia/crm-ui";
@@ -65,7 +67,7 @@ import { SegmentList } from "@/components/segments/segment-list";
 import { TagsPageClient } from "@/app/(dashboard)/tags/tags-client";
 import { crmKanbanActions } from "@/features/crm-kanban/crm-kanban-actions";
 
-type CrmTab = "pipeline" | "leads" | "segmentos" | "tags" | "atividades";
+type CrmTab = "pipeline" | "leads" | "grupos" | "segmentos" | "tags" | "atividades";
 
 const TABS: {
   key: CrmTab;
@@ -77,6 +79,7 @@ const TABS: {
   // como "pipeline" (?tab=pipeline) pra nao quebrar bookmarks.
   { key: "pipeline", label: "Funil", icon: Kanban },
   { key: "leads", label: "Leads", icon: Users },
+  { key: "grupos", label: "Grupos", icon: MessageSquare },
   { key: "segmentos", label: "Segmentação", icon: FilterIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
   { key: "atividades", label: "Atividades", icon: Activity },
@@ -283,6 +286,7 @@ export function CrmShell(props: CrmShellProps) {
         {activeTab === "tags" && canManageTags && (
           <TagsPageClient initialTags={props.tagsList as never} />
         )}
+        {activeTab === "grupos" && <GroupsTab />}
         {activeTab === "atividades" && (
           <ActivitiesTab
             initialActivities={props.activitiesData.initialActivities}
