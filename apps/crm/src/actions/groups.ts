@@ -687,10 +687,10 @@ export async function getLeadGroups(leadId: string) {
   const { supabase, orgId } = await requireRole("agent");
   const db = supabase as any;
 
-  // Fetch memberships + group data
+  // Fetch memberships + group data (left_at adicionado na migration 081)
   const { data: memberships, error } = await db
     .from("group_memberships")
-    .select("id, group_id, joined_at, source, utm_source, whatsapp_groups(name)")
+    .select("id, group_id, joined_at, left_at, source, utm_source, whatsapp_groups(name)")
     .eq("organization_id", orgId)
     .eq("lead_id", leadId)
     .order("joined_at", { ascending: false });
@@ -737,6 +737,7 @@ export async function getLeadGroups(leadId: string) {
       group_name: (m.whatsapp_groups as { name?: string } | null)?.name ?? "Grupo",
       campaign_name: campaignByGroup.get(m.group_id as string) ?? null,
       joined_at: m.joined_at as string,
+      left_at: (m.left_at as string | null) ?? null,
       source: (m.source as "smart_link" | "manual" | "webhook") || "manual",
       utm_source: m.utm_source as string | null,
       message_count: stats.count,

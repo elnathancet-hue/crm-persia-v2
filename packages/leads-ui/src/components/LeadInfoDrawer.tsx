@@ -1582,7 +1582,7 @@ function LeadGruposTab({
                   )}
                 </div>
               </div>
-              {removeLeadFromGroup && (
+              {removeLeadFromGroup && !g.left_at && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -1622,10 +1622,17 @@ function LeadGruposTab({
               <div>
                 <dt className="text-xs text-muted-foreground">Status no grupo</dt>
                 <dd>
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-                    <span className="size-1.5 rounded-full bg-success inline-block" />
-                    Participante
-                  </span>
+                  {g.left_at ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                      <span className="size-1.5 rounded-full bg-muted-foreground inline-block" />
+                      {"Saiu em " + new Date(g.left_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+                      <span className="size-1.5 rounded-full bg-success inline-block" />
+                      Participante
+                    </span>
+                  )}
                 </dd>
               </div>
               <div>
