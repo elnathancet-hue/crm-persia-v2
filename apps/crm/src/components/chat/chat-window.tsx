@@ -876,8 +876,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       </div>
 
       {/* Messages - WhatsApp style with subtle pattern background */}
-      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-3 sm:px-8 lg:px-12 xl:px-20">
-        <div className="mx-auto flex max-w-[920px] flex-col gap-1 py-4">
+      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-2 sm:px-3">
+        <div className="flex flex-col gap-1 py-4">
           {messages.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma mensagem ainda
@@ -1006,7 +1006,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   return (
                     <div
                       className={cn(
-                        "group flex max-w-[86%] items-end gap-1 sm:max-w-[72%] lg:max-w-[62%]",
+                        "group flex max-w-[85%] items-end gap-1",
                         isLead ? "flex-row" : "ml-auto flex-row-reverse"
                       )}
                     >

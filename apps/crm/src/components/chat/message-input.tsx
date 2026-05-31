@@ -11,6 +11,13 @@ import {
   PopoverContent,
 } from "@persia/ui/popover";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@persia/ui/dropdown-menu";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -29,6 +36,8 @@ import {
   Mic,
   Square,
   CornerUpLeft,
+  Plus,
+  ImageIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -413,9 +422,76 @@ export function MessageInput({
         </div>
       )}
 
+      {/* AI Generate Panel — inline, expande acima dos botões */}
+      {aiOpen && (
+        <div className="mb-2 rounded-xl border bg-popover p-3 shadow-lg">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground">Assistente IA — Apoio ao agente</p>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setAiOpen(false)} className="size-6">
+                <X className="size-3" />
+              </Button>
+            </div>
+            {aiAssistants.length > 1 && (
+              <select
+                value={selectedAssistantId}
+                onChange={(e) => setSelectedAssistantId(e.target.value)}
+                className="w-full h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+              >
+                {aiAssistants.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            )}
+            {aiAssistants.length === 1 && (
+              <p className="text-xs text-primary font-medium">{aiAssistants[0].name}</p>
+            )}
+            {aiAssistants.length === 0 && assistantsLoaded && (
+              <p className="text-xs text-muted-foreground">Nenhum assistente ativo. Crie em Automações.</p>
+            )}
+            <textarea
+              value={aiQuery}
+              onChange={(e) => setAiQuery(e.target.value)}
+              placeholder="Ex: Como responder sobre o preço?"
+              rows={2}
+              className="w-full rounded-md border bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus:ring-1 focus:ring-primary"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleAiGenerate();
+                }
+              }}
+            />
+            <Button size="sm" onClick={handleAiGenerate} disabled={aiLoading || !aiQuery.trim() || aiAssistants.length === 0} className="w-full">
+              {aiLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+              {aiLoading ? "Gerando..." : "Gerar sugestão"}
+            </Button>
+            {aiSuggestion && (
+              <div className="space-y-2">
+                <div className="rounded-lg bg-muted p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
+                  {aiSuggestion}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    navigator.clipboard.writeText(aiSuggestion);
+                    toast.success("Sugestão copiada!");
+                  }}
+                >
+                  <Copy className="size-3.5" />
+                  Copiar sugestão
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div
         className={cn(
-          "mx-auto flex max-w-[920px] items-end gap-2",
+          "flex items-end gap-2",
           disabled && "opacity-50"
         )}
       >
@@ -435,139 +511,42 @@ export function MessageInput({
           onChange={handleFileSelect}
         />
 
-        {/* AI Generate */}
-        <Popover open={aiOpen} onOpenChange={setAiOpen}>
-          {/* PR 39 (mai/2026): Tooltip explícito explicando o que faz.
-              Antes só tinha title HTML nativo — pouco descobrível.
-              Sparkles é a feature mais poderosa do input mas a menos
-              óbvia visualmente. */}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <PopoverTrigger>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={disabled}
-                    className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
-                    aria-label="Gerar resposta com IA"
-                  >
-                    <Sparkles className="size-4" />
-                  </Button>
-                </PopoverTrigger>
-              }
-            />
-            <TooltipContent>
-              Gerar resposta com IA
-            </TooltipContent>
-          </Tooltip>
-          <PopoverContent side="top" align="start" className="w-80 p-3">
-            <div className="space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Assistente IA - Apoio ao agente</p>
-
-              {/* Assistant selector */}
-              {aiAssistants.length > 1 && (
-                <select
-                  value={selectedAssistantId}
-                  onChange={(e) => setSelectedAssistantId(e.target.value)}
-                  className="w-full h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {aiAssistants.map((a) => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
-                </select>
-              )}
-              {aiAssistants.length === 1 && (
-                <p className="text-xs text-primary font-medium">{aiAssistants[0].name}</p>
-              )}
-              {aiAssistants.length === 0 && assistantsLoaded && (
-                <p className="text-xs text-muted-foreground">Nenhum assistente ativo. Crie em Automações.</p>
-              )}
-
-              <textarea
-                value={aiQuery}
-                onChange={(e) => setAiQuery(e.target.value)}
-                placeholder="Ex: Como responder sobre o preco?"
-                rows={2}
-                className="w-full rounded-md border bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus:ring-1 focus:ring-primary"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleAiGenerate();
-                  }
-                }}
-              />
-              <Button size="sm" onClick={handleAiGenerate} disabled={aiLoading || !aiQuery.trim() || aiAssistants.length === 0} className="w-full">
-                {aiLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                {aiLoading ? "Gerando..." : "Gerar sugestao"}
-              </Button>
-              {aiSuggestion && (
-                <div className="space-y-2">
-                  <div className="rounded-lg bg-muted p-3 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-                    {aiSuggestion}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      navigator.clipboard.writeText(aiSuggestion);
-                      toast.success("Sugestao copiada!");
-                    }}
-                  >
-                    <Copy className="size-3.5" />
-                    Copiar sugestao
-                  </Button>
-                </div>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
-
-        {/* Attach file */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={disabled || sending}
-                className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
-                aria-label="Anexar arquivo"
-              >
-                <Paperclip className="size-4" />
-              </Button>
-            }
-          />
-          <TooltipContent>Anexar imagem ou arquivo</TooltipContent>
-        </Tooltip>
-
-        {/* Template (Meta Cloud) */}
-        {showTemplates && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setTemplateOpen(true)}
-                  disabled={disabled || sending}
-                  className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
-                  aria-label="Enviar template oficial"
-                >
-                  <FileText className="size-4" />
-                </Button>
-              }
-            />
-            <TooltipContent>
-              Enviar template oficial Meta (reabre janela 24h)
-            </TooltipContent>
-          </Tooltip>
-        )}
+        {/* + menu — Fotos/Docs/IA/Template (estilo WhatsApp) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={disabled || sending}
+              className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
+              aria-label="Mais opções"
+            >
+              <Plus className="size-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start">
+            <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+              <ImageIcon className="size-4 text-progress" />
+              Fotos e vídeos
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+              <Paperclip className="size-4 text-muted-foreground" />
+              Documento
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setAiOpen(true)}>
+              <Sparkles className="size-4 text-primary" />
+              Gerar com IA
+            </DropdownMenuItem>
+            {showTemplates && (
+              <DropdownMenuItem onClick={() => setTemplateOpen(true)}>
+                <FileText className="size-4 text-warning" />
+                Template oficial
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Emoji Picker */}
         <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
