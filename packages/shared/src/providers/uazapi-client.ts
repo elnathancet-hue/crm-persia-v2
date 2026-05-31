@@ -550,6 +550,14 @@ export class UazapiClient {
     });
   }
 
+  async pinMessage(id: string, pin = true, duration: 1 | 7 | 30 = 7): Promise<void> {
+    await this.request("POST", "/message/pin", { id, pin, duration });
+  }
+
+  async pinChat(number: string, pin: boolean): Promise<void> {
+    await this.request("POST", "/chat/pin", { number, pin });
+  }
+
   // ============ SENDER (MASS MESSAGING) ============
 
   async senderSimple(params: SenderSimpleParams): Promise<SenderResponse> {

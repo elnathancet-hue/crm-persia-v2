@@ -86,6 +86,7 @@ export class UazapiAdapter implements WhatsAppProvider {
     const result = await this.client.sendTextV2({
       number: opts.phone,
       text: opts.message,
+      replyid: opts.replyTo,
     });
     const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
     return { messageId: String(id), success: true };
@@ -96,13 +97,18 @@ export class UazapiAdapter implements WhatsAppProvider {
       const result = await this.client.sendMediaV2({
         number: opts.phone,
         file: opts.media,
-        type: opts.type,
+        type: opts.type as "image" | "audio" | "video" | "document",
         caption: opts.caption,
         docName: opts.type === "document" ? (opts.fileName || "arquivo") : undefined,
+        replyid: opts.replyTo,
       });
       const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
       return { messageId: String(id), success: true };
     } catch {
+      if (opts.type === "ptt") {
+        // PTT (voice note) — no legacy fallback, re-throw
+        throw new Error("PTT send failed and no legacy fallback available");
+      }
       let result: { MessageId: string };
       switch (opts.type) {
         case "image":

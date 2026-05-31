@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type ReactNode } from "react";
 import { sendMessageViaWhatsApp, sendMediaViaWhatsApp, type Message } from "@/actions/messages";
 import { generateAgentResponse } from "@/actions/conversations";
 import { getAssistants } from "@/actions/ai";
@@ -26,6 +26,9 @@ import {
   Smile,
   Copy,
   Clock,
+  Mic,
+  Square,
+  CornerUpLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -40,10 +43,19 @@ const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
 });
 
 
+type ReplyTo = {
+  id: string;
+  whatsapp_msg_id: string | null;
+  content: string | null;
+  sender: string;
+};
+
 type MessageInputProps = {
   conversationId: string;
   onMessageSent: (message: Message) => void;
   disabled?: boolean;
+  replyTo?: ReplyTo | null;
+  onClearReply?: () => void;
 };
 
 function getMediaType(mimeType: string): "image" | "audio" | "video" | "document" {
@@ -57,6 +69,8 @@ export function MessageInput({
   conversationId,
   onMessageSent,
   disabled = false,
+  replyTo,
+  onClearReply,
 }: MessageInputProps) {
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
@@ -71,6 +85,12 @@ export function MessageInput({
   const [selectedAssistantId, setSelectedAssistantId] = useState("");
   const [assistantsLoaded, setAssistantsLoaded] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  // Audio recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -148,6 +168,79 @@ export function MessageInput({
     setFilePreview(null);
   };
 
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = reader.result as string;
+          setSending(true);
+          try {
+            const { data, error } = await sendMediaViaWhatsApp(conversationId, {
+              base64,
+              type: "ptt",
+              fileName: "audio.webm",
+              replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
+            });
+            if (data) {
+              onMessageSent(data);
+              onClearReply?.();
+            }
+            if (error) toast.error(`Falha ao enviar áudio: ${error}`);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
+          } finally {
+            setSending(false);
+          }
+        };
+        reader.readAsDataURL(blob);
+
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+    } catch {
+      toast.error("Não foi possível acessar o microfone");
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const handleCancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      // Suppress onstop handler by swapping it out
+      mediaRecorderRef.current.onstop = () => {
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      };
+      mediaRecorderRef.current.stop();
+    }
+  };
+
   const handleSend = async () => {
     if (sending || disabled) return;
 
@@ -169,12 +262,14 @@ export function MessageInput({
           type: mediaType,
           fileName: selectedFile.name,
           caption: content.trim() || undefined,
+          replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
         });
 
         if (data) {
           onMessageSent(data);
           setContent("");
           clearFile();
+          onClearReply?.();
           if (textareaRef.current) textareaRef.current.style.height = "auto";
         }
         if (error) toast.error(`Falha ao enviar: ${error}`);
@@ -194,12 +289,14 @@ export function MessageInput({
     setSending(true);
     const { data, error } = await sendMessageViaWhatsApp(
       conversationId,
-      trimmed
+      trimmed,
+      { replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined }
     );
 
     if (data) {
       onMessageSent(data);
       setContent("");
+      onClearReply?.();
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
@@ -228,7 +325,7 @@ export function MessageInput({
        browsers). delay 300ms pra não disparar em hover acidental. */
     <TooltipProvider delay={300}>
     <div
-      className="border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2 sm:px-5 lg:px-8 xl:px-12"
+      className="border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2"
       style={{ background: "var(--chat-input-bar-bg)" }}
     >
       {/* 24h window banner (Meta Cloud apenas) */}
@@ -258,6 +355,27 @@ export function MessageInput({
         <div className="mb-2 flex items-center gap-2 text-xs text-warning">
           <Clock className="size-3" />
           Janela de 24h expira em {Math.round(hoursLeft)}h — envie um template antes para nao perder o contato.
+        </div>
+      )}
+
+      {/* Reply preview */}
+      {replyTo && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-[color:var(--chat-send-bg)] bg-muted/50 px-3 py-2">
+          <CornerUpLeft className="size-3.5 shrink-0 text-muted-foreground" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-[color:var(--chat-send-bg)] truncate">{replyTo.sender}</p>
+            <p className="text-xs text-muted-foreground truncate">{replyTo.content || "Mídia"}</p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClearReply}
+            className="shrink-0"
+            aria-label="Cancelar resposta"
+          >
+            <X className="size-3.5" />
+          </Button>
         </div>
       )}
 
@@ -514,27 +632,64 @@ export function MessageInput({
           }}
         />
 
-        {/* Send button */}
-        <Button
-          type="button"
-          variant="default"
-          size="icon-sm"
-          onClick={handleSend}
-          disabled={(!content.trim() && !selectedFile) || sending || disabled || composerLocked}
-          title={composerLocked ? "Fora da janela de 24h — use um template" : "Enviar"}
-          aria-label="Enviar mensagem"
-          className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
-          style={{
-            backgroundColor: "var(--chat-send-bg)",
-            color: "var(--chat-send-fg)",
-          }}
-        >
-          {sending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Send className="size-4" />
-          )}
-        </Button>
+        {/* Recording indicator or Send/Mic button */}
+        {isRecording ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium tabular-nums text-destructive">
+              {String(Math.floor(recordingSeconds / 60)).padStart(2, "0")}:{String(recordingSeconds % 60).padStart(2, "0")}
+            </span>
+            {/* Cancel */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleCancelRecording}
+              className="size-10 shrink-0 rounded-full text-muted-foreground"
+              aria-label="Cancelar gravação"
+            >
+              <X className="size-4" />
+            </Button>
+            {/* Send recording */}
+            <Button
+              type="button"
+              variant="default"
+              size="icon-sm"
+              onClick={handleStopRecording}
+              aria-label="Enviar áudio"
+              className="size-10 shrink-0 rounded-full hover:opacity-90"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            </Button>
+          </div>
+        ) : content.trim() || selectedFile ? (
+          <Button
+            type="button"
+            variant="default"
+            size="icon-sm"
+            onClick={handleSend}
+            disabled={sending || disabled || composerLocked}
+            title={composerLocked ? "Fora da janela de 24h — use um template" : "Enviar"}
+            aria-label="Enviar mensagem"
+            className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
+            style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+          >
+            {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="default"
+            size="icon-sm"
+            onClick={handleStartRecording}
+            disabled={disabled || composerLocked || sending}
+            aria-label="Gravar áudio"
+            className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
+            style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+          >
+            <Mic className="size-4" />
+          </Button>
+        )}
       </div>
 
       <TemplateSelector

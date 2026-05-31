@@ -41,10 +41,11 @@ export interface SendTextOptions {
 
 export interface SendMediaOptions {
   phone: string;
-  type: "image" | "audio" | "video" | "document";
+  type: "image" | "audio" | "video" | "document" | "ptt";
   media: string;
   caption?: string;
   fileName?: string;
+  replyTo?: string;
 }
 
 export interface SendLocationOptions {

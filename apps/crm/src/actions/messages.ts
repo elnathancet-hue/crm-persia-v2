@@ -19,6 +19,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorMessage, logError } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
+import { UazapiClient } from "@persia/shared";
 
 export type Message = {
   id: string;
@@ -264,7 +265,8 @@ export async function sendMessage(
  */
 export async function sendMessageViaWhatsApp(
   conversationId: string,
-  content: string
+  content: string,
+  options?: { replyToWhatsAppMsgId?: string }
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
 
@@ -363,7 +365,7 @@ export async function sendMessageViaWhatsApp(
 
     try {
       const provider = createProvider(connection);
-      const result = await provider.sendText({ phone, message: content });
+      const result = await provider.sendText({ phone, message: content, replyTo: options?.replyToWhatsAppMsgId });
       const update: Record<string, unknown> = { status: "sent" };
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
       await supabase.from("messages").update(update as never).eq("id", message.id);
@@ -416,9 +418,10 @@ export async function sendMediaViaWhatsApp(
   conversationId: string,
   file: {
     base64: string;
-    type: "image" | "audio" | "video" | "document";
+    type: "image" | "audio" | "video" | "document" | "ptt";
     fileName: string;
     caption?: string;
+    replyToWhatsAppMsgId?: string;
   }
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
@@ -564,6 +567,7 @@ export async function sendMediaViaWhatsApp(
         media: providerMediaUrl,
         caption: file.caption,
         fileName: file.type === "document" ? file.fileName : undefined,
+        replyTo: file.replyToWhatsAppMsgId,
       });
       const update: Record<string, unknown> = { status: "sent" };
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
@@ -868,4 +872,48 @@ export async function hideMessage(messageId: string): Promise<{ error?: string }
     .eq("id", messageId)
     .eq("organization_id", orgId);
   return {};
+}
+
+/**
+ * Fixa ou desafixa uma mensagem no WhatsApp via UAZAPI.
+ * Funciona em 1:1 e grupos. UAZAPI-only (Meta Cloud nao suporta).
+ */
+export async function pinWhatsAppMessage(
+  messageId: string,
+  pin = true,
+  duration: 1 | 7 | 30 = 7,
+): Promise<{ error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const { data: msg } = await supabase
+    .from("messages")
+    .select("whatsapp_msg_id, conversations(channel, organization_id)")
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!msg?.whatsapp_msg_id) return { error: "Mensagem sem ID WhatsApp" };
+
+  const conv = msg.conversations as Record<string, unknown> | null;
+  if (!conv || conv.channel !== "whatsapp") return { error: "Conversa nao e WhatsApp" };
+
+  const { data: connection } = await supabase
+    .from("whatsapp_connections")
+    .select("provider, instance_url, instance_token")
+    .eq("organization_id", orgId)
+    .eq("status", "connected")
+    .limit(1)
+    .single();
+
+  if (!connection || connection.provider !== "uazapi" || !connection.instance_url || !connection.instance_token) {
+    return { error: "Fixar mensagem requer conexao UAZAPI ativa" };
+  }
+
+  try {
+    const client = new UazapiClient({ baseUrl: connection.instance_url, token: connection.instance_token });
+    await client.pinMessage(msg.whatsapp_msg_id, pin, duration);
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao fixar mensagem" };
+  }
 }

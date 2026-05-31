@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { getConversation } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
-import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, type Message } from "@/actions/messages";
+import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
@@ -54,7 +54,9 @@ import {
   MoreHorizontal,
   Pencil,
   Phone,
+  Pin,
   Play,
+  Reply,
   RotateCw,
   Smile,
   Sparkles,
@@ -376,6 +378,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [editDialogText, setEditDialogText] = useState("");
   const [deleteDialogMsgId, setDeleteDialogMsgId] = useState<string | null>(null);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -948,6 +951,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align={isLead ? "start" : "end"} className="min-w-[160px]">
                           <DropdownMenuItem
+                            onClick={() => setReplyTo(msg)}
+                          >
+                            <Reply className="size-4" />
+                            Responder
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => {
                               if (msg.content) navigator.clipboard.writeText(msg.content);
                             }}
@@ -964,6 +973,16 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                           {canModify && (
                             <>
                               <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  const result = await pinWhatsAppMessage(msg.id);
+                                  if (result.error) toast.error(result.error);
+                                  else toast.success("Mensagem fixada");
+                                }}
+                              >
+                                <Pin className="size-4" />
+                                Fixar
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => startEdit(msg.id, msg.content || "")}
                               >
@@ -1157,6 +1176,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           conversationId={conversationId}
           onMessageSent={handleMessageSent}
           disabled={isClosed}
+          replyTo={replyTo ? {
+            id: replyTo.id,
+            whatsapp_msg_id: replyTo.whatsapp_msg_id ?? null,
+            content: replyTo.content ?? null,
+            sender: replyTo.sender === "lead" ? ((conversation as any)?.leads?.name || "Lead") : "Você",
+          } : null}
+          onClearReply={() => setReplyTo(null)}
         />
       </div>
 
