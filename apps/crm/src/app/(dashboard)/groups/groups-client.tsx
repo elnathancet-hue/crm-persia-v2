@@ -519,9 +519,7 @@ function GroupChatPanel({
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Main chat column */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header — WhatsApp style matching chat-window */}
       <div
         className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
@@ -716,58 +714,58 @@ function GroupChatPanel({
         </div>
       </div>
 
-      </div>
-
-      {/* Members / contact panel */}
-      {membersOpen && (
-        selectedMember ? (
-          <LeadContactPanel
-            lead={selectedMember.lead}
-            onClose={() => setSelectedMember(null)}
-          />
-        ) : (
-          <div className="flex h-full w-[280px] shrink-0 flex-col border-l border-[color:var(--chat-sidebar-divider)] bg-background overflow-y-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Membros identificados
-              </span>
-              <Button variant="ghost" size="icon-xs" onClick={() => setMembersOpen(false)} aria-label="Fechar">
-                <X className="size-3.5" />
-              </Button>
+      {/* Members / contact panel — Sheet overlay, não empurra o layout */}
+      <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); } }}>
+        <SheetContent side="right" showCloseButton={false} className="w-[300px] sm:w-[320px] p-0 overflow-hidden">
+          {selectedMember ? (
+            <LeadContactPanel
+              lead={selectedMember.lead}
+              onClose={() => setSelectedMember(null)}
+            />
+          ) : (
+            <div className="flex h-full flex-col overflow-y-auto">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Membros identificados
+                </span>
+                <Button variant="ghost" size="icon-xs" onClick={() => setMembersOpen(false)} aria-label="Fechar">
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+              {membersLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : groupMembers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
+                  <UserCircle className="size-8 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">Nenhum membro identificado como lead</p>
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  {groupMembers.map((member) => (
+                    <button
+                      key={member.membership_id}
+                      type="button"
+                      onClick={() => setSelectedMember(member)}
+                      className="flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-muted/50 text-left transition-colors"
+                    >
+                      <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <UserCircle className="size-4 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{member.lead.name || member.name || "Sem nome"}</p>
+                        <p className="text-xs text-muted-foreground truncate">{member.lead.phone || member.phone || ""}</p>
+                      </div>
+                      <ExternalLink className="size-3.5 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            {membersLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : groupMembers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
-                <UserCircle className="size-8 text-muted-foreground/40" />
-                <p className="text-sm text-muted-foreground">Nenhum membro identificado como lead</p>
-              </div>
-            ) : (
-              <div className="flex flex-col">
-                {groupMembers.map((member) => (
-                  <button
-                    key={member.membership_id}
-                    type="button"
-                    onClick={() => setSelectedMember(member)}
-                    className="flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-muted/50 text-left transition-colors"
-                  >
-                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <UserCircle className="size-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{member.lead.name || member.name || "Sem nome"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{member.lead.phone || member.phone || ""}</p>
-                    </div>
-                    <ExternalLink className="size-3.5 text-muted-foreground shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      )}
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Settings Sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>

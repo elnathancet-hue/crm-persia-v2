@@ -37,6 +37,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@persia/ui/dropdown-menu";
+import { Sheet, SheetContent } from "@persia/ui/sheet";
 import {
   AlertCircle,
   ArrowLeft,
@@ -668,9 +669,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     : null;
 
   return (
-    <div className="flex h-full overflow-hidden" style={{ background: "var(--chat-bg)" }}>
-      {/* Main chat column */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden" style={{ background: "var(--chat-bg)" }}>
       {/* Header - WhatsApp style with action bar */}
       <div
         className="flex h-[59px] shrink-0 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4"
@@ -1160,15 +1159,18 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           disabled={isClosed}
         />
       </div>
-      </div>
 
-      {/* Contact panel — slides in when toggled */}
-      {contactPanelOpen && leadForPanel && (
-        <LeadContactPanel
-          lead={leadForPanel}
-          onClose={() => setContactPanelOpen(false)}
-        />
-      )}
+      {/* Contact panel — Sheet overlay, não empurra o layout */}
+      <Sheet open={contactPanelOpen && !!leadForPanel} onOpenChange={(o) => { if (!o) setContactPanelOpen(false); }}>
+        <SheetContent side="right" showCloseButton={false} className="w-[300px] sm:w-[320px] p-0 overflow-hidden">
+          {leadForPanel && (
+            <LeadContactPanel
+              lead={leadForPanel}
+              onClose={() => setContactPanelOpen(false)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Dialogs */}
       <ScheduleMessageDialog
