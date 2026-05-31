@@ -59,6 +59,18 @@ export function SmartLinkClient({ resolution, utms }: Props) {
   function handleDirectJoin() {
     if (!group) return;
     setLoading(true);
+    // Fire-and-forget: captura UTMs + campaign mesmo sem dados do lead.
+    // Sem isso, "skips" nao teriam contexto de smart_link/UTMs.
+    recordGroupJoin({
+      organizationId,
+      groupId: group.id,
+      campaignId: campaign.id,
+      utmSource: utms.utm_source,
+      utmMedium: utms.utm_medium,
+      utmCampaign: utms.utm_campaign,
+      utmContent: utms.utm_content,
+      utmTerm: utms.utm_term,
+    }).catch(() => {});
     window.location.href = group.invite_link;
   }
 
