@@ -774,7 +774,7 @@ function GroupChatPanel({
             <SheetTitle>Configurações do Grupo</SheetTitle>
             <SheetDescription>Edite nome, descrição, categoria e comportamento do grupo.</SheetDescription>
           </SheetHeader>
-          <div className="space-y-5 mt-6">
+          <div className="space-y-5 px-card py-6">
 
             {/* ── Invite link ── */}
             <div className="space-y-2">
