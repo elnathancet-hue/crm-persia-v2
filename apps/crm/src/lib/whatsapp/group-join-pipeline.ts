@@ -401,8 +401,7 @@ export async function processGroupWebhookEvent(
   const action =
     typeof body.action === "string" ? body.action.toLowerCase() : null;
 
-  // Por enquanto só tratamos "add" (join). Remove → não temos "left_at" no schema.
-  if (action !== "add") return;
+  if (action !== "add" && action !== "remove") return;
 
   const groupJid =
     typeof body.chatid === "string"
@@ -432,19 +431,41 @@ export async function processGroupWebhookEvent(
 
   if (participantList.length === 0) return;
 
+  const db = supabase as any; // migration 079/081 tables not in generated types yet
+
   // Processa cada participante (em série para não sobrecarregar o DB)
   for (const jid of participantList) {
     if (!jid) continue;
     try {
-      await linkGroupMembership({
-        supabase,
-        orgId,
-        groupId: group.id as string,
-        groupName: group.name as string,
-        participantJid: jid,
-        participantName: null, // UAZAPI groups event não tem nome dos participantes
-        source: "webhook",
-      });
+      if (action === "add") {
+        await linkGroupMembership({
+          supabase,
+          orgId,
+          groupId: group.id as string,
+          groupName: group.name as string,
+          participantJid: jid,
+          participantName: null, // UAZAPI groups event não tem nome dos participantes
+          source: "webhook",
+        });
+      } else {
+        // action === "remove": marca left_at + decrementa contador
+        const phone = normalizePhoneBR(jid);
+        if (phone) {
+          await db
+            .from("group_memberships")
+            .update({ left_at: new Date().toISOString() })
+            .eq("organization_id", orgId)
+            .eq("group_id", group.id)
+            .eq("phone", phone)
+            .is("left_at", null); // apenas se ainda ativo
+
+          await db
+            .rpc("decrement_group_participant_count", {
+              p_group_id: group.id,
+            })
+            .catch(() => {});
+        }
+      }
     } catch {
       // Best-effort: um participante falhando não bloqueia os outros
     }

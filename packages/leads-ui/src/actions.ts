@@ -177,6 +177,8 @@ export interface LeadGroupMembership {
   group_name: string;
   campaign_name: string | null;
   joined_at: string;
+  /** null = ainda no grupo, string ISO = saiu nessa data (migration 081). */
+  left_at: string | null;
   source: "smart_link" | "manual" | "webhook";
   /** utm_source bruto para montar label de origem (ex: "facebook", "instagram"). */
   utm_source: string | null;
