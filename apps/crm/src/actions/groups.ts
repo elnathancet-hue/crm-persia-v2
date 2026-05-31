@@ -57,13 +57,15 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
 
   const groupIds = (groups as { id: string }[]).map((g) => g.id);
 
-  // Get memberships linked to leads (table added in migration 079, not in generated types)
+  // Get memberships linked to leads — só membros ativos (left_at IS NULL).
+  // Ex-membros não devem inflar identified_leads nem duplicates.
   const { data: memberships } = await db
     .from("group_memberships")
     .select("group_id, lead_id")
     .eq("organization_id", orgId)
     .in("group_id", groupIds)
-    .not("lead_id", "is", null);
+    .not("lead_id", "is", null)
+    .is("left_at", null);
 
   const allMemberships = (memberships || []) as { group_id: string; lead_id: string }[];
 
@@ -825,6 +827,21 @@ export async function recordGroupJoin(input: {
     .eq("id", input.groupId)
     .maybeSingle();
 
+  // Verifica se já é membro ativo ANTES do upsert para evitar duplo-incremento
+  // (mesma pessoa clicando o link duas vezes → upsert só atualiza, não insere).
+  let isActiveMember = false;
+  if (phone) {
+    const { data: existing } = await db
+      .from("group_memberships")
+      .select("id")
+      .eq("organization_id", input.organizationId)
+      .eq("group_id", input.groupId)
+      .eq("phone", phone)
+      .is("left_at", null)
+      .maybeSingle();
+    isActiveMember = Boolean(existing);
+  }
+
   await linkGroupMembership({
     supabase: adminClient,
     orgId: input.organizationId,
@@ -844,10 +861,13 @@ export async function recordGroupJoin(input: {
     },
   });
 
-  // Increment participant_count (RPC criado na migration 080)
-  await db
-    .rpc("increment_group_participant_count", { p_group_id: input.groupId })
-    .catch((err: unknown) => {
-      console.error("[recordGroupJoin] increment_group_participant_count falhou:", err);
-    });
+  // Incrementa participant_count só para entradas novas (RPC migration 080).
+  // Revisitas (upsert atualiza row existente) não contam como nova entrada.
+  if (!isActiveMember) {
+    await db
+      .rpc("increment_group_participant_count", { p_group_id: input.groupId })
+      .catch((err: unknown) => {
+        console.error("[recordGroupJoin] increment_group_participant_count falhou:", err);
+      });
+  }
 }
