@@ -871,3 +871,78 @@ export async function recordGroupJoin(input: {
       });
   }
 }
+
+// ── getGroupLeadMembers ────────────────────────────────────────────────────────
+// Returns active group members that are linked to a lead in the system.
+// Used by the groups chat panel to show member contact details.
+
+export interface GroupLeadMember {
+  membership_id: string;
+  phone: string | null;
+  name: string | null;
+  lead_id: string;
+  lead: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    avatar_url: string | null;
+    status: string | null;
+    source: string | null;
+    created_at: string;
+    assigned_to: string | null;
+    lead_tags: Array<{ tag_id: string; tags: { id: string; name: string; color: string } | null }>;
+  };
+}
+
+export async function getGroupLeadMembers(groupId: string): Promise<GroupLeadMember[]> {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  const { data, error } = await db
+    .from("group_memberships")
+    .select(`
+      id,
+      phone,
+      name,
+      lead_id,
+      leads (
+        id,
+        name,
+        phone,
+        email,
+        avatar_url,
+        status,
+        source,
+        created_at,
+        assigned_to,
+        lead_tags ( tag_id, tags ( id, name, color ) )
+      )
+    `)
+    .eq("organization_id", orgId)
+    .eq("group_id", groupId)
+    .not("lead_id", "is", null)
+    .is("left_at", null)
+    .order("name");
+
+  if (error) {
+    console.error("[getGroupLeadMembers] erro:", error);
+    return [];
+  }
+
+  return ((data as unknown) as Array<{
+    id: string;
+    phone: string | null;
+    name: string | null;
+    lead_id: string;
+    leads: GroupLeadMember["lead"] | null;
+  }>)
+    .filter((m) => m.leads !== null)
+    .map((m) => ({
+      membership_id: m.id,
+      phone: m.phone,
+      name: m.name,
+      lead_id: m.lead_id,
+      lead: m.leads!,
+    }));
+}

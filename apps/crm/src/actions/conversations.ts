@@ -197,7 +197,12 @@ export async function getConversation(id: string) {
         status,
         score,
         metadata,
-        created_at
+        created_at,
+        assigned_to,
+        lead_tags (
+          tag_id,
+          tags ( id, name, color )
+        )
       )
     `)
     .eq("id", id)

@@ -20,8 +20,10 @@ import {
   Smile,
   Trash2,
   Users,
+  UserCircle,
   Link2,
   Save,
+  X,
   Zap,
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
@@ -76,8 +78,11 @@ import {
   deleteGroupCampaign,
   linkGroupToCampaign,
   setGroupCapacity,
+  getGroupLeadMembers,
   type GroupCampaign,
+  type GroupLeadMember,
 } from "@/actions/groups";
+import { LeadContactPanel } from "@/components/chat/lead-contact-panel";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
@@ -337,6 +342,12 @@ function GroupChatPanel({
   const [selectedLeadId, setSelectedLeadId] = React.useState("");
   const [sendingInvite, setSendingInvite] = React.useState(false);
 
+  // Member contact panel
+  const [membersOpen, setMembersOpen] = React.useState(false);
+  const [groupMembers, setGroupMembers] = React.useState<GroupLeadMember[]>([]);
+  const [membersLoading, setMembersLoading] = React.useState(false);
+  const [selectedMember, setSelectedMember] = React.useState<GroupLeadMember | null>(null);
+
   // Reset when group changes
   React.useEffect(() => {
     setEditName(group.name);
@@ -344,6 +355,9 @@ function GroupChatPanel({
     setEditAnnounce(group.is_announce);
     setEditCategory(group.category);
     setInviteLink(group.invite_link || "");
+    setMembersOpen(false);
+    setSelectedMember(null);
+    setGroupMembers([]);
   }, [group.id]);
 
   // Load initial messages
@@ -401,6 +415,15 @@ function GroupChatPanel({
     } finally {
       setSendingMessage(false);
     }
+  }
+
+  async function handleOpenMembers() {
+    setMembersOpen(true);
+    setSelectedMember(null);
+    setMembersLoading(true);
+    const members = await getGroupLeadMembers(group.id).catch(() => []);
+    setGroupMembers(members);
+    setMembersLoading(false);
   }
 
   async function handleSaveSettings() {
@@ -496,7 +519,9 @@ function GroupChatPanel({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full overflow-hidden">
+      {/* Main chat column */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       {/* Header — WhatsApp style matching chat-window */}
       <div
         className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
@@ -519,6 +544,16 @@ function GroupChatPanel({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {/* Members contact panel toggle */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleOpenMembers}
+            className={`size-8 rounded-lg hover:bg-muted ${membersOpen ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="Membros identificados"
+          >
+            <UserCircle className="size-4" />
+          </Button>
           <Button variant="ghost" size="icon-sm" onClick={() => setInviteOpen(true)} title="Enviar convite">
             <Users className="size-4" />
           </Button>
@@ -680,6 +715,59 @@ function GroupChatPanel({
           </Button>
         </div>
       </div>
+
+      </div>
+
+      {/* Members / contact panel */}
+      {membersOpen && (
+        selectedMember ? (
+          <LeadContactPanel
+            lead={selectedMember.lead}
+            onClose={() => setSelectedMember(null)}
+          />
+        ) : (
+          <div className="flex h-full w-[280px] shrink-0 flex-col border-l border-[color:var(--chat-sidebar-divider)] bg-background overflow-y-auto">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Membros identificados
+              </span>
+              <Button variant="ghost" size="icon-xs" onClick={() => setMembersOpen(false)} aria-label="Fechar">
+                <X className="size-3.5" />
+              </Button>
+            </div>
+            {membersLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : groupMembers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
+                <UserCircle className="size-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">Nenhum membro identificado como lead</p>
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {groupMembers.map((member) => (
+                  <button
+                    key={member.membership_id}
+                    type="button"
+                    onClick={() => setSelectedMember(member)}
+                    className="flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-muted/50 text-left transition-colors"
+                  >
+                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <UserCircle className="size-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{member.lead.name || member.name || "Sem nome"}</p>
+                      <p className="text-xs text-muted-foreground truncate">{member.lead.phone || member.phone || ""}</p>
+                    </div>
+                    <ExternalLink className="size-3.5 text-muted-foreground shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      )}
 
       {/* Settings Sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>

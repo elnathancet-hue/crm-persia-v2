@@ -47,6 +47,7 @@ import {
   ChevronDown,
   Copy,
   FileText,
+  Info,
   Loader2,
   MessageSquare,
   MoreHorizontal,
@@ -62,6 +63,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 import { cn } from "@/lib/utils";
@@ -372,6 +374,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [editDialogMsgId, setEditDialogMsgId] = useState<string | null>(null);
   const [editDialogText, setEditDialogText] = useState("");
   const [deleteDialogMsgId, setDeleteDialogMsgId] = useState<string | null>(null);
+  const [contactPanelOpen, setContactPanelOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -660,11 +663,14 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const isClosed = conversation?.status === "closed";
   const leadId = lead?.id as string | undefined;
 
+  const leadForPanel = lead
+    ? (lead as unknown as LeadContactData)
+    : null;
+
   return (
-    <div
-      className="flex flex-col h-full overflow-hidden"
-      style={{ background: "var(--chat-bg)" }}
-    >
+    <div className="flex h-full overflow-hidden" style={{ background: "var(--chat-bg)" }}>
+      {/* Main chat column */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       {/* Header - WhatsApp style with action bar */}
       <div
         className="flex h-[59px] shrink-0 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4"
@@ -786,6 +792,18 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               <UserPlus className="size-4" />
             </Button>
           )}
+
+          {/* Contact panel toggle */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setContactPanelOpen((v) => !v)}
+            className={`size-8 rounded-lg hover:bg-muted ${contactPanelOpen ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="Detalhes do contato"
+            aria-label="Detalhes do contato"
+          >
+            <Info className="size-4" />
+          </Button>
 
           {/* More options dropdown */}
           <DropdownMenu>
@@ -1142,6 +1160,15 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           disabled={isClosed}
         />
       </div>
+      </div>
+
+      {/* Contact panel — slides in when toggled */}
+      {contactPanelOpen && leadForPanel && (
+        <LeadContactPanel
+          lead={leadForPanel}
+          onClose={() => setContactPanelOpen(false)}
+        />
+      )}
 
       {/* Dialogs */}
       <ScheduleMessageDialog
