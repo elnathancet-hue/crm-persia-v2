@@ -680,6 +680,113 @@ export async function resolveSmartLink(orgSlug: string, campaignSlug: string): P
   };
 }
 
+// ─── Lead-centric group queries (for LeadInfoDrawer tab) ─────────────────────
+
+export async function getLeadGroups(leadId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  // Fetch memberships + group data
+  const { data: memberships, error } = await db
+    .from("group_memberships")
+    .select("id, group_id, joined_at, source, utm_source, whatsapp_groups(name)")
+    .eq("organization_id", orgId)
+    .eq("lead_id", leadId)
+    .order("joined_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!memberships || memberships.length === 0) return [];
+
+  const groupIds: string[] = memberships.map((m: any) => m.group_id as string);
+
+  // Fetch campaign names via group_campaigns join on whatsapp_groups
+  const { data: groupsWithCampaign } = await db
+    .from("whatsapp_groups")
+    .select("id, campaign_id, group_campaigns(name)")
+    .in("id", groupIds)
+    .eq("organization_id", orgId);
+
+  const campaignByGroup = new Map<string, string | null>();
+  for (const g of (groupsWithCampaign || []) as any[]) {
+    campaignByGroup.set(g.id as string, (g.group_campaigns as { name?: string } | null)?.name ?? null);
+  }
+
+  // Fetch message stats per group (inbound messages since lead joined)
+  const messageStats = new Map<string, { count: number; last_message: string | null; last_message_at: string | null }>();
+  for (const m of memberships as any[]) {
+    const { data: msgs, count } = await db
+      .from("group_messages")
+      .select("text, created_at", { count: "exact" })
+      .eq("organization_id", orgId)
+      .eq("group_id", m.group_id)
+      .eq("direction", "inbound")
+      .gte("created_at", m.joined_at)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    messageStats.set(m.group_id as string, {
+      count: count ?? 0,
+      last_message: (msgs as any[])?.[0]?.text ?? null,
+      last_message_at: (msgs as any[])?.[0]?.created_at ?? null,
+    });
+  }
+
+  return (memberships as any[]).map((m) => {
+    const stats = messageStats.get(m.group_id as string) ?? { count: 0, last_message: null, last_message_at: null };
+    return {
+      id: m.id as string,
+      group_id: m.group_id as string,
+      group_name: (m.whatsapp_groups as { name?: string } | null)?.name ?? "Grupo",
+      campaign_name: campaignByGroup.get(m.group_id as string) ?? null,
+      joined_at: m.joined_at as string,
+      source: (m.source as "smart_link" | "manual" | "webhook") || "manual",
+      utm_source: m.utm_source as string | null,
+      message_count: stats.count,
+      last_message: stats.last_message,
+      last_message_at: stats.last_message_at,
+    };
+  });
+}
+
+export async function removeLeadFromGroup(membershipId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  // Fetch membership to get group info + phone
+  const { data: membership } = await db
+    .from("group_memberships")
+    .select("group_id, phone, whatsapp_groups(group_jid)")
+    .eq("id", membershipId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!membership) throw new Error("Participação não encontrada");
+
+  // Try to remove from WhatsApp group (best-effort — don't fail if UAZAPI unavailable)
+  if (membership.phone && (membership.whatsapp_groups as any)?.group_jid) {
+    try {
+      const provider = await getProvider(supabase, orgId);
+      const phone = (membership.phone as string).replace(/\D/g, "");
+      await provider.updateGroupParticipants(
+        (membership.whatsapp_groups as any).group_jid,
+        "remove",
+        [phone]
+      );
+    } catch {
+      // UAZAPI call failed — still remove from DB
+    }
+  }
+
+  const { error } = await db
+    .from("group_memberships")
+    .delete()
+    .eq("id", membershipId)
+    .eq("organization_id", orgId);
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+}
+
 export async function recordGroupJoin(input: {
   organizationId: string;
   groupId: string;

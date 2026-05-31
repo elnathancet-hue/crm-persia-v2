@@ -40,6 +40,12 @@ import {
   Pause,
   Play,
   Sparkles,
+  // Tab Grupos
+  Users,
+  MessageSquare as GroupMessageSquare,
+  Link2,
+  UserMinus,
+  ArrowRight,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
 import { TagBadge } from "@persia/tags-ui";
@@ -96,6 +102,7 @@ import type {
   LeadCustomFieldDef,
   LeadCustomFieldEntry,
   LeadDealItem,
+  LeadGroupMembership,
   LeadStats,
 } from "../actions";
 import { useLeadsActions } from "../context";
@@ -960,11 +967,8 @@ export function LeadInfoDrawer({
         <LeadStatsCards stats={stats} loading={statsLoading} />
 
         <Tabs defaultValue="dados" className="flex-1 flex flex-col min-h-0">
-          {/* PR-AGENT-INTEGRATION-5 (mai/2026): 6 tabs (era 5). Tab
-              "Agente IA" fecha loop CRM<->AI Agent — operador ve o
-              que a IA fez no lead. Mobile: 2 cols (3 linhas); Desktop:
-              6 cols (1 linha). */}
-          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-6">
+          {/* 7 tabs. Mobile: 2 cols (4 linhas); Desktop: 7 cols (1 linha). */}
+          <TabsList className="mx-5 mt-3 grid grid-cols-2 sm:grid-cols-7">
             <TabsTrigger value="dados">
               <Contact className="size-4" />
               Dados
@@ -978,6 +982,11 @@ export function LeadInfoDrawer({
             <TabsTrigger value="agenda">
               <Calendar className="size-4" />
               Agenda
+            </TabsTrigger>
+            {/* Tab Grupos — grupos WhatsApp em que o lead participou */}
+            <TabsTrigger value="grupos">
+              <Users className="size-4" />
+              Grupos
             </TabsTrigger>
             {/* PR-AGENT-INTEGRATION-5 (mai/2026): tab Agente IA */}
             <TabsTrigger value="agente">
@@ -1298,6 +1307,10 @@ export function LeadInfoDrawer({
               <LeadAgendaTab leadId={lead.id} open={open} />
             </TabsContent>
 
+            <TabsContent value="grupos" className="mt-0">
+              <LeadGruposTab leadId={lead.id} lead={lead} open={open} />
+            </TabsContent>
+
             {/* PR-AGENT-INTEGRATION-5: tab Agente IA — status atual,
                 pause/resume manual, trilha de runs + activities. */}
             <TabsContent value="agente" className="mt-0">
@@ -1414,6 +1427,247 @@ function Field({
     <div className={className ? `space-y-1 ${className}` : "space-y-1"}>
       <Label className="text-xs text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// ============================================================================
+// LeadGruposTab — grupos WhatsApp em que o lead participou
+// ----------------------------------------------------------------------------
+// Busca via getLeadGroups (DI opcional). Se ausente, tab mostra empty state.
+// Exibe: grupo, campanha, data de entrada, origem, contagem de mensagens,
+// última mensagem no grupo. Ações rápidas: chamar no privado, remover do grupo.
+// ============================================================================
+
+const SOURCE_LABEL: Record<string, string> = {
+  smart_link: "Smart Link",
+  manual: "Manual",
+  webhook: "Webhook",
+};
+
+function utmLabel(utm: string | null, source: string): string {
+  if (!utm) return SOURCE_LABEL[source] ?? source;
+  const lower = utm.toLowerCase();
+  if (lower.includes("facebook") || lower.includes("fb")) return "Meta Ads";
+  if (lower.includes("instagram") || lower.includes("ig")) return "Instagram";
+  if (lower.includes("google")) return "Google Ads";
+  if (lower.includes("youtube")) return "YouTube";
+  if (lower.includes("tiktok")) return "TikTok";
+  // Capitalize first letter
+  return utm.charAt(0).toUpperCase() + utm.slice(1);
+}
+
+function LeadGruposTab({
+  leadId,
+  lead,
+  open,
+}: {
+  leadId: string;
+  lead: LeadWithTags;
+  open: boolean;
+}) {
+  const { getLeadGroups, removeLeadFromGroup, findOrCreateConversationByLead } = useLeadsActions();
+  const [groups, setGroups] = React.useState<LeadGroupMembership[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
+  const [removing, setRemoving] = React.useState<string | null>(null);
+  const [openingChat, setOpeningChat] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open || loaded || !getLeadGroups) return;
+    setLoading(true);
+    getLeadGroups(leadId)
+      .then(setGroups)
+      .catch(() => {})
+      .finally(() => {
+        setLoading(false);
+        setLoaded(true);
+      });
+  }, [open, loaded, leadId, getLeadGroups]);
+
+  if (!getLeadGroups) {
+    return (
+      <div className="py-10 text-center text-sm text-muted-foreground">
+        Recurso não disponível nesta versão.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-10">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!loading && groups.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-10 text-center">
+        <div className="size-10 rounded-full bg-muted flex items-center justify-center">
+          <Users className="size-5 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium">Nenhum grupo vinculado</p>
+        <p className="text-xs text-muted-foreground max-w-[240px]">
+          Este lead ainda não entrou em nenhum grupo monitorado pelo CRM.
+        </p>
+      </div>
+    );
+  }
+
+  async function handleOpenChat() {
+    if (!findOrCreateConversationByLead) return;
+    setOpeningChat(true);
+    try {
+      await findOrCreateConversationByLead(leadId);
+      toast.info("Conversa aberta no privado");
+    } catch {
+      toast.error("Erro ao abrir conversa");
+    } finally {
+      setOpeningChat(false);
+    }
+  }
+
+  async function handleRemove(membershipId: string, groupName: string) {
+    if (!removeLeadFromGroup) return;
+    if (!confirm(`Remover ${lead.name ?? "este lead"} do grupo "${groupName}"? O participante será removido do WhatsApp também.`)) return;
+    setRemoving(membershipId);
+    try {
+      await removeLeadFromGroup(membershipId);
+      setGroups((prev) => prev.filter((g) => g.id !== membershipId));
+      toast.success("Lead removido do grupo");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao remover do grupo");
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3 py-2">
+      {/* Quick actions bar */}
+      <div className="flex flex-wrap gap-2 px-1">
+        {findOrCreateConversationByLead && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleOpenChat}
+            disabled={openingChat}
+          >
+            {openingChat ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <GroupMessageSquare className="size-4" />
+            )}
+            Chamar no privado
+          </Button>
+        )}
+      </div>
+
+      {/* Group cards */}
+      <div className="space-y-2">
+        {groups.map((g) => (
+          <div key={g.id} className="rounded-xl border bg-card p-4 space-y-3">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="size-8 rounded-full bg-progress-soft flex items-center justify-center shrink-0">
+                  <Users className="size-4 text-progress" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium text-sm truncate">{g.group_name}</p>
+                  {g.campaign_name && (
+                    <p className="text-xs text-muted-foreground truncate">{g.campaign_name}</p>
+                  )}
+                </div>
+              </div>
+              {removeLeadFromGroup && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title="Remover do grupo"
+                  onClick={() => handleRemove(g.id, g.group_name)}
+                  disabled={removing === g.id}
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+                >
+                  {removing === g.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <UserMinus className="size-4" />
+                  )}
+                </Button>
+              )}
+            </div>
+
+            {/* Detail rows */}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Entrada no grupo</dt>
+                <dd className="font-medium">
+                  {new Date(g.joined_at).toLocaleDateString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Origem</dt>
+                <dd className="font-medium">{utmLabel(g.utm_source, g.source)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Status no grupo</dt>
+                <dd>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+                    <span className="size-1.5 rounded-full bg-success inline-block" />
+                    Participante
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Mensagens no grupo</dt>
+                <dd className="font-medium">
+                  {g.message_count > 0 ? (
+                    <span className="flex items-center gap-1">
+                      <GroupMessageSquare className="size-3.5 text-muted-foreground" />
+                      {g.message_count}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </dd>
+              </div>
+              {g.last_message && (
+                <div className="col-span-2">
+                  <dt className="text-xs text-muted-foreground">Última mensagem no grupo</dt>
+                  <dd className="font-medium text-sm truncate max-w-full" title={g.last_message}>
+                    &ldquo;{g.last_message}&rdquo;
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            {/* Footer link to group page */}
+            <div className="flex items-center gap-1.5 pt-1 border-t">
+              <Link2 className="size-3.5 text-muted-foreground" />
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                onClick={() => {
+                  window.location.href = `/groups?id=${g.group_id}`;
+                }}
+              >
+                Ver grupo completo
+                <ArrowRight className="size-3" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

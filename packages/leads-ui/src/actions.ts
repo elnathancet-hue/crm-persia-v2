@@ -165,6 +165,28 @@ export interface LeadComment {
   updated_at: string;
 }
 
+/**
+ * Shape de um grupo WhatsApp em que o lead tem (ou teve) participacao.
+ * Usado pela tab "Grupos" do LeadInfoDrawer. message_count e last_message
+ * sao agregados do grupo inteiro (nao por participante — grupo_messages
+ * nao tem sender_phone).
+ */
+export interface LeadGroupMembership {
+  id: string;
+  group_id: string;
+  group_name: string;
+  campaign_name: string | null;
+  joined_at: string;
+  source: "smart_link" | "manual" | "webhook";
+  /** utm_source bruto para montar label de origem (ex: "facebook", "instagram"). */
+  utm_source: string | null;
+  /** Total de mensagens inbound no grupo desde a entrada do lead. */
+  message_count: number;
+  /** Texto da ultima mensagem inbound no grupo. */
+  last_message: string | null;
+  last_message_at: string | null;
+}
+
 export interface LeadsActions {
   /** Lista paginada com filtros (search/status/tags). */
   listLeads: (filters: LeadFilters) => Promise<PaginatedLeadsResult>;
@@ -400,4 +422,17 @@ export interface LeadsActions {
   reactivateLeadAgent?: (
     leadId: string,
   ) => Promise<{ updatedCount: number }>;
+
+  /**
+   * Tab Grupos no drawer: lista os grupos WhatsApp em que o lead
+   * esta (ou esteve) — via group_memberships. Inclui stats leves
+   * de mensagens do grupo. Opcional — se ausente, tab some.
+   */
+  getLeadGroups?: (leadId: string) => Promise<LeadGroupMembership[]>;
+
+  /**
+   * Remove o lead de um grupo: chama UAZAPI pra remover participante
+   * + deleta o registro de group_memberships. Opcional.
+   */
+  removeLeadFromGroup?: (membershipId: string) => Promise<{ success: boolean }>;
 }

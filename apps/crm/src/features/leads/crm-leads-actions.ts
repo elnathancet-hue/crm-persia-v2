@@ -52,6 +52,7 @@ import {
   getLeadComments,
   updateLeadComment,
 } from "@/actions/lead-comments";
+import { getLeadGroups, removeLeadFromGroup } from "@/actions/groups";
 
 export const crmLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -134,4 +135,7 @@ export const crmLeadsActions: LeadsActions = {
   findOrCreateConversationByLead,
   getLeadAgentHandoffState,
   reactivateLeadAgent: reactivateAgent,
+  // Tab Grupos no drawer
+  getLeadGroups,
+  removeLeadFromGroup,
 };
