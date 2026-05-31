@@ -769,7 +769,7 @@ function GroupChatPanel({
 
       {/* Settings Sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="right" className="w-[360px] sm:w-[420px] overflow-y-auto">
+        <SheetContent side="right" className="w-[380px] sm:w-[480px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Configurações do Grupo</SheetTitle>
             <SheetDescription>Edite nome, descrição, categoria e comportamento do grupo.</SheetDescription>
