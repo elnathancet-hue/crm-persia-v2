@@ -453,11 +453,14 @@ export async function sendMediaViaWhatsApp(
   const phone = lead?.phone as string | null;
   const admin = createAdminClient();
 
-  const match = /^data:([^;]+);base64,(.+)$/.exec(file.base64);
-  if (!match) return { error: "Formato de midia invalido" };
-
-  const mimeType = match[1];
-  const content = match[2];
+  // Data URLs from MediaRecorder may include codec params:
+  // "data:audio/webm;codecs=opus;base64,{data}"
+  // The naive regex [^;]+ breaks on these — find ";base64," explicitly.
+  const base64Marker = ";base64,";
+  const markerIdx = file.base64.indexOf(base64Marker);
+  if (!file.base64.startsWith("data:") || markerIdx === -1) return { error: "Formato de midia invalido" };
+  const mimeType = file.base64.slice(5, markerIdx).split(";")[0]; // e.g. "audio/webm"
+  const content = file.base64.slice(markerIdx + base64Marker.length);
   const buffer = Buffer.from(content, "base64");
   if (buffer.byteLength > 16 * 1024 * 1024) {
     return { error: "Arquivo maior que 16MB" };
