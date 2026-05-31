@@ -225,5 +225,5 @@ async function updateStatusByWamid(
   metaStatus: string,
 ) {
   const status = ["sent", "delivered", "read", "failed"].includes(metaStatus) ? metaStatus : "sent";
-  await supabase.from("messages").update({ status }).eq("whatsapp_msg_id", wamid);
+  await supabase.from("messages").update({ status }).eq("whatsapp_msg_id", wamid).neq("status", "deleted");
 }

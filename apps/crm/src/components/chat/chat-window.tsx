@@ -51,7 +51,9 @@ import {
   Info,
   Loader2,
   MessageSquare,
+  Mic,
   MoreHorizontal,
+  Pause,
   Pencil,
   Phone,
   Pin,
@@ -119,6 +121,93 @@ function getInitials(name: string | null): string {
 function shouldResolveMediaUrl(mediaUrl: string | null): boolean {
   if (!mediaUrl) return false;
   return mediaUrl.startsWith("chat-media:") || mediaUrl.includes("/storage/v1/object/public/chat-media/");
+}
+
+// ---- Audio Player (WhatsApp-style) ----
+const WAVEFORM = [3, 5, 8, 6, 10, 7, 12, 9, 14, 11, 16, 13, 15, 10, 12, 8, 6, 9, 11, 14, 12, 10, 7, 9, 11, 8, 6, 5, 8, 10, 7, 5];
+
+function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      audio.play().catch(() => {});
+      setPlaying(true);
+    }
+  };
+
+  const fmt = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[200px] max-w-[240px] py-0.5">
+      {/* Circular play/pause */}
+      <button
+        onClick={togglePlay}
+        className="size-10 shrink-0 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
+        style={{
+          background: isOutgoing ? "rgba(0,0,0,0.18)" : "var(--chat-send-bg)",
+          color: isOutgoing ? "inherit" : "var(--chat-send-fg)",
+        }}
+      >
+        {playing
+          ? <Pause className="size-4 fill-current" />
+          : <Play className="size-4 fill-current ml-0.5" />}
+      </button>
+
+      {/* Waveform + duration */}
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-px h-5">
+          {WAVEFORM.map((h, i) => {
+            const pct = (i / WAVEFORM.length) * 100;
+            const filled = pct <= progress;
+            return (
+              <div
+                key={i}
+                className="flex-1 rounded-full"
+                style={{
+                  height: `${(h / 16) * 100}%`,
+                  backgroundColor: filled
+                    ? (isOutgoing ? "rgba(255,255,255,0.9)" : "var(--chat-send-bg)")
+                    : "currentColor",
+                  opacity: filled ? 1 : 0.35,
+                }}
+              />
+            );
+          })}
+        </div>
+        <span className="text-[10px] tabular-nums opacity-70">
+          {fmt(playing ? currentTime : duration)}
+        </span>
+      </div>
+
+      {/* Mic icon */}
+      <Mic className="size-4 shrink-0 opacity-50" />
+
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={() => {
+          const a = audioRef.current;
+          if (a && a.duration) {
+            setCurrentTime(a.currentTime);
+            setProgress((a.currentTime / a.duration) * 100);
+          }
+        }}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
+      />
+    </div>
+  );
 }
 
 // ---- Schedule Message Dialog ----
@@ -877,7 +966,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
 
       {/* Messages - WhatsApp style with subtle pattern background */}
       <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-2 sm:px-3">
-        <div className="flex flex-col gap-1 py-4">
+        <div className="flex flex-col py-4">
           {messages.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma mensagem ainda
@@ -893,8 +982,19 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               idx === 0 ||
               !isSameDay(messages[idx - 1].created_at, msg.created_at);
 
+            // Grouping: smaller gap when same sender, larger when sender changes
+            const prevSameSender =
+              idx > 0 &&
+              !showDateSeparator &&
+              messages[idx - 1].sender === msg.sender;
+            const spacingClass = idx === 0 || showDateSeparator
+              ? ""
+              : prevSameSender
+                ? "mt-0.5"
+                : "mt-2";
+
             return (
-              <div key={msg.id}>
+              <div key={msg.id} className={spacingClass}>
                 {/* Date separator */}
                 {showDateSeparator && (
                   <div className="flex items-center justify-center py-3">
@@ -1056,7 +1156,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                           {msg.status === "deleted" ? (
                             <div
                               className={cn(
-                                "rounded-[7.5px] px-3 py-1.5 text-[13px] leading-5 shadow-sm italic",
+                                "flex items-center gap-1.5 rounded-[7.5px] px-3 py-1.5 text-[13px] leading-5 shadow-sm",
                                 isLead ? "rounded-bl-sm" : "rounded-br-sm"
                               )}
                               style={
@@ -1065,11 +1165,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   : { background: "var(--chat-bubble-out)", color: "var(--chat-timestamp)" }
                               }
                             >
-                              🚫 Esta mensagem foi apagada
-                              <span
-                                className="text-[10px] float-right ml-2 mt-0.5 not-italic"
-                                style={{ color: "var(--chat-timestamp)" }}
-                              >
+                              <X className="size-3.5 shrink-0 opacity-60" />
+                              <span className="italic opacity-80">Mensagem apagada</span>
+                              <span className="text-[10px] ml-auto pl-2 shrink-0">
                                 {formatMessageTime(msg.created_at)}
                               </span>
                             </div>
@@ -1098,10 +1196,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
                                 </a>
                               )}
-                              {msg.media_url && msg.type === "audio" && (
-                                <audio controls className="max-w-[250px] h-10 mb-1">
-                                  <source src={msg.media_url} />
-                                </audio>
+                              {msg.media_url && (msg.type === "audio" || msg.type === "ptt") && (
+                                <div className="mb-1">
+                                  <AudioPlayer src={msg.media_url} isOutgoing={!isLead} />
+                                </div>
                               )}
                               {msg.media_url && msg.type === "video" && (
                                 <video controls className="max-h-64 rounded-xl mb-1">

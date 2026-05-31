@@ -168,7 +168,8 @@ export async function POST(request: NextRequest) {
         .from("messages")
         .update({ status: dbStatus })
         .eq("organization_id", matchedConn.organization_id)
-        .eq("whatsapp_msg_id", messageId);
+        .eq("whatsapp_msg_id", messageId)
+        .neq("status", "deleted"); // nunca sobrescrever mensagem ja apagada
       if (updateErr) {
         logError("uazapi_webhook_messages_update_failed", {
           organization_id: matchedConn.organization_id,
