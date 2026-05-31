@@ -368,7 +368,7 @@ function GroupChatPanel({
     return () => { supabase.removeChannel(channel); };
   }, [group.id]);
 
-  // Scroll to bottom
+  // Scroll to bottom on new messages
   React.useEffect(() => {
     if (!loadingMsgs) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loadingMsgs]);
@@ -451,8 +451,11 @@ function GroupChatPanel({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b bg-background shrink-0">
+      {/* Header — WhatsApp style matching chat-window */}
+      <div
+        className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        style={{ background: "var(--chat-header-bg)", color: "var(--chat-header-fg)" }}
+      >
         <Button variant="ghost" size="icon-sm" onClick={onBack} className="md:hidden">
           <ArrowLeft className="size-4" />
         </Button>
@@ -462,19 +465,11 @@ function GroupChatPanel({
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate">{group.name}</p>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{group.participant_count} membros</span>
-            <span>·</span>
-            <span>{CATEGORY_LABELS[group.category] || group.category}</span>
-            {group.is_announce && (
-              <>
-                <span>·</span>
-                <Megaphone className="size-3" />
-                <span>Anuncio</span>
-              </>
-            )}
-          </div>
+          <p className="font-medium text-[15px] leading-5 truncate">{group.name}</p>
+          <p className="text-[13px] leading-5 text-muted-foreground truncate">
+            {group.participant_count} membros · {CATEGORY_LABELS[group.category] || group.category}
+            {group.is_announce && " · Anuncio"}
+          </p>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -509,62 +504,95 @@ function GroupChatPanel({
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-[color:var(--chat-bg)]">
-        {loadingMsgs ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <EmptyState
-              variant="subtle"
-              icon={<MessageSquare />}
-              title="Nenhuma mensagem ainda"
-              description="Envie a primeira mensagem para o grupo"
-            />
-          </div>
-        ) : (
-          messages.map((msg, idx) => (
-            <React.Fragment key={msg.id}>
-              {(idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at)) && (
-                <div className="flex items-center justify-center my-3">
-                  <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
-                    {formatDateLabel(msg.created_at)}
-                  </span>
-                </div>
-              )}
-            <div
-              className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`max-w-[75%] px-3 py-2 text-sm shadow-sm ${
-                  msg.direction === "outbound"
-                    ? "rounded-2xl rounded-br-sm bg-[color:var(--chat-bubble-out)] text-[color:var(--chat-bubble-out-text)]"
-                    : "rounded-2xl rounded-bl-sm bg-[color:var(--chat-bubble-in)] text-[color:var(--chat-bubble-in-text)] border"
-                }`}
-              >
-                {msg.direction === "inbound" && msg.sender_name && (
-                  <p className="text-xs font-semibold mb-1 text-primary">{msg.sender_name}</p>
-                )}
-                <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.text}</p>
-                <p className={`text-[10px] mt-1 text-right opacity-60 ${
-                  msg.direction === "outbound"
-                    ? "text-[color:var(--chat-bubble-out-text)]"
-                    : "text-muted-foreground"
-                }`}>
-                  {formatTime(msg.created_at)}
-                </p>
-              </div>
+      {/* Messages — WhatsApp wallpaper + bubble styling */}
+      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-3 sm:px-8 lg:px-12 xl:px-16">
+        <div className="mx-auto flex max-w-[860px] flex-col gap-1 py-4">
+          {loadingMsgs ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
-            </React.Fragment>
-          ))
-        )}
-        <div ref={messagesEndRef} />
+          ) : messages.length === 0 ? (
+            <div className="flex items-center justify-center py-16">
+              <EmptyState
+                variant="subtle"
+                icon={<MessageSquare />}
+                title="Nenhuma mensagem ainda"
+                description="Envie a primeira mensagem para o grupo"
+              />
+            </div>
+          ) : (
+            messages.map((msg, idx) => {
+              const isOutbound = msg.direction === "outbound";
+              const showDateSep = idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
+
+              return (
+                <div key={msg.id}>
+                  {showDateSep && (
+                    <div className="flex items-center justify-center py-3">
+                      <span className="rounded-lg bg-[color:var(--chat-header-bg)] px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-sm">
+                        {formatDateLabel(msg.created_at)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div
+                    className={`group flex max-w-[86%] items-end gap-1 sm:max-w-[72%] ${
+                      isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
+                    }`}
+                  >
+                    {/* Copy button — visible on hover */}
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity self-end mb-1 shrink-0">
+                      <button
+                        onClick={() => {
+                          if (msg.text) { navigator.clipboard.writeText(msg.text); toast.success("Copiado!"); }
+                        }}
+                        className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                        title="Copiar mensagem"
+                      >
+                        <Copy className="size-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Bubble column */}
+                    <div className={`flex flex-col gap-0.5 ${isOutbound ? "items-end" : "items-start"}`}>
+                      {/* Sender label above bubble */}
+                      {isOutbound ? (
+                        <p className="text-[11px] px-1" style={{ color: "var(--chat-timestamp)" }}>Você</p>
+                      ) : msg.sender_name ? (
+                        <p className="text-[11px] px-1 font-medium text-primary">{msg.sender_name}</p>
+                      ) : null}
+
+                      {/* Bubble */}
+                      <div
+                        className={`rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm ${
+                          isOutbound ? "rounded-br-sm" : "rounded-bl-sm"
+                        }`}
+                        style={
+                          isOutbound
+                            ? { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
+                            : { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
+                        }
+                      >
+                        <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                        <span
+                          className="text-[10px] float-right ml-2 mt-1"
+                          style={{ color: "var(--chat-timestamp)" }}
+                        >
+                          {formatTime(msg.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Input bar */}
-      <div className="flex items-end gap-2 px-4 py-3 border-t bg-background shrink-0">
+      <div className="shrink-0 flex items-end gap-2 px-4 py-3 border-t bg-background">
         <Textarea
           value={chatInput}
           onChange={(e) => setChatInput(e.target.value)}
