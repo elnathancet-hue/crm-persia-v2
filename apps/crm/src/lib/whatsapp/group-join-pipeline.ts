@@ -286,6 +286,7 @@ export async function linkGroupMembership(
     phone: e164,
     name: participantName || null,
     joined_at: new Date().toISOString(),
+    left_at: null, // zera saída anterior na re-entrada
     source,
     campaign_id: campaignId ?? null,
     lead_id: lead?.id ?? null,
@@ -455,19 +456,27 @@ export async function processGroupWebhookEvent(
         // action === "remove": marca left_at + decrementa contador
         const phone = normalizePhoneBR(jid);
         if (phone) {
-          await db
+          // Só decrementa se o UPDATE realmente marcou alguém como saído.
+          // Evita duplo-decremento quando removeLeadFromGroup já deletou a row
+          // e o webhook chega em seguida (row não existe → 0 rows afetadas).
+          const { data: updated } = await db
             .from("group_memberships")
             .update({ left_at: new Date().toISOString() })
             .eq("organization_id", orgId)
             .eq("group_id", group.id)
             .eq("phone", phone)
-            .is("left_at", null); // apenas se ainda ativo
+            .is("left_at", null) // apenas se ainda ativo
+            .select("id");
 
-          await db
-            .rpc("decrement_group_participant_count", {
-              p_group_id: group.id,
-            })
-            .catch(() => {});
+          if (updated && updated.length > 0) {
+            await db
+              .rpc("decrement_group_participant_count", {
+                p_group_id: group.id,
+              })
+              .catch((err: unknown) => {
+                console.error("[processGroupWebhookEvent] decrement_group_participant_count falhou:", err);
+              });
+          }
         }
       }
     } catch {

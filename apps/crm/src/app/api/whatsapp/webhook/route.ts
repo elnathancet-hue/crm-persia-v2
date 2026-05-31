@@ -193,7 +193,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, status: dbStatus });
     }
 
-    // 2. Normalize payload.
+    // 2. Group participant event (join/leave) — UAZAPI EventType: "groups".
+    //    Detectado ANTES de parseWebhook: grupos têm payload não-padrão (chatid
+    //    é o JID do grupo, não de um participante), e se parseWebhook eventualmente
+    //    retornasse null para esse formato, o evento seria dropado silenciosamente.
+    if (typeof rawEventType === "string" && rawEventType.toLowerCase() === "groups") {
+      // Fire-and-forget: best-effort, não bloqueia resposta do webhook
+      processGroupWebhookEvent(supabase, matchedConn.organization_id, body).catch(() => {});
+      return NextResponse.json({ ok: true, handled: "group_participant_event" });
+    }
+
+    // 3. Normalize payload.
     const provider = createProvider(matchedConn);
     const msg = provider.parseWebhook(body.message || body);
     if (!msg) {
@@ -206,16 +216,6 @@ export async function POST(request: NextRequest) {
         skipped: "no processable message",
       });
       return NextResponse.json({ ok: true, skipped: "no processable message" });
-    }
-
-    // 3. Group participant event (join/leave) — UAZAPI EventType: "groups".
-    //    Fired when someone enters or leaves a group. We detect here BEFORE
-    //    parseWebhook (which returns null for non-message payloads) so the
-    //    event isn't silently dropped as "no processable message".
-    if (typeof rawEventType === "string" && rawEventType.toLowerCase() === "groups") {
-      // Fire-and-forget: best-effort, don't block webhook response
-      processGroupWebhookEvent(supabase, matchedConn.organization_id, body).catch(() => {});
-      return NextResponse.json({ ok: true, handled: "group_participant_event" });
     }
 
     // 4. Group message branch — save to group_messages, skip lead pipeline.
