@@ -4,6 +4,7 @@ import { Copy, ExternalLink, MessageCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@persia/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
+import { Badge } from "@persia/ui/badge";
 import { TagBadge } from "@persia/tags-ui";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -41,6 +42,15 @@ const STATUS_LABEL: Record<string, string> = {
   lost: "Perdido",
 };
 
+// Maps status → Badge variant for visual hierarchy
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  new: "secondary",
+  contacted: "secondary",
+  qualified: "default",
+  customer: "default",
+  lost: "destructive",
+};
+
 const SOURCE_LABEL: Record<string, string> = {
   manual: "Manual",
   whatsapp: "WhatsApp",
@@ -72,10 +82,8 @@ function formatDate(iso: string) {
 
 function formatPhone(phone: string | null) {
   if (!phone) return null;
-  // Remove non-digits
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 13) {
-    // +55 (XX) XXXXX-XXXX
     return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
   }
   if (digits.length === 11) {
@@ -130,9 +138,9 @@ export function LeadContactPanel({ lead, onClose }: LeadContactPanelProps) {
   }
 
   return (
-    <div className="flex h-full w-[280px] shrink-0 flex-col border-l border-[color:var(--chat-sidebar-divider)] bg-background overflow-y-auto">
-      {/* Header row with close button */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+    <div className="flex h-full flex-col bg-background overflow-y-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Detalhes do contato
         </span>
@@ -146,8 +154,8 @@ export function LeadContactPanel({ lead, onClose }: LeadContactPanelProps) {
         </Button>
       </div>
 
-      {/* Avatar + name block */}
-      <div className="flex flex-col items-center gap-2 px-4 py-5 border-b border-border/50">
+      {/* Identity block: avatar + name + phone + status badges */}
+      <div className="flex flex-col items-center gap-3 px-5 pt-6 pb-5 border-b border-border/50">
         <Avatar size="lg">
           {lead.avatar_url && (
             <AvatarImage src={lead.avatar_url} alt={lead.name ?? undefined} />
@@ -156,80 +164,91 @@ export function LeadContactPanel({ lead, onClose }: LeadContactPanelProps) {
             {getInitials(lead.name)}
           </AvatarFallback>
         </Avatar>
+
         <div className="text-center">
-          <p className="font-semibold text-[15px] leading-tight">
+          <p className="font-semibold text-[16px] leading-tight">
             {lead.name || "Sem nome"}
           </p>
           {lead.phone && (
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-sm text-muted-foreground mt-1">
               {formatPhone(lead.phone)}
             </p>
           )}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2 mt-1">
+        {/* Status + source chips */}
+        {(lead.status || lead.source) && (
+          <div className="flex flex-wrap gap-1.5 justify-center">
+            {lead.status && (
+              <Badge variant={STATUS_VARIANT[lead.status] ?? "secondary"} className="text-xs">
+                {STATUS_LABEL[lead.status] || lead.status}
+              </Badge>
+            )}
+            {lead.source && (
+              <Badge variant="outline" className="text-xs">
+                {SOURCE_LABEL[lead.source] || lead.source}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* WhatsApp — primary CTA */}
+        {lead.phone && (
+          <Button
+            className="w-full gap-2"
+            size="sm"
+            onClick={handleWhatsApp}
+          >
+            <MessageCircle className="size-4" />
+            Enviar WhatsApp
+          </Button>
+        )}
+
+        {/* Secondary actions */}
+        <div className="flex w-full gap-2">
           {lead.id && (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 text-xs"
+              className="flex-1 gap-1.5 text-xs"
               onClick={() => window.open(`/leads/${lead.id}`, "_blank")}
             >
-              <ExternalLink className="size-3" />
+              <ExternalLink className="size-3.5" />
               Ver lead
-            </Button>
-          )}
-          {lead.phone && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 text-xs"
-              onClick={handleWhatsApp}
-            >
-              <MessageCircle className="size-3" />
-              WhatsApp
             </Button>
           )}
           <Button
             variant="outline"
             size="sm"
-            className="h-8 gap-1.5 text-xs"
+            className="flex-1 gap-1.5 text-xs"
             onClick={handleCopyData}
           >
-            <Copy className="size-3" />
-            Copiar
+            <Copy className="size-3.5" />
+            Copiar dados
           </Button>
         </div>
       </div>
 
-      {/* Contato section */}
+      {/* Contato section — omite campos vazios */}
       <div className="px-4 py-4 border-b border-border/50 space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Contato
         </p>
-        <InfoRow label="Nome" value={lead.name} />
-        <InfoRow label="E-mail" value={lead.email} />
         <InfoRow label="Celular" value={formatPhone(lead.phone)} />
-        {lead.status && (
-          <InfoRow
-            label="Status"
-            value={STATUS_LABEL[lead.status] || lead.status}
-          />
-        )}
-        {lead.source && (
-          <InfoRow
-            label="Origem"
-            value={SOURCE_LABEL[lead.source] || lead.source}
-          />
-        )}
-        <InfoRow
-          label="Responsável"
-          value={responsavel ?? "Não atribuído"}
-        />
+        {lead.email && <InfoRow label="E-mail" value={lead.email} />}
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+            Responsável
+          </span>
+          {responsavel ? (
+            <span className="text-sm text-foreground">{responsavel}</span>
+          ) : (
+            <span className="text-sm text-warning">Não atribuído</span>
+          )}
+        </div>
       </div>
 
-      {/* Tags section — only if there are tags */}
+      {/* Tags section — só aparece se houver tags */}
       {tags.length > 0 && (
         <div className="px-4 py-4 border-b border-border/50 space-y-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -243,7 +262,7 @@ export function LeadContactPanel({ lead, onClose }: LeadContactPanelProps) {
         </div>
       )}
 
-      {/* Datas section */}
+      {/* Datas */}
       <div className="px-4 py-4 space-y-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           Datas
