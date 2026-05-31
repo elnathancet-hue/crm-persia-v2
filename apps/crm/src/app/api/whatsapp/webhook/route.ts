@@ -13,6 +13,7 @@ import {
   logUazapiWebhookDiagnostics,
 } from "@/lib/whatsapp/uazapi-webhook-diagnostics";
 import { validateUazapiWebhookSignature } from "@/lib/whatsapp/uazapi-webhook-verifier";
+import { processGroupWebhookEvent } from "@/lib/whatsapp/group-join-pipeline";
 
 function getSupabase() {
   return createClient(
@@ -207,7 +208,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no processable message" });
     }
 
-    // 3. Group message branch — save to group_messages, skip lead pipeline.
+    // 3. Group participant event (join/leave) — UAZAPI EventType: "groups".
+    //    Fired when someone enters or leaves a group. We detect here BEFORE
+    //    parseWebhook (which returns null for non-message payloads) so the
+    //    event isn't silently dropped as "no processable message".
+    if (typeof rawEventType === "string" && rawEventType.toLowerCase() === "groups") {
+      // Fire-and-forget: best-effort, don't block webhook response
+      processGroupWebhookEvent(supabase, matchedConn.organization_id, body).catch(() => {});
+      return NextResponse.json({ ok: true, handled: "group_participant_event" });
+    }
+
+    // 4. Group message branch — save to group_messages, skip lead pipeline.
     if (msg.isGroup && msg.groupJid) {
       const { data: grp } = await supabase
         .from("whatsapp_groups")

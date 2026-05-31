@@ -6,6 +6,7 @@ import { createProvider } from "@/lib/whatsapp/providers";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createHash } from "crypto";
+import { linkGroupMembership, normalizePhoneBR } from "@/lib/whatsapp/group-join-pipeline";
 
 async function getProvider(supabase: any, orgId: string) {
   const { data: connection } = await supabase
@@ -799,61 +800,40 @@ export async function recordGroupJoin(input: {
   utmContent?: string;
   utmTerm?: string;
 }) {
-  const db = createAdminClient() as any;
+  const adminClient = createAdminClient();
   const hdrs = await headers();
   const ip = hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() || hdrs.get("x-real-ip") || "";
   const ipHash = ip ? createHash("sha256").update(ip).digest("hex") : null;
 
-  // Normalize phone (remove non-digits, add +55 if BR 10-11 digit)
-  let phone: string | null = null;
-  if (input.phone) {
-    const digits = input.phone.replace(/\D/g, "");
-    if (digits.startsWith("55") && digits.length >= 12) {
-      phone = `+${digits}`;
-    } else if (digits.length >= 10 && digits.length <= 11) {
-      phone = `+55${digits}`;
-    } else if (digits.length > 0) {
-      phone = `+${digits}`;
-    }
-  }
+  // Normalize phone using the shared pipeline helper (handles 9° dígito)
+  const phone = input.phone ? normalizePhoneBR(input.phone) : null;
 
-  // Upsert membership (ON CONFLICT on phone+group → update joined_at)
-  await db.from("group_memberships").upsert(
-    {
-      organization_id: input.organizationId,
-      group_id: input.groupId,
-      campaign_id: input.campaignId,
-      phone,
-      name: input.name?.trim() || null,
-      joined_at: new Date().toISOString(),
-      source: "smart_link",
-      utm_source: input.utmSource || null,
-      utm_medium: input.utmMedium || null,
-      utm_campaign: input.utmCampaign || null,
-      utm_content: input.utmContent || null,
-      utm_term: input.utmTerm || null,
-      ip_hash: ipHash,
+  // Fetch group name for activity description
+  const db = adminClient as any;
+  const { data: group } = await db
+    .from("whatsapp_groups")
+    .select("name")
+    .eq("id", input.groupId)
+    .maybeSingle();
+
+  await linkGroupMembership({
+    supabase: adminClient,
+    orgId: input.organizationId,
+    groupId: input.groupId,
+    groupName: (group?.name as string | null) ?? "Grupo",
+    participantJid: phone ?? input.phone ?? "",
+    participantName: input.name?.trim() || null,
+    source: "smart_link",
+    campaignId: input.campaignId,
+    ipHash,
+    utm: {
+      source: input.utmSource ?? null,
+      medium: input.utmMedium ?? null,
+      campaign: input.utmCampaign ?? null,
+      content: input.utmContent ?? null,
+      term: input.utmTerm ?? null,
     },
-    { onConflict: "organization_id,group_id,phone", ignoreDuplicates: false }
-  );
-
-  // Link to existing lead if phone matches
-  if (phone) {
-    const { data: lead } = await db
-      .from("leads")
-      .select("id")
-      .eq("organization_id", input.organizationId)
-      .eq("phone", phone)
-      .maybeSingle();
-    if (lead) {
-      await db
-        .from("group_memberships")
-        .update({ lead_id: lead.id })
-        .eq("organization_id", input.organizationId)
-        .eq("group_id", input.groupId)
-        .eq("phone", phone);
-    }
-  }
+  });
 
   // Increment participant_count optimistically
   await db.rpc("increment_group_participant_count", { p_group_id: input.groupId }).catch(() => {
