@@ -1162,7 +1162,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
 
       {/* Contact panel — Sheet overlay, não empurra o layout */}
       <Sheet open={contactPanelOpen && !!leadForPanel} onOpenChange={(o) => { if (!o) setContactPanelOpen(false); }}>
-        <SheetContent side="right" showCloseButton={false} className="w-[360px] sm:w-[380px] p-0 overflow-hidden">
+        <SheetContent side="right" showCloseButton={false} className="w-[380px] sm:w-[440px] p-0 overflow-hidden">
           {leadForPanel && (
             <LeadContactPanel
               lead={leadForPanel}
