@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isChatPage = pathname === "/chat";
+  const isChatPage = pathname === "/chat" || pathname === "/groups" || pathname.startsWith("/groups/");
 
   // PR-P/Q: 2 toasts globais. Listeners vivem enquanto o user esta no
   // dashboard (qualquer rota). Mute global (PR-Q) respeitado pelos 2.
@@ -47,7 +47,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main id="main-content" className={`flex-1 overflow-y-auto ${isChatPage ? "p-0" : "p-6"}`}>
+        <main id="main-content" className={`flex-1 ${isChatPage ? "overflow-hidden p-0" : "overflow-y-auto p-6"}`}>
           {children}
         </main>
       </div>

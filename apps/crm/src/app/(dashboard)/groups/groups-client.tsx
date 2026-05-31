@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   ArrowLeft,
   ChevronDown,
-  Clock,
   Copy,
   ExternalLink,
   Loader2,
@@ -774,11 +773,108 @@ function GroupChatPanel({
             <SheetTitle>Configurações do Grupo</SheetTitle>
             <SheetDescription>Edite nome, descrição, categoria e comportamento do grupo.</SheetDescription>
           </SheetHeader>
-          <div className="space-y-5 px-card py-6">
+          <div className="px-card py-6 space-y-6">
 
-            {/* ── Invite link ── */}
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Link de Convite</Label>
+            {/* ── Identidade ── */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Identidade</p>
+              <div className="space-y-form">
+                <div className="space-y-1.5">
+                  <Label>Nome</Label>
+                  <Input name="group-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Descrição</Label>
+                  <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="min-h-16" placeholder="Descrição..." />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Categoria</Label>
+                  <Select value={editCategory} onValueChange={(v) => setEditCategory(v ?? "geral")}>
+                    <SelectTrigger><SelectValue>{CATEGORY_LABELS[editCategory] ?? "Selecione"}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="geral">Geral</SelectItem>
+                      <SelectItem value="aquecimento">Aquecimento</SelectItem>
+                      <SelectItem value="evento">Evento</SelectItem>
+                      <SelectItem value="oferta">Oferta</SelectItem>
+                      <SelectItem value="alunos">Alunos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Comportamento ── */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comportamento</p>
+              <div className="space-y-form">
+                <div className="space-y-1.5">
+                  <Label>Mensagens temporárias</Label>
+                  <Select value={editEphemeral} onValueChange={(v) => setEditEphemeral((v ?? "off") as typeof editEphemeral)}>
+                    <SelectTrigger>
+                      <SelectValue>
+                        {{ off: "Desativado", "1d": "Sumem em 1 dia", "7d": "Sumem em 7 dias", "90d": "Sumem em 90 dias" }[editEphemeral]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Desativado</SelectItem>
+                      <SelectItem value="1d">Sumem em 1 dia</SelectItem>
+                      <SelectItem value="7d">Sumem em 7 dias</SelectItem>
+                      <SelectItem value="90d">Sumem em 90 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="rounded-lg border divide-y">
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-2">
+                      <Megaphone className="size-4 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Modo Anúncio</p>
+                        <p className="text-xs text-muted-foreground">Só admins enviam mensagens</p>
+                      </div>
+                    </div>
+                    <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
+                  </div>
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="size-4 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Bloquear grupo</p>
+                        <p className="text-xs text-muted-foreground">Só admins editam info do grupo</p>
+                      </div>
+                    </div>
+                    <Switch checked={editLocked} onCheckedChange={setEditLocked} />
+                  </div>
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="size-4 text-muted-foreground shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium">Aprovação para entrar</p>
+                        <p className="text-xs text-muted-foreground">Admin aprova cada novo membro</p>
+                      </div>
+                    </div>
+                    <Switch checked={editJoinApproval} onCheckedChange={setEditJoinApproval} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Quem pode adicionar membros</Label>
+                  <Select value={editMemberAddMode} onValueChange={(v) => setEditMemberAddMode((v ?? "all_member_add") as typeof editMemberAddMode)}>
+                    <SelectTrigger>
+                      <SelectValue>
+                        {{ all_member_add: "Todos os membros", admin_add: "Somente admins" }[editMemberAddMode]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_member_add">Todos os membros</SelectItem>
+                      <SelectItem value="admin_add">Somente admins</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Convite ── */}
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Link de Convite</p>
               <div className="flex gap-2">
                 <Input name="invite-link" value={inviteLink} readOnly placeholder="Clique em obter..." className="font-mono text-xs" />
                 <Button variant="outline" size="icon-sm" title="Copiar link" onClick={() => {
@@ -794,100 +890,6 @@ function GroupChatPanel({
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">Revogar invalida o link atual e gera um novo.</p>
-            </div>
-
-            {/* ── Identidade ── */}
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input name="group-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="min-h-16" placeholder="Descrição..." />
-            </div>
-            <div className="space-y-2">
-              <Label>Categoria</Label>
-              <Select value={editCategory} onValueChange={(v) => setEditCategory(v ?? "geral")}>
-                <SelectTrigger><SelectValue>{CATEGORY_LABELS[editCategory] ?? "Selecione"}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="geral">Geral</SelectItem>
-                  <SelectItem value="aquecimento">Aquecimento</SelectItem>
-                  <SelectItem value="evento">Evento</SelectItem>
-                  <SelectItem value="oferta">Oferta</SelectItem>
-                  <SelectItem value="alunos">Alunos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* ── Mensagens temporárias ── */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Clock className="size-4 text-muted-foreground" />
-                <Label>Mensagens temporárias</Label>
-              </div>
-              <Select value={editEphemeral} onValueChange={(v) => setEditEphemeral((v ?? "off") as typeof editEphemeral)}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {{ off: "Desativado", "1d": "Sumem em 1 dia", "7d": "Sumem em 7 dias", "90d": "Sumem em 90 dias" }[editEphemeral]}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">Desativado</SelectItem>
-                  <SelectItem value="1d">Sumem em 1 dia</SelectItem>
-                  <SelectItem value="7d">Sumem em 7 dias</SelectItem>
-                  <SelectItem value="90d">Sumem em 90 dias</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* ── Controles de acesso ── */}
-            <div className="rounded-lg border divide-y">
-              <div className="flex items-center justify-between p-3">
-                <div className="flex items-center gap-2">
-                  <Megaphone className="size-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Modo Anúncio</p>
-                    <p className="text-xs text-muted-foreground">Só admins enviam mensagens</p>
-                  </div>
-                </div>
-                <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
-              </div>
-              <div className="flex items-center justify-between p-3">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="size-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Bloquear grupo</p>
-                    <p className="text-xs text-muted-foreground">Só admins editam info do grupo</p>
-                  </div>
-                </div>
-                <Switch checked={editLocked} onCheckedChange={setEditLocked} />
-              </div>
-              <div className="flex items-center justify-between p-3">
-                <div className="flex items-center gap-2">
-                  <Users className="size-4 text-muted-foreground shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">Aprovação para entrar</p>
-                    <p className="text-xs text-muted-foreground">Admin aprova cada novo membro</p>
-                  </div>
-                </div>
-                <Switch checked={editJoinApproval} onCheckedChange={setEditJoinApproval} />
-              </div>
-            </div>
-
-            {/* ── Quem pode adicionar membros ── */}
-            <div className="space-y-2">
-              <Label>Quem pode adicionar membros</Label>
-              <Select value={editMemberAddMode} onValueChange={(v) => setEditMemberAddMode((v ?? "all_member_add") as typeof editMemberAddMode)}>
-                <SelectTrigger>
-                  <SelectValue>
-                    {{ all_member_add: "Todos os membros", admin_add: "Somente admins" }[editMemberAddMode]}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all_member_add">Todos os membros</SelectItem>
-                  <SelectItem value="admin_add">Somente admins</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
