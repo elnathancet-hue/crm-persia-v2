@@ -46,8 +46,11 @@ import {
   createGroup,
   syncGroups,
   getGroupsOverview,
+  getGroupParticipants,
   type GroupOverview,
 } from "@/actions/groups";
+
+type GroupParticipant = Awaited<ReturnType<typeof getGroupParticipants>>[number];
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -98,6 +101,10 @@ export function GroupsTab() {
   const [newName, setNewName] = React.useState("");
   const [newCategory, setNewCategory] = React.useState("geral");
   const [creating, setCreating] = React.useState(false);
+  const [participantsOpen, setParticipantsOpen] = React.useState(false);
+  const [participantsGroup, setParticipantsGroup] = React.useState<GroupOverview | null>(null);
+  const [participants, setParticipants] = React.useState<GroupParticipant[]>([]);
+  const [participantsLoading, setParticipantsLoading] = React.useState(false);
 
   React.useEffect(() => {
     getGroupsOverview()
@@ -136,6 +143,27 @@ export function GroupsTab() {
     } finally {
       setCreating(false);
     }
+  }
+
+  async function handleViewParticipants(group: GroupOverview) {
+    setParticipantsGroup(group);
+    setParticipants([]);
+    setParticipantsOpen(true);
+    setParticipantsLoading(true);
+    try {
+      const result = await getGroupParticipants(group.id);
+      setParticipants(result);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao buscar participantes");
+    } finally {
+      setParticipantsLoading(false);
+    }
+  }
+
+  function formatParticipantJid(jid: string) {
+    if (jid.endsWith("@lid")) return "ID interno do WhatsApp";
+    const clean = jid.replace(/@(s\.whatsapp\.net|c\.us)$/, "");
+    return clean ? `+${clean.replace(/^\+/, "")}` : jid;
   }
 
   const filtered = groups.filter(
@@ -346,6 +374,10 @@ export function GroupsTab() {
                             <MoreHorizontal className="size-4" />
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewParticipants(group)}>
+                              <Users className="size-4" />
+                              Ver participantes
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push("/groups")}>
                               <MessageSquare className="size-4" />
                               Ver chat
@@ -421,6 +453,61 @@ export function GroupsTab() {
             <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
             <Button onClick={handleCreate} disabled={creating || !newName.trim()}>
               {creating ? "Criando..." : "Criar Grupo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={participantsOpen} onOpenChange={setParticipantsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Participantes</DialogTitle>
+            <DialogDescription>
+              {participantsGroup?.name ?? "Grupo"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {participantsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : participants.length === 0 ? (
+            <EmptyState
+              variant="subtle"
+              icon={<Users />}
+              title="Nenhum participante retornado"
+              description="Sincronize o grupo e tente novamente."
+            />
+          ) : (
+            <div className="max-h-[420px] overflow-y-auto rounded-lg border">
+              <div className="divide-y divide-border/50">
+                {participants.map((participant, index) => (
+                  <div key={`${participant.jid}-${index}`} className="flex items-center gap-3 px-4 py-3">
+                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Users className="size-4 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">
+                        {formatParticipantJid(participant.jid)}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {participant.jid}
+                      </p>
+                    </div>
+                    {participant.isSuperAdmin ? (
+                      <Badge variant="secondary" className="text-xs">Dono</Badge>
+                    ) : participant.isAdmin ? (
+                      <Badge variant="secondary" className="text-xs">Admin</Badge>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setParticipantsOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
