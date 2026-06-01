@@ -132,6 +132,9 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [rate, setRate] = useState(1);
+
+  const RATES = [1, 1.5, 2];
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -145,8 +148,16 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
     }
   };
 
+  const cycleRate = () => {
+    const next = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
+    setRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
   const fmt = (s: number) =>
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  const rateLabel = rate.toFixed(1).replace(".", ",") + "x";
 
   return (
     <div className="flex items-center gap-2.5 min-w-[200px] max-w-[240px] py-0.5">
@@ -164,7 +175,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
           : <Play className="size-4 fill-current ml-0.5" />}
       </button>
 
-      {/* Waveform + duration */}
+      {/* Waveform + duration + speed */}
       <div className="flex flex-1 flex-col gap-1.5">
         <div className="flex items-center gap-px h-5">
           {WAVEFORM.map((h, i) => {
@@ -185,9 +196,20 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
             );
           })}
         </div>
-        <span className="text-[10px] tabular-nums opacity-70">
-          {fmt(playing ? currentTime : duration)}
-        </span>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] tabular-nums opacity-70">
+            {fmt(playing ? currentTime : duration)}
+          </span>
+          <button
+            onClick={cycleRate}
+            className="text-[10px] tabular-nums font-medium rounded-full px-1.5 py-0.5 transition-opacity hover:opacity-80"
+            style={{
+              background: isOutgoing ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.08)",
+            }}
+          >
+            {rateLabel}
+          </button>
+        </div>
       </div>
 
       {/* Mic icon */}
