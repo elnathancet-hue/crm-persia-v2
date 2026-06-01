@@ -1112,36 +1112,37 @@ export async function getGroupLeadMembers(groupId: string): Promise<GroupLeadMem
 // o pipeline de matching para cada um. Popula group_memberships com leads
 // identificados retroativamente.
 
-export async function backfillGroupMembers(groupId: string): Promise<{ processed: number; linked: number }> {
-  const { supabase, orgId } = await requireRole("agent");
-  const db = supabase as any;
+export async function backfillGroupMembers(groupId: string): Promise<{ processed: number; linked: number; error?: string }> {
+  // requireRole valida que o user pertence à org — queries usam adminDb
+  // para bypass de RLS (whatsapp_groups e whatsapp_connections exigem admin).
+  const { orgId } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
 
-  // Busca grupo (JID + nome)
-  const { data: grp } = await db
+  // Busca grupo (JID + nome) — adminDb para bypass da RLS de whatsapp_groups
+  const { data: grp } = await adminDb
     .from("whatsapp_groups")
     .select("id, name, group_jid")
     .eq("id", groupId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
-  if (!grp) throw new Error("Grupo não encontrado");
+  if (!grp) return { processed: 0, linked: 0, error: "Grupo não encontrado" };
 
   // Fonte 1: lista de participantes ao vivo via UAZAPI
-  // Retorna todos os membros atuais, independente de terem enviado mensagem.
   let apiParticipants: Array<{ jid: string; name: string | null }> = [];
   try {
-    const provider = await getProvider(db, orgId);
+    const provider = await getProvider(adminDb, orgId);
     const info = await provider.getGroupInfo(grp.group_jid as string);
-    apiParticipants = (info.participants || []).map((p: { jid: string }) => ({
-      jid: p.jid,
-      name: null, // UAZAPI não retorna pushName na lista de participantes
-    }));
-  } catch {
-    // Se a UAZAPI não responder, cai no fallback por histórico de mensagens
+    // Filtra @lid (IDs internos do WhatsApp — não são telefones reais)
+    apiParticipants = (info.participants || [])
+      .filter((p: { jid: string }) => p.jid && !p.jid.endsWith("@lid"))
+      .map((p: { jid: string }) => ({ jid: p.jid, name: null }));
+  } catch (err) {
+    console.error("[backfillGroupMembers] getGroupInfo falhou:", err);
   }
 
-  // Fonte 2 (fallback/complemento): senders do histórico com sender_jid salvo
-  const { data: senders } = await db
+  // Fonte 2 (complemento): senders do histórico com sender_jid (migration 084)
+  const { data: senders } = await adminDb
     .from("group_messages")
     .select("sender_name, sender_jid")
     .eq("group_id", groupId)
@@ -1159,20 +1160,25 @@ export async function backfillGroupMembers(groupId: string): Promise<{ processed
     participants.push({ jid: row.sender_jid, name: row.sender_name ?? null });
   }
 
-  if (participants.length === 0) return { processed: 0, linked: 0 };
+  if (participants.length === 0) {
+    return { processed: 0, linked: 0, error: "Nenhum participante encontrado" };
+  }
 
   let linked = 0;
   await Promise.all(
     participants.map(async ({ jid, name }) => {
       const result = await linkGroupMembership({
-        supabase,
+        supabase: createAdminClient(),
         orgId,
         groupId,
         groupName: grp.name as string,
         participantJid: jid,
         participantName: name,
         source: "webhook",
-      }).catch(() => null);
+      }).catch((err: unknown) => {
+        console.error("[backfillGroupMembers] linkGroupMembership falhou para", jid, err);
+        return null;
+      });
       if (result?.lead) linked++;
     })
   );

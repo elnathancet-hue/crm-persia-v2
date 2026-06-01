@@ -938,8 +938,15 @@ function GroupChatPanel({
                     onClick={async () => {
                       setBackfillLoading(true);
                       try {
-                        await backfillGroupMembers(group.id);
-                        await handleOpenMembers();
+                        const res = await backfillGroupMembers(group.id);
+                        if (res.error) {
+                          toast.error(res.error);
+                        } else {
+                          toast.success(`${res.linked} lead(s) identificado(s) de ${res.processed} participante(s)`);
+                          await handleOpenMembers();
+                        }
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Erro ao identificar membros");
                       } finally {
                         setBackfillLoading(false);
                       }
@@ -972,8 +979,15 @@ function GroupChatPanel({
                     onClick={async () => {
                       setBackfillLoading(true);
                       try {
-                        await backfillGroupMembers(group.id);
-                        await handleOpenMembers();
+                        const res = await backfillGroupMembers(group.id);
+                        if (res.error) {
+                          toast.error(res.error);
+                        } else {
+                          toast.success(`${res.linked} lead(s) identificado(s) de ${res.processed} participante(s)`);
+                          await handleOpenMembers();
+                        }
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Erro ao identificar membros");
                       } finally {
                         setBackfillLoading(false);
                       }
