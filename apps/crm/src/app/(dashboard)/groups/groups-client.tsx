@@ -164,7 +164,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   alunos: "bg-progress-soft text-progress-soft-foreground",
 };
 
-// â”€â”€â”€ Left panel: group list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Left panel: group list â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function GroupListPanel({
   groups,
@@ -333,7 +333,7 @@ function GroupListPanel({
   );
 }
 
-// â”€â”€â”€ Right panel: empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Right panel: empty state â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function GroupEmptyState() {
   return (
@@ -348,7 +348,7 @@ function GroupEmptyState() {
   );
 }
 
-// â”€â”€â”€ Right panel: group chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Right panel: group chat â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function GroupChatPanel({
   group,
@@ -446,7 +446,7 @@ function GroupChatPanel({
             if (prev.some((m) => m.id === payload.new.id)) return prev;
             return [...prev, payload.new];
           });
-          // NÃ£o dispara toast aqui â€” o grupo estÃ¡ aberto e o usuÃ¡rio vÃª a mensagem
+          // NÃ£o dispara toast aqui â€" o grupo estÃ¡ aberto e o usuÃ¡rio vÃª a mensagem
           // em tempo real. O toast para grupos nÃ£o selecionados Ã© gerenciado pelo
           // GlobalRealtimeSubscription em GroupsClient.
         },
@@ -633,7 +633,7 @@ function GroupChatPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header â€” WhatsApp style matching chat-window */}
+      {/* Header â€" WhatsApp style matching chat-window */}
       <div
         className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
         style={{ background: "var(--chat-header-bg)", color: "var(--chat-header-fg)" }}
@@ -696,7 +696,7 @@ function GroupChatPanel({
         </div>
       </div>
 
-      {/* Messages â€” WhatsApp wallpaper + bubble styling */}
+      {/* Messages â€" WhatsApp wallpaper + bubble styling */}
       <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
         <div className="flex flex-col gap-1 py-4">
           {loadingMsgs ? (
@@ -732,7 +732,7 @@ function GroupChatPanel({
                       isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {/* Reaction + context menu â€” visible on hover */}
+                    {/* Reaction + context menu â€" visible on hover */}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
                       {/* Quick emoji reactions */}
                       {msg.whatsapp_msg_id && (
@@ -867,7 +867,7 @@ function GroupChatPanel({
         </div>
       </div>
 
-      {/* Input bar â€” matching MessageInput style */}
+      {/* Input bar â€" matching MessageInput style */}
       <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2">
         {/* Hidden file input */}
         <input
@@ -914,7 +914,7 @@ function GroupChatPanel({
         </div>
       </div>
 
-      {/* Members / contact panel â€” Sheet overlay, nÃ£o empurra o layout */}
+      {/* Members / contact panel â€" Sheet overlay, nÃ£o empurra o layout */}
       <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); } }}>
         <SheetContent side="right" showCloseButton={false} className="w-full max-w-[440px] p-0 overflow-hidden">
           {selectedMember ? (
@@ -976,7 +976,7 @@ function GroupChatPanel({
           </SheetHeader>
           <div className="px-card py-6 space-y-6">
 
-            {/* â”€â”€ Identidade â”€â”€ */}
+            {/* â"€â"€ Identidade â"€â"€ */}
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Identidade</p>
               <div className="space-y-form">
@@ -1004,7 +1004,7 @@ function GroupChatPanel({
               </div>
             </div>
 
-            {/* â”€â”€ Comportamento â”€â”€ */}
+            {/* â"€â"€ Comportamento â"€â"€ */}
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comportamento</p>
               <div className="space-y-form">
@@ -1073,7 +1073,7 @@ function GroupChatPanel({
               </div>
             </div>
 
-            {/* â”€â”€ Convite â”€â”€ */}
+            {/* â"€â"€ Convite â"€â"€ */}
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Link de Convite</p>
               <div className="flex gap-2">
@@ -1098,7 +1098,7 @@ function GroupChatPanel({
               {saving ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
             </Button>
 
-            {/* â”€â”€ Zona de perigo â”€â”€ */}
+            {/* â"€â"€ Zona de perigo â"€â"€ */}
             <div className="pt-2 border-t">
               <Button
                 variant="outline"
@@ -1153,7 +1153,7 @@ function GroupChatPanel({
   );
 }
 
-// â”€â”€â”€ Lead type for invite â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Lead type for invite â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 interface Lead {
   id: string;
@@ -1161,7 +1161,7 @@ interface Lead {
   phone: string | null;
 }
 
-// â”€â”€â”€ Campaign Manager Sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Campaign Manager Sheet â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function CampaignManagerSheet({
   open,
@@ -1385,7 +1385,7 @@ function CampaignManagerSheet({
   );
 }
 
-// â”€â”€â”€ Main page component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Main page component â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const [groups, setGroups] = React.useState<Group[]>(initialGroups);
@@ -1394,12 +1394,24 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const [campaigns, setCampaigns] = React.useState<GroupCampaign[]>([]);
   const [orgSlug, setOrgSlug] = React.useState("");
   const [unreadCounts, setUnreadCounts] = React.useState<Record<string, number>>({});
-  // Inicializa contagens nao-lidas do DB no mount â€” igual ao Chat (conversations.unread_count).
+  // Captura lastSeen durante o render (antes de qualquer effect) para evitar
+  // race condition com useGroupsUnreadCount (Sidebar) que roda antes no DOM.
+  const [initialLastSeen] = React.useState<string>(() =>
+    typeof window !== "undefined"
+      ? (localStorage.getItem("groups_last_seen_at") ?? new Date(0).toISOString())
+      : new Date(0).toISOString()
+  );
+  // Escreve timestamp no unmount — indica que o user "viu" até este momento.
+  React.useEffect(() => {
+    return () => {
+      localStorage.setItem("groups_last_seen_at", new Date().toISOString());
+    };
+  }, []);
+  // Inicializa contagens nao-lidas do DB no mount.
   React.useEffect(() => {
     const groupIds = initialGroups.map((g) => g.id);
     if (groupIds.length === 0) return;
     const supabase = createClient();
-    const lastSeen = localStorage.getItem("groups_last_seen_at") ?? new Date(0).toISOString();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("group_messages")
@@ -1407,7 +1419,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .in("group_id", groupIds)
       .eq("direction", "inbound")
       .eq("is_deleted", false)
-      .gt("created_at", lastSeen)
+      .gt("created_at", initialLastSeen)
       .then(({ data }: { data: Array<{ group_id: string }> | null }) => {
         if (!data || data.length === 0) return;
         const counts: Record<string, number> = {};
@@ -1416,7 +1428,8 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
         }
         setUnreadCounts(counts);
       });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLastSeen]);
   const [lastMessages, setLastMessages] = React.useState<Record<string, GroupLastMsg>>(() => {
     const init: Record<string, GroupLastMsg> = {};
     for (const g of initialGroups) {
@@ -1477,7 +1490,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .then(({ data }) => { if (data?.slug) setOrgSlug(data.slug as string); }, () => {});
   }, []);
 
-  // Global Realtime subscription â€” notifica mensagens de grupos nÃ£o selecionados
+  // Global Realtime subscription â€" notifica mensagens de grupos nÃ£o selecionados
   // e mantÃ©m contagem de nÃ£o lidas no painel lateral.
   React.useEffect(() => {
     const supabase = createClient();
@@ -1513,7 +1526,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []); // monta uma vez â€” usa refs para selectedId e groups
+  }, []); // monta uma vez â€" usa refs para selectedId e groups
 
   function handleSelectGroup(id: string) {
     setSelectedId(id);

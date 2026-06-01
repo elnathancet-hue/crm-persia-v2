@@ -38,11 +38,10 @@ export function useGroupsUnreadCount() {
     })();
   }, []);
 
-  // 2. Reset ao entrar em /groups — salva timestamp para próxima visita
+  // 2. Reset ao entrar em /groups (GroupsClient salva o timestamp no unmount)
   useEffect(() => {
     if (pathname === "/groups" || pathname.startsWith("/groups/")) {
       setCount(0);
-      localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString());
     }
   }, [pathname]);
 
