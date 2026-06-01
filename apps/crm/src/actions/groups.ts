@@ -466,7 +466,7 @@ export async function sendMessageToGroup(groupId: string, message: string) {
 
   if (!group) throw new Error("Grupo nao encontrado");
 
-  await provider.sendText({ phone: group.group_jid, message });
+  const result = await provider.sendText({ phone: group.group_jid, message });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("group_messages").insert({
@@ -475,10 +475,108 @@ export async function sendMessageToGroup(groupId: string, message: string) {
     direction: "outbound",
     text: message,
     sender_name: null,
-    whatsapp_msg_id: null,
+    whatsapp_msg_id: result.messageId || null,
   });
 
   return { sent: true };
+}
+
+// ---- Send media to group ----
+export async function sendMediaToGroup(
+  groupId: string,
+  fileBase64: string,
+  mediaType: "image" | "video" | "audio" | "document",
+  caption?: string,
+  fileName?: string,
+) {
+  const { supabase, orgId } = await requireRole("admin");
+  const provider = await getProvider(supabase, orgId);
+
+  const { data: group } = await supabase
+    .from("whatsapp_groups")
+    .select("group_jid")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!group) throw new Error("Grupo nao encontrado");
+
+  const result = await provider.sendMedia({
+    phone: group.group_jid,
+    media: fileBase64,
+    type: mediaType,
+    caption,
+    fileName,
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from("group_messages").insert({
+    organization_id: orgId,
+    group_id: groupId,
+    direction: "outbound",
+    text: caption || null,
+    sender_name: null,
+    whatsapp_msg_id: result.messageId || null,
+    media_type: mediaType,
+    media_url: null, // base64 not stored; UAZAPI returns no URL
+  });
+
+  return { sent: true };
+}
+
+// ---- Delete group message ----
+export async function deleteGroupMessage(
+  groupId: string,
+  messageId: string,
+  whatsappMsgId?: string | null,
+) {
+  const { supabase, orgId } = await requireRole("admin");
+  const db = supabase as any;
+
+  // Attempt UAZAPI deletion (best-effort — only if we have the WA msg ID)
+  if (whatsappMsgId) {
+    try {
+      const provider = await getProvider(supabase, orgId);
+      const { data: group } = await supabase
+        .from("whatsapp_groups")
+        .select("group_jid")
+        .eq("id", groupId)
+        .eq("organization_id", orgId)
+        .single();
+      if (group) {
+        await provider.deleteMessage(group.group_jid, whatsappMsgId);
+      }
+    } catch {
+      // UAZAPI deletion failed — still soft-delete from DB
+    }
+  }
+
+  await db
+    .from("group_messages")
+    .update({ is_deleted: true })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+}
+
+// ---- React to group message ----
+export async function reactToGroupMessage(
+  groupId: string,
+  whatsappMsgId: string,
+  emoji: string,
+) {
+  const { supabase, orgId } = await requireRole("admin");
+  const provider = await getProvider(supabase, orgId);
+
+  const { data: group } = await supabase
+    .from("whatsapp_groups")
+    .select("group_jid")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!group) throw new Error("Grupo nao encontrado");
+
+  await provider.reactToMessage(group.group_jid, whatsappMsgId, emoji);
 }
 
 export async function getGroupMessages(groupId: string, limit = 50) {
@@ -487,13 +585,23 @@ export async function getGroupMessages(groupId: string, limit = 50) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any)
     .from("group_messages")
-    .select("id, direction, text, sender_name, created_at")
+    .select("id, direction, text, sender_name, created_at, whatsapp_msg_id, media_url, media_type")
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
+    .eq("is_deleted", false)
     .order("created_at", { ascending: true })
     .limit(limit);
 
-  return (data || []) as Array<{ id: string; direction: string; text: string | null; sender_name: string | null; created_at: string }>;
+  return (data || []) as Array<{
+    id: string;
+    direction: string;
+    text: string | null;
+    sender_name: string | null;
+    created_at: string;
+    whatsapp_msg_id: string | null;
+    media_url: string | null;
+    media_type: string | null;
+  }>;
 }
 
 // ─── Group Campaigns ──────────────────────────────────────────────────────────

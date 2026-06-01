@@ -6,11 +6,16 @@ import {
   ChevronDown,
   Copy,
   ExternalLink,
+  File,
+  FileVideo,
+  Image,
   Loader2,
   LogOut,
   Megaphone,
   MessageSquare,
+  Mic,
   MoreHorizontal,
+  Paperclip,
   Plus,
   RefreshCw,
   Send,
@@ -66,6 +71,9 @@ import {
   syncGroups,
   deleteGroup,
   sendMessageToGroup,
+  sendMediaToGroup,
+  deleteGroupMessage,
+  reactToGroupMessage,
   getInviteLink,
   resetInviteLink,
   leaveGroup,
@@ -112,7 +120,12 @@ interface GroupMessage {
   text: string | null;
   sender_name: string | null;
   created_at: string;
+  whatsapp_msg_id: string | null;
+  media_url: string | null;
+  media_type: string | null;
 }
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "👏"];
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -323,7 +336,10 @@ function GroupChatPanel({
   const [loadingMsgs, setLoadingMsgs] = React.useState(true);
   const [chatInput, setChatInput] = React.useState("");
   const [sendingMessage, setSendingMessage] = React.useState(false);
+  const [sendingMedia, setSendingMedia] = React.useState(false);
+  const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Settings sheet state
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -375,8 +391,9 @@ function GroupChatPanel({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("group_messages")
-      .select("id, direction, text, sender_name, created_at")
+      .select("id, direction, text, sender_name, created_at, whatsapp_msg_id, media_url, media_type")
       .eq("group_id", group.id)
+      .eq("is_deleted", false)
       .order("created_at", { ascending: true })
       .limit(50)
       .then(({ data }: { data: GroupMessage[] | null }) => {
@@ -432,6 +449,61 @@ function GroupChatPanel({
       setChatInput(text);
     } finally {
       setSendingMessage(false);
+    }
+  }
+
+  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    let mediaType: "image" | "video" | "audio" | "document" = "document";
+    if (file.type.startsWith("image/")) mediaType = "image";
+    else if (file.type.startsWith("video/")) mediaType = "video";
+    else if (file.type.startsWith("audio/")) mediaType = "audio";
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target?.result as string;
+      if (!base64) return;
+      setSendingMedia(true);
+      try {
+        await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name);
+        toast.success("Mídia enviada");
+      } catch (err: any) {
+        toast.error(err.message || "Erro ao enviar mídia");
+      } finally {
+        setSendingMedia(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleReact(msg: GroupMessage, emoji: string) {
+    if (!msg.whatsapp_msg_id) return;
+    setReactingMsgId(null);
+    try {
+      await reactToGroupMessage(group.id, msg.whatsapp_msg_id, emoji);
+    } catch {
+      toast.error("Erro ao enviar reação");
+    }
+  }
+
+  async function handleDeleteMessage(msg: GroupMessage) {
+    // Optimistic: remove from local state immediately
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    try {
+      await deleteGroupMessage(group.id, msg.id, msg.whatsapp_msg_id);
+    } catch {
+      // Restore message on failure
+      setMessages((prev) => {
+        const restored = [...prev, msg].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        return restored;
+      });
+      toast.error("Erro ao apagar mensagem");
     }
   }
 
@@ -633,12 +705,42 @@ function GroupChatPanel({
                   )}
 
                   <div
-                    className={`group flex max-w-[86%] items-end gap-1 sm:max-w-[72%] ${
+                    className={`group/msg flex max-w-[86%] items-end gap-1 sm:max-w-[72%] ${
                       isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {/* Context menu — visible on hover */}
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity self-end mb-1 shrink-0">
+                    {/* Reaction + context menu — visible on hover */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
+                      {/* Quick emoji reactions */}
+                      {msg.whatsapp_msg_id && (
+                        <DropdownMenu
+                          open={reactingMsgId === msg.id}
+                          onOpenChange={(o) => setReactingMsgId(o ? msg.id : null)}
+                        >
+                          <DropdownMenuTrigger
+                            className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                            title="Reagir"
+                          >
+                            <Smile className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align={isOutbound ? "end" : "start"}
+                            className="flex gap-1 p-1.5 min-w-0"
+                          >
+                            {QUICK_REACTIONS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => handleReact(msg, emoji)}
+                                className="text-lg hover:scale-125 transition-transform px-0.5"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                      {/* Context menu */}
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
@@ -647,11 +749,20 @@ function GroupChatPanel({
                           <ChevronDown className="size-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align={isOutbound ? "end" : "start"} className="min-w-[140px]">
-                          <DropdownMenuItem onClick={() => {
-                            if (msg.text) { navigator.clipboard.writeText(msg.text); toast.success("Copiado!"); }
-                          }}>
-                            <Copy className="size-4" />
-                            Copiar
+                          {msg.text && (
+                            <DropdownMenuItem onClick={() => {
+                              navigator.clipboard.writeText(msg.text!); toast.success("Copiado!");
+                            }}>
+                              <Copy className="size-4" />
+                              Copiar
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => handleDeleteMessage(msg)}
+                          >
+                            <Trash2 className="size-4" />
+                            Apagar
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -668,7 +779,7 @@ function GroupChatPanel({
 
                       {/* Bubble */}
                       <div
-                        className={`rounded-[7.5px] px-2.5 py-1.5 text-[14.2px] leading-5 shadow-sm ${
+                        className={`rounded-[7.5px] shadow-sm overflow-hidden ${
                           isOutbound ? "rounded-br-sm" : "rounded-bl-sm"
                         }`}
                         style={
@@ -677,13 +788,51 @@ function GroupChatPanel({
                             : { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
                         }
                       >
-                        <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                        <span
-                          className="text-[10px] float-right ml-2 mt-1"
-                          style={{ color: "var(--chat-timestamp)" }}
-                        >
-                          {formatTime(msg.created_at)}
-                        </span>
+                        {/* Media content */}
+                        {msg.media_type === "image" && msg.media_url && (
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={msg.media_url}
+                              alt="Imagem"
+                              className="max-w-[240px] max-h-[200px] object-cover"
+                            />
+                          </a>
+                        )}
+                        {msg.media_type === "image" && !msg.media_url && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <Image className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Imagem</span>
+                          </div>
+                        )}
+                        {msg.media_type === "video" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <FileVideo className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
+                          </div>
+                        )}
+                        {msg.media_type === "audio" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <Mic className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Áudio</span>
+                          </div>
+                        )}
+                        {msg.media_type === "document" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <File className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Documento</span>
+                          </div>
+                        )}
+                        {/* Text / caption */}
+                        <div className="px-2.5 py-1.5 text-[14.2px] leading-5">
+                          {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
+                          <span
+                            className="text-[10px] float-right ml-2 mt-1"
+                            style={{ color: "var(--chat-timestamp)" }}
+                          >
+                            {formatTime(msg.created_at)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -697,16 +846,26 @@ function GroupChatPanel({
 
       {/* Input bar — matching MessageInput style */}
       <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
         <div className="flex items-end gap-1">
+          {/* Attach button */}
           <Button
             variant="ghost"
             size="icon"
             className="size-10 shrink-0 rounded-full hover:bg-transparent"
             style={{ color: "var(--chat-header-fg)" }}
-            tabIndex={-1}
-            disabled
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sendingMedia}
+            title="Anexar mídia"
           >
-            <Smile className="size-5" />
+            {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Paperclip className="size-5" />}
           </Button>
           <Textarea
             value={chatInput}
@@ -718,12 +877,12 @@ function GroupChatPanel({
             className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
             style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none", boxShadow: "none" }}
             rows={1}
-            disabled={sendingMessage}
+            disabled={sendingMessage || sendingMedia}
           />
           <Button
             size="icon"
             onClick={handleSendMessage}
-            disabled={sendingMessage || !chatInput.trim()}
+            disabled={sendingMessage || sendingMedia || !chatInput.trim()}
             className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
             style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
           >
