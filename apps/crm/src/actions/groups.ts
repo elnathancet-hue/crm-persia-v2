@@ -1116,62 +1116,60 @@ export async function backfillGroupMembers(groupId: string): Promise<{ processed
   const { supabase, orgId } = await requireRole("agent");
   const db = supabase as any;
 
-  // Busca grupo para ter o nome
+  // Busca grupo (JID + nome)
   const { data: grp } = await db
     .from("whatsapp_groups")
-    .select("id, name")
+    .select("id, name, group_jid")
     .eq("id", groupId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
   if (!grp) throw new Error("Grupo não encontrado");
 
-  // Busca todos os senders únicos — preferindo sender_jid (col 084), fallback por nome
-  const { data: senders, error } = await db
+  // Fonte 1: lista de participantes ao vivo via UAZAPI
+  // Retorna todos os membros atuais, independente de terem enviado mensagem.
+  let apiParticipants: Array<{ jid: string; name: string | null }> = [];
+  try {
+    const provider = await getProvider(db, orgId);
+    const info = await provider.getGroupInfo(grp.group_jid as string);
+    apiParticipants = (info.participants || []).map((p: { jid: string }) => ({
+      jid: p.jid,
+      name: null, // UAZAPI não retorna pushName na lista de participantes
+    }));
+  } catch {
+    // Se a UAZAPI não responder, cai no fallback por histórico de mensagens
+  }
+
+  // Fonte 2 (fallback/complemento): senders do histórico com sender_jid salvo
+  const { data: senders } = await db
     .from("group_messages")
     .select("sender_name, sender_jid")
     .eq("group_id", groupId)
     .eq("organization_id", orgId)
-    .eq("direction", "inbound");
+    .eq("direction", "inbound")
+    .not("sender_jid", "is", null);
 
-  if (error) throw new Error(error.message);
-  if (!senders || senders.length === 0) return { processed: 0, linked: 0 };
+  // Mescla as duas fontes, deduplica por JID
+  const seen = new Set<string>(apiParticipants.map((p) => p.jid));
+  const participants: Array<{ jid: string; name: string | null }> = [...apiParticipants];
 
-  // Deduplica por JID (quando disponível) ou por nome normalizado (fallback)
-  const seenJid = new Set<string>();
-  const seenName = new Set<string>();
-  const participants: Array<{ jid: string | null; name: string | null }> = [];
-
-  for (const row of senders as Array<{ sender_name: string | null; sender_jid: string | null }>) {
-    const jid = row.sender_jid || null;
-    const name = row.sender_name || null;
-    if (jid) {
-      if (seenJid.has(jid)) continue;
-      seenJid.add(jid);
-      participants.push({ jid, name });
-    } else if (name) {
-      const key = name.trim().toLowerCase();
-      if (seenName.has(key)) continue;
-      seenName.add(key);
-      participants.push({ jid: null, name });
-    }
+  for (const row of (senders || []) as Array<{ sender_name: string | null; sender_jid: string | null }>) {
+    if (!row.sender_jid || seen.has(row.sender_jid)) continue;
+    seen.add(row.sender_jid);
+    participants.push({ jid: row.sender_jid, name: row.sender_name ?? null });
   }
 
   if (participants.length === 0) return { processed: 0, linked: 0 };
 
-  const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
-
   let linked = 0;
   await Promise.all(
     participants.map(async ({ jid, name }) => {
-      // jid === null → passa "" para o pipeline, que normaliza para null e
-      // cai no fallback de matching por nome.
       const result = await linkGroupMembership({
         supabase,
         orgId,
         groupId,
         groupName: grp.name as string,
-        participantJid: jid ?? "",
+        participantJid: jid,
         participantName: name,
         source: "webhook",
       }).catch(() => null);
