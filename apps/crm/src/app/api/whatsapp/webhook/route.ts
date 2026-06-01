@@ -243,12 +243,12 @@ export async function POST(request: NextRequest) {
         // no grupo chegam via "messages" event. Ao salvar a mensagem, tentamos
         // linkar o remetente como membro — idempotente via upsert.
         //
-        // sender_pn = JID do remetente com telefone (ex: "5511999@s.whatsapp.net").
-        // sender pode ser LID sem telefone — nesse caso sender_pn é o fallback.
-        const rawBody = body as Record<string, unknown>;
+        // UAZAPI v2: sender fields (sender_pn, sender) ficam dentro de body.message,
+        // não no root do envelope. Usar msgRaw para capturar o nível correto.
+        const msgRaw = ((body as any).message || body) as Record<string, unknown>;
         const senderJid =
-          (typeof rawBody.sender_pn === "string" && rawBody.sender_pn ? rawBody.sender_pn : null) ??
-          (typeof rawBody.sender === "string" && rawBody.sender && !rawBody.sender.endsWith("@lid") ? rawBody.sender : null);
+          (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
+          (typeof msgRaw.sender === "string" && msgRaw.sender && !msgRaw.sender.endsWith("@lid") ? msgRaw.sender : null);
 
         if (senderJid) {
           const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");

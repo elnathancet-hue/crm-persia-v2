@@ -157,6 +157,7 @@ function GroupListPanel({
   onSearch,
   categoryFilter,
   onCategoryFilter,
+  unreadCounts,
 }: {
   groups: Group[];
   selectedId: string | null;
@@ -169,6 +170,7 @@ function GroupListPanel({
   onSearch: (v: string) => void;
   categoryFilter: string;
   onCategoryFilter: (v: string) => void;
+  unreadCounts: Record<string, number>;
 }) {
   const filtered = groups.filter((g) => {
     const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase());
@@ -260,6 +262,11 @@ function GroupListPanel({
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold truncate">{group.name}</p>
                   <div className="flex items-center gap-1 shrink-0">
+                    {(unreadCounts[group.id] ?? 0) > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold px-1">
+                        {unreadCounts[group.id] > 99 ? "99+" : unreadCounts[group.id]}
+                      </span>
+                    )}
                     {group.campaign_id && <Link2 className="size-3 text-primary" />}
                     {!group.is_accepting && <span className="text-[10px] text-destructive font-medium">Fechado</span>}
                     <Badge
@@ -1370,6 +1377,14 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const [leads, setLeads] = React.useState<Lead[]>([]);
   const [campaigns, setCampaigns] = React.useState<GroupCampaign[]>([]);
   const [orgSlug, setOrgSlug] = React.useState("");
+  const [unreadCounts, setUnreadCounts] = React.useState<Record<string, number>>({});
+
+  // Ref para o selectedId atual dentro do callback do Realtime (evita closure stale)
+  const selectedIdRef = React.useRef<string | null>(null);
+  React.useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  // Ref para groups atual dentro do callback
+  const groupsRef = React.useRef<Group[]>(initialGroups);
+  React.useEffect(() => { groupsRef.current = groups; }, [groups]);
 
   // Create dialog
   const [createOpen, setCreateOpen] = React.useState(false);
@@ -1408,6 +1423,48 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
     supabase.from("organizations").select("slug").limit(1).single()
       .then(({ data }) => { if (data?.slug) setOrgSlug(data.slug as string); }, () => {});
   }, []);
+
+  // Global Realtime subscription — notifica mensagens de grupos não selecionados
+  // e mantém contagem de não lidas no painel lateral.
+  React.useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("groups_global_messages")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "group_messages" },
+        (payload: { new: { group_id: string; direction: string; text: string | null; sender_name: string | null } }) => {
+          const { group_id, direction, text, sender_name } = payload.new;
+          if (direction !== "inbound") return;
+          // Só age em grupos que NÃO estão visíveis no painel de chat atual
+          if (group_id === selectedIdRef.current) return;
+
+          setUnreadCounts((prev) => ({ ...prev, [group_id]: (prev[group_id] ?? 0) + 1 }));
+
+          const grp = groupsRef.current.find((g) => g.id === group_id);
+          if (grp) {
+            const sender = sender_name || "Participante";
+            const preview = text
+              ? text.length > 60 ? text.slice(0, 60) + "…" : text
+              : "Nova mensagem";
+            toast.message(grp.name, { description: `${sender}: ${preview}` });
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []); // monta uma vez — usa refs para selectedId e groups
+
+  function handleSelectGroup(id: string) {
+    setSelectedId(id);
+    // Zera não lidas ao abrir o grupo
+    setUnreadCounts((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
 
   async function handleSync() {
     setSyncing(true);
@@ -1468,7 +1525,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
         <GroupListPanel
           groups={groups}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={handleSelectGroup}
           onCreateOpen={() => setCreateOpen(true)}
           onSync={handleSync}
           syncing={syncing}
@@ -1477,6 +1534,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           onSearch={setSearch}
           categoryFilter={categoryFilter}
           onCategoryFilter={setCategoryFilter}
+          unreadCounts={unreadCounts}
         />
       </div>
 
