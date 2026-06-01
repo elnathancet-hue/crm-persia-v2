@@ -229,15 +229,21 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (grp) {
+        // UAZAPI v2: sender fields (sender_pn, sender) ficam dentro de body.message,
+        // não no root do envelope. Usar msgRaw para capturar o nível correto.
+        const msgRaw = ((body as any).message || body) as Record<string, unknown>;
+        const senderJid =
+          (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
+          (typeof msgRaw.sender === "string" && msgRaw.sender && !msgRaw.sender.endsWith("@lid") ? msgRaw.sender : null);
+
         await supabase.from("group_messages").insert({
           organization_id: matchedConn.organization_id,
           group_id: grp.id,
           direction: "inbound",
           text: msg.text,
           sender_name: msg.pushName || null,
+          sender_jid: senderJid || null,
           whatsapp_msg_id: msg.messageId || null,
-          // media_type: null for text, otherwise the message type (image/video/audio/document)
-          // media_url: UAZAPI does not include fileURL in group message webhooks; left null
           media_type: msg.type && msg.type !== "text" ? msg.type : null,
           media_url: (msg as any).mediaUrl || null,
         } as never);
@@ -246,14 +252,6 @@ export async function POST(request: NextRequest) {
         // UAZAPI "groups" event só dispara em join/leave; mensagens recebidas
         // no grupo chegam via "messages" event. Ao salvar a mensagem, tentamos
         // linkar o remetente como membro — idempotente via upsert.
-        //
-        // UAZAPI v2: sender fields (sender_pn, sender) ficam dentro de body.message,
-        // não no root do envelope. Usar msgRaw para capturar o nível correto.
-        const msgRaw = ((body as any).message || body) as Record<string, unknown>;
-        const senderJid =
-          (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
-          (typeof msgRaw.sender === "string" && msgRaw.sender && !msgRaw.sender.endsWith("@lid") ? msgRaw.sender : null);
-
         if (senderJid) {
           const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
           linkGroupMembership({
