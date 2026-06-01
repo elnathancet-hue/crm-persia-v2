@@ -190,7 +190,8 @@ export default function WhatsAppPage() {
         toast.error(result.error || "Falha ao re-sincronizar webhook.");
       } else {
         const eventsLabel = result.events?.join(", ") || "configurado";
-        toast.success(`Webhook re-sincronizado: ${eventsLabel}`);
+        const presenceNote = result.presenceSet === false ? " (presence não resetada)" : "";
+        toast.success(`Webhook re-sincronizado: ${eventsLabel}${presenceNote}`);
       }
     } catch {
       toast.error("Erro ao re-sincronizar webhook. Tente novamente.");
@@ -408,6 +409,14 @@ export default function WhatsAppPage() {
                 {Object.entries(diagnoseResult.statusCounts ?? {}).map(([s, n]) => (
                   <p key={s}>{s}: {n as number}</p>
                 ))}
+              </div>
+              <div>
+                {diagnoseResult.presenceSet === true && (
+                  <p className="text-emerald-500">✓ Presence resetada para &quot;available&quot; — ticks devem funcionar</p>
+                )}
+                {diagnoseResult.presenceSet === false && (
+                  <p className="text-amber-500">⚠ Presence não foi resetada (verifique conexão com UAZAPI)</p>
+                )}
               </div>
             </>
           )}

@@ -369,6 +369,7 @@ export async function disconnectWhatsAppAdmin(): Promise<{ error?: string }> {
 export async function resyncUazapiWebhook(): Promise<{
   ok: boolean;
   events?: string[];
+  presenceSet?: boolean;
   error?: string;
 }> {
   try {
@@ -381,10 +382,13 @@ export async function resyncUazapiWebhook(): Promise<{
       return { ok: false, error: "instance_url/instance_token não configurados" };
     }
 
+    const instanceUrl = ctx.connection.instance_url;
+    const instanceToken = ctx.connection.instance_token;
+
     const webhookUrl = getCrmWebhookUrl();
     const response = await configureUazapiWebhook({
-      baseUrl: ctx.connection.instance_url,
-      token: ctx.connection.instance_token,
+      baseUrl: instanceUrl,
+      token: instanceToken,
       url: webhookUrl,
       enabled: true,
     });
@@ -411,11 +415,27 @@ export async function resyncUazapiWebhook(): Promise<{
       entityType: "whatsapp",
     });
 
+    // Fix: reset instance presence to "available".
+    // UAZAPI blocks DELIVERY_ACK and READ events when presence is "unavailable"
+    // and the API is the only active device — causing ticks to never arrive.
+    const presenceSet = await fetch(`${instanceUrl}/instance/presence`, {
+      method: "POST",
+      headers: { token: instanceToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ presence: "available" }),
+    }).then((r) => r.ok).catch(() => false);
+
+    if (!presenceSet) {
+      console.warn("[WhatsApp] presence reset failed (non-critical)", {
+        organization_id: ctx.orgId,
+        action: "whatsapp_resync_webhook",
+      });
+    }
+
     // Retorna lista de events configurada (espelha o default).
     const { UAZAPI_DEFAULT_WEBHOOK_EVENTS } = await import(
       "@persia/shared/providers/uazapi-webhook-config"
     );
-    return { ok: true, events: [...UAZAPI_DEFAULT_WEBHOOK_EVENTS] };
+    return { ok: true, events: [...UAZAPI_DEFAULT_WEBHOOK_EVENTS], presenceSet };
   } catch (e: unknown) {
     return {
       ok: false,
@@ -561,6 +581,7 @@ export async function diagnoseTicks(): Promise<{
   webhook?: { url: string; events: string[]; excludeMessages?: string[] };
   recentMessages?: Array<{ id: string; created_at: string; status: string; has_wamid: boolean }>;
   statusCounts?: Record<string, number>;
+  presenceSet?: boolean;
 }> {
   try {
     const ctx = await getConnection();
@@ -620,7 +641,14 @@ export async function diagnoseTicks(): Promise<{
       statusCounts[s] = (statusCounts[s] ?? 0) + 1;
     }
 
-    return { ok: true, webhook, recentMessages, statusCounts };
+    // Reset presence to "available" — UAZAPI blocks delivery/read ACKs when unavailable
+    const presenceSet = await fetch(`${ctx.connection.instance_url}/instance/presence`, {
+      method: "POST",
+      headers: { token: ctx.connection.instance_token!, "Content-Type": "application/json" },
+      body: JSON.stringify({ presence: "available" }),
+    }).then((r) => r.ok).catch(() => false);
+
+    return { ok: true, webhook, recentMessages, statusCounts, presenceSet };
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
