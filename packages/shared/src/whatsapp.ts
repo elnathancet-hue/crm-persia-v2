@@ -282,7 +282,7 @@ export interface WhatsAppProvider {
 
   // Groups
   listGroups(opts?: { noParticipants?: boolean }): Promise<Array<GroupInfo>>;
-  listGroupsPaged(opts?: { limit?: number; offset?: number; search?: string; noParticipants?: boolean }): Promise<{ groups: GroupInfo[]; total?: number }>;
+  listGroupsPaged(opts?: { limit?: number; offset?: number; search?: string; noParticipants?: boolean; force?: boolean }): Promise<{ groups: GroupInfo[]; total?: number }>;
   createGroup(name: string, participants: string[]): Promise<GroupInfo>;
   getGroupInfo(jid: string, opts?: { getInviteLink?: boolean }): Promise<GroupInfo>;
   getGroupInviteInfo(invitecode: string): Promise<GroupInfo>;

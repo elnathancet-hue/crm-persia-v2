@@ -9,10 +9,11 @@ describe("UAZAPI webhook config", () => {
     // excludeMessages intentionally omitted: removing "wasSentByApi" allows ACK delivery
     // (messages_update events for our outbound msgs). Loop prevention is handled by
     // parseWebhook() returning null for fromMe=true. See b20c003 for full rationale.
+    // groups events are required to keep group memberships and member counts in sync.
     expect(buildUazapiWebhookConfig({ url: "https://crm.funilpersia.top/api/whatsapp/webhook" })).toEqual({
       enabled: true,
       url: "https://crm.funilpersia.top/api/whatsapp/webhook",
-      events: ["messages", "messages_update"],
+      events: ["messages", "messages_update", "groups"],
     });
   });
 
@@ -35,7 +36,7 @@ describe("UAZAPI webhook config", () => {
       body: JSON.stringify({
         enabled: true,
         url: "https://crm.funilpersia.top/api/whatsapp/webhook",
-        events: ["messages", "messages_update"],
+        events: ["messages", "messages_update", "groups"],
       }),
     });
   });

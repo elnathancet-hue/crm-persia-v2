@@ -383,11 +383,42 @@ export class UazapiAdapter implements WhatsAppProvider {
   // ---- Groups ----
 
   private mapGroupInfo(g: UazapiGroupInfo): GroupInfo {
-    const participants: GroupParticipant[] = (g.Participants || []).map(p => ({
-      jid: p.JID || "",
-      isAdmin: p.IsAdmin === true,
-      isSuperAdmin: p.IsSuperAdmin === true,
-    }));
+    const rawParticipants = Array.isArray(g.Participants)
+      ? g.Participants
+      : Array.isArray((g as { participants?: unknown }).participants)
+        ? ((g as { participants: UazapiGroupInfo["Participants"] }).participants ?? [])
+        : [];
+    const participants: GroupParticipant[] = rawParticipants
+      .map((p) => {
+        const row = p as {
+          JID?: string;
+          jid?: string;
+          Jid?: string;
+          PhoneNumber?: string;
+          phoneNumber?: string;
+          Phone?: string;
+          phone?: string;
+          IsAdmin?: boolean;
+          isAdmin?: boolean;
+          IsSuperAdmin?: boolean;
+          isSuperAdmin?: boolean;
+        };
+        const jid =
+          row.JID ||
+          row.jid ||
+          row.Jid ||
+          row.PhoneNumber ||
+          row.phoneNumber ||
+          row.Phone ||
+          row.phone ||
+          "";
+        return {
+          jid,
+          isAdmin: row.IsAdmin === true || row.isAdmin === true,
+          isSuperAdmin: row.IsSuperAdmin === true || row.isSuperAdmin === true,
+        };
+      })
+      .filter((p) => p.jid.length > 0);
     return {
       jid: g.JID || "",
       name: g.Name || "",
