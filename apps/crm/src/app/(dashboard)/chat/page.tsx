@@ -4,6 +4,11 @@ export const metadata = {
   title: "Chat ao Vivo",
 };
 
-export default function ChatPage() {
-  return <ChatPageClient />;
+type Props = {
+  searchParams: Promise<{ c?: string }>;
+};
+
+export default async function ChatPage({ searchParams }: Props) {
+  const { c } = await searchParams;
+  return <ChatPageClient initialConversationId={c ?? null} />;
 }

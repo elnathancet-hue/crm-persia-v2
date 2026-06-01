@@ -65,6 +65,7 @@ import {
   type GroupOverview,
   type GroupParticipantView,
 } from "@/actions/groups";
+import { findOrCreateConversationByLead } from "@/actions/conversations";
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -106,9 +107,13 @@ function exportAllCSV(groups: GroupOverview[]) {
 function ParticipantRow({
   participant: p,
   onOpenProfile,
+  onOpenChat,
+  chatLoading,
 }: {
   participant: GroupParticipantView;
   onOpenProfile: (leadId: string) => void;
+  onOpenChat: (leadId: string) => void;
+  chatLoading: boolean;
 }) {
   function copyPhone() {
     if (!p.phone) return;
@@ -155,6 +160,21 @@ function ParticipantRow({
             onClick={() => onOpenProfile(p.lead!.id)}
           >
             <ExternalLink className="size-3.5" />
+          </Button>
+        )}
+        {p.lead && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            title="Abrir chat"
+            disabled={chatLoading}
+            onClick={() => onOpenChat(p.lead!.id)}
+          >
+            {chatLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <MessageSquare className="size-3.5" />
+            )}
           </Button>
         )}
         {p.phone && (
@@ -213,6 +233,7 @@ export function GroupsTab() {
   const [participantsError, setParticipantsError] = React.useState<string | null>(null);
   const [participantsSearch, setParticipantsSearch] = React.useState("");
   const [participantsTab, setParticipantsTab] = React.useState("todos");
+  const [chatLoadingLeadId, setChatLoadingLeadId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     getGroupsOverview()
@@ -250,6 +271,19 @@ export function GroupsTab() {
       toast.error((err as Error).message || "Erro ao criar grupo");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleOpenChat(leadId: string) {
+    setChatLoadingLeadId(leadId);
+    try {
+      const { conversationId } = await findOrCreateConversationByLead(leadId);
+      setParticipantsOpen(false);
+      router.push(`/chat?c=${conversationId}`);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao abrir chat");
+    } finally {
+      setChatLoadingLeadId(null);
     }
   }
 
@@ -645,6 +679,8 @@ export function GroupsTab() {
                                 setParticipantsOpen(false);
                                 router.push(`/crm?tab=leads&lead=${leadId}`);
                               }}
+                              onOpenChat={handleOpenChat}
+                              chatLoading={chatLoadingLeadId === p.lead?.id}
                             />
                           ))}
                         </div>
