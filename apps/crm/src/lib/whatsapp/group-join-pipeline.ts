@@ -427,19 +427,17 @@ function extractParticipantJid(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
-  const candidates = [
-    row.JID,
-    row.jid,
-    row.Jid,
+  const jidCandidate = [row.JID, row.jid, row.Jid].find(
+    (candidate): candidate is string => typeof candidate === "string",
+  );
+  const phoneCandidate = [
     row.PhoneNumber,
     row.phoneNumber,
     row.Phone,
     row.phone,
-  ];
-  return (
-    candidates.find((candidate): candidate is string => typeof candidate === "string") ??
-    null
-  );
+  ].find((candidate): candidate is string => typeof candidate === "string");
+  if (jidCandidate?.endsWith("@lid")) return phoneCandidate ?? jidCandidate;
+  return jidCandidate ?? phoneCandidate ?? null;
 }
 
 export async function processGroupWebhookEvent(

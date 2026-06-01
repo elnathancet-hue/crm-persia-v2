@@ -1138,7 +1138,7 @@ export async function backfillGroupMembers(groupId: string): Promise<{ processed
   let apiParticipants: Array<{ jid: string; name: string | null }> = [];
   try {
     const provider = await getProvider(adminDb, orgId);
-    const info = await provider.getGroupInfo(grp.group_jid as string);
+    const info = await provider.getGroupInfo(grp.group_jid as string, { force: true });
     // Filtra @lid (IDs internos do WhatsApp — não são telefones reais)
     apiParticipants = (info.participants || [])
       .filter((p: { jid: string }) => p.jid && !p.jid.endsWith("@lid"))
