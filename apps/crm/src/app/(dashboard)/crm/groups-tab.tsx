@@ -43,14 +43,28 @@ import {
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
 import {
+  Copy,
+  Phone,
+  UserPlus,
+  ExternalLink,
+  ShieldCheck,
+  Crown,
+  UserX,
+} from "lucide-react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@persia/ui/tabs";
+import {
   createGroup,
   syncGroups,
   getGroupsOverview,
-  getGroupParticipants,
+  getGroupParticipantsView,
   type GroupOverview,
+  type GroupParticipantView,
 } from "@/actions/groups";
-
-type GroupParticipant = Awaited<ReturnType<typeof getGroupParticipants>>[number];
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -89,6 +103,97 @@ function exportAllCSV(groups: GroupOverview[]) {
   URL.revokeObjectURL(url);
 }
 
+function ParticipantRow({
+  participant: p,
+  onOpenProfile,
+}: {
+  participant: GroupParticipantView;
+  onOpenProfile: (leadId: string) => void;
+}) {
+  function copyPhone() {
+    if (!p.phone) return;
+    navigator.clipboard.writeText(p.phone);
+    toast.success("Telefone copiado");
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+      {/* Avatar */}
+      <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+        {p.lead?.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={p.lead.avatar_url} alt="" className="size-8 rounded-full object-cover" />
+        ) : (
+          <Users className="size-4 text-primary" />
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm font-medium truncate">
+            {p.lead?.name ?? p.displayName ?? (p.phone ? p.phone : "Sem nome")}
+          </span>
+          {p.isSuperAdmin && <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-tight"><Crown className="size-2.5 mr-0.5" />Dono</Badge>}
+          {p.isAdmin && !p.isSuperAdmin && <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-tight"><ShieldCheck className="size-2.5 mr-0.5" />Admin</Badge>}
+          {p.lead && <Badge variant="default" className="text-[10px] px-1 py-0 leading-tight">Lead</Badge>}
+          {!p.lead && p.identityKind === "phone" && <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight">Nao id.</Badge>}
+          {p.identityKind === "lid" && <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight text-muted-foreground"><UserX className="size-2.5 mr-0.5" />LID</Badge>}
+        </div>
+        <p className="text-xs text-muted-foreground truncate">
+          {p.phone ?? p.rawJid}
+        </p>
+      </div>
+
+      {/* Acoes */}
+      <div className="flex items-center gap-1 shrink-0">
+        {p.lead && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            title="Ver perfil"
+            onClick={() => onOpenProfile(p.lead!.id)}
+          >
+            <ExternalLink className="size-3.5" />
+          </Button>
+        )}
+        {p.phone && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            title="Copiar telefone"
+            onClick={copyPhone}
+          >
+            <Copy className="size-3.5" />
+          </Button>
+        )}
+        {!p.lead && p.identityKind === "phone" && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            title="Criar lead"
+            onClick={() => {
+              toast.info("Em breve: criar lead a partir do participante");
+            }}
+          >
+            <UserPlus className="size-3.5" />
+          </Button>
+        )}
+        {p.identityKind === "lid" && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            disabled
+            title="Telefone nao disponivel pela API"
+          >
+            <Phone className="size-3.5 opacity-30" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GroupsTab() {
   const router = useRouter();
   const [groups, setGroups] = React.useState<GroupOverview[]>([]);
@@ -103,8 +208,11 @@ export function GroupsTab() {
   const [creating, setCreating] = React.useState(false);
   const [participantsOpen, setParticipantsOpen] = React.useState(false);
   const [participantsGroup, setParticipantsGroup] = React.useState<GroupOverview | null>(null);
-  const [participants, setParticipants] = React.useState<GroupParticipant[]>([]);
+  const [participants, setParticipants] = React.useState<GroupParticipantView[]>([]);
   const [participantsLoading, setParticipantsLoading] = React.useState(false);
+  const [participantsError, setParticipantsError] = React.useState<string | null>(null);
+  const [participantsSearch, setParticipantsSearch] = React.useState("");
+  const [participantsTab, setParticipantsTab] = React.useState("todos");
 
   React.useEffect(() => {
     getGroupsOverview()
@@ -148,22 +256,19 @@ export function GroupsTab() {
   async function handleViewParticipants(group: GroupOverview) {
     setParticipantsGroup(group);
     setParticipants([]);
+    setParticipantsError(null);
+    setParticipantsSearch("");
+    setParticipantsTab("todos");
     setParticipantsOpen(true);
     setParticipantsLoading(true);
     try {
-      const result = await getGroupParticipants(group.id);
+      const result = await getGroupParticipantsView(group.id);
       setParticipants(result);
     } catch (err: unknown) {
-      toast.error((err as Error).message || "Erro ao buscar participantes");
+      setParticipantsError((err as Error).message || "Erro ao buscar participantes");
     } finally {
       setParticipantsLoading(false);
     }
-  }
-
-  function formatParticipantJid(jid: string) {
-    if (jid.endsWith("@lid")) return "ID interno do WhatsApp";
-    const clean = jid.replace(/@(s\.whatsapp\.net|c\.us)$/, "");
-    return clean ? `+${clean.replace(/^\+/, "")}` : jid;
   }
 
   const filtered = groups.filter(
@@ -458,18 +563,33 @@ export function GroupsTab() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={participantsOpen} onOpenChange={setParticipantsOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog open={participantsOpen} onOpenChange={(o) => { setParticipantsOpen(o); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Participantes</DialogTitle>
+            <DialogTitle>Participantes — {participantsGroup?.name ?? "Grupo"}</DialogTitle>
             <DialogDescription>
-              {participantsGroup?.name ?? "Grupo"}
+              {participants.length > 0 && (
+                <>
+                  {participants.length} total &middot;{" "}
+                  {participants.filter((p) => p.lead).length} leads &middot;{" "}
+                  {participants.filter((p) => !p.lead && p.identityKind === "phone").length} nao identificados &middot;{" "}
+                  {participants.filter((p) => p.identityKind === "lid").length} sem telefone
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           {participantsLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-16">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : participantsError ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+              <AlertTriangle className="size-6 text-destructive" />
+              <p className="text-sm text-muted-foreground">{participantsError}</p>
+              <Button size="sm" variant="outline" onClick={() => participantsGroup && handleViewParticipants(participantsGroup)}>
+                Tentar novamente
+              </Button>
             </div>
           ) : participants.length === 0 ? (
             <EmptyState
@@ -479,33 +599,64 @@ export function GroupsTab() {
               description="Sincronize o grupo e tente novamente."
             />
           ) : (
-            <div className="max-h-[420px] overflow-y-auto rounded-lg border">
-              <div className="divide-y divide-border/50">
-                {participants.map((participant, index) => (
-                  <div key={`${participant.jid}-${index}`} className="flex items-center gap-3 px-4 py-3">
-                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <Users className="size-4 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {formatParticipantJid(participant.jid)}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {participant.jid}
-                      </p>
-                    </div>
-                    {participant.isSuperAdmin ? (
-                      <Badge variant="secondary" className="text-xs">Dono</Badge>
-                    ) : participant.isAdmin ? (
-                      <Badge variant="secondary" className="text-xs">Admin</Badge>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+            <div className="flex flex-col gap-3 overflow-hidden flex-1 min-h-0">
+              <Input
+                name="participants-search"
+                placeholder="Buscar por nome, telefone ou JID..."
+                value={participantsSearch}
+                onChange={(e) => setParticipantsSearch(e.target.value)}
+                className="shrink-0"
+              />
+              <Tabs value={participantsTab} onValueChange={setParticipantsTab} className="flex flex-col overflow-hidden flex-1 min-h-0">
+                <TabsList className="shrink-0">
+                  <TabsTrigger value="todos">Todos ({participants.length})</TabsTrigger>
+                  <TabsTrigger value="leads">Leads ({participants.filter((p) => p.lead).length})</TabsTrigger>
+                  <TabsTrigger value="nao_id">Nao id. ({participants.filter((p) => !p.lead && p.identityKind === "phone").length})</TabsTrigger>
+                  <TabsTrigger value="admins">Admins ({participants.filter((p) => p.isAdmin || p.isSuperAdmin).length})</TabsTrigger>
+                </TabsList>
+                {(["todos", "leads", "nao_id", "admins"] as const).map((tab) => {
+                  const filtered = participants.filter((p) => {
+                    if (tab === "leads") return Boolean(p.lead);
+                    if (tab === "nao_id") return !p.lead && p.identityKind === "phone";
+                    if (tab === "admins") return p.isAdmin || p.isSuperAdmin;
+                    return true;
+                  }).filter((p) => {
+                    if (!participantsSearch.trim()) return true;
+                    const q = participantsSearch.toLowerCase();
+                    return (
+                      p.lead?.name?.toLowerCase().includes(q) ||
+                      p.phone?.includes(q) ||
+                      p.rawJid.toLowerCase().includes(q)
+                    );
+                  });
+                  return (
+                    <TabsContent key={tab} value={tab} className="flex-1 overflow-y-auto min-h-0 mt-0">
+                      {filtered.length === 0 ? (
+                        <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                          Nenhum resultado
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border/40 rounded-lg border">
+                          {filtered.map((p) => (
+                            <ParticipantRow
+                              key={p.id}
+                              participant={p}
+                              onOpenProfile={(leadId) => {
+                                setParticipantsOpen(false);
+                                router.push(`/leads?lead=${leadId}`);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                  );
+                })}
+              </Tabs>
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 pt-2">
             <Button variant="outline" onClick={() => setParticipantsOpen(false)}>
               Fechar
             </Button>
