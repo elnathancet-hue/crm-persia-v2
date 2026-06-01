@@ -349,7 +349,7 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     throw new MetaCloudUnsupportedError("createGroup");
   }
 
-  async getGroupInfo(_jid: string, _opts?: { getInviteLink?: boolean }): Promise<GroupInfo> {
+  async getGroupInfo(_jid: string, _opts?: { getInviteLink?: boolean; force?: boolean }): Promise<GroupInfo> {
     throw new MetaCloudUnsupportedError("getGroupInfo");
   }
 

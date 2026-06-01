@@ -403,15 +403,12 @@ export class UazapiAdapter implements WhatsAppProvider {
           IsSuperAdmin?: boolean;
           isSuperAdmin?: boolean;
         };
-        const jid =
-          row.JID ||
-          row.jid ||
-          row.Jid ||
-          row.PhoneNumber ||
-          row.phoneNumber ||
-          row.Phone ||
-          row.phone ||
-          "";
+        const jidCandidate = row.JID || row.jid || row.Jid || "";
+        const phoneCandidate =
+          row.PhoneNumber || row.phoneNumber || row.Phone || row.phone || "";
+        const jid = jidCandidate.endsWith("@lid")
+          ? phoneCandidate || jidCandidate
+          : jidCandidate || phoneCandidate;
         return {
           jid,
           isAdmin: row.IsAdmin === true || row.isAdmin === true,
@@ -454,8 +451,11 @@ export class UazapiAdapter implements WhatsAppProvider {
     return this.mapGroupInfo(g);
   }
 
-  async getGroupInfo(jid: string, opts?: { getInviteLink?: boolean }): Promise<GroupInfo> {
-    const g = await this.client.getGroupInfo(jid, { getInviteLink: opts?.getInviteLink });
+  async getGroupInfo(jid: string, opts?: { getInviteLink?: boolean; force?: boolean }): Promise<GroupInfo> {
+    const g = await this.client.getGroupInfo(jid, {
+      getInviteLink: opts?.getInviteLink,
+      force: opts?.force,
+    });
     return this.mapGroupInfo(g);
   }
 
