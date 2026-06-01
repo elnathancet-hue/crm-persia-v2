@@ -27,7 +27,7 @@ import { errorMessage, logError } from "@/lib/observability";
 import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import { phoneBR } from "@persia/shared/validation";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
-import { cacheLeadAvatarFromUrl } from "@/lib/lead-avatar-cache";
+import { getAndCacheContactAvatar } from "@/lib/lead-avatar-cache";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
@@ -192,27 +192,14 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
         type: "lead_created",
         description: `Lead criado via WhatsApp (${msg.pushName || normalizedPhone})`,
       });
-      // Bug A fix (mai/2026): busca foto WhatsApp em background (legacy
-      // pipeline). Mesma lógica do executor.ts pra AI Agent nativo.
-      const newLeadId = lead.id;
-      void (async () => {
-        try {
-          const remoteAvatarUrl = await provider.getContactProfilePic(normalizedPhone);
-          const avatarUrl = await cacheLeadAvatarFromUrl({
-            organizationId: orgId,
-            leadId: newLeadId,
-            remoteUrl: remoteAvatarUrl,
-          });
-          if (avatarUrl) {
-            await supabase
-              .from("leads")
-              .update({ avatar_url: avatarUrl })
-              .eq("id", newLeadId);
-          }
-        } catch {
-          // Best-effort.
-        }
-      })();
+      // Etapa 2: busca foto WhatsApp em background usando serviço único.
+      // getAndCacheContactAvatar já persiste leads.avatar_url internamente.
+      void getAndCacheContactAvatar({
+        organizationId: orgId,
+        leadId: lead.id,
+        phone: normalizedPhone,
+        provider,
+      });
     }
   }
 

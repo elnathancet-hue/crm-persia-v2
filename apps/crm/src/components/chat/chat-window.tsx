@@ -1125,6 +1125,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                     </div>
                   );
 
+                  // Etapa 2: avatar do lead — mostrar só no fim de um bloco
+                  // (quando a próxima mensagem é de outro remetente ou esta é a última).
+                  const isLastInBlock =
+                    isLead &&
+                    (idx === messages.length - 1 ||
+                      messages[idx + 1].sender !== msg.sender);
+
                   return (
                     <div
                       className={cn(
@@ -1132,6 +1139,22 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                         isLead ? "flex-row" : "ml-auto flex-row-reverse"
                       )}
                     >
+                      {/* Avatar do lead — alinhado à base da bolha, fim de bloco */}
+                      {isLead && (
+                        <div className="w-6 shrink-0 self-end mb-0.5">
+                          {isLastInBlock ? (
+                            <Avatar size="sm">
+                              {(lead?.avatar_url as string | null) ? (
+                                <AvatarImage src={lead!.avatar_url as string} alt={lead?.name as string | undefined} />
+                              ) : null}
+                              <AvatarFallback className="text-[9px]">
+                                {((lead?.name as string) || (lead?.phone as string) || "L").slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          ) : null}
+                        </div>
+                      )}
+
                       {/* Hover controls */}
                       {msgControls}
 

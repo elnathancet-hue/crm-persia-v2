@@ -1,4 +1,4 @@
-const LEAD_AVATARS_BUCKET = "lead-avatars";
+export const LEAD_AVATARS_BUCKET = "lead-avatars";
 const MAX_AVATAR_BYTES = 1024 * 1024;
 
 const MIME_TO_EXT: Record<string, string> = {
@@ -77,4 +77,66 @@ export async function cacheLeadAvatarFromUrl(input: {
     .getPublicUrl(storagePath);
 
   return data.publicUrl;
+}
+
+// ── getAndCacheContactAvatar ───────────────────────────────────────────────────
+// Serviço único (Etapa 1 do roadmap). Centraliza a lógica de:
+// 1. skip se já há URL cacheada (a menos que force: true)
+// 2. buscar foto via provider.getContactProfilePic(phone)
+// 3. cachear no Storage via cacheLeadAvatarFromUrl
+// 4. atualizar leads.avatar_url se leadId foi fornecido e URL mudou
+// 5. retornar sem lançar erro em qualquer falha de rede/UAZAPI
+export async function getAndCacheContactAvatar(input: {
+  organizationId: string;
+  leadId?: string | null;
+  phone: string;
+  currentAvatarUrl?: string | null;
+  /** Provider WhatsApp para chamada getContactProfilePic */
+  provider: { getContactProfilePic(phone: string): Promise<string | null> };
+  force?: boolean;
+}): Promise<{ avatarUrl: string | null; updated: boolean }> {
+  const { organizationId, leadId, phone, currentAvatarUrl, provider, force } = input;
+
+  // Skip se já temos URL cacheada e não está forçando refresh
+  if (!force && currentAvatarUrl && isCachedLeadAvatarUrl(currentAvatarUrl)) {
+    return { avatarUrl: currentAvatarUrl, updated: false };
+  }
+
+  try {
+    const remoteUrl = await provider.getContactProfilePic(phone);
+    if (!remoteUrl) {
+      return { avatarUrl: currentAvatarUrl ?? null, updated: false };
+    }
+
+    // Se a URL remota já é a mesma que temos, não recachear
+    if (!force && currentAvatarUrl && remoteUrl === currentAvatarUrl) {
+      return { avatarUrl: currentAvatarUrl, updated: false };
+    }
+
+    if (!leadId) {
+      // Sem leadId, apenas retorna a URL remota sem cachear no Storage
+      return { avatarUrl: remoteUrl, updated: false };
+    }
+
+    const cachedUrl = await cacheLeadAvatarFromUrl({
+      organizationId,
+      leadId,
+      remoteUrl,
+    });
+
+    if (!cachedUrl) return { avatarUrl: currentAvatarUrl ?? null, updated: false };
+
+    // Atualiza leads.avatar_url se URL mudou
+    if (cachedUrl !== currentAvatarUrl) {
+      const { createAdminClient } = await import("@/lib/supabase/admin");
+      const admin = createAdminClient();
+      await admin.from("leads").update({ avatar_url: cachedUrl }).eq("id", leadId);
+      return { avatarUrl: cachedUrl, updated: true };
+    }
+
+    return { avatarUrl: cachedUrl, updated: false };
+  } catch {
+    // Best-effort: falha de rede, rate limit, foto privada → retorna o que tinha
+    return { avatarUrl: currentAvatarUrl ?? null, updated: false };
+  }
 }
