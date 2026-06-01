@@ -341,6 +341,10 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     return [];
   }
 
+  async listGroupsPaged(_opts?: { limit?: number; offset?: number; search?: string; noParticipants?: boolean }): Promise<{ groups: GroupInfo[]; total?: number }> {
+    return { groups: [] };
+  }
+
   async createGroup(_name: string, _participants: string[]): Promise<GroupInfo> {
     throw new MetaCloudUnsupportedError("createGroup");
   }

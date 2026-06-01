@@ -410,6 +410,14 @@ export class UazapiAdapter implements WhatsAppProvider {
     return (result.groups || []).map(g => this.mapGroupInfo(g));
   }
 
+  async listGroupsPaged(opts?: { limit?: number; offset?: number; search?: string; noParticipants?: boolean }): Promise<{ groups: GroupInfo[]; total?: number }> {
+    const result = await this.client.listGroupsPaged(opts);
+    return {
+      groups: (result.groups || []).map(g => this.mapGroupInfo(g)),
+      total: result.pagination?.totalRecords,
+    };
+  }
+
   async createGroup(name: string, participants: string[]): Promise<GroupInfo> {
     const g = await this.client.createGroup(name, participants);
     return this.mapGroupInfo(g);
