@@ -579,7 +579,7 @@ export async function diagnoseTicks(): Promise<{
   ok: boolean;
   error?: string;
   webhook?: { url: string; events: string[]; excludeMessages?: string[] };
-  recentMessages?: Array<{ id: string; created_at: string; status: string; has_wamid: boolean }>;
+  recentMessages?: Array<{ id: string; created_at: string; status: string; has_wamid: boolean; wamid_preview: string }>;
   statusCounts?: Record<string, number>;
   presenceSet?: boolean;
 }> {
@@ -624,6 +624,8 @@ export async function diagnoseTicks(): Promise<{
       created_at: m.created_at ?? "",
       status: m.status ?? "null",
       has_wamid: !!m.whatsapp_msg_id,
+      // First 40 chars to identify format (short vs "true_PHONE@..._MSGID" long format)
+      wamid_preview: m.whatsapp_msg_id ? m.whatsapp_msg_id.slice(0, 40) : "",
     }));
 
     // 3. Distribuição de status nos últimos 50 envios

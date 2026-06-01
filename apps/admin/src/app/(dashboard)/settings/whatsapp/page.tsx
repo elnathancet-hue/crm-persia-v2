@@ -395,9 +395,10 @@ export default function WhatsAppPage() {
                 <p className="text-muted-foreground mb-1">Últimas 5 mensagens enviadas:</p>
                 {diagnoseResult.recentMessages?.length === 0 && <p className="text-muted-foreground">Nenhuma mensagem encontrada</p>}
                 {diagnoseResult.recentMessages?.map((m) => (
-                  <p key={m.id}>
+                  <p key={m.id} className="break-all">
                     {m.has_wamid ? <span className="text-emerald-500">✓</span> : <span className="text-red-500">✗</span>}
-                    {" "}wamid={m.has_wamid ? "sim" : "NÃO"} | status={m.status} | {new Date(m.created_at).toLocaleTimeString("pt-BR")}
+                    {" "}status={m.status} | {new Date(m.created_at).toLocaleTimeString("pt-BR")}
+                    {m.wamid_preview && <span className="text-muted-foreground"> | id={m.wamid_preview}</span>}
                   </p>
                 ))}
                 {diagnoseResult.recentMessages?.some((m) => !m.has_wamid) && (
