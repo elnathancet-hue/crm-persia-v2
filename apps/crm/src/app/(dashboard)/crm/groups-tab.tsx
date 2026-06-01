@@ -643,7 +643,7 @@ export function GroupsTab() {
                               participant={p}
                               onOpenProfile={(leadId) => {
                                 setParticipantsOpen(false);
-                                router.push(`/leads?lead=${leadId}`);
+                                router.push(`/crm?tab=leads&lead=${leadId}`);
                               }}
                             />
                           ))}
