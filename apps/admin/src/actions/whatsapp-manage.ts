@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
 import { configureUazapiWebhook, createProvider } from "@/lib/whatsapp/providers";
+import { UazapiClient } from "@/lib/whatsapp/uazapi";
 import { MetaCloudAdapter } from "@/lib/whatsapp/providers/meta-cloud";
 
 
@@ -545,5 +546,82 @@ export async function connectMetaCloudWhatsApp(input: MetaConnectInput): Promise
       });
     }
     return { status: "error", error: e instanceof Error ? e.message : "Erro ao conectar Meta Cloud" };
+  }
+}
+
+/**
+ * Diagnostica ticks de entrega/leitura. Três verificações:
+ *  1. GET /webhook no UAZAPI — eventos realmente configurados
+ *  2. Últimas 5 msgs outbound — tem whatsapp_msg_id salvo?
+ *  3. Distribuição de status nos últimos 50 envios
+ */
+export async function diagnoseTicks(): Promise<{
+  ok: boolean;
+  error?: string;
+  webhook?: { url: string; events: string[]; excludeMessages?: string[] };
+  recentMessages?: Array<{ id: string; created_at: string; status: string; has_wamid: boolean }>;
+  statusCounts?: Record<string, number>;
+}> {
+  try {
+    const ctx = await getConnection();
+    if (!ctx) return { ok: false, error: "Conexão WhatsApp não configurada" };
+    if (ctx.connection.provider !== "uazapi")
+      return { ok: false, error: "Diagnóstico de ticks só disponível para UAZAPI" };
+    if (!ctx.connection.instance_url || !ctx.connection.instance_token)
+      return { ok: false, error: "instance_url/instance_token não configurados" };
+
+    // 1. Config real do UAZAPI (GET /webhook)
+    const uaClient = new UazapiClient({
+      baseUrl: ctx.connection.instance_url,
+      token: ctx.connection.instance_token,
+    });
+    let webhook: { url: string; events: string[]; excludeMessages?: string[] };
+    try {
+      const raw = await uaClient.getWebhook() as unknown;
+      const entry = Array.isArray(raw) ? ((raw as unknown[])[0] ?? {}) : raw;
+      const ent = entry as Record<string, unknown>;
+      webhook = {
+        url: String(ent.url ?? ent.webhookURL ?? ""),
+        events: Array.isArray(ent.events) ? (ent.events as string[]) : [],
+        excludeMessages: Array.isArray(ent.excludeMessages) ? (ent.excludeMessages as string[]) : undefined,
+      };
+    } catch {
+      webhook = { url: "(erro ao buscar)", events: [] };
+    }
+
+    // 2. Últimas 5 mensagens outbound — whatsapp_msg_id salvo?
+    const { data: recent } = await ctx.admin
+      .from("messages")
+      .select("id, created_at, status, whatsapp_msg_id")
+      .eq("organization_id", ctx.orgId)
+      .in("sender", ["agent", "ai"])
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    const recentMessages = (recent ?? []).map((m) => ({
+      id: m.id,
+      created_at: m.created_at ?? "",
+      status: m.status ?? "null",
+      has_wamid: !!m.whatsapp_msg_id,
+    }));
+
+    // 3. Distribuição de status nos últimos 50 envios
+    const { data: all50 } = await ctx.admin
+      .from("messages")
+      .select("status")
+      .eq("organization_id", ctx.orgId)
+      .in("sender", ["agent", "ai"])
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    const statusCounts: Record<string, number> = {};
+    for (const m of all50 ?? []) {
+      const s = m.status ?? "null";
+      statusCounts[s] = (statusCounts[s] ?? 0) + 1;
+    }
+
+    return { ok: true, webhook, recentMessages, statusCounts };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }

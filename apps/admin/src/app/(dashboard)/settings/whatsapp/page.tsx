@@ -4,10 +4,10 @@ import { useEffect, useState, useRef } from "react";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { useClientStore } from "@/lib/stores/client-store";
 import { getWhatsAppStatus } from "@/actions/settings";
-import { connectWhatsAppAdmin, getQRCodeAdmin, resetAndGetQRAdmin, disconnectWhatsAppAdmin, autoProvisionWhatsApp, resyncUazapiWebhook } from "@/actions/whatsapp-manage";
+import { connectWhatsAppAdmin, getQRCodeAdmin, resetAndGetQRAdmin, disconnectWhatsAppAdmin, autoProvisionWhatsApp, resyncUazapiWebhook, diagnoseTicks } from "@/actions/whatsapp-manage";
 import {
   Loader2, RefreshCw, CheckCircle, XCircle, X,
-  AlertTriangle, QrCode, Wifi, LogOut, Clock, Link2, Smartphone, Cable
+  AlertTriangle, QrCode, Wifi, LogOut, Clock, Link2, Smartphone, Cable, Stethoscope
 } from "lucide-react";
 import { toast } from "sonner";
 import { NoContextFallback } from "@/components/no-context-fallback";
@@ -35,6 +35,8 @@ export default function WhatsAppPage() {
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [resyncing, setResyncing] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagnoseResult, setDiagnoseResult] = useState<Awaited<ReturnType<typeof diagnoseTicks>> | null>(null);
   const [qrExpired, setQrExpired] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [tab, setTab] = useState<ProviderTab>("uazapi");
@@ -196,6 +198,20 @@ export default function WhatsAppPage() {
     setResyncing(false);
   }
 
+  async function handleDiagnose() {
+    if (!isManagingClient) return;
+    setDiagnosing(true);
+    setDiagnoseResult(null);
+    try {
+      const result = await diagnoseTicks();
+      setDiagnoseResult(result);
+      if (!result.ok) toast.error(result.error || "Falha no diagnóstico.");
+    } catch {
+      toast.error("Erro ao diagnosticar. Tente novamente.");
+    }
+    setDiagnosing(false);
+  }
+
   async function handleDisconnect() {
     if (!isManagingClient) return;
     if (!confirm(`Desconectar o WhatsApp de ${activeOrgName}? A IA parara de funcionar.`)) return;
@@ -329,6 +345,18 @@ export default function WhatsAppPage() {
             </button>
           )}
 
+          {/* Diagnosticar ticks — só quando conectado UAZAPI */}
+          {isConnected && (
+            <button
+              onClick={handleDiagnose}
+              disabled={diagnosing}
+              title="Verifica se whatsapp_msg_id está sendo salvo e se o webhook está com messages_update configurado."
+              className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/30 disabled:opacity-50 transition-colors"
+            >
+              {diagnosing ? <Loader2 className="size-4 animate-spin" /> : <Stethoscope className="size-4" />} Diagnosticar ticks
+            </button>
+          )}
+
           {/* Disconnect button for connected */}
           {isConnected && (
             <button onClick={handleDisconnect} disabled={disconnecting} className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm disabled:opacity-50 transition-colors">
@@ -337,6 +365,54 @@ export default function WhatsAppPage() {
           )}
         </div>
       </div>
+
+      {/* Resultado do diagnóstico de ticks */}
+      {diagnoseResult && (
+        <div className="mt-4 rounded-xl border border-border bg-card p-4 text-sm font-mono space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-foreground">Diagnóstico de Ticks</span>
+            <button onClick={() => setDiagnoseResult(null)} className="text-muted-foreground hover:text-foreground"><X className="size-4" /></button>
+          </div>
+          {!diagnoseResult.ok ? (
+            <p className="text-red-500">{diagnoseResult.error}</p>
+          ) : (
+            <>
+              <div>
+                <p className="text-muted-foreground mb-1">Webhook UAZAPI (real):</p>
+                <p><span className="text-foreground">URL:</span> {diagnoseResult.webhook?.url || "(vazio)"}</p>
+                <p><span className="text-foreground">Eventos:</span> {diagnoseResult.webhook?.events?.join(", ") || "(nenhum)"}</p>
+                {diagnoseResult.webhook?.excludeMessages?.length ? (
+                  <p className="text-amber-500">⚠ excludeMessages: {diagnoseResult.webhook.excludeMessages.join(", ")}</p>
+                ) : (
+                  <p className="text-emerald-500">✓ excludeMessages vazio (correto)</p>
+                )}
+                {!diagnoseResult.webhook?.events?.includes("messages_update") && (
+                  <p className="text-red-500">✗ messages_update NÃO está nos eventos — clique em Re-sincronizar!</p>
+                )}
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-1">Últimas 5 mensagens enviadas:</p>
+                {diagnoseResult.recentMessages?.length === 0 && <p className="text-muted-foreground">Nenhuma mensagem encontrada</p>}
+                {diagnoseResult.recentMessages?.map((m) => (
+                  <p key={m.id}>
+                    {m.has_wamid ? <span className="text-emerald-500">✓</span> : <span className="text-red-500">✗</span>}
+                    {" "}wamid={m.has_wamid ? "sim" : "NÃO"} | status={m.status} | {new Date(m.created_at).toLocaleTimeString("pt-BR")}
+                  </p>
+                ))}
+                {diagnoseResult.recentMessages?.some((m) => !m.has_wamid) && (
+                  <p className="text-red-500 mt-1">✗ Mensagens sem whatsapp_msg_id — UAZAPI não retornou o ID ao enviar!</p>
+                )}
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-1">Status dos últimos 50 envios:</p>
+                {Object.entries(diagnoseResult.statusCounts ?? {}).map(([s, n]) => (
+                  <p key={s}>{s}: {n as number}</p>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* QR Code Popup — centered overlay */}
       {qrCode && !qrExpired && (
