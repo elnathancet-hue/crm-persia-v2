@@ -1293,7 +1293,10 @@ function CampaignManagerSheet({
     }
   }
 
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  // useState "" garante que servidor e cliente renderizam igual no primeiro pass,
+  // evitando hydration mismatch (React error #418).
+  const [baseUrl, setBaseUrl] = React.useState("");
+  React.useEffect(() => { setBaseUrl(window.location.origin); }, []);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
