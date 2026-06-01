@@ -185,6 +185,12 @@
   --warning-soft-foreground: hsl(28, 80%, 30%);
   --warning-ring: hsl(43, 96%, 70%);        /* amber 300 */
 
+  /* Badge de notificação não-lida — vermelho mais vibrante que --destructive
+     (que é red 700 firme, adequado para texto/botões mas escuro demais para
+     bolinha preenchida de badge). Padrão: red-500 equiv. */
+  --badge-notification: hsl(0, 84%, 60%);   /* ~red-500 #F03030 */
+  --badge-notification-fg: hsl(0, 0%, 100%);
+
   --radius: 0.5rem;
 
   /* Sidebar — PR-NAVUI (mai/2026): tema Clean ganhou sidebar PRETA com
@@ -292,6 +298,10 @@
   --warning-soft: hsl(28, 60%, 14%);        /* amber deep */
   --warning-soft-foreground: hsl(48, 95%, 78%);
   --warning-ring: hsl(28, 60%, 38%);
+
+  /* Badge de notificação não-lida (dark mode) */
+  --badge-notification: hsl(0, 84%, 65%);   /* ligeiramente mais claro no dark */
+  --badge-notification-fg: hsl(0, 0%, 100%);
 
   /* Sidebar - deeper navy */
   --sidebar: hsl(230, 45%, 5%);            /* deep navy */

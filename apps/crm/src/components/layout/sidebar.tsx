@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { navigation } from "@/lib/constants/navigation";
 import { useUnreadCount } from "@/lib/hooks/use-unread-count";
+import { useGroupsUnreadCount } from "@/lib/hooks/use-groups-unread-count";
 import { useTabTitleBadge } from "@/lib/hooks/use-notification";
 import { useRole } from "@/lib/hooks/use-role";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -15,6 +16,7 @@ export function Sidebar() {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const unreadCount = useUnreadCount();
+  const groupsUnreadCount = useGroupsUnreadCount();
   const { setUnreadCount } = useTabTitleBadge();
 
   // Filter navigation items by role — items without minRole are visible to all
@@ -129,8 +131,19 @@ export function Sidebar() {
                   <Icon className="size-5" />
                   <span className="text-[10px] font-medium leading-tight">{item.label}</span>
                   {item.badge && unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 size-4 rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center">
+                    <span
+                      className="absolute top-1 right-1 size-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                      style={{ background: "var(--badge-notification)", color: "var(--badge-notification-fg)" }}
+                    >
                       {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                  {item.href === "/groups" && groupsUnreadCount > 0 && (
+                    <span
+                      className="absolute top-1 right-1 size-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                      style={{ background: "var(--badge-notification)", color: "var(--badge-notification-fg)" }}
+                    >
+                      {groupsUnreadCount > 9 ? "9+" : groupsUnreadCount}
                     </span>
                   )}
                 </Link>

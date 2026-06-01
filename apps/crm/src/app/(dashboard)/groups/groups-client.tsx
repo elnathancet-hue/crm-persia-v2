@@ -309,7 +309,10 @@ function GroupListPanel({
                     <div className="flex items-center gap-1 shrink-0">
                       {group.campaign_id && <Link2 className="size-3 text-primary" />}
                       {unread > 0 && (
-                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                        <span
+                          className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold px-1"
+                          style={{ background: "var(--badge-notification)", color: "var(--badge-notification-fg)" }}
+                        >
                           {unread > 99 ? "99+" : unread}
                         </span>
                       )}
