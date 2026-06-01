@@ -406,7 +406,7 @@ export async function getGroupParticipants(id: string) {
 
   if (!group) throw new Error("Grupo nao encontrado");
 
-  const info = await provider.getGroupInfo(group.group_jid as string);
+  const info = await provider.getGroupInfo(group.group_jid as string, { force: true });
   return info.participants;
 }
 
