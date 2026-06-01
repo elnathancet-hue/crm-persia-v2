@@ -112,6 +112,17 @@ interface Group {
   campaign_id: string | null;
   created_at: string;
   updated_at: string;
+  last_message_text: string | null;
+  last_message_sender: string | null;
+  last_message_direction: string | null;
+  last_message_at: string | null;
+}
+
+interface GroupLastMsg {
+  text: string | null;
+  sender: string | null;
+  direction: string;
+  at: string;
 }
 
 interface GroupMessage {
@@ -126,6 +137,16 @@ interface GroupMessage {
 }
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "👏"];
+
+function formatMsgTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 1) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -158,6 +179,7 @@ function GroupListPanel({
   categoryFilter,
   onCategoryFilter,
   unreadCounts,
+  lastMessages,
 }: {
   groups: Group[];
   selectedId: string | null;
@@ -171,6 +193,7 @@ function GroupListPanel({
   categoryFilter: string;
   onCategoryFilter: (v: string) => void;
   unreadCounts: Record<string, number>;
+  lastMessages: Record<string, GroupLastMsg>;
 }) {
   const filtered = groups.filter((g) => {
     const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase());
@@ -243,61 +266,59 @@ function GroupListPanel({
             />
           </div>
         ) : (
-          filtered.map((group) => (
-            <Button
-              key={group.id}
-              variant="ghost"
-              onClick={() => onSelect(group.id)}
-              className={`w-full justify-start h-auto text-left px-4 py-3 rounded-none border-b border-border/30 hover:bg-muted/50 ${
-                selectedId === group.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
-              }`}
-            >
-              {/* Avatar */}
-              <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <Users className="size-5 text-primary" />
-              </div>
+          filtered.map((group) => {
+            const lastMsg = lastMessages[group.id];
+            const unread = unreadCounts[group.id] ?? 0;
+            const timeLabel = lastMsg ? formatMsgTime(lastMsg.at) : "";
+            const preview = lastMsg
+              ? lastMsg.direction === "outbound"
+                ? `Você: ${lastMsg.text || "Mídia"}`
+                : lastMsg.sender
+                  ? `${lastMsg.sender.split(" ")[0]}: ${lastMsg.text || "Mídia"}`
+                  : lastMsg.text || "Mídia"
+              : "Nenhuma mensagem";
 
-              {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold truncate">{group.name}</p>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {(unreadCounts[group.id] ?? 0) > 0 && (
-                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-primary text-primary-foreground text-[10px] font-bold px-1">
-                        {unreadCounts[group.id] > 99 ? "99+" : unreadCounts[group.id]}
+            return (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => onSelect(group.id)}
+                className={`w-full text-left flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-muted/50 transition-colors ${
+                  selectedId === group.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
+                }`}
+              >
+                {/* Avatar */}
+                <div className="size-11 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <Users className="size-5 text-primary" />
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  {/* Row 1: name + time */}
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-sm font-semibold truncate">{group.name}</p>
+                    {timeLabel && (
+                      <span className={`text-[11px] shrink-0 ${unread > 0 ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                        {timeLabel}
                       </span>
                     )}
-                    {group.campaign_id && <Link2 className="size-3 text-primary" />}
-                    {!group.is_accepting && <span className="text-[10px] text-destructive font-medium">Fechado</span>}
-                    <Badge
-                      variant="secondary"
-                      className={`text-[10px] px-1.5 ${CATEGORY_COLORS[group.category] || ""}`}
-                    >
-                      {CATEGORY_LABELS[group.category] || group.category}
-                    </Badge>
+                  </div>
+                  {/* Row 2: last message preview + unread badge */}
+                  <div className="flex items-center justify-between gap-1 mt-0.5">
+                    <p className="text-xs text-muted-foreground truncate flex-1">{preview}</p>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {group.campaign_id && <Link2 className="size-3 text-primary" />}
+                      {unread > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                          {unread > 99 ? "99+" : unread}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                  <Users className="size-3 shrink-0" />
-                  <span>{group.participant_count}/{group.max_participants}</span>
-                  {group.is_announce && (
-                    <>
-                      <span>·</span>
-                      <Megaphone className="size-3 shrink-0" />
-                      <span>Anuncio</span>
-                    </>
-                  )}
-                </div>
-                {/* Capacity bar */}
-                <div className="mt-1.5 h-1 w-full rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all bg-primary"
-                    style={{ width: `${Math.min(100, Math.round(((group.participant_count ?? 0) / (group.max_participants || 256)) * 100))}%` }}
-                  />
-                </div>
-              </div>
-            </Button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
 
@@ -1378,6 +1399,20 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const [campaigns, setCampaigns] = React.useState<GroupCampaign[]>([]);
   const [orgSlug, setOrgSlug] = React.useState("");
   const [unreadCounts, setUnreadCounts] = React.useState<Record<string, number>>({});
+  const [lastMessages, setLastMessages] = React.useState<Record<string, GroupLastMsg>>(() => {
+    const init: Record<string, GroupLastMsg> = {};
+    for (const g of initialGroups) {
+      if (g.last_message_at) {
+        init[g.id] = {
+          text: g.last_message_text,
+          sender: g.last_message_sender,
+          direction: g.last_message_direction ?? "inbound",
+          at: g.last_message_at,
+        };
+      }
+    }
+    return init;
+  });
 
   // Ref para o selectedId atual dentro do callback do Realtime (evita closure stale)
   const selectedIdRef = React.useRef<string | null>(null);
@@ -1433,10 +1468,17 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "group_messages" },
-        (payload: { new: { group_id: string; direction: string; text: string | null; sender_name: string | null } }) => {
-          const { group_id, direction, text, sender_name } = payload.new;
+        (payload: { new: { group_id: string; direction: string; text: string | null; sender_name: string | null; created_at: string } }) => {
+          const { group_id, direction, text, sender_name, created_at } = payload.new;
           if (direction !== "inbound") return;
-          // Só age em grupos que NÃO estão visíveis no painel de chat atual
+
+          // Atualiza preview da última mensagem no painel lateral
+          setLastMessages((prev) => ({
+            ...prev,
+            [group_id]: { text, sender: sender_name, direction, at: created_at },
+          }));
+
+          // Só notifica/incrementa unread para grupos fora de foco
           if (group_id === selectedIdRef.current) return;
 
           setUnreadCounts((prev) => ({ ...prev, [group_id]: (prev[group_id] ?? 0) + 1 }));
@@ -1535,6 +1577,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           categoryFilter={categoryFilter}
           onCategoryFilter={setCategoryFilter}
           unreadCounts={unreadCounts}
+          lastMessages={lastMessages}
         />
       </div>
 
