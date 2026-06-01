@@ -62,6 +62,7 @@ import {
   syncGroups,
   getGroupsOverview,
   getGroupParticipantsView,
+  createLeadFromParticipant,
   type GroupOverview,
   type GroupParticipantView,
 } from "@/actions/groups";
@@ -108,12 +109,16 @@ function ParticipantRow({
   participant: p,
   onOpenProfile,
   onOpenChat,
+  onCreateLead,
   chatLoading,
+  createLoading,
 }: {
   participant: GroupParticipantView;
   onOpenProfile: (leadId: string) => void;
   onOpenChat: (leadId: string) => void;
+  onCreateLead: (participant: GroupParticipantView) => void;
   chatLoading: boolean;
+  createLoading: boolean;
 }) {
   function copyPhone() {
     if (!p.phone) return;
@@ -192,11 +197,14 @@ function ParticipantRow({
             variant="ghost"
             size="icon-xs"
             title="Criar lead"
-            onClick={() => {
-              toast.info("Em breve: criar lead a partir do participante");
-            }}
+            disabled={createLoading}
+            onClick={() => onCreateLead(p)}
           >
-            <UserPlus className="size-3.5" />
+            {createLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <UserPlus className="size-3.5" />
+            )}
           </Button>
         )}
         {p.identityKind === "lid" && (
@@ -234,6 +242,7 @@ export function GroupsTab() {
   const [participantsSearch, setParticipantsSearch] = React.useState("");
   const [participantsTab, setParticipantsTab] = React.useState("todos");
   const [chatLoadingLeadId, setChatLoadingLeadId] = React.useState<string | null>(null);
+  const [createLoadingJid, setCreateLoadingJid] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     getGroupsOverview()
@@ -271,6 +280,34 @@ export function GroupsTab() {
       toast.error((err as Error).message || "Erro ao criar grupo");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleCreateLead(participant: GroupParticipantView) {
+    if (!participant.phone) return;
+    setCreateLoadingJid(participant.rawJid);
+    try {
+      const { leadId, created } = await createLeadFromParticipant(
+        participantsGroup!.id,
+        {
+          rawJid: participant.rawJid,
+          phone: participant.phone,
+          displayName: participant.displayName,
+        },
+      );
+      toast.success(
+        created
+          ? "Lead criado com sucesso"
+          : "Lead já existia — membership vinculada",
+      );
+      // Re-fetch para atualizar badges na lista
+      if (participantsGroup) await handleViewParticipants(participantsGroup);
+      // Opcional: abrir perfil recém-criado
+      router.prefetch(`/crm?tab=leads&lead=${leadId}`);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao criar lead");
+    } finally {
+      setCreateLoadingJid(null);
     }
   }
 
@@ -680,7 +717,9 @@ export function GroupsTab() {
                                 router.push(`/crm?tab=leads&lead=${leadId}`);
                               }}
                               onOpenChat={handleOpenChat}
+                              onCreateLead={handleCreateLead}
                               chatLoading={chatLoadingLeadId === p.lead?.id}
+                              createLoading={createLoadingJid === p.rawJid}
                             />
                           ))}
                         </div>

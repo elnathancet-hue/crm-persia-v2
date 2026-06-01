@@ -6,7 +6,7 @@ import { createProvider } from "@/lib/whatsapp/providers";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createHash } from "crypto";
-import { linkGroupMembership, normalizePhoneBR } from "@/lib/whatsapp/group-join-pipeline";
+import { linkGroupMembership, normalizePhoneBR, generatePhoneVariants } from "@/lib/whatsapp/group-join-pipeline";
 
 async function getProvider(supabase: any, orgId: string) {
   const { data: connection } = await supabase
@@ -1307,4 +1307,84 @@ export async function backfillGroupMembers(groupId: string): Promise<{ processed
   );
 
   return { processed: participants.length, linked };
+}
+
+// ── createLeadFromParticipant ─────────────────────────────────────────────────
+// Etapa 5: cria (ou vincula) lead a partir de participante sem lead identificado.
+// Deduplicado por telefone + variantes BR com/sem 9° dígito.
+// Idempotente: se lead ja existir por telefone, apenas vincula a membership.
+export async function createLeadFromParticipant(
+  groupId: string,
+  participant: {
+    rawJid: string;
+    phone: string;
+    displayName?: string | null;
+  },
+): Promise<{ leadId: string; created: boolean }> {
+  const { orgId } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
+
+  const normalized = normalizePhoneBR(participant.phone);
+  if (!normalized) throw new Error("Telefone inválido para criar lead");
+
+  const variants = generatePhoneVariants(normalized);
+
+  // 1. Buscar lead existente por telefone (com variantes do 9° dígito)
+  const { data: existing } = await adminDb
+    .from("leads")
+    .select("id")
+    .eq("organization_id", orgId)
+    .in("phone", variants)
+    .limit(1)
+    .maybeSingle();
+
+  let leadId: string;
+  let created: boolean;
+
+  if (existing) {
+    leadId = (existing as { id: string }).id;
+    created = false;
+  } else {
+    // 2. Criar lead novo com source = "whatsapp_group"
+    const { data: newLead, error } = await adminDb
+      .from("leads")
+      .insert({
+        organization_id: orgId,
+        phone: normalized,
+        name: participant.displayName?.trim() || null,
+        source: "whatsapp_group",
+        status: "new",
+        channel: "whatsapp",
+      })
+      .select("id")
+      .single();
+
+    if (error) throw new Error(error.message);
+    leadId = (newLead as { id: string }).id;
+    created = true;
+  }
+
+  // 3. Buscar nome do grupo para o membership
+  const { data: group } = await adminDb
+    .from("whatsapp_groups")
+    .select("name")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  // 4. Upsert membership vinculando o lead (idempotente por org+group+phone)
+  await linkGroupMembership({
+    supabase: createAdminClient(),
+    orgId,
+    groupId,
+    groupName: (group?.name as string | null) ?? "Grupo",
+    participantJid: participant.rawJid,
+    participantName: participant.displayName?.trim() || null,
+    source: "manual",
+  }).catch((err: unknown) => {
+    console.error("[createLeadFromParticipant] linkGroupMembership falhou:", err);
+  });
+
+  revalidatePath("/crm");
+  return { leadId, created };
 }
