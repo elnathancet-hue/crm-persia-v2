@@ -443,17 +443,9 @@ function GroupChatPanel({
             if (prev.some((m) => m.id === payload.new.id)) return prev;
             return [...prev, payload.new];
           });
-          if (payload.new.direction === "inbound") {
-            const sender = payload.new.sender_name || "Participante";
-            const preview = payload.new.text
-              ? payload.new.text.length > 60
-                ? payload.new.text.slice(0, 60) + "…"
-                : payload.new.text
-              : "Nova mensagem";
-            toast.message(`${group.name}`, {
-              description: `${sender}: ${preview}`,
-            });
-          }
+          // Não dispara toast aqui — o grupo está aberto e o usuário vê a mensagem
+          // em tempo real. O toast para grupos não selecionados é gerenciado pelo
+          // GlobalRealtimeSubscription em GroupsClient.
         },
       )
       .subscribe();

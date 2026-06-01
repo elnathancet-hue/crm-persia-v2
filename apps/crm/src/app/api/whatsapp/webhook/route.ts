@@ -236,7 +236,11 @@ export async function POST(request: NextRequest) {
           text: msg.text,
           sender_name: msg.pushName || null,
           whatsapp_msg_id: msg.messageId || null,
-        });
+          // media_type: null for text, otherwise the message type (image/video/audio/document)
+          // media_url: UAZAPI does not include fileURL in group message webhooks; left null
+          media_type: msg.type && msg.type !== "text" ? msg.type : null,
+          media_url: (msg as any).mediaUrl || null,
+        } as never);
 
         // Bug C fix (mai/2026): vincular remetente como membro do grupo.
         // UAZAPI "groups" event só dispara em join/leave; mensagens recebidas
