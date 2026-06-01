@@ -1388,3 +1388,26 @@ export async function createLeadFromParticipant(
   revalidatePath("/crm");
   return { leadId, created };
 }
+
+// ── bulkAddTagToGroupLeads ─────────────────────────────────────────────────────
+// Etapa 6: aplica uma tag em massa a múltiplos leads de um grupo.
+// Usa Promise.allSettled para não abortar ao primeiro erro.
+export async function bulkAddTagToGroupLeads(
+  leadIds: string[],
+  tagId: string,
+): Promise<{ success: number; failed: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+  const { addTagToLead: addTagShared } = await import("@persia/shared/crm");
+
+  const results = await Promise.allSettled(
+    leadIds.map((leadId) =>
+      addTagShared({ db: supabase, orgId }, leadId, tagId),
+    ),
+  );
+
+  const success = results.filter((r) => r.status === "fulfilled").length;
+  const failed = results.filter((r) => r.status === "rejected").length;
+
+  if (success > 0) revalidatePath("/crm");
+  return { success, failed };
+}

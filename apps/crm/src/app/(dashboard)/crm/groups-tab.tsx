@@ -50,6 +50,9 @@ import {
   ShieldCheck,
   Crown,
   UserX,
+  Tag,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import {
   Tabs,
@@ -63,10 +66,12 @@ import {
   getGroupsOverview,
   getGroupParticipantsView,
   createLeadFromParticipant,
+  bulkAddTagToGroupLeads,
   type GroupOverview,
   type GroupParticipantView,
 } from "@/actions/groups";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
+import { getOrgTags } from "@/actions/leads";
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -110,6 +115,8 @@ function ParticipantRow({
   onOpenProfile,
   onOpenChat,
   onCreateLead,
+  onToggleSelect,
+  selected,
   chatLoading,
   createLoading,
 }: {
@@ -117,9 +124,13 @@ function ParticipantRow({
   onOpenProfile: (leadId: string) => void;
   onOpenChat: (leadId: string) => void;
   onCreateLead: (participant: GroupParticipantView) => void;
+  onToggleSelect: (id: string) => void;
+  selected: boolean;
   chatLoading: boolean;
   createLoading: boolean;
 }) {
+  const selectable = Boolean(p.lead) || p.identityKind === "phone";
+
   function copyPhone() {
     if (!p.phone) return;
     navigator.clipboard.writeText(p.phone);
@@ -128,6 +139,17 @@ function ParticipantRow({
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+      {/* Checkbox de seleção */}
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={selected ? "Desmarcar" : "Selecionar"}
+        disabled={!selectable}
+        onClick={(e) => { e.stopPropagation(); onToggleSelect(p.id); }}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        {selected ? <CheckSquare className="size-4 text-primary" /> : <Square className="size-4" />}
+      </Button>
       {/* Avatar */}
       <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
         {p.lead?.avatar_url ? (
@@ -243,6 +265,11 @@ export function GroupsTab() {
   const [participantsTab, setParticipantsTab] = React.useState("todos");
   const [chatLoadingLeadId, setChatLoadingLeadId] = React.useState<string | null>(null);
   const [createLoadingJid, setCreateLoadingJid] = React.useState<string | null>(null);
+  // Bulk selection & actions
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const [orgTags, setOrgTags] = React.useState<{ id: string; name: string; color: string }[]>([]);
+  const [bulkTagId, setBulkTagId] = React.useState("");
+  const [bulkLoading, setBulkLoading] = React.useState(false);
 
   React.useEffect(() => {
     getGroupsOverview()
@@ -280,6 +307,92 @@ export function GroupsTab() {
       toast.error((err as Error).message || "Erro ao criar grupo");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function handleToggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function handleSelectAll(visibleParticipants: GroupParticipantView[]) {
+    const selectable = visibleParticipants
+      .filter((p) => Boolean(p.lead) || p.identityKind === "phone")
+      .map((p) => p.id);
+    const allSelected = selectable.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        selectable.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        selectable.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }
+
+  async function loadTagsIfNeeded() {
+    if (orgTags.length === 0) {
+      try {
+        const tags = await getOrgTags();
+        setOrgTags(tags as { id: string; name: string; color: string }[]);
+      } catch {
+        toast.error("Erro ao carregar tags");
+      }
+    }
+  }
+
+  function handleBulkExportCSV(groupName: string) {
+    const selected = participants.filter((p) => selectedIds.has(p.id));
+    const header = "Nome,Telefone,JID,Status Lead,Grupo\n";
+    const rows = selected
+      .map((p) => {
+        const name = p.lead?.name ?? p.displayName ?? "";
+        const phone = p.phone ?? "";
+        const status = p.lead?.status ?? "";
+        return `"${name}","${phone}","${p.rawJid}","${status}","${groupName}"`;
+      })
+      .join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `participantes_${groupName.replace(/[^a-z0-9]/gi, "_")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleBulkAddTag() {
+    if (!bulkTagId) { toast.error("Selecione uma tag"); return; }
+    const leadIds = participants
+      .filter((p) => selectedIds.has(p.id) && p.lead)
+      .map((p) => p.lead!.id);
+    if (leadIds.length === 0) { toast.error("Nenhum lead selecionado"); return; }
+    setBulkLoading(true);
+    try {
+      const { success, failed } = await bulkAddTagToGroupLeads(leadIds, bulkTagId);
+      if (failed === 0) {
+        toast.success(`Tag adicionada a ${success} lead${success !== 1 ? "s" : ""}`);
+      } else {
+        toast.warning(`Tag adicionada a ${success} de ${leadIds.length} (${failed} falha${failed !== 1 ? "s" : ""})`);
+      }
+      setBulkTagId("");
+      setSelectedIds(new Set());
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao aplicar tag");
+    } finally {
+      setBulkLoading(false);
     }
   }
 
@@ -330,6 +443,8 @@ export function GroupsTab() {
     setParticipantsError(null);
     setParticipantsSearch("");
     setParticipantsTab("todos");
+    setSelectedIds(new Set());
+    setBulkTagId("");
     setParticipantsOpen(true);
     setParticipantsLoading(true);
     try {
@@ -671,13 +786,25 @@ export function GroupsTab() {
             />
           ) : (
             <div className="flex flex-col gap-3 overflow-hidden flex-1 min-h-0">
-              <Input
-                name="participants-search"
-                placeholder="Buscar por nome, telefone ou JID..."
-                value={participantsSearch}
-                onChange={(e) => setParticipantsSearch(e.target.value)}
-                className="shrink-0"
-              />
+              <div className="flex items-center gap-2 shrink-0">
+                <Input
+                  name="participants-search"
+                  placeholder="Buscar por nome, telefone ou JID..."
+                  value={participantsSearch}
+                  onChange={(e) => setParticipantsSearch(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0 text-xs"
+                  onClick={() => handleSelectAll(participants)}
+                >
+                  {participants.filter((p) => Boolean(p.lead) || p.identityKind === "phone").every((p) => selectedIds.has(p.id))
+                    ? "Desmarcar todos"
+                    : "Selecionar todos"}
+                </Button>
+              </div>
               <Tabs value={participantsTab} onValueChange={setParticipantsTab} className="flex flex-col overflow-hidden flex-1 min-h-0">
                 <TabsList className="shrink-0">
                   <TabsTrigger value="todos">Todos ({participants.length})</TabsTrigger>
@@ -718,6 +845,8 @@ export function GroupsTab() {
                               }}
                               onOpenChat={handleOpenChat}
                               onCreateLead={handleCreateLead}
+                              onToggleSelect={handleToggleSelect}
+                              selected={selectedIds.has(p.id)}
                               chatLoading={chatLoadingLeadId === p.lead?.id}
                               createLoading={createLoadingJid === p.rawJid}
                             />
@@ -732,9 +861,71 @@ export function GroupsTab() {
           )}
 
           <DialogFooter className="shrink-0 pt-2">
-            <Button variant="outline" onClick={() => setParticipantsOpen(false)}>
-              Fechar
-            </Button>
+            {selectedIds.size > 0 ? (
+              <div className="flex flex-1 items-center gap-2 flex-wrap">
+                <span className="text-sm text-muted-foreground shrink-0">
+                  {selectedIds.size} selecionado{selectedIds.size !== 1 ? "s" : ""}
+                </span>
+                <div className="flex items-center gap-2 flex-1 flex-wrap">
+                  <Select
+                    value={bulkTagId}
+                    onValueChange={(v) => setBulkTagId(v ?? "")}
+                    onOpenChange={(open) => { if (open) loadTagsIfNeeded(); }}
+                  >
+                    <SelectTrigger className="h-8 text-xs w-40">
+                      <SelectValue placeholder="Escolher tag..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgTags.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          Nenhuma tag cadastrada
+                        </div>
+                      ) : (
+                        orgTags.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span
+                              className="inline-block size-2 rounded-full mr-1.5"
+                              style={{ background: t.color }}
+                            />
+                            {t.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={!bulkTagId || bulkLoading}
+                    onClick={handleBulkAddTag}
+                  >
+                    {bulkLoading ? <Loader2 className="size-3 animate-spin" /> : <Tag className="size-3" />}
+                    Aplicar tag
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => handleBulkExportCSV(participantsGroup?.name ?? "grupo")}
+                  >
+                    <Download className="size-3" />
+                    Exportar CSV
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 text-xs ml-auto"
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Limpar seleção
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" onClick={() => setParticipantsOpen(false)}>
+                Fechar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
