@@ -21,6 +21,29 @@ async function getProvider(supabase: any, orgId: string) {
   return createProvider(connection);
 }
 
+// ── GroupParticipantView — modelo normalizado para UI (Etapa 1 do roadmap) ────
+export interface GroupParticipantView {
+  /** Chave estável para a lista — rawJid ou fallback gerado. */
+  id: string;
+  rawJid: string;
+  /** Telefone E.164 extraído do JID. Null para @lid sem PhoneNumber separado. */
+  phone: string | null;
+  displayName: string | null;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  /** "phone" = JID com telefone real | "lid" = ID interno WA | "unknown" = outro */
+  identityKind: "phone" | "lid" | "unknown";
+  lead: null | {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    avatar_url: string | null;
+    status: string | null;
+  };
+  membershipId: string | null;
+}
+
 // ── GroupOverview type (enriquecido com stats de membros) ─────────────────────
 export interface GroupOverview {
   id: string;
@@ -406,8 +429,105 @@ export async function getGroupParticipants(id: string) {
 
   if (!group) throw new Error("Grupo nao encontrado");
 
-  const info = await provider.getGroupInfo(group.group_jid as string);
+  const info = await provider.getGroupInfo(group.group_jid as string, { force: true });
   return info.participants;
+}
+
+// ── getGroupParticipantsView ───────────────────────────────────────────────────
+// Modelo enriquecido para UI (Etapa 1 do roadmap).
+// Combina participantes ao vivo da UAZAPI com group_memberships e leads do DB.
+// Retorna TODOS os participantes, identificados ou não — nunca filtra silenciosamente.
+
+export async function getGroupParticipantsView(groupId: string): Promise<GroupParticipantView[]> {
+  const { orgId } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
+
+  // Busca grupo (JID) com adminDb para bypass da RLS
+  const { data: grp } = await adminDb
+    .from("whatsapp_groups")
+    .select("id, group_jid")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!grp) throw new Error("Grupo não encontrado");
+
+  // Participantes ao vivo da UAZAPI
+  let rawParticipants: Array<{ jid: string; isAdmin: boolean; isSuperAdmin: boolean }> = [];
+  try {
+    const provider = await getProvider(adminDb, orgId);
+    const info = await provider.getGroupInfo(grp.group_jid as string, { force: true });
+    rawParticipants = (info.participants || []).filter((p) => p.jid);
+  } catch (err) {
+    console.error("[getGroupParticipantsView] getGroupInfo falhou:", err);
+    // Continua com lista vazia — caller deve tratar o estado de erro
+  }
+
+  // Memberships ativos + dados do lead num único SELECT
+  const { data: memberships } = await adminDb
+    .from("group_memberships")
+    .select(`
+      id,
+      phone,
+      lead_id,
+      leads (
+        id,
+        name,
+        phone,
+        email,
+        avatar_url,
+        status
+      )
+    `)
+    .eq("group_id", groupId)
+    .eq("organization_id", orgId)
+    .is("left_at", null);
+
+  // Índice rápido: phone E.164 → membership
+  const membershipByPhone = new Map<string, { id: string; lead: GroupParticipantView["lead"] }>();
+  for (const m of (memberships || []) as Array<{
+    id: string;
+    phone: string | null;
+    lead_id: string | null;
+    leads: GroupParticipantView["lead"] | null;
+  }>) {
+    if (m.phone) {
+      membershipByPhone.set(m.phone, {
+        id: m.id,
+        lead: m.leads ?? null,
+      });
+    }
+  }
+
+  return rawParticipants.map((p) => {
+    const jid = p.jid;
+
+    // Determina identityKind
+    let identityKind: GroupParticipantView["identityKind"] = "unknown";
+    if (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@c.us")) {
+      identityKind = "phone";
+    } else if (jid.endsWith("@lid")) {
+      identityKind = "lid";
+    }
+
+    // Normaliza telefone — apenas para JIDs com número real
+    const phone = identityKind === "phone" ? (normalizePhoneBR(jid) ?? null) : null;
+
+    // Vincula membership/lead pelo telefone normalizado
+    const membership = phone ? (membershipByPhone.get(phone) ?? null) : null;
+
+    return {
+      id: jid,
+      rawJid: jid,
+      phone,
+      displayName: null, // UAZAPI não retorna push name na lista de participantes
+      isAdmin: p.isAdmin,
+      isSuperAdmin: p.isSuperAdmin,
+      identityKind,
+      lead: membership?.lead ?? null,
+      membershipId: membership?.id ?? null,
+    };
+  });
 }
 
 // ---- Manage participants (add/remove/promote/demote/approve/reject) ----
@@ -508,7 +628,6 @@ export async function sendMessageToGroup(groupId: string, message: string) {
 
   const result = await provider.sendText({ phone: group.group_jid, message });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("group_messages").insert({
     organization_id: orgId,
     group_id: groupId,
@@ -549,7 +668,6 @@ export async function sendMediaToGroup(
     fileName,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from("group_messages").insert({
     organization_id: orgId,
     group_id: groupId,
@@ -622,7 +740,6 @@ export async function reactToGroupMessage(
 export async function getGroupMessages(groupId: string, limit = 50) {
   const { supabase, orgId } = await requireRole("agent");
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (supabase as any)
     .from("group_messages")
     .select("id, direction, text, sender_name, created_at, whatsapp_msg_id, media_url, media_type")

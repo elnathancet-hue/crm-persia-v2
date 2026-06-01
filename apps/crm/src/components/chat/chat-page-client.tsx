@@ -6,11 +6,15 @@ import { ChatWindow } from "@/components/chat/chat-window";
 import { useOrganization } from "@/lib/hooks/use-organization";
 import { Loader2 } from "lucide-react";
 
-export function ChatPageClient() {
+interface ChatPageClientProps {
+  initialConversationId?: string | null;
+}
+
+export function ChatPageClient({ initialConversationId = null }: ChatPageClientProps) {
   const { organization, loading } = useOrganization();
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
-  >(null);
+  >(initialConversationId);
 
   if (loading) {
     return (
