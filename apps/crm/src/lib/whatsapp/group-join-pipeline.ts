@@ -507,6 +507,24 @@ export async function processGroupWebhookEvent(
         if (result.membershipId && !result.wasActiveMember) {
           await incrementGroupParticipantCount(db, group.id as string);
         }
+        // Etapa 8: disparar automações member_joined (e lead_identified se novo vínculo)
+        const phone = normalizePhoneBR(jid);
+        const eventKeyJoined = `member_joined:${group.id}:${jid}:${new Date().toISOString().slice(0, 10)}`;
+        const { runGroupAutomations } = await import("@/actions/groups");
+        runGroupAutomations(orgId, group.id as string, "member_joined", eventKeyJoined, {
+          leadId: (result as any).leadId ?? undefined,
+          phone: phone ?? undefined,
+          jid,
+        }).catch(() => {});
+        if ((result as any).leadId && result.membershipId) {
+          // lead_identified: só dispara quando a membership recém vinculou um lead
+          const eventKeyLead = `lead_identified:${result.membershipId}`;
+          runGroupAutomations(orgId, group.id as string, "lead_identified", eventKeyLead, {
+            leadId: (result as any).leadId,
+            phone: phone ?? undefined,
+            jid,
+          }).catch(() => {});
+        }
       } else {
         // action === "remove": marca left_at + decrementa contador
         const phone = normalizePhoneBR(jid);
@@ -531,6 +549,13 @@ export async function processGroupWebhookEvent(
               .catch((err: unknown) => {
                 console.error("[processGroupWebhookEvent] decrement_group_participant_count falhou:", err);
               });
+            // Etapa 8: disparar automação member_left
+            const eventKeyLeft = `member_left:${group.id}:${phone}:${new Date().toISOString().slice(0, 10)}`;
+            const { runGroupAutomations } = await import("@/actions/groups");
+            runGroupAutomations(orgId, group.id as string, "member_left", eventKeyLeft, {
+              phone,
+              jid,
+            }).catch(() => {});
           }
         }
       }

@@ -1450,6 +1450,135 @@ export async function createLeadFromParticipant(
   return { leadId, created };
 }
 
+// ── Etapa 8: Automações de Grupo ──────────────────────────────────────────────
+
+export type GroupAutomationTrigger =
+  | "member_joined"
+  | "member_left"
+  | "lead_identified"
+  | "message_received";
+
+export interface GroupAutomation {
+  id: string;
+  group_id: string;
+  trigger: GroupAutomationTrigger;
+  action_type: "add_tag";
+  action_payload: Record<string, string>;
+  is_active: boolean;
+  created_at: string;
+}
+
+export async function getGroupAutomations(groupId: string): Promise<GroupAutomation[]> {
+  const { supabase } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
+
+  // Verify caller has access to this group
+  const { data: grp } = await supabase
+    .from("whatsapp_groups")
+    .select("id")
+    .eq("id", groupId)
+    .maybeSingle();
+  if (!grp) throw new Error("Grupo não encontrado ou sem permissão");
+
+  const { data } = await adminDb
+    .from("group_automations")
+    .select("id, group_id, trigger, action_type, action_payload, is_active, created_at")
+    .eq("group_id", groupId)
+    .order("created_at", { ascending: true });
+
+  return (data ?? []) as GroupAutomation[];
+}
+
+export async function upsertGroupAutomation(input: {
+  groupId: string;
+  trigger: GroupAutomationTrigger;
+  action_type: "add_tag";
+  action_payload: Record<string, string>;
+  is_active?: boolean;
+}): Promise<{ id: string }> {
+  const { orgId } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
+
+  // Verify group belongs to org
+  const { data: grp } = await adminDb
+    .from("whatsapp_groups")
+    .select("id")
+    .eq("id", input.groupId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!grp) throw new Error("Grupo não encontrado");
+
+  const { data, error } = await adminDb
+    .from("group_automations")
+    .insert({
+      organization_id: orgId,
+      group_id: input.groupId,
+      trigger: input.trigger,
+      action_type: input.action_type,
+      action_payload: input.action_payload,
+      is_active: input.is_active ?? true,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/crm");
+  return { id: data.id };
+}
+
+export async function deleteGroupAutomation(automationId: string): Promise<void> {
+  const { orgId } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
+
+  // Verify ownership
+  const { data: auto } = await adminDb
+    .from("group_automations")
+    .select("id, organization_id")
+    .eq("id", automationId)
+    .maybeSingle();
+  if (!auto || auto.organization_id !== orgId) throw new Error("Automação não encontrada");
+
+  await adminDb.from("group_automations").delete().eq("id", automationId);
+  revalidatePath("/crm");
+}
+
+// runGroupAutomations — chamado fire-and-forget do webhook.
+// Usa admin client para acessar group_automation_logs (sem RLS pública).
+export async function runGroupAutomations(
+  orgId: string,
+  groupId: string,
+  trigger: GroupAutomationTrigger,
+  eventKey: string,
+  context: { leadId?: string; phone?: string; jid?: string },
+): Promise<void> {
+  const adminDb = createAdminClient() as any;
+
+  const { data: automations } = await adminDb
+    .from("group_automations")
+    .select("id, action_type, action_payload")
+    .eq("organization_id", orgId)
+    .eq("group_id", groupId)
+    .eq("trigger", trigger)
+    .eq("is_active", true);
+
+  if (!automations || automations.length === 0) return;
+
+  await Promise.allSettled(
+    automations.map(async (auto: any) => {
+      // Idempotency: try to insert log; if UNIQUE violation → already ran → skip
+      const { error: logErr } = await adminDb
+        .from("group_automation_logs")
+        .insert({ automation_id: auto.id, event_key: eventKey });
+      if (logErr) return; // duplicate key = skip
+
+      if (auto.action_type === "add_tag" && context.leadId && auto.action_payload?.tag_id) {
+        const { addTagToLead } = await import("@persia/shared/crm");
+        await addTagToLead({ db: adminDb, orgId }, context.leadId, auto.action_payload.tag_id);
+      }
+    }),
+  );
+}
+
 // ── bulkAddTagToGroupLeads ─────────────────────────────────────────────────────
 // Etapa 6: aplica uma tag em massa a múltiplos leads de um grupo.
 // Usa Promise.allSettled para não abortar ao primeiro erro.

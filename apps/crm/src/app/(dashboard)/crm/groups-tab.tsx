@@ -57,6 +57,8 @@ import {
   Tag,
   CheckSquare,
   Square,
+  Zap,
+  Trash2,
 } from "lucide-react";
 import {
   Tabs,
@@ -71,8 +73,13 @@ import {
   getGroupParticipantsView,
   createLeadFromParticipant,
   bulkAddTagToGroupLeads,
+  getGroupAutomations,
+  upsertGroupAutomation,
+  deleteGroupAutomation,
   type GroupOverview,
   type GroupParticipantView,
+  type GroupAutomation,
+  type GroupAutomationTrigger,
 } from "@/actions/groups";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
 import { getOrgTags } from "@/actions/leads";
@@ -274,6 +281,15 @@ export function GroupsTab() {
   const [orgTags, setOrgTags] = React.useState<{ id: string; name: string; color: string }[]>([]);
   const [bulkTagId, setBulkTagId] = React.useState("");
   const [bulkLoading, setBulkLoading] = React.useState(false);
+  // Automations dialog — Etapa 8
+  const [automsOpen, setAutomsOpen] = React.useState(false);
+  const [automsGroup, setAutomsGroup] = React.useState<GroupOverview | null>(null);
+  const [automs, setAutoms] = React.useState<GroupAutomation[]>([]);
+  const [automsLoading, setAutomsLoading] = React.useState(false);
+  const [newAutoTrigger, setNewAutoTrigger] = React.useState<GroupAutomationTrigger>("member_joined");
+  const [newAutoTagId, setNewAutoTagId] = React.useState("");
+  const [newAutoSaving, setNewAutoSaving] = React.useState(false);
+  const [deletingAutoId, setDeletingAutoId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     getGroupsOverview()
@@ -397,6 +413,58 @@ export function GroupsTab() {
       toast.error((err as Error).message || "Erro ao aplicar tag");
     } finally {
       setBulkLoading(false);
+    }
+  }
+
+  async function handleOpenAutomations(group: GroupOverview) {
+    setAutomsGroup(group);
+    setAutoms([]);
+    setNewAutoTrigger("member_joined");
+    setNewAutoTagId("");
+    setAutomsOpen(true);
+    setAutomsLoading(true);
+    try {
+      const list = await getGroupAutomations(group.id);
+      setAutoms(list);
+    } catch {
+      toast.error("Erro ao carregar automações");
+    } finally {
+      setAutomsLoading(false);
+    }
+    loadTagsIfNeeded();
+  }
+
+  async function handleAddAutomation() {
+    if (!automsGroup || !newAutoTagId) { toast.error("Selecione uma tag"); return; }
+    setNewAutoSaving(true);
+    try {
+      await upsertGroupAutomation({
+        groupId: automsGroup.id,
+        trigger: newAutoTrigger,
+        action_type: "add_tag",
+        action_payload: { tag_id: newAutoTagId },
+      });
+      toast.success("Automação criada");
+      setNewAutoTagId("");
+      const list = await getGroupAutomations(automsGroup.id);
+      setAutoms(list);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao criar automação");
+    } finally {
+      setNewAutoSaving(false);
+    }
+  }
+
+  async function handleDeleteAutomation(autoId: string) {
+    setDeletingAutoId(autoId);
+    try {
+      await deleteGroupAutomation(autoId);
+      setAutoms((prev) => prev.filter((a) => a.id !== autoId));
+      toast.success("Automação removida");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao remover automação");
+    } finally {
+      setDeletingAutoId(null);
     }
   }
 
@@ -746,6 +814,10 @@ export function GroupsTab() {
                               <Users className="size-4" />
                               Ver participantes
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleOpenAutomations(group)}>
+                              <Zap className="size-4" />
+                              Automações
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push("/groups")}>
                               <MessageSquare className="size-4" />
                               Ver chat
@@ -826,6 +898,137 @@ export function GroupsTab() {
             <Button onClick={handleCreate} disabled={creating || !newName.trim()}>
               {creating ? "Criando..." : "Criar Grupo"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Automations dialog — Etapa 8 */}
+      <Dialog open={automsOpen} onOpenChange={setAutomsOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="size-4 text-primary" />
+              Automações — {automsGroup?.name ?? "Grupo"}
+            </DialogTitle>
+            <DialogDescription>
+              Ações automáticas disparadas quando eventos ocorrem no grupo.
+            </DialogDescription>
+          </DialogHeader>
+
+          {automsLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Existing automations */}
+              {automs.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ativas</p>
+                  <div className="divide-y divide-border/50 rounded-lg border overflow-hidden">
+                    {automs.map((a) => (
+                      <div key={a.id} className="flex items-center gap-3 px-3 py-2.5">
+                        <Zap className="size-3.5 shrink-0 text-primary" />
+                        <div className="flex-1 min-w-0 text-sm">
+                          <span className="font-medium">
+                            {a.trigger === "member_joined" && "Ao entrar no grupo"}
+                            {a.trigger === "member_left" && "Ao sair do grupo"}
+                            {a.trigger === "lead_identified" && "Ao identificar lead"}
+                            {a.trigger === "message_received" && "Ao receber mensagem"}
+                          </span>
+                          <span className="text-muted-foreground mx-1.5">→</span>
+                          <span className="text-muted-foreground">
+                            Adicionar tag:{" "}
+                            {orgTags.find((t) => t.id === a.action_payload.tag_id)?.name ?? a.action_payload.tag_id}
+                          </span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          title="Remover"
+                          disabled={deletingAutoId === a.id}
+                          onClick={() => handleDeleteAutomation(a.id)}
+                        >
+                          {deletingAutoId === a.id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3.5 text-destructive" />
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-3">
+                  Nenhuma automação configurada ainda.
+                </p>
+              )}
+
+              {/* Add new automation */}
+              <div className="space-y-3 rounded-lg border p-4 bg-muted/20">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Nova automação</p>
+                <div className="space-y-2">
+                  <Label className="text-xs">Quando</Label>
+                  <Select
+                    value={newAutoTrigger}
+                    onValueChange={(v) => setNewAutoTrigger((v ?? "member_joined") as GroupAutomationTrigger)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member_joined">Ao entrar no grupo</SelectItem>
+                      <SelectItem value="member_left">Ao sair do grupo</SelectItem>
+                      <SelectItem value="lead_identified">Ao identificar lead</SelectItem>
+                      <SelectItem value="message_received">Ao receber mensagem</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Ação — Adicionar tag</Label>
+                  <Select
+                    value={newAutoTagId}
+                    onValueChange={(v) => setNewAutoTagId(v ?? "")}
+                    onOpenChange={(open) => { if (open) loadTagsIfNeeded(); }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolher tag..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {orgTags.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">
+                          Nenhuma tag cadastrada
+                        </div>
+                      ) : (
+                        orgTags.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            <span
+                              className="inline-block size-2 rounded-full mr-1.5"
+                              style={{ background: t.color }}
+                            />
+                            {t.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={!newAutoTagId || newAutoSaving}
+                  onClick={handleAddAutomation}
+                >
+                  {newAutoSaving ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : <Zap className="size-3.5 mr-1.5" />}
+                  Adicionar automação
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Fechar</DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
