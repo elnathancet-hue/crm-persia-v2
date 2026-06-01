@@ -163,12 +163,18 @@ export async function syncGroups() {
   const { supabase, orgId } = await requireRole("admin");
   const provider = await getProvider(supabase, orgId);
 
-  // Carrega grupos em páginas de 100 para suportar contas com muitos grupos
+  // Carrega grupos em páginas de 100 para suportar contas com muitos grupos.
+  // Precisamos de Participants para calcular participant_count corretamente.
   const PAGE_SIZE = 100;
   let offset = 0;
   const remoteGroups: Awaited<ReturnType<typeof provider.listGroups>> = [];
   while (true) {
-    const page = await provider.listGroupsPaged({ limit: PAGE_SIZE, offset, noParticipants: true });
+    const page = await provider.listGroupsPaged({
+      limit: PAGE_SIZE,
+      offset,
+      noParticipants: false,
+      force: true,
+    });
     remoteGroups.push(...page.groups);
     if (page.groups.length < PAGE_SIZE) break;
     offset += PAGE_SIZE;

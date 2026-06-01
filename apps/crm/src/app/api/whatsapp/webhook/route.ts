@@ -235,6 +235,7 @@ export async function POST(request: NextRequest) {
         const senderJid =
           (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
           (typeof msgRaw.sender === "string" && msgRaw.sender && !msgRaw.sender.endsWith("@lid") ? msgRaw.sender : null);
+        const messageCreatedAt = new Date().toISOString();
 
         await supabase.from("group_messages").insert({
           organization_id: matchedConn.organization_id,
@@ -246,6 +247,7 @@ export async function POST(request: NextRequest) {
           whatsapp_msg_id: msg.messageId || null,
           media_type: msg.type && msg.type !== "text" ? msg.type : null,
           media_url: (msg as any).mediaUrl || null,
+          created_at: messageCreatedAt,
         } as never);
 
         // Bug C fix (mai/2026): vincular remetente como membro do grupo.
@@ -262,7 +264,15 @@ export async function POST(request: NextRequest) {
             participantJid: senderJid,
             participantName: msg.pushName || null,
             source: "webhook",
-          }).catch(() => {});
+            joinedAt: messageCreatedAt,
+          })
+            .then((result) => {
+              if (!result.membershipId || result.wasActiveMember) return null;
+              return supabase.rpc("increment_group_participant_count", {
+                p_group_id: grp.id,
+              });
+            })
+            .catch(() => {});
         }
       }
       return NextResponse.json({ ok: true, skipped: "group_message_saved" });

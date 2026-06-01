@@ -244,6 +244,8 @@ export interface GroupJoinContext {
   };
   /** SHA-256 do IP do visitante (smart link path). */
   ipHash?: string | null;
+  /** Timestamp de entrada/interação usado para estatísticas de mensagens. */
+  joinedAt?: string;
 }
 
 export interface GroupJoinResult {
@@ -251,6 +253,7 @@ export interface GroupJoinResult {
   lead: LeadMatch | null;
   activityCreated: boolean;
   alreadyLinked: boolean;
+  wasActiveMember: boolean;
 }
 
 /**
@@ -285,7 +288,7 @@ export async function linkGroupMembership(
     group_id: groupId,
     phone: e164,
     name: participantName || null,
-    joined_at: new Date().toISOString(),
+    joined_at: ctx.joinedAt ?? new Date().toISOString(),
     left_at: null, // zera saída anterior na re-entrada
     source,
     campaign_id: campaignId ?? null,
@@ -300,8 +303,19 @@ export async function linkGroupMembership(
 
   let membershipId: string | null = null;
   let alreadyLinked = false;
+  let wasActiveMember = false;
 
   if (e164) {
+    const { data: existingActive } = await db
+      .from("group_memberships")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("group_id", groupId)
+      .eq("phone", e164)
+      .is("left_at", null)
+      .maybeSingle();
+    wasActiveMember = Boolean(existingActive);
+
     // Upsert por (org, group, phone) — índice único na migration 079
     const { data: upserted } = await db
       .from("group_memberships")
@@ -380,7 +394,18 @@ export async function linkGroupMembership(
     }
   }
 
-  return { membershipId, lead, activityCreated, alreadyLinked };
+  return { membershipId, lead, activityCreated, alreadyLinked, wasActiveMember };
+}
+
+async function incrementGroupParticipantCount(
+  db: any,
+  groupId: string,
+): Promise<void> {
+  await db
+    .rpc("increment_group_participant_count", { p_group_id: groupId })
+    .catch((err: unknown) => {
+      console.error("[group-join-pipeline] increment_group_participant_count falhou:", err);
+    });
 }
 
 // ─── Webhook event handler ────────────────────────────────────────────────────
@@ -398,22 +423,49 @@ export async function linkGroupMembership(
  *   owner: string
  * }
  */
+function extractParticipantJid(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const candidates = [
+    row.JID,
+    row.jid,
+    row.Jid,
+    row.PhoneNumber,
+    row.phoneNumber,
+    row.Phone,
+    row.phone,
+  ];
+  return (
+    candidates.find((candidate): candidate is string => typeof candidate === "string") ??
+    null
+  );
+}
+
 export async function processGroupWebhookEvent(
   supabase: SupabaseClient,
   orgId: string,
   body: Record<string, unknown>,
 ): Promise<void> {
   const action =
-    typeof body.action === "string" ? body.action.toLowerCase() : null;
+    typeof body.action === "string"
+      ? body.action.toLowerCase()
+      : typeof body.Action === "string"
+        ? body.Action.toLowerCase()
+        : null;
 
   if (action !== "add" && action !== "remove") return;
 
+  const groupJidCandidates = [
+    body.chatid,
+    body.chatId,
+    body.ChatID,
+    body.groupJid,
+    body.GroupJID,
+  ];
   const groupJid =
-    typeof body.chatid === "string"
-      ? body.chatid
-      : typeof body.groupJid === "string"
-        ? body.groupJid
-        : null;
+    groupJidCandidates.find((value): value is string => typeof value === "string") ??
+    null;
   if (!groupJid) return;
 
   // Resolve group_id pelo JID
@@ -427,9 +479,11 @@ export async function processGroupWebhookEvent(
   if (!group) return; // grupo não monitorado → ignora
 
   // Normaliza participants (pode ser string ou array)
-  const rawParticipants = body.participants;
+  const rawParticipants = body.participants ?? body.Participants;
   const participantList: string[] = Array.isArray(rawParticipants)
-    ? (rawParticipants as unknown[]).filter((p) => typeof p === "string") as string[]
+    ? (rawParticipants as unknown[])
+        .map(extractParticipantJid)
+        .filter((p): p is string => typeof p === "string" && p.length > 0)
     : typeof rawParticipants === "string"
       ? [rawParticipants]
       : [];
@@ -443,7 +497,7 @@ export async function processGroupWebhookEvent(
     if (!jid) continue;
     try {
       if (action === "add") {
-        await linkGroupMembership({
+        const result = await linkGroupMembership({
           supabase,
           orgId,
           groupId: group.id as string,
@@ -452,6 +506,9 @@ export async function processGroupWebhookEvent(
           participantName: null, // UAZAPI groups event não tem nome dos participantes
           source: "webhook",
         });
+        if (result.membershipId && !result.wasActiveMember) {
+          await incrementGroupParticipantCount(db, group.id as string);
+        }
       } else {
         // action === "remove": marca left_at + decrementa contador
         const phone = normalizePhoneBR(jid);
