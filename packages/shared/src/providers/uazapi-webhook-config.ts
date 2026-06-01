@@ -10,12 +10,17 @@
 // Sem o filtro, events de messages com fromMe=true chegam mas são descartados
 // pelo parseWebhook() (retorna null para fromMe=true) — sem risco de loop.
 //
+// Bug C fix (mai/2026): adicionado "groups" para receber eventos de
+// participante entrou/saiu de grupos WhatsApp. Sem esse evento, leads
+// nunca eram registrados ao entrar pelo link de convite do grupo.
+//
 // IMPORTANTE: instâncias existentes JÁ conectadas precisam ter o
 // webhook reconfigurado (re-chamar provider.setWebhook). Sem isso,
 // as mudanças não são entregues. Ver script `scripts/uazapi-resync-webhooks.ts`.
 export const UAZAPI_DEFAULT_WEBHOOK_EVENTS = [
   "messages",
   "messages_update",
+  "groups",
 ] as const;
 export const UAZAPI_DEFAULT_EXCLUDED_MESSAGES = [] as const;
 

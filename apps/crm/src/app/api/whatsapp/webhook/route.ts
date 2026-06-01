@@ -219,11 +219,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no processable message" });
     }
 
-    // 4. Group message branch — save to group_messages, skip lead pipeline.
+    // 4. Group message branch — save to group_messages + try to link sender as member.
     if (msg.isGroup && msg.groupJid) {
       const { data: grp } = await supabase
         .from("whatsapp_groups")
-        .select("id")
+        .select("id, name")
         .eq("organization_id", matchedConn.organization_id)
         .eq("group_jid", msg.groupJid)
         .maybeSingle();
@@ -237,6 +237,31 @@ export async function POST(request: NextRequest) {
           sender_name: msg.pushName || null,
           whatsapp_msg_id: msg.messageId || null,
         });
+
+        // Bug C fix (mai/2026): vincular remetente como membro do grupo.
+        // UAZAPI "groups" event só dispara em join/leave; mensagens recebidas
+        // no grupo chegam via "messages" event. Ao salvar a mensagem, tentamos
+        // linkar o remetente como membro — idempotente via upsert.
+        //
+        // sender_pn = JID do remetente com telefone (ex: "5511999@s.whatsapp.net").
+        // sender pode ser LID sem telefone — nesse caso sender_pn é o fallback.
+        const rawBody = body as Record<string, unknown>;
+        const senderJid =
+          (typeof rawBody.sender_pn === "string" && rawBody.sender_pn ? rawBody.sender_pn : null) ??
+          (typeof rawBody.sender === "string" && rawBody.sender && !rawBody.sender.endsWith("@lid") ? rawBody.sender : null);
+
+        if (senderJid) {
+          const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
+          linkGroupMembership({
+            supabase,
+            orgId: matchedConn.organization_id,
+            groupId: grp.id as string,
+            groupName: (grp.name as string) || "",
+            participantJid: senderJid,
+            participantName: msg.pushName || null,
+            source: "webhook",
+          }).catch(() => {});
+        }
       }
       return NextResponse.json({ ok: true, skipped: "group_message_saved" });
     }

@@ -390,6 +390,17 @@ function GroupChatPanel({
             if (prev.some((m) => m.id === payload.new.id)) return prev;
             return [...prev, payload.new];
           });
+          if (payload.new.direction === "inbound") {
+            const sender = payload.new.sender_name || "Participante";
+            const preview = payload.new.text
+              ? payload.new.text.length > 60
+                ? payload.new.text.slice(0, 60) + "…"
+                : payload.new.text
+              : "Nova mensagem";
+            toast.message(`${group.name}`, {
+              description: `${sender}: ${preview}`,
+            });
+          }
         },
       )
       .subscribe();
