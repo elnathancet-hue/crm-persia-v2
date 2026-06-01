@@ -86,6 +86,7 @@ import {
   linkGroupToCampaign,
   setGroupCapacity,
   getGroupLeadMembers,
+  backfillGroupMembers,
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
@@ -397,6 +398,7 @@ function GroupChatPanel({
   const [groupMembers, setGroupMembers] = React.useState<GroupLeadMember[]>([]);
   const [membersLoading, setMembersLoading] = React.useState(false);
   const [selectedMember, setSelectedMember] = React.useState<GroupLeadMember | null>(null);
+  const [backfillLoading, setBackfillLoading] = React.useState(false);
 
   // Reset when group changes
   React.useEffect(() => {
@@ -928,18 +930,62 @@ function GroupChatPanel({
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Membros identificados
                 </span>
-                <Button variant="ghost" size="icon-xs" onClick={() => setMembersOpen(false)} aria-label="Fechar">
-                  <X className="size-3.5" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={backfillLoading}
+                    onClick={async () => {
+                      setBackfillLoading(true);
+                      try {
+                        await backfillGroupMembers(group.id);
+                        await handleOpenMembers();
+                      } finally {
+                        setBackfillLoading(false);
+                      }
+                    }}
+                    title="Identificar leads pelos historico de mensagens"
+                  >
+                    {backfillLoading ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-3.5" />
+                    )}
+                  </Button>
+                  <Button variant="ghost" size="icon-xs" onClick={() => setMembersOpen(false)} aria-label="Fechar">
+                    <X className="size-3.5" />
+                  </Button>
+                </div>
               </div>
               {membersLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 </div>
               ) : groupMembers.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-2">
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-3">
                   <UserCircle className="size-8 text-muted-foreground/40" />
                   <p className="text-sm text-muted-foreground">Nenhum membro identificado como lead</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={backfillLoading}
+                    onClick={async () => {
+                      setBackfillLoading(true);
+                      try {
+                        await backfillGroupMembers(group.id);
+                        await handleOpenMembers();
+                      } finally {
+                        setBackfillLoading(false);
+                      }
+                    }}
+                  >
+                    {backfillLoading ? (
+                      <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    ) : (
+                      <RefreshCw className="size-3.5 mr-1.5" />
+                    )}
+                    Identificar pelo historico
+                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-col">

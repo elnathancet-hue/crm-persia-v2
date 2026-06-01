@@ -114,14 +114,48 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
 export async function getGroups() {
   const { supabase, orgId } = await requireRole("admin");
 
-  const { data, error } = await supabase
+  const { data: groups, error } = await supabase
     .from("whatsapp_groups")
     .select("*")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data || [];
+  if (!groups || groups.length === 0) return [];
+
+  // Última mensagem por grupo — query única, deduplicada em JS
+  const groupIds = (groups as { id: string }[]).map((g) => g.id);
+  const { data: lastMsgs } = await (supabase as any)
+    .from("group_messages")
+    .select("group_id, text, sender_name, direction, created_at")
+    .eq("organization_id", orgId)
+    .in("group_id", groupIds)
+    .eq("is_deleted", false)
+    .order("created_at", { ascending: false })
+    .limit(groupIds.length * 3 + 10);
+
+  const lastMsgByGroup = new Map<string, {
+    text: string | null;
+    sender_name: string | null;
+    direction: string;
+    created_at: string;
+  }>();
+  for (const msg of (lastMsgs || []) as any[]) {
+    if (!lastMsgByGroup.has(msg.group_id as string)) {
+      lastMsgByGroup.set(msg.group_id as string, msg);
+    }
+  }
+
+  return (groups as any[]).map((g) => {
+    const lm = lastMsgByGroup.get(g.id as string);
+    return {
+      ...g,
+      last_message_text: lm?.text ?? null,
+      last_message_sender: lm?.sender_name ?? null,
+      last_message_direction: lm?.direction ?? null,
+      last_message_at: lm?.created_at ?? null,
+    };
+  });
 }
 
 // ---- Sync groups from UAZAPI to DB ----
@@ -1071,4 +1105,74 @@ export async function getGroupLeadMembers(groupId: string): Promise<GroupLeadMem
       lead_id: m.lead_id,
       lead: m.leads!,
     }));
+}
+
+// ── backfillGroupMembers ───────────────────────────────────────────────────────
+// Escaneia todos os remetentes únicos do histórico de mensagens do grupo e roda
+// o pipeline de matching para cada um. Popula group_memberships com leads
+// identificados retroativamente.
+
+export async function backfillGroupMembers(groupId: string): Promise<{ processed: number; linked: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  // Busca grupo para ter o nome
+  const { data: grp } = await db
+    .from("whatsapp_groups")
+    .select("id, name")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!grp) throw new Error("Grupo não encontrado");
+
+  // Busca todos os senders únicos com nome
+  const { data: senders, error } = await db
+    .from("group_messages")
+    .select("sender_name, whatsapp_msg_id")
+    .eq("group_id", groupId)
+    .eq("organization_id", orgId)
+    .eq("direction", "inbound")
+    .not("whatsapp_msg_id", "is", null);
+
+  if (error) throw new Error(error.message);
+  if (!senders || senders.length === 0) return { processed: 0, linked: 0 };
+
+  // Extrai JIDs únicos do whatsapp_msg_id
+  // Formato UAZAPI: "XXXXXXXXXX@s.whatsapp.net_MSGID" ou similar
+  const seen = new Set<string>();
+  const participants: Array<{ jid: string; name: string | null }> = [];
+
+  for (const row of senders as Array<{ sender_name: string | null; whatsapp_msg_id: string | null }>) {
+    if (!row.whatsapp_msg_id) continue;
+    // O JID pode estar codificado no msg_id: "558699..._MSGID" → extrair parte numérica
+    // Tenta extrair JID como "558XXXXXXXXXX@s.whatsapp.net"
+    const match = row.whatsapp_msg_id.match(/^([0-9]+@[a-z.]+)/);
+    const jid = match ? match[1] : null;
+    if (!jid || seen.has(jid)) continue;
+    seen.add(jid);
+    participants.push({ jid, name: row.sender_name ?? null });
+  }
+
+  if (participants.length === 0) return { processed: 0, linked: 0 };
+
+  const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
+
+  let linked = 0;
+  await Promise.all(
+    participants.map(async ({ jid, name }) => {
+      const result = await linkGroupMembership({
+        supabase,
+        orgId,
+        groupId,
+        groupName: grp.name as string,
+        participantJid: jid,
+        participantName: name,
+        source: "webhook",
+      }).catch(() => null);
+      if (result?.lead) linked++;
+    })
+  );
+
+  return { processed: participants.length, linked };
 }
