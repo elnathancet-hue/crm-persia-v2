@@ -11,6 +11,10 @@ import {
   Plus,
   RefreshCw,
   Users,
+  UserCheck,
+  UserX2,
+  Flame,
+  LogOut,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -510,6 +514,63 @@ export function GroupsTab() {
         </div>
       </div>
 
+      {/* Métricas comerciais — Etapa 7 */}
+      {!loading && groups.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            {
+              label: "Participantes",
+              value: groups.reduce((a, g) => a + g.participant_count, 0),
+              icon: <Users className="size-4 text-primary" />,
+              color: "bg-primary/8",
+            },
+            {
+              label: "Leads id.",
+              value: groups.reduce((a, g) => a + g.identified_leads, 0),
+              icon: <UserCheck className="size-4 text-success" />,
+              color: "bg-success/8",
+            },
+            {
+              label: "Não id.",
+              value: groups.reduce((a, g) => a + g.unidentified_count, 0),
+              icon: <Users className="size-4 text-warning" />,
+              color: "bg-warning/8",
+            },
+            {
+              label: "Sem telefone",
+              value: groups.reduce((a, g) => a + g.lid_count, 0),
+              icon: <UserX2 className="size-4 text-muted-foreground" />,
+              color: "bg-muted/40",
+            },
+            {
+              label: "Engajados",
+              value: groups.reduce((a, g) => a + g.engaged_count, 0),
+              icon: <Flame className="size-4 text-progress" />,
+              color: "bg-progress/8",
+            },
+            {
+              label: "Saídas (7d)",
+              value: groups.reduce((a, g) => a + g.recent_exits, 0),
+              icon: <LogOut className="size-4 text-destructive" />,
+              color: "bg-destructive/8",
+            },
+          ].map((card) => (
+            <div
+              key={card.label}
+              className={`rounded-xl border p-3 flex items-center gap-3 ${card.color}`}
+            >
+              <div className="shrink-0">{card.icon}</div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground truncate">{card.label}</p>
+                <p className="text-lg font-semibold tabular-nums leading-tight">
+                  {card.value.toLocaleString("pt-BR")}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -550,7 +611,10 @@ export function GroupsTab() {
                     Ocupação
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Leads identificados
+                    Leads id.
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Não id.
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Duplicados
@@ -637,6 +701,19 @@ export function GroupsTab() {
                         </div>
                       </td>
 
+                      {/* Não identificados */}
+                      <td className="px-4 py-3">
+                        {group.unidentified_count > 0 ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium tabular-nums text-warning">
+                              {group.unidentified_count}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
+
                       {/* Duplicados */}
                       <td className="px-4 py-3">
                         {group.duplicates > 0 ? (
@@ -692,7 +769,11 @@ export function GroupsTab() {
             <span>
               {filtered.length} grupo{filtered.length !== 1 ? "s" : ""}
             </span>
-            <span>{totalParticipants} participantes totais</span>
+            <span>
+              {totalParticipants} participantes &middot;{" "}
+              {filtered.reduce((a, g) => a + g.engaged_count, 0)} engajados &middot;{" "}
+              {filtered.reduce((a, g) => a + g.recent_exits, 0)} saíram (7d)
+            </span>
           </div>
         </div>
       )}

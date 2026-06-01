@@ -61,6 +61,15 @@ export interface GroupOverview {
   identified_leads: number;
   duplicates: number;
   created_at: string;
+  // Etapa 7: métricas comerciais
+  /** Membros ativos com telefone mas sem lead vinculado. */
+  unidentified_count: number;
+  /** Membros ativos sem telefone (participantes @lid). */
+  lid_count: number;
+  /** Membros que enviaram ao menos 1 mensagem inbound no grupo. */
+  engaged_count: number;
+  /** Saídas nos últimos 7 dias. */
+  recent_exits: number;
 }
 
 // ---- Groups overview with membership stats ----
@@ -91,6 +100,54 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
     .is("left_at", null);
 
   const allMemberships = (memberships || []) as { group_id: string; lead_id: string }[];
+
+  // Não identificados e LID: membros ativos sem lead
+  const { data: unidentifiedMemberships } = await db
+    .from("group_memberships")
+    .select("group_id, phone")
+    .eq("organization_id", orgId)
+    .in("group_id", groupIds)
+    .is("lead_id", null)
+    .is("left_at", null);
+
+  const unidentifiedByGroup = new Map<string, number>();
+  const lidByGroup = new Map<string, number>();
+  for (const m of (unidentifiedMemberships || []) as { group_id: string; phone: string | null }[]) {
+    if (m.phone) {
+      unidentifiedByGroup.set(m.group_id, (unidentifiedByGroup.get(m.group_id) || 0) + 1);
+    } else {
+      lidByGroup.set(m.group_id, (lidByGroup.get(m.group_id) || 0) + 1);
+    }
+  }
+
+  // Engajados: membros com pelo menos 1 msg inbound (distinct sender_jid por grupo)
+  const { data: inboundMsgs } = await db
+    .from("group_messages")
+    .select("group_id, sender_jid")
+    .eq("organization_id", orgId)
+    .in("group_id", groupIds)
+    .eq("direction", "inbound")
+    .not("sender_jid", "is", null);
+
+  const engagedByGroup = new Map<string, Set<string>>();
+  for (const m of (inboundMsgs || []) as { group_id: string; sender_jid: string }[]) {
+    if (!engagedByGroup.has(m.group_id)) engagedByGroup.set(m.group_id, new Set());
+    engagedByGroup.get(m.group_id)!.add(m.sender_jid);
+  }
+
+  // Saídas recentes: left_at nos últimos 7 dias
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: recentExits } = await db
+    .from("group_memberships")
+    .select("group_id")
+    .eq("organization_id", orgId)
+    .in("group_id", groupIds)
+    .gte("left_at", sevenDaysAgo);
+
+  const recentExitsByGroup = new Map<string, number>();
+  for (const m of (recentExits || []) as { group_id: string }[]) {
+    recentExitsByGroup.set(m.group_id, (recentExitsByGroup.get(m.group_id) || 0) + 1);
+  }
 
   // Identified leads per group
   const identifiedByGroup = new Map<string, Set<string>>();
@@ -130,6 +187,10 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
     identified_leads: identifiedByGroup.get(g.id as string)?.size ?? 0,
     duplicates: duplicatesByGroup.get(g.id as string) ?? 0,
     created_at: g.created_at as string,
+    unidentified_count: unidentifiedByGroup.get(g.id as string) ?? 0,
+    lid_count: lidByGroup.get(g.id as string) ?? 0,
+    engaged_count: engagedByGroup.get(g.id as string)?.size ?? 0,
+    recent_exits: recentExitsByGroup.get(g.id as string) ?? 0,
   }));
 }
 
