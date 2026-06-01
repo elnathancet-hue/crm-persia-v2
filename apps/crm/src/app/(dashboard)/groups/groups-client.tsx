@@ -96,6 +96,10 @@ interface Group {
   max_participants: number;
   is_accepting: boolean;
   is_announce: boolean;
+  is_locked: boolean;
+  is_join_approval_required: boolean;
+  member_add_mode: "all_member_add" | "admin_add";
+  ephemeral_duration: "off" | "1d" | "7d" | "90d";
   category: string;
   campaign_id: string | null;
   created_at: string;
@@ -330,10 +334,10 @@ function GroupChatPanel({
   const [saving, setSaving] = React.useState(false);
   const [inviteLink, setInviteLink] = React.useState(group.invite_link || "");
   const [resettingLink, setResettingLink] = React.useState(false);
-  const [editLocked, setEditLocked] = React.useState(false);
-  const [editJoinApproval, setEditJoinApproval] = React.useState(false);
-  const [editMemberAddMode, setEditMemberAddMode] = React.useState<"all_member_add" | "admin_add">("all_member_add");
-  const [editEphemeral, setEditEphemeral] = React.useState<"off" | "1d" | "7d" | "90d">("off");
+  const [editLocked, setEditLocked] = React.useState(group.is_locked);
+  const [editJoinApproval, setEditJoinApproval] = React.useState(group.is_join_approval_required);
+  const [editMemberAddMode, setEditMemberAddMode] = React.useState<"all_member_add" | "admin_add">(group.member_add_mode);
+  const [editEphemeral, setEditEphemeral] = React.useState<"off" | "1d" | "7d" | "90d">(group.ephemeral_duration);
   const [leavingGroup, setLeavingGroup] = React.useState(false);
 
   // Invite dialog
@@ -354,6 +358,10 @@ function GroupChatPanel({
     setEditAnnounce(group.is_announce);
     setEditCategory(group.category);
     setInviteLink(group.invite_link || "");
+    setEditLocked(group.is_locked);
+    setEditJoinApproval(group.is_join_approval_required);
+    setEditMemberAddMode(group.member_add_mode);
+    setEditEphemeral(group.ephemeral_duration);
     setMembersOpen(false);
     setSelectedMember(null);
     setGroupMembers([]);

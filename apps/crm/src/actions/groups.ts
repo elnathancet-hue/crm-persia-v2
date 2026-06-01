@@ -141,10 +141,15 @@ export async function syncGroups() {
           organization_id: orgId,
           group_jid: group.jid,
           name: group.name,
+          description: group.description || null,
           participant_count: group.participantCount,
           invite_link: group.inviteLink || null,
+          is_announce: group.announce ?? false,
+          is_locked: group.locked ?? false,
+          is_join_approval_required: group.joinApprovalRequired ?? false,
+          member_add_mode: group.memberAddMode ?? "all_member_add",
           updated_at: new Date().toISOString(),
-        },
+        } as never,
         { onConflict: "organization_id,group_jid" }
       );
   }
@@ -221,6 +226,10 @@ export async function updateGroup(
   if (data.name) dbUpdate.name = data.name;
   if (data.description !== undefined) dbUpdate.description = data.description;
   if (data.is_announce !== undefined) dbUpdate.is_announce = data.is_announce;
+  if (data.locked !== undefined) dbUpdate.is_locked = data.locked;
+  if (data.join_approval_required !== undefined) dbUpdate.is_join_approval_required = data.join_approval_required;
+  if (data.member_add_mode !== undefined) dbUpdate.member_add_mode = data.member_add_mode;
+  if (data.ephemeral_duration !== undefined) dbUpdate.ephemeral_duration = data.ephemeral_duration;
   if (data.category) dbUpdate.category = data.category;
 
   await supabase
