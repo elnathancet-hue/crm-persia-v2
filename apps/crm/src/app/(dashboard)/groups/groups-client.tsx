@@ -18,6 +18,7 @@ import {
   Paperclip,
   Plus,
   RefreshCw,
+  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -32,6 +33,7 @@ import {
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { EmptyState } from "@persia/ui/empty-state";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -259,6 +261,28 @@ function initialsFromName(name: string | null | undefined): string {
   return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
 }
 
+const GROUP_AVATAR_COLORS = [
+  "bg-red-500",
+  "bg-orange-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-teal-500",
+  "bg-cyan-500",
+  "bg-blue-500",
+  "bg-indigo-500",
+  "bg-violet-500",
+  "bg-pink-500",
+];
+
+function hashGroupColor(name: string | null): string {
+  if (!name) return GROUP_AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return GROUP_AVATAR_COLORS[Math.abs(hash) % GROUP_AVATAR_COLORS.length];
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
   aquecimento: "Aquecimento",
@@ -313,37 +337,32 @@ function GroupListPanel({
   });
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ background: "var(--chat-sidebar-bg)" }}>
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-[color:var(--chat-sidebar-divider)]">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-base">Grupos WhatsApp</h2>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={onCampaignOpen} title="Campanhas / Link Inteligente">
-              <Zap className="size-4" />
-            </Button>
-            <Button variant="ghost" size="icon-sm" onClick={onSync} disabled={syncing} title="Sincronizar">
-              {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-            </Button>
-            <Button size="icon-sm" onClick={onCreateOpen} title="Criar grupo">
-              <Plus className="size-4" />
-            </Button>
-          </div>
+      <div
+        className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        style={{ background: "var(--chat-header-bg)" }}
+      >
+        <Users className="size-5 text-[color:var(--chat-send-bg)]" />
+        <h2 className="text-base font-medium text-[color:var(--chat-header-fg)] flex-1">
+          Grupos WhatsApp
+        </h2>
+        <div className="flex items-center gap-0.5">
+          <Button variant="ghost" size="icon-sm" onClick={onCampaignOpen} title="Campanhas">
+            <Zap className="size-4" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={onSync} disabled={syncing} title="Sincronizar">
+            {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+          </Button>
+          <Button size="icon-sm" onClick={onCreateOpen} title="Criar grupo">
+            <Plus className="size-4" />
+          </Button>
         </div>
+      </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Input
-            name="search"
-            placeholder="Buscar grupo..."
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            className="h-8 text-sm pl-3"
-          />
-        </div>
-
-        {/* Category filter */}
-        <div className="flex gap-1 mt-2 overflow-x-auto pb-0.5 no-scrollbar">
+      {/* Category filter */}
+      <div className="shrink-0 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2">
+        <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar">
           {["todos", "geral", "aquecimento", "evento", "oferta", "alunos"].map((cat) => (
             <Button
               key={cat}
@@ -352,12 +371,26 @@ function GroupListPanel({
               className={`shrink-0 h-7 text-xs px-2.5 rounded-full transition-colors ${
                 categoryFilter === cat
                   ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  : "bg-[color:var(--chat-input-field-bg)] text-muted-foreground hover:bg-muted/80"
               }`}
             >
               {cat === "todos" ? "Todos" : CATEGORY_LABELS[cat]}
             </Button>
           ))}
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="shrink-0 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            name="search"
+            placeholder="Buscar grupo..."
+            value={search}
+            onChange={(e) => onSearch(e.target.value)}
+            className="h-9 rounded-lg border-0 bg-[color:var(--chat-input-field-bg)] pl-8 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-[color:var(--chat-send-bg)]"
+          />
         </div>
       </div>
 
@@ -377,72 +410,105 @@ function GroupListPanel({
             />
           </div>
         ) : (
-          filtered.map((group) => {
-            const lastMsg = lastMessages[group.id];
-            const unread = unreadCounts[group.id] ?? 0;
-            const timeLabel = lastMsg ? formatMsgTime(lastMsg.at) : "";
-            const preview = lastMsg
-              ? lastMsg.direction === "outbound"
-                ? `VocÃª: ${lastMsg.text || "MÃ­dia"}`
-                : lastMsg.sender
-                  ? `${lastMsg.sender.split(" ")[0]}: ${lastMsg.text || "MÃ­dia"}`
-                  : lastMsg.text || "MÃ­dia"
-              : "Nenhuma mensagem";
+          <div className="flex flex-col">
+            {filtered.map((group) => {
+              const lastMsg = lastMessages[group.id];
+              const unread = unreadCounts[group.id] ?? 0;
+              const isSelected = selectedId === group.id;
+              const timeLabel = lastMsg ? formatMsgTime(lastMsg.at) : "";
+              const preview = lastMsg
+                ? lastMsg.direction === "outbound"
+                  ? `Você: ${lastMsg.text || "Mídia"}`
+                  : lastMsg.sender
+                    ? `${lastMsg.sender.split(" ")[0]}: ${lastMsg.text || "Mídia"}`
+                    : lastMsg.text || "Mídia"
+                : "Nenhuma mensagem";
+              const colorClass = hashGroupColor(group.name);
 
-            return (
-              <button
-                key={group.id}
-                type="button"
-                onClick={() => onSelect(group.id)}
-                className={`w-full text-left flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-muted/50 transition-colors ${
-                  selectedId === group.id ? "bg-primary/5 border-l-2 border-l-primary" : ""
-                }`}
-              >
-                {/* Avatar */}
-                <div className="size-11 overflow-hidden rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  {group.image_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={group.image_url} alt="" className="size-full object-cover" />
-                  ) : (
-                    <Users className="size-5 text-primary" />
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  {/* Row 1: name + time */}
-                  <div className="flex items-center justify-between gap-1">
-                    <p className="text-sm font-semibold truncate">{group.name}</p>
-                    {timeLabel && (
-                      <span className={`text-[11px] shrink-0 ${unread > 0 ? "text-primary font-medium" : "text-muted-foreground"}`}>
-                        {timeLabel}
-                      </span>
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => onSelect(group.id)}
+                  className="w-full text-left flex min-h-[72px] items-start gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2.5 transition-colors"
+                  style={{ background: isSelected ? "var(--chat-sidebar-active)" : "transparent" }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = "var(--chat-sidebar-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  {/* Avatar */}
+                  <div className="relative shrink-0 mt-0.5">
+                    <Avatar size="default">
+                      {group.image_url ? (
+                        <AvatarImage src={group.image_url} alt={group.name} />
+                      ) : null}
+                      <AvatarFallback className={`${colorClass} text-white`}>
+                        {initialsFromName(group.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {/* Unread dot */}
+                    {unread > 0 && (
+                      <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-background bg-primary" />
                     )}
                   </div>
-                  {/* Row 2: last message preview + unread badge */}
-                  <div className="flex items-center justify-between gap-1 mt-0.5">
-                    <p className="text-xs text-muted-foreground truncate flex-1">{preview}</p>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {group.campaign_id && <Link2 className="size-3 text-primary" />}
+
+                  {/* Info */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    {/* Row 1: name + time */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[15px] font-medium leading-5 text-[color:var(--chat-header-fg)]">
+                        {group.name}
+                      </span>
+                      {timeLabel && (
+                        <span className={`shrink-0 text-[11px] ${unread > 0 ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                          {timeLabel}
+                        </span>
+                      )}
+                    </div>
+                    {/* Row 2: preview + unread count */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] leading-5 text-muted-foreground">
+                        {preview}
+                      </span>
                       {unread > 0 && (
                         <span
-                          className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold px-1"
+                          className="inline-flex shrink-0 items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold px-1"
                           style={{ background: "var(--badge-notification)", color: "var(--badge-notification-fg)" }}
                         >
                           {unread > 99 ? "99+" : unread}
                         </span>
                       )}
                     </div>
+                    {/* Row 3: category + flags */}
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <Badge variant="secondary" className="h-4 px-1 text-[10px] capitalize">
+                        {CATEGORY_LABELS[group.category] || group.category}
+                      </Badge>
+                      {group.is_announce && (
+                        <Badge variant="outline" className="h-4 px-1 text-[10px]">
+                          Anúncio
+                        </Badge>
+                      )}
+                      {group.campaign_id && (
+                        <Badge variant="secondary" className="h-4 px-1 text-[10px] text-primary">
+                          <Link2 className="size-2.5 mr-0.5" />
+                          Campanha
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
       {/* Footer count */}
-      <div className="px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
+      <div className="px-4 py-2 border-t border-[color:var(--chat-sidebar-divider)] text-xs text-muted-foreground">
         {groups.length} grupos
       </div>
     </div>
