@@ -97,7 +97,7 @@ import {
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
-import { LeadContactPanel } from "@/components/chat/lead-contact-panel";
+import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
@@ -154,6 +154,17 @@ interface GroupMessage {
 }
 
 const QUICK_REACTIONS = ["ðŸ‘", "â¤ï¸", "ðŸ˜‚", "ðŸ˜®", "ðŸ˜¢", "ðŸ™", "ðŸ”¥", "ðŸ‘"];
+
+const SENDER_COLORS = [
+  { bg: "#ec4899", fg: "#ffffff" },
+  { bg: "#84cc16", fg: "#ffffff" },
+  { bg: "#06b6d4", fg: "#ffffff" },
+  { bg: "#f97316", fg: "#ffffff" },
+  { bg: "#8b5cf6", fg: "#ffffff" },
+  { bg: "#10b981", fg: "#ffffff" },
+  { bg: "#ef4444", fg: "#ffffff" },
+  { bg: "#0ea5e9", fg: "#ffffff" },
+];
 
 interface GroupMessageSenderLead {
   id: string;
@@ -263,6 +274,15 @@ function initialsFromName(name: string | null | undefined): string {
     .slice(0, 2);
   if (parts.length === 0) return "?";
   return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function senderColorForKey(key: string | null | undefined): { bg: string; fg: string } {
+  const value = key || "unknown";
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = value.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return SENDER_COLORS[Math.abs(hash) % SENDER_COLORS.length];
 }
 
 const GROUP_AVATAR_COLORS = [
@@ -589,6 +609,7 @@ function GroupChatPanel({
   const [groupMembers, setGroupMembers] = React.useState<GroupLeadMember[]>([]);
   const [membersLoading, setMembersLoading] = React.useState(false);
   const [selectedMember, setSelectedMember] = React.useState<GroupLeadMember | null>(null);
+  const [selectedContact, setSelectedContact] = React.useState<LeadContactData | null>(null);
   const [backfillLoading, setBackfillLoading] = React.useState(false);
 
   // Reset when group changes
@@ -604,6 +625,7 @@ function GroupChatPanel({
     setEditEphemeral(group.ephemeral_duration);
     setMembersOpen(false);
     setSelectedMember(null);
+    setSelectedContact(null);
     setGroupMembers([]);
     setReplyTo(null);
     setAiOpen(false);
@@ -819,22 +841,20 @@ function GroupChatPanel({
   async function handleOpenMembers() {
     setMembersOpen(true);
     setSelectedMember(null);
+    setSelectedContact(null);
     setMembersLoading(true);
     const members = await getGroupLeadMembers(group.id).catch(() => []);
     setGroupMembers(members);
     setMembersLoading(false);
   }
 
-  function handleOpenSenderLead(msg: GroupMessage) {
+  function handleOpenSenderContact(msg: GroupMessage) {
     const lead = msg.sender_lead;
-    if (!lead) return;
     setMembersOpen(true);
-    setSelectedMember({
-      membership_id: msg.sender_membership_id ?? `message-${msg.id}`,
-      phone: msg.sender_phone ?? lead.phone,
-      name: msg.sender_name ?? lead.name,
-      lead_id: lead.id,
-      lead: {
+    setSelectedMember(null);
+    setSelectedContact(
+      lead
+        ? {
         id: lead.id,
         name: lead.name,
         phone: lead.phone,
@@ -845,8 +865,20 @@ function GroupChatPanel({
         created_at: msg.created_at,
         assigned_to: null,
         lead_tags: [],
-      },
-    });
+        }
+        : {
+          id: null,
+          name: msg.sender_name,
+          phone: msg.sender_phone,
+          email: null,
+          avatar_url: msg.sender_avatar_url,
+          status: null,
+          source: "whatsapp_group",
+          created_at: msg.created_at,
+          assigned_to: null,
+          lead_tags: [],
+        },
+    );
   }
 
   async function handleSaveSettings() {
@@ -1064,6 +1096,7 @@ function GroupChatPanel({
                 msg.sender_name ??
                 msg.sender_phone ??
                 (msg.sender_identity_kind === "lid" ? "Participante sem telefone" : "Participante");
+              const senderColor = senderColorForKey(senderKey);
               const senderSecondary =
                 senderLead?.phone ??
                 msg.sender_phone ??
@@ -1090,14 +1123,14 @@ function GroupChatPanel({
                     {!isOutbound && (
                       <div className="mt-0.5 size-8 shrink-0">
                         {showBlockHeader && (
-                          <button
+                          <Button
                             type="button"
-                            disabled={!senderLead}
-                            onClick={() => handleOpenSenderLead(msg)}
-                            className={`flex size-8 items-center justify-center overflow-hidden rounded-full border border-border/40 bg-primary/10 text-[11px] font-semibold text-primary ${
-                              senderLead ? "cursor-pointer hover:ring-2 hover:ring-primary/25" : "cursor-default"
-                            }`}
-                            title={senderLead ? "Abrir perfil do lead" : senderSecondary ?? senderDisplayName}
+                            variant="ghost"
+                            onClick={() => handleOpenSenderContact(msg)}
+                            className="size-8 overflow-hidden rounded-full p-0 text-[11px] font-semibold"
+                            style={{ backgroundColor: senderColor.bg, color: senderColor.fg }}
+                            aria-label="Abrir dados do contato"
+                            title="Abrir dados do contato"
                           >
                             {senderAvatarUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -1109,7 +1142,7 @@ function GroupChatPanel({
                             ) : (
                               initialsFromName(senderDisplayName)
                             )}
-                          </button>
+                          </Button>
                         )}
                       </div>
                     )}
@@ -1189,14 +1222,13 @@ function GroupChatPanel({
                       {showBlockHeader && isOutbound ? (
                         <p className="text-[11px] px-1" style={{ color: "var(--chat-timestamp)" }}>VocÃª</p>
                       ) : showBlockHeader ? (
-                        <button
+                        <Button
                           type="button"
-                          disabled={!senderLead}
-                          onClick={() => handleOpenSenderLead(msg)}
-                          className={`flex max-w-[260px] items-center gap-1 px-1 text-left text-[11px] font-medium text-primary ${
-                            senderLead ? "hover:underline" : "cursor-default"
-                          }`}
-                          title={senderSecondary ?? undefined}
+                          variant="ghost"
+                          onClick={() => handleOpenSenderContact(msg)}
+                          className="h-auto max-w-[260px] justify-start gap-1 px-1 py-0 text-left text-[11px] font-semibold hover:underline"
+                          style={{ color: senderColor.bg }}
+                          title="Abrir dados do contato"
                         >
                           <span className="truncate">{senderDisplayName}</span>
                           {senderLead && (
@@ -1204,7 +1236,7 @@ function GroupChatPanel({
                               Lead
                             </Badge>
                           )}
-                        </button>
+                        </Button>
                       ) : null}
                       {showBlockHeader && !isOutbound && senderSecondary && senderSecondary !== senderDisplayName && (
                         <p className="max-w-[260px] truncate px-1 text-[10px] text-muted-foreground">
@@ -1459,9 +1491,14 @@ function GroupChatPanel({
       </div>
 
       {/* Members / contact panel â€" Sheet overlay, nÃ£o empurra o layout */}
-      <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); } }}>
+      <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); setSelectedContact(null); } }}>
         <SheetContent side="right" showCloseButton={false} className="w-full max-w-[440px] p-0 overflow-hidden">
-          {selectedMember ? (
+          {selectedContact ? (
+            <LeadContactPanel
+              lead={selectedContact}
+              onClose={() => setSelectedContact(null)}
+            />
+          ) : selectedMember ? (
             <LeadContactPanel
               lead={selectedMember.lead}
               onClose={() => setSelectedMember(null)}

@@ -74,6 +74,17 @@ const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+const LEAD_COLORS = [
+  { bg: "#ec4899", fg: "#ffffff" },
+  { bg: "#84cc16", fg: "#ffffff" },
+  { bg: "#06b6d4", fg: "#ffffff" },
+  { bg: "#f97316", fg: "#ffffff" },
+  { bg: "#8b5cf6", fg: "#ffffff" },
+  { bg: "#10b981", fg: "#ffffff" },
+  { bg: "#ef4444", fg: "#ffffff" },
+  { bg: "#0ea5e9", fg: "#ffffff" },
+];
+
 // ---- Helpers ----
 
 function formatMessageTime(dateStr: string): string {
@@ -116,6 +127,15 @@ function getInitials(name: string | null): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+function leadColorForKey(key: string | null | undefined): { bg: string; fg: string } {
+  const value = key || "unknown";
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = value.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return LEAD_COLORS[Math.abs(hash) % LEAD_COLORS.length];
 }
 
 function shouldResolveMediaUrl(mediaUrl: string | null): boolean {
@@ -781,6 +801,11 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const leadForPanel = lead
     ? (lead as unknown as LeadContactData)
     : null;
+  const leadColor = leadColorForKey(
+    (lead?.id as string | undefined) ??
+    (lead?.phone as string | undefined) ??
+    (lead?.name as string | undefined),
+  );
 
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: "var(--chat-bg)" }}>
@@ -810,22 +835,38 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               /chat/details). Cai pro AvatarFallback com iniciais se
               não houver foto, falhar ao carregar, ou provider Meta
               Cloud (que não expõe profile pic). */}
-          <Avatar size="default">
-            {lead?.avatar_url ? (
-              <AvatarImage
-                src={lead.avatar_url as string}
-                alt={lead?.name as string | undefined}
-              />
-            ) : null}
-            <AvatarFallback>
-              {getInitials(lead?.name as string | null)}
-            </AvatarFallback>
-          </Avatar>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setContactPanelOpen(true)}
+            className="h-auto rounded-full p-0"
+            aria-label="Abrir dados do contato"
+            title="Abrir dados do contato"
+          >
+            <Avatar size="default">
+              {lead?.avatar_url ? (
+                <AvatarImage
+                  src={lead.avatar_url as string}
+                  alt={lead?.name as string | undefined}
+                />
+              ) : null}
+              <AvatarFallback style={{ backgroundColor: leadColor.bg, color: leadColor.fg }}>
+                {getInitials(lead?.name as string | null)}
+              </AvatarFallback>
+            </Avatar>
+          </Button>
           <div className="flex min-w-0 flex-col">
             <div className="flex items-center gap-2">
-              <span className="truncate text-[15px] font-medium leading-5">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setContactPanelOpen(true)}
+                className="h-auto min-w-0 justify-start p-0 text-left font-semibold leading-5 hover:underline"
+                style={{ color: leadColor.bg }}
+                title="Abrir dados do contato"
+              >
                 {(lead?.name as string) || "Sem nome"}
-              </span>
+              </Button>
               <Badge
                 variant="secondary"
                 className="h-4 px-1 text-[10px] capitalize"
@@ -1143,14 +1184,23 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                       {isLead && (
                         <div className="w-6 shrink-0 self-end mb-0.5">
                           {isLastInBlock ? (
-                            <Avatar size="sm">
-                              {(lead?.avatar_url as string | null) ? (
-                                <AvatarImage src={lead!.avatar_url as string} alt={lead?.name as string | undefined} />
-                              ) : null}
-                              <AvatarFallback className="text-[9px]">
-                                {((lead?.name as string) || (lead?.phone as string) || "L").slice(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </Avatar>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setContactPanelOpen(true)}
+                              className="h-auto rounded-full p-0"
+                              aria-label="Abrir dados do contato"
+                              title="Abrir dados do contato"
+                            >
+                              <Avatar size="sm">
+                                {(lead?.avatar_url as string | null) ? (
+                                  <AvatarImage src={lead!.avatar_url as string} alt={lead?.name as string | undefined} />
+                                ) : null}
+                                <AvatarFallback className="text-[9px]" style={{ backgroundColor: leadColor.bg, color: leadColor.fg }}>
+                                  {((lead?.name as string) || (lead?.phone as string) || "L").slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                            </Button>
                           ) : null}
                         </div>
                       )}
@@ -1182,14 +1232,20 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                         {isLead && (
                           <div
                             className="flex items-center gap-1 text-[11px] px-1"
-                            style={{ color: "var(--chat-timestamp)" }}
                           >
                             <User className="size-3" />
-                            <span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setContactPanelOpen(true)}
+                              className="h-auto p-0 font-semibold hover:underline"
+                              style={{ color: leadColor.bg }}
+                              title="Abrir dados do contato"
+                            >
                               {(lead?.name as string) ||
                                 (lead?.phone as string) ||
                                 "Lead"}
-                            </span>
+                            </Button>
                           </div>
                         )}
 

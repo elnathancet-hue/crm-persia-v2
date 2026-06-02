@@ -15,14 +15,14 @@ interface TagEntry {
 }
 
 export interface LeadContactData {
-  id: string;
+  id?: string | null;
   name: string | null;
   phone: string | null;
   email: string | null;
   avatar_url: string | null;
   status: string | null;
   source: string | null;
-  created_at: string;
+  created_at?: string | null;
   assigned_to?: string | null;
   lead_tags?: TagEntry[];
 }
@@ -72,7 +72,8 @@ function getInitials(name: string | null | undefined) {
     .join("");
 }
 
-function formatDate(iso: string) {
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return "—";
   return new Date(iso).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "short",
