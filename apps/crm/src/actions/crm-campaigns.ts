@@ -459,14 +459,36 @@ export async function scheduleCampaign(id: string): Promise<ActionResult<void>> 
     const jobRows: Array<Record<string, unknown>> = [];
     const orderedSteps = [...steps].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 
+    // Intervalo mínimo entre jobs do mesmo step para respeitar rate_limit_per_minute.
+    // Ex: 20 msg/min → 1 job a cada 3 s. Default (null) = sem controle.
+    const rateLimit = (c.rate_limit_per_minute as number | null) ?? null;
+    const perStepIntervalMs = rateLimit && rateLimit > 0 ? Math.ceil(60_000 / rateLimit) : 0;
+
+    // stepBaseTime[stepId] = timestamp base do próximo job desse step (para escalonamento)
+    const stepBaseTime = new Map<string, number>();
+    for (const step of orderedSteps) {
+      stepBaseTime.set(step.id as string, now.getTime());
+    }
+
     for (const recipId of activeIds) {
       let previousSendAt = now;
       for (const step of orderedSteps) {
-        const sendAt = computeStepSendAt(step, now, previousSendAt);
+        const stepId = step.id as string;
+        const computedAt = computeStepSendAt(step, now, previousSendAt);
+
+        // Se rate limit ativo, o send_at é o maior entre o tempo calculado
+        // e o próximo slot disponível nesse step.
+        let sendAt = computedAt;
+        if (perStepIntervalMs > 0) {
+          const nextSlot = new Date(Math.max(computedAt.getTime(), stepBaseTime.get(stepId)!));
+          sendAt = nextSlot;
+          stepBaseTime.set(stepId, nextSlot.getTime() + perStepIntervalMs);
+        }
+
         jobRows.push({
           organization_id: orgId,
           campaign_id: id,
-          step_id: step.id,
+          step_id: stepId,
           recipient_id: recipId,
           send_at: sendAt.toISOString(),
           status: "queued",
@@ -558,6 +580,7 @@ export async function cancelCampaign(id: string): Promise<ActionResult<void>> {
       });
 
     revalidatePath("/campaigns");
+    revalidatePath(`/campaigns/${id}`);
     return;
   } catch (err) {
     return { error: asErr(err, "Não foi possível cancelar a campanha.") };
@@ -602,6 +625,7 @@ async function setCampaignStatus(
       });
 
     revalidatePath("/campaigns");
+    revalidatePath(`/campaigns/${id}`);
     return;
   } catch (err) {
     return { error: asErr(err) };

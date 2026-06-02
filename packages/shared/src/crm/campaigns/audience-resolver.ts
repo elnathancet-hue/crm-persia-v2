@@ -211,14 +211,11 @@ async function fetchLeadsByIds(
   };
   const { data, error } = await dbAny
     .from("leads")
-    .select("id, name, phone")
+    .select("id, name, phone, chat_jid")
     .eq("organization_id", orgId)
     .in("id", ids);
   if (error) throw new StrictMatchError(`fetchLeads: ${error.message}`);
-  return ((data ?? []) as Array<{ id: string; phone: string | null; name: string | null }>).map((r) => ({
-    ...r,
-    chat_jid: null,
-  }));
+  return (data ?? []) as Array<{ id: string; phone: string | null; chat_jid: string | null; name: string | null }>;
 }
 
 // ─── Group targets ────────────────────────────────────────────────────────────

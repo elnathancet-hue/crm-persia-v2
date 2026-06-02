@@ -516,27 +516,25 @@ function nextWindowStart(windowStart: string, timezone: string): string {
   try {
     const [h, m] = windowStart.split(":").map(Number);
     const now = new Date();
-    // Calcula próximo horário de início na timezone
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    const parts = formatter.formatToParts(now);
-    const year = Number(parts.find((p) => p.type === "year")?.value);
-    const month = Number(parts.find((p) => p.type === "month")?.value) - 1;
-    const day = Number(parts.find((p) => p.type === "day")?.value);
 
-    const todayWindow = new Date(year, month, day, h, m, 0, 0);
-    const todayWindowUTC = todayWindow.getTime();
+    // Calcula o offset UTC→timezone usando o truque toLocaleString.
+    // tzNow representa "agora" interpretado como se o horário da timezone
+    // fosse o horário local — permite extrair data/hora na timezone correta.
+    const tzNowStr = now.toLocaleString("en-US", { timeZone: timezone });
+    const tzNow = new Date(tzNowStr);
+    const offsetMs = now.getTime() - tzNow.getTime();
 
-    if (todayWindowUTC > now.getTime()) {
-      return new Date(todayWindowUTC).toISOString();
+    // Ajusta tzNow para h:m:00 de hoje na timezone da campanha
+    const windowToday = new Date(tzNow);
+    windowToday.setHours(h, m, 0, 0);
+    // Converte de volta para UTC somando o offset
+    const windowTodayUTC = windowToday.getTime() + offsetMs;
+
+    if (windowTodayUTC > now.getTime()) {
+      return new Date(windowTodayUTC).toISOString();
     }
-    // Amanhã
-    const tomorrowWindow = new Date(todayWindowUTC + 86_400_000);
-    return tomorrowWindow.toISOString();
+    // Amanhã na mesma janela
+    return new Date(windowTodayUTC + 86_400_000).toISOString();
   } catch {
     return new Date(Date.now() + 3_600_000).toISOString(); // fallback: +1h
   }

@@ -745,8 +745,8 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                       <span className="text-2xl font-bold text-foreground mt-2">{preview.duplicate_count}</span>
                     </div>
                     <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Bloqueados</span>
-                      <span className="text-2xl font-bold text-destructive mt-2">{preview.ineligible_count > 0 ? 4 : 0 /* MOCKUP FIX */}</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Inelegíveis</span>
+                      <span className="text-2xl font-bold text-destructive mt-2">{preview.ineligible_count}</span>
                     </div>
                   </div>
 
