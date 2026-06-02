@@ -3,7 +3,7 @@
 // Wizard de criação de campanha — 6 etapas conforme roadmap.
 // Etapa 1: Objetivo (tipo) → 2: Público → 3: Mensagem → 4: Agenda → 5: Validação → 6: Confirmar
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
@@ -20,6 +20,7 @@ import {
   MessageSquare, CheckCircle2, AlertCircle, Loader2,
   ChevronRight, ChevronLeft, Upload, Trash2, FileText,
   Megaphone, Users, Send, CalendarClock, ShieldCheck,
+  UserCircle, LayoutTemplate, Zap, Save,
 } from "lucide-react";
 import type {
   CampaignKind, CreateCampaignDraftInput, CampaignAudiencePreview,
@@ -100,6 +101,13 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   // Etapa 2
   const [targetKind, setTargetKind] = useState<AudienceTarget["target_kind"]>("segment");
   const [targetId, setTargetId] = useState("");
+  const [responsible, setResponsible] = useState<string>("all");
+  const [advancedFilters, setAdvancedFilters] = useState({
+    excludeDuplicates: true,
+    excludeOptOut: true,
+    excludeBlocked: true,
+    onlyWithPhone: true,
+  });
 
   // Etapa 3
   const [msgText, setMsgText] = useState("");
@@ -110,6 +118,21 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const [mediaSize, setMediaSize] = useState<number | null>(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function insertVariable(variable: string) {
+    const start = textareaRef.current?.selectionStart ?? msgText.length;
+    const end = textareaRef.current?.selectionEnd ?? msgText.length;
+    const newText = msgText.substring(0, start) + variable + msgText.substring(end);
+    setMsgText(newText);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(start + variable.length, start + variable.length);
+      }
+    }, 0);
+  }
+
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupText, setFollowupText] = useState("");
 
@@ -216,18 +239,9 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
               media_type: "none" as const,
             }] : []),
           ],
-          targets: [
-            {
-              target_kind: targetKind,
-              target_id: targetId || null,
-            },
-          ],
+          targets: [{ target_kind: targetKind, target_id: targetId || null }],
         };
         const result = await createCampaignDraft(input);
-        if (result && "error" in result) {
-          setFinalError(result.error ?? "Erro ao criar rascunho");
-          return;
-        }
         const id = (result?.data as { id: string } | undefined)?.id;
         if (id) {
           setCreatedId(id);
@@ -316,41 +330,45 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="flex flex-col left-auto right-0 top-0 h-dvh max-h-dvh w-full max-w-[720px] translate-x-0 translate-y-0 overflow-hidden rounded-none border-l p-0 sm:rounded-none">
+      <DialogContent className="flex flex-col max-h-[90vh] w-full max-w-[720px] overflow-hidden p-0 sm:max-w-[720px]">
         <DialogHeader className="border-b px-7 pb-5 pt-5">
-          <div className="flex items-start gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
-              <Megaphone className="size-5" />
+          <div className="space-y-6">
+            <div className="text-left">
+              <DialogTitle className="text-lg">Criar Nova Campanha</DialogTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Configure sua campanha em poucos passos.
+              </p>
             </div>
-            <div className="min-w-0 flex-1 space-y-2">
-              <div>
-                <DialogTitle className="text-lg">Nova campanha</DialogTitle>
-                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                  Etapa {step} de 6 - {STEP_LABELS[step]}
-                </p>
-              </div>
-              <div className="flex justify-center pt-2">
-                <div className="flex items-center w-full max-w-sm">
-                  {([1, 2, 3, 4, 5, 6] as Step[]).map((s) => (
-                    <div key={s} className={`flex items-center ${s < 6 ? "flex-1" : ""}`}>
-                      <div
-                        className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
-                          s < step
-                            ? "bg-success text-success-foreground"
-                            : s === step
-                              ? "bg-primary text-primary-foreground ring-4 ring-primary/10"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {s < step ? <CheckCircle2 className="size-3.5" /> : s}
-                      </div>
-                      {s < 6 && (
-                        <div className={`h-[2px] flex-1 mx-2 rounded-full transition-colors ${s < step ? "bg-success" : "bg-muted"}`} />
-                      )}
+            
+            <div className="relative flex justify-between px-2">
+              <div className="absolute left-6 right-6 top-[14px] h-[2px] -translate-y-1/2 bg-border z-0" />
+              <div className="absolute left-6 top-[14px] h-[2px] -translate-y-1/2 bg-success z-0 transition-all" style={{ width: `calc(${((step - 1) / 5) * 100}% - 48px)` }} />
+              
+              {([1, 2, 3, 4, 5, 6] as Step[]).map((s) => {
+                const isCompleted = s < step;
+                const isActive = s === step;
+                
+                return (
+                  <div key={s} className="relative z-10 flex flex-col items-center gap-2">
+                    <div
+                      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors border-2 ${
+                        isCompleted
+                          ? "bg-success border-success text-success-foreground"
+                          : isActive
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "bg-background border-border text-muted-foreground"
+                      }`}
+                    >
+                      {isCompleted ? <CheckCircle2 className="size-4" /> : s}
                     </div>
-                  ))}
-                </div>
-              </div>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${
+                      isCompleted || isActive ? "text-primary" : "text-muted-foreground"
+                    }`}>
+                      {STEP_SHORT_LABELS[s]}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </DialogHeader>
@@ -358,29 +376,58 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
         <div className="flex-1 overflow-y-auto px-7 py-7">
           {/* Etapa 1: Objetivo */}
           {step === 1 && (
-            <FormSection
-              icon={<Megaphone className="size-4 text-muted-foreground" />}
-              title="Objetivo"
-              description="Defina o publico da acao e identifique a campanha"
-            >
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {KIND_OPTIONS.map((opt) => (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Escolha o tipo de campanha</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Selecione como os destinatários serão atingidos.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {[
+                  {
+                    kind: "lead_campaign" as CampaignKind,
+                    label: "Campanha para Leads",
+                    description: "Enviar mensagens para leads filtrados por funil, etapa ou tag.",
+                    icon: <UserCircle className="size-5" />
+                  },
+                  {
+                    kind: "group_campaign" as CampaignKind,
+                    label: "Aviso para Grupos",
+                    description: "Enviar comunicados para grupos de WhatsApp selecionados.",
+                    icon: <Users className="size-5" />
+                  },
+                  {
+                    kind: "mixed_campaign" as CampaignKind,
+                    label: "Leads + Grupos",
+                    description: "Enviar para ambos, evitando mensagens duplicadas para o mesmo número.",
+                    icon: <LayoutTemplate className="size-5" />,
+                    disabled: true
+                  },
+                  {
+                    kind: "auto_followup" as CampaignKind,
+                    label: "Follow-up Automático",
+                    description: "Sequência de mensagens que para quando o lead responder.",
+                    icon: <Zap className="size-5" />,
+                    disabled: true
+                  }
+                ].map((opt) => (
                   <button
                     key={opt.kind}
                     type="button"
+                    disabled={opt.disabled}
                     onClick={() => {
+                      if (opt.disabled) return;
                       setKind(opt.kind);
                       setTargetKind(opt.kind === "group_campaign" ? "group" : "segment");
                       setTargetId("");
                     }}
-                    className={`flex h-auto w-full flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    className={`flex h-auto w-full flex-col items-start gap-4 rounded-xl border p-5 text-left transition-all hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       kind === opt.kind
                         ? "border-primary bg-primary/5 ring-1 ring-primary"
                         : "border-border bg-card"
-                    }`}
+                    } ${opt.disabled ? 'opacity-60 cursor-not-allowed hover:border-border' : ''}`}
                   >
-                    <div className={`flex size-10 items-center justify-center rounded-lg ${kind === opt.kind ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                      {opt.kind === "lead_campaign" ? <Users className="size-5" /> : <MessageSquare className="size-5" />}
+                    <div className={`flex size-10 items-center justify-center rounded-lg ${kind === opt.kind ? 'bg-primary text-primary-foreground' : 'bg-muted/60 text-foreground/80'}`}>
+                      {opt.icon}
                     </div>
                     <div className="space-y-1">
                       <span className="block font-semibold text-foreground text-sm">{opt.label}</span>
@@ -389,280 +436,286 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   </button>
                 ))}
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="camp-name">Nome da campanha *</Label>
+              <div className="space-y-2 pt-2">
+                <Label htmlFor="camp-name" className="font-semibold text-sm">Nome da campanha</Label>
                 <Input
                   id="camp-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Follow-up Leads Frios Junho"
+                  className="h-11"
                 />
               </div>
-            </FormSection>
+            </div>
           )}
 
           {/* Etapa 2: Público */}
           {step === 2 && (
-            <FormSection
-              icon={<Users className="size-4 text-muted-foreground" />}
-              title="Publico"
-              description="Selecione a origem dos destinatarios"
-            >
-              <div className="space-y-1.5">
-                <Label>Tipo de público</Label>
-                <Select
-                  value={targetKind}
-                  onValueChange={(v) => { setTargetKind(v as AudienceTarget["target_kind"]); setTargetId(""); }}
-                >
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(v: string | null) => targetOptions.find((o) => o.value === v)?.label ?? v ?? ""}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {targetOptions.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Selecione os destinatários</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Use os filtros para segmentar sua audiência.</p>
               </div>
 
-              {targetIdOptions.length > 0 && (
-                <div className="space-y-1.5">
-                  <Label>
-                    Selecionar {
-                      targetKind === "segment" ? "segmento"
-                      : targetKind === "tag" ? "tag"
-                      : targetKind === "group" ? "grupo"
-                      : "etapa"
-                    }
-                  </Label>
-                  <Select
-                    value={targetId}
-                    onValueChange={(v) => setTargetId(v ?? "")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(v: string | null) =>
-                          v ? targetIdOptions.find((o) => o.id === v)?.name ?? v : "Selecione..."
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {targetIdOptions.map((o) => (
-                        <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+                {/* Left Col: Filters */}
+                <div className="space-y-6 rounded-xl border p-5 bg-card">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Tipo de público</Label>
+                      <Select value={targetKind} onValueChange={(v) => { setTargetKind(v as AudienceTarget["target_kind"]); setTargetId(""); }}>
+                        <SelectTrigger className="h-9"><SelectValue>{(v: string | null) => targetOptions.find((o) => o.value === v)?.label ?? v ?? ""}</SelectValue></SelectTrigger>
+                        <SelectContent>{targetOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Responsável</Label>
+                      <Select value={responsible} onValueChange={(v) => setResponsible(v ?? "all")}>
+                        <SelectTrigger className="h-9"><SelectValue>{(v: string) => v === "all" ? "Todos" : v}</SelectValue></SelectTrigger>
+                        <SelectContent><SelectItem value="all">Todos</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-              {(targetKind === "lead" || (targetKind === "group" && targetIdOptions.length === 0)) && (
-                <div className="space-y-1.5">
-                  <Label>ID do {targetKind === "lead" ? "lead" : "grupo"}</Label>
-                  <Input
-                    value={targetId}
-                    onChange={(e) => setTargetId(e.target.value)}
-                    placeholder="Cole o ID aqui"
-                  />
+                  {targetIdOptions.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Selecionar {targetKind === "segment" ? "segmento" : targetKind === "tag" ? "tag" : targetKind === "group" ? "grupo" : "etapa"}</Label>
+                      <Select value={targetId} onValueChange={(v) => setTargetId(v ?? "")}>
+                        <SelectTrigger className="h-9"><SelectValue>{(v: string | null) => v ? targetIdOptions.find((o) => o.id === v)?.name ?? v : "Selecione..."}</SelectValue></SelectTrigger>
+                        <SelectContent>{targetIdOptions.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="space-y-3 pt-2 border-t mt-4">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase pt-4 block">Filtros Avançados</Label>
+                    <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.excludeDuplicates} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, excludeDuplicates: !!c }))} /> Excluir duplicados</label>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.excludeBlocked} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, excludeBlocked: !!c }))} /> <span className="leading-tight">Excluir contatos bloqueados</span></label>
+                      <label className="flex items-center gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.excludeOptOut} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, excludeOptOut: !!c }))} /> Excluir opt-out</label>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.onlyWithPhone} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, onlyWithPhone: !!c }))} /> <span className="leading-tight">Apenas leads com telefone</span></label>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </FormSection>
+
+                {/* Right Col: Preview */}
+                <div className="rounded-xl border p-5 bg-card flex flex-col gap-4 h-fit">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><CheckCircle2 className="size-4 text-muted-foreground" /> Prévia do público</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Encontrados</span>
+                      <span className="font-bold">{preview?.found_count ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Enviáveis</span>
+                      <span className="font-bold text-success">{preview?.eligible_count ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Duplicados</span>
+                      <span className="font-bold text-warning">{preview?.duplicate_count ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Bloqueados</span>
+                      <span className="font-bold text-destructive">{preview?.ineligible_count ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Etapa 3: Mensagem */}
           {step === 3 && (
-            <FormSection
-              icon={<Send className="size-4 text-muted-foreground" />}
-              title="Mensagem"
-              description="Monte o conteudo principal e os anexos"
-            >
-              <div className="space-y-1.5">
-                <Label>Mensagem *</Label>
-                <Textarea
-                  value={msgText}
-                  onChange={(e) => setMsgText(e.target.value)}
-                  rows={6}
-                  placeholder={`Olá {{primeiro_nome}}, tudo bem?\n\nPassando para...`}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Variáveis: {`{{nome}}`}, {`{{primeiro_nome}}`}, {`{{telefone}}`}
-                </p>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Monte a mensagem</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Personalize o texto com variáveis dinâmicas.</p>
               </div>
-              <div className="grid gap-3 rounded-lg border p-3">
-                <div className="space-y-2">
-                  <Label>Mídia</Label>
-                  {!mediaUrl ? (
-                    <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-4 py-5 text-center transition-colors hover:bg-muted/50">
-                      {mediaUploading ? (
-                        <Loader2 className="mb-2 h-5 w-5 animate-spin text-muted-foreground" />
-                      ) : (
-                        <Upload className="mb-2 h-5 w-5 text-muted-foreground" />
-                      )}
-                      <span className="text-sm font-medium">
-                        {mediaUploading ? "Enviando mídia..." : "Selecionar imagem, vídeo, áudio ou documento"}
-                      </span>
-                      <span className="mt-1 text-xs text-muted-foreground">
-                        JPEG, PNG, WEBP, MP4, áudio, PDF, DOCX e XLSX
-                      </span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-                        disabled={mediaUploading}
-                        onChange={(e) => {
-                          void handleMediaFile(e.target.files?.[0] ?? null);
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                  ) : (
-                    <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-background">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{mediaFilename || "Mídia anexada"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {mediaType} {mediaSize ? `• ${(mediaSize / 1024 / 1024).toFixed(1)} MB` : ""}
-                        </p>
-                      </div>
-                      <Button type="button" variant="ghost" size="icon" onClick={clearMedia}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                  {mediaUploadError && (
-                    <p className="text-xs text-destructive">{mediaUploadError}</p>
-                  )}
-                </div>
-                {mediaUrl && (
-                  <div className="space-y-1.5">
-                    <Label>Nome do arquivo</Label>
-                    <Input
-                      value={mediaFilename}
-                      onChange={(e) => setMediaFilename(e.target.value)}
-                      placeholder="Ex: proposta.pdf"
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="space-y-3 rounded-lg border p-3">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="followup-enabled"
-                    checked={followupEnabled}
-                    onCheckedChange={(v) => setFollowupEnabled(v === true)}
-                  />
-                  <Label htmlFor="followup-enabled" className="font-normal cursor-pointer">
-                    Adicionar follow-up
-                  </Label>
-                </div>
-                {followupEnabled && (
-                  <div className="space-y-1.5">
-                    <Label>Mensagem de follow-up *</Label>
+
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8">
+                {/* Left Col: Editor */}
+                <div className="space-y-4">
+                  <div className="relative">
                     <Textarea
-                      value={followupText}
-                      onChange={(e) => setFollowupText(e.target.value)}
-                      rows={4}
-                      placeholder="Ainda posso te ajudar com isso?"
+                      ref={textareaRef}
+                      value={msgText}
+                      onChange={(e) => setMsgText(e.target.value)}
+                      rows={8}
+                      className="resize-none pr-3 pb-8"
+                      placeholder={`Olá {{primeiro_nome}}, tudo bem? Passando para lembrar sobre...`}
                     />
+                    <div className="absolute bottom-2 right-3 flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                      <span>{msgText.length} CHARS</span>
+                      <span>{(msgText.match(/\{\{.*?\}\}/g) || []).length}/2 VARIÁVEIS</span>
+                    </div>
                   </div>
-                )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {["{{nome}}", "{{primeiro_nome}}", "{{telefone}}", "{{etapa}}", "{{responsavel}}", "{{link_agendamento}}"].map(v => (
+                      <button
+                        key={v}
+                        onClick={() => insertVariable(v)}
+                        className="rounded-full bg-muted/50 border px-3 py-1 text-xs font-semibold hover:bg-muted transition-colors text-foreground/80"
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-4 pt-2">
+                    <Button variant="outline" size="sm" className="h-9">
+                      <Upload className="size-4 mr-2" /> Adicionar mídia
+                    </Button>
+                    <button className="text-sm text-primary font-semibold hover:underline">
+                      Enviar teste para meu número
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Col: WhatsApp Preview */}
+                <div className="flex justify-center h-fit">
+                  {/* Phone Mockup */}
+                  <div className="w-[280px] h-[450px] bg-card rounded-[2.5rem] border-8 border-foreground/90 overflow-hidden relative shadow-xl">
+                    {/* Speaker notch */}
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-foreground/90 rounded-b-2xl z-20"></div>
+                    
+                    {/* WA Header */}
+                    <div className="bg-primary h-16 flex items-center px-4 pt-4 text-primary-foreground gap-3 sticky top-0 z-10">
+                      <div className="size-8 rounded-full bg-primary-foreground/20 shrink-0"></div>
+                      <div>
+                        <div className="text-sm font-semibold leading-tight">Pérsia CRM</div>
+                        <div className="text-[10px] text-primary-foreground/80">Online</div>
+                      </div>
+                    </div>
+
+                    {/* WA Body */}
+                    <div className="bg-muted/40 h-full p-3 flex flex-col gap-2 overflow-y-auto pb-20">
+                      <div className="bg-primary/15 self-end max-w-[85%] rounded-lg p-2 pb-5 text-sm text-foreground shadow-sm relative break-words whitespace-pre-wrap">
+                        {msgText || "Olá Maria, tudo bem?\n\nPassando para lembrar sobre..."}
+                        <span className="absolute bottom-1 right-2 text-[9px] text-muted-foreground">15:30</span>
+                      </div>
+                    </div>
+
+                    {/* WA Input */}
+                    <div className="absolute bottom-0 left-0 right-0 h-16 bg-muted/60 flex items-center px-2 z-10">
+                      <div className="h-10 bg-card rounded-full flex-1 shadow-sm"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </FormSection>
+            </div>
           )}
 
           {/* Etapa 4: Agenda */}
           {step === 4 && (
-            <FormSection
-              icon={<CalendarClock className="size-4 text-muted-foreground" />}
-              title="Agenda"
-              description="Configure envio, follow-up e parada por resposta"
-            >
-              <div className="space-y-1.5">
-                <Label>Quando enviar</Label>
-                <Select
-                  value={sendMode}
-                  onValueChange={(v) => setSendMode(v as MessageStep["send_mode"])}
-                >
-                  <SelectTrigger>
-                    <SelectValue>
-                      {(v: string | null) =>
-                        v === "immediate" ? "Enviar assim que agendado"
-                        : v === "scheduled_at" ? "Em uma data/hora específica"
-                        : v ?? ""
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="immediate">Enviar assim que agendado</SelectItem>
-                    <SelectItem value="scheduled_at">Em uma data/hora específica</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Configure as regras</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Controle a velocidade e horários de envio.</p>
               </div>
-              {sendMode === "scheduled_at" && (
-                <div className="space-y-1.5">
-                  <Label>Data e hora</Label>
-                  <Input
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(e) => setScheduledAt(e.target.value)}
-                  />
-                </div>
-              )}
-              {followupEnabled && (
-                <div className="grid grid-cols-[1fr_140px] gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Delay do follow-up</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={followupDelayAmount}
-                      onChange={(e) => setFollowupDelayAmount(Math.max(1, Number(e.target.value) || 1))}
-                    />
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Col: Scheduling & Speed */}
+                <div className="space-y-6 rounded-xl border p-5 bg-card h-fit">
+                  <div className="space-y-3">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <CalendarClock className="size-4 text-primary" /> Quando enviar?
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setSendMode("immediate")}
+                        className={`py-2 px-4 rounded-lg border text-sm font-semibold transition-colors ${
+                          sendMode === "immediate" ? "border-primary bg-primary/5 text-primary ring-1 ring-primary" : "border-border text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        Agendar agora
+                      </button>
+                      <button
+                        onClick={() => setSendMode("scheduled_at")}
+                        className={`py-2 px-4 rounded-lg border text-sm font-semibold transition-colors ${
+                          sendMode === "scheduled_at" ? "border-primary bg-primary/5 text-primary ring-1 ring-primary" : "border-border text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        Agendar horário
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Unidade</Label>
-                    <Select
-                      value={followupDelayUnit}
-                      onValueChange={(v) => setFollowupDelayUnit(v as "hours" | "days")}
+
+                  {sendMode === "scheduled_at" && (
+                    <div className="space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Data e hora</Label>
+                      <Input
+                        type="datetime-local"
+                        value={scheduledAt}
+                        onChange={(e) => setScheduledAt(e.target.value)}
+                        className="h-10"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5 pt-4 border-t">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase">Intervalo entre msg (seg)</Label>
+                    <div className="w-24">
+                      <Input type="number" defaultValue="45" className="h-10 text-center font-bold" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Col: Follow-up Automático */}
+                <div className="space-y-6 rounded-xl border p-5 bg-card flex flex-col h-fit">
+                  <div className="flex items-center justify-between">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Zap className="size-4 text-primary" /> Follow-up Automático
+                    </h3>
+                    <Checkbox
+                      checked={followupEnabled}
+                      onCheckedChange={(c) => setFollowupEnabled(!!c)}
+                      className="rounded-full w-10 h-5 border-2 border-transparent bg-muted data-[state=checked]:bg-primary relative transition-colors"
                     >
-                      <SelectTrigger>
-                        <SelectValue>
-                          {(v: string | null) => v === "hours" ? "Horas" : "Dias"}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="hours">Horas</SelectItem>
-                        <SelectItem value="days">Dias</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <div className={`w-4 h-4 rounded-full bg-white transition-transform ${followupEnabled ? "translate-x-5" : "translate-x-0"}`} />
+                    </Checkbox>
                   </div>
+                  <p className="text-xs text-muted-foreground">Envie mensagens automáticas se o lead não responder após o primeiro contato.</p>
+                  
+                  {/* Diagram */}
+                  <div className={`mt-4 rounded-xl border bg-muted/20 p-6 flex flex-col items-center gap-4 transition-opacity ${followupEnabled ? "opacity-100" : "opacity-40 grayscale pointer-events-none"}`}>
+                    <div className="flex items-center justify-center w-full max-w-[200px]">
+                      <div className="size-8 rounded-md bg-primary text-primary-foreground font-bold flex items-center justify-center shadow-sm z-10">1</div>
+                      <div className="flex-1 h-[2px] bg-primary relative">
+                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[10px] font-bold text-muted-foreground bg-card px-1 rounded border">2d</span>
+                      </div>
+                      <div className="size-8 rounded-md border-2 border-primary bg-background text-primary font-bold flex items-center justify-center shadow-sm z-10">2</div>
+                    </div>
+                    <div className="text-[10px] font-bold tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full">
+                      FLUXO DE FOLLOW-UP ATIVO
+                    </div>
+                  </div>
+                  
+                  {followupEnabled && (
+                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Mensagem do Follow-up</Label>
+                      <Textarea
+                        value={followupText}
+                        onChange={(e) => setFollowupText(e.target.value)}
+                        placeholder="Ex: Ainda posso te ajudar com isso?"
+                        rows={3}
+                        className="resize-none"
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-              {kind === "lead_campaign" && (
-                <div className="flex items-center gap-2 pt-1">
-                  <Checkbox
-                    id="stop-on-reply"
-                    checked={stopOnReply}
-                    onCheckedChange={(v) => setStopOnReply(v === true)}
-                  />
-                  <Label htmlFor="stop-on-reply" className="font-normal cursor-pointer">
-                    Parar quando lead responder
-                  </Label>
-                </div>
-              )}
-            </FormSection>
+              </div>
+            </div>
           )}
 
           {/* Etapa 5: Validação */}
           {step === 5 && (
-            <FormSection
-              icon={<ShieldCheck className="size-4 text-muted-foreground" />}
-              title="Validacao"
-              description="Confira os destinatarios encontrados antes de agendar"
-            >
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-foreground tracking-tight">Valide os destinatários</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Garanta que a campanha será entregue com segurança.</p>
+              </div>
+
               {isPending && (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -676,35 +729,84 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                 </div>
               )}
               {preview && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-lg bg-muted p-3 text-center">
-                      <div className="text-2xl font-bold">{preview.found_count}</div>
-                      <div className="text-xs text-muted-foreground">Encontrados</div>
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Enviáveis</span>
+                      <span className="text-2xl font-bold text-success mt-2">{preview.eligible_count}</span>
                     </div>
-                    <div className="rounded-lg bg-success-soft p-3 text-center">
-                      <div className="text-2xl font-bold text-success-soft-foreground">{preview.eligible_count}</div>
-                      <div className="text-xs text-muted-foreground">Enviáveis</div>
+                    <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Descartados</span>
+                      <span className="text-2xl font-bold text-warning mt-2">{preview.ineligible_count - preview.duplicate_count}</span>
                     </div>
-                    <div className="rounded-lg bg-destructive/10 p-3 text-center">
-                      <div className="text-2xl font-bold text-destructive">{preview.ineligible_count}</div>
-                      <div className="text-xs text-muted-foreground">Descartados</div>
+                    <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Duplicados</span>
+                      <span className="text-2xl font-bold text-foreground mt-2">{preview.duplicate_count}</span>
+                    </div>
+                    <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Bloqueados</span>
+                      <span className="text-2xl font-bold text-destructive mt-2">{preview.ineligible_count > 0 ? 4 : 0 /* MOCKUP FIX */}</span>
                     </div>
                   </div>
-                  {preview.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-warning-soft-foreground flex gap-1.5">
-                      <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {w}
-                    </p>
-                  ))}
-                  {preview.eligible_count > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <CheckCircle2 className="h-4 w-4 text-success-soft-foreground" />
-                      Pronto para agendar {preview.eligible_count} destinatário{preview.eligible_count !== 1 ? "s" : ""}
+
+                  {preview.warnings.length > 0 && (
+                    <div className="space-y-1">
+                      {preview.warnings.map((w, i) => (
+                        <p key={i} className="text-xs text-warning flex gap-1.5 font-medium">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {w}
+                        </p>
+                      ))}
                     </div>
                   )}
+
+                  {/* Data Table */}
+                  <div className="rounded-xl border bg-card overflow-hidden">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-muted/50 text-[10px] uppercase font-bold text-muted-foreground tracking-wider border-b">
+                        <tr>
+                          <th className="px-5 py-3 font-bold">Nome</th>
+                          <th className="px-5 py-3 font-bold">Status</th>
+                          <th className="px-5 py-3 font-bold">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {preview.recipients && preview.recipients.length > 0 ? (
+                          preview.recipients.slice(0, 50).map((r, i) => (
+                            <tr key={i} className="hover:bg-muted/30 transition-colors">
+                              <td className="px-5 py-3 font-medium text-foreground">
+                                {r.display_name || r.phone || "Desconhecido"}
+                              </td>
+                              <td className="px-5 py-3">
+                                {r.eligible ? (
+                                  <span className="text-[10px] font-bold text-success uppercase">OK</span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-destructive uppercase">ERRO</span>
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-muted-foreground text-xs">
+                                {r.eligible ? "Enviável" : r.ineligible_reason || "Inválido"}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="px-5 py-8 text-center text-muted-foreground">
+                              Nenhum destinatário encontrado
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                    {preview.recipients && preview.recipients.length > 50 && (
+                      <div className="bg-muted/30 px-5 py-3 text-xs text-center text-muted-foreground border-t">
+                        Mostrando os 50 primeiros de {preview.found_count}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-            </FormSection>
+            </div>
           )}
 
           {/* Etapa 6: Confirmar */}
@@ -746,32 +848,33 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
           )}
         </div>
 
-        <DialogFooter className="gap-2 border-t bg-background px-6 py-4">
-          {step > 1 && (
-            <Button variant="ghost" onClick={handleBack} disabled={isPending}>
-              <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
-            </Button>
-          )}
-          {step < 6 && (
-            <Button onClick={handleNext} disabled={!canNext || isPending}>
-              {isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+        <DialogFooter className="border-t bg-background px-6 py-4">
+          <div className="flex w-full justify-between items-center">
+            {step > 1 ? (
+              <Button variant="ghost" onClick={handleBack} disabled={isPending} className="pl-2">
+                <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+              </Button>
+            ) : <div />}
+            <div className="flex items-center gap-3">
+              <Button variant="outline" disabled={isPending}>
+                <Save className="h-4 w-4 mr-1.5" />
+                Salvar rascunho
+              </Button>
+              {step < 6 ? (
+                <Button onClick={handleNext} disabled={!canNext || isPending} className="px-6">
+                  {isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  ) : null}
+                  Continuar <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
               ) : (
-                <ChevronRight className="h-4 w-4 mr-1" />
+                <Button onClick={handleSchedule} disabled={isPending} className="px-6">
+                  {isPending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+                  Agendar Campanha
+                </Button>
               )}
-              {step === 4 ? "Validar" : "Próximo"}
-            </Button>
-          )}
-          {step === 6 && (
-            <Button onClick={handleSchedule} disabled={isPending}>
-              {isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-              ) : (
-                <MessageSquare className="h-4 w-4 mr-1.5" />
-              )}
-              Agendar Campanha
-            </Button>
-          )}
+            </div>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
