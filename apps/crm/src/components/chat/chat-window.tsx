@@ -1166,24 +1166,23 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                     </div>
                   );
 
-                  // Etapa 2: avatar do lead — mostrar só no fim de um bloco
-                  // (quando a próxima mensagem é de outro remetente ou esta é a última).
-                  const isLastInBlock =
+                  // Avatar do lead no topo do bloco, como no WhatsApp.
+                  const isFirstInBlock =
                     isLead &&
-                    (idx === messages.length - 1 ||
-                      messages[idx + 1].sender !== msg.sender);
+                    (idx === 0 ||
+                      messages[idx - 1].sender !== msg.sender);
 
                   return (
                     <div
                       className={cn(
-                        "group flex max-w-[85%] items-end gap-1",
+                        "group flex max-w-[85%] gap-1",
                         isLead ? "flex-row" : "ml-auto flex-row-reverse"
                       )}
                     >
-                      {/* Avatar do lead — alinhado à base da bolha, fim de bloco */}
+                      {/* Avatar do lead — alinhado ao topo do bloco */}
                       {isLead && (
-                        <div className="w-6 shrink-0 self-end mb-0.5">
-                          {isLastInBlock ? (
+                        <div className="w-6 shrink-0 self-start mt-0.5">
+                          {isFirstInBlock ? (
                             <Button
                               type="button"
                               variant="ghost"

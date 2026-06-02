@@ -1524,15 +1524,20 @@ export async function recordGroupJoin(input: {
 }
 
 // ── getGroupLeadMembers ────────────────────────────────────────────────────────
-// Returns active group members that are linked to a lead in the system.
-// Used by the groups chat panel to show member contact details.
+// Returns active group members with the contact data available in CRM.
+// Members linked to leads include full lead details; unlinked members still
+// return name/phone/avatar from group_memberships so the chat can open a
+// contact panel instead of hiding them.
 
 export interface GroupLeadMember {
   membership_id: string;
   phone: string | null;
   name: string | null;
-  lead_id: string;
-  lead: {
+  avatar_url: string | null;
+  joined_at: string | null;
+  source: string | null;
+  lead_id: string | null;
+  lead: null | {
     id: string;
     name: string | null;
     phone: string | null;
@@ -1556,6 +1561,9 @@ export async function getGroupLeadMembers(groupId: string): Promise<GroupLeadMem
       id,
       phone,
       name,
+      avatar_url,
+      joined_at,
+      source,
       lead_id,
       leads (
         id,
@@ -1572,7 +1580,6 @@ export async function getGroupLeadMembers(groupId: string): Promise<GroupLeadMem
     `)
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
-    .not("lead_id", "is", null)
     .is("left_at", null)
     .order("name");
 
@@ -1585,16 +1592,21 @@ export async function getGroupLeadMembers(groupId: string): Promise<GroupLeadMem
     id: string;
     phone: string | null;
     name: string | null;
-    lead_id: string;
+    avatar_url: string | null;
+    joined_at: string | null;
+    source: string | null;
+    lead_id: string | null;
     leads: GroupLeadMember["lead"] | null;
   }>)
-    .filter((m) => m.leads !== null)
     .map((m) => ({
       membership_id: m.id,
       phone: m.phone,
       name: m.name,
+      avatar_url: m.avatar_url,
+      joined_at: m.joined_at,
+      source: m.source,
       lead_id: m.lead_id,
-      lead: m.leads!,
+      lead: m.leads ?? null,
     }));
 }
 

@@ -843,9 +843,37 @@ function GroupChatPanel({
     setSelectedMember(null);
     setSelectedContact(null);
     setMembersLoading(true);
-    const members = await getGroupLeadMembers(group.id).catch(() => []);
-    setGroupMembers(members);
-    setMembersLoading(false);
+    try {
+      const members = await getGroupLeadMembers(group.id);
+      setGroupMembers(members);
+    } catch {
+      setGroupMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  function contactFromGroupMember(member: GroupLeadMember): LeadContactData {
+    if (member.lead) {
+      return {
+        ...member.lead,
+        phone: member.lead.phone ?? member.phone,
+        avatar_url: member.lead.avatar_url ?? member.avatar_url,
+      };
+    }
+
+    return {
+      id: null,
+      name: member.name,
+      phone: member.phone,
+      email: null,
+      avatar_url: member.avatar_url,
+      status: null,
+      source: member.source ?? "whatsapp_group",
+      created_at: member.joined_at,
+      assigned_to: null,
+      lead_tags: [],
+    };
   }
 
   function handleOpenSenderContact(msg: GroupMessage) {
@@ -1026,7 +1054,7 @@ function GroupChatPanel({
             size="icon-sm"
             onClick={handleOpenMembers}
             className={`size-8 rounded-lg hover:bg-muted ${membersOpen ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            title="Membros identificados"
+            title="Contatos do grupo"
           >
             <UserCircle className="size-4" />
           </Button>
@@ -1500,14 +1528,14 @@ function GroupChatPanel({
             />
           ) : selectedMember ? (
             <LeadContactPanel
-              lead={selectedMember.lead}
+              lead={contactFromGroupMember(selectedMember)}
               onClose={() => setSelectedMember(null)}
             />
           ) : (
             <div className="flex h-full flex-col overflow-y-auto">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Membros identificados
+                  Participantes do grupo
                 </span>
                 <div className="flex items-center gap-1">
                   <Button
@@ -1550,7 +1578,7 @@ function GroupChatPanel({
               ) : groupMembers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 px-4 text-center gap-3">
                   <UserCircle className="size-8 text-muted-foreground/40" />
-                  <p className="text-sm text-muted-foreground">Nenhum membro identificado como lead</p>
+                  <p className="text-sm text-muted-foreground">Nenhum contato do grupo encontrado</p>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1581,24 +1609,45 @@ function GroupChatPanel({
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-col">
-                  {groupMembers.map((member) => (
-                    <button
-                      key={member.membership_id}
-                      type="button"
-                      onClick={() => setSelectedMember(member)}
-                      className="flex items-center gap-3 px-4 py-3 border-b border-border/30 hover:bg-muted/50 text-left transition-colors"
-                    >
-                      <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <UserCircle className="size-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{member.lead.name || member.name || "Sem nome"}</p>
-                        <p className="text-xs text-muted-foreground truncate">{member.lead.phone || member.phone || ""}</p>
-                      </div>
-                      <ExternalLink className="size-3.5 text-muted-foreground shrink-0" />
-                    </button>
-                  ))}
+                <div className="flex flex-col divide-y divide-border/30">
+                  {groupMembers.map((member) => {
+                    const contact = contactFromGroupMember(member);
+                    const displayName = contact.name || contact.phone || "Sem nome";
+                    const displayPhone = contact.phone || member.phone || "";
+                    const color = senderColorForKey(member.lead_id ?? member.phone ?? member.name ?? member.membership_id);
+
+                    return (
+                      <Button
+                        key={member.membership_id}
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setSelectedMember(member)}
+                        className="h-auto justify-start gap-3 rounded-none px-4 py-3 text-left"
+                        title="Abrir dados do contato"
+                      >
+                        <Avatar size="sm" className="shrink-0">
+                          {contact.avatar_url ? (
+                            <AvatarImage src={contact.avatar_url} alt={displayName} />
+                          ) : null}
+                          <AvatarFallback style={{ backgroundColor: color.bg, color: color.fg }}>
+                            {displayName.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <p className="truncate text-sm font-medium">{displayName}</p>
+                            {member.lead ? (
+                              <Badge variant="secondary" className="shrink-0">
+                                Lead
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
+                        </div>
+                        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+                      </Button>
+                    );
+                  })}
                 </div>
               )}
             </div>
