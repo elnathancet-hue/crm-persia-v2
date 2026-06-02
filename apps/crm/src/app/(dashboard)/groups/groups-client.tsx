@@ -9,9 +9,11 @@ import {
   File,
   FileVideo,
   Image,
+  Bell,
+  Heart,
   Loader2,
+  Lock,
   LogOut,
-  Megaphone,
   MessageSquare,
   Mic,
   MoreHorizontal,
@@ -26,6 +28,7 @@ import {
   Trash2,
   Users,
   UserCircle,
+  UserPlus,
   Link2,
   Save,
   X,
@@ -72,7 +75,6 @@ import {
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
 import {
-  createGroup,
   syncGroups,
   deleteGroup,
   sendMessageToGroup,
@@ -80,11 +82,9 @@ import {
   deleteGroupMessage,
   reactToGroupMessage,
   getInviteLink,
-  resetInviteLink,
   leaveGroup,
   updateGroup,
   sendInviteToLead,
-  getGroupCampaigns,
   createGroupCampaign,
   updateGroupCampaign,
   deleteGroupCampaign,
@@ -329,10 +329,8 @@ function GroupListPanel({
   groups,
   selectedId,
   onSelect,
-  onCreateOpen,
   onSync,
   syncing,
-  onCampaignOpen,
   search,
   onSearch,
   categoryFilter,
@@ -343,10 +341,8 @@ function GroupListPanel({
   groups: Group[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onCreateOpen: () => void;
   onSync: () => void;
   syncing: boolean;
-  onCampaignOpen: () => void;
   search: string;
   onSearch: (v: string) => void;
   categoryFilter: string;
@@ -372,14 +368,8 @@ function GroupListPanel({
           Grupos WhatsApp
         </h2>
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon-sm" onClick={onCampaignOpen} title="Campanhas">
-            <Zap className="size-4" />
-          </Button>
           <Button variant="ghost" size="icon-sm" onClick={onSync} disabled={syncing} title="Sincronizar">
             {syncing ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
-          </Button>
-          <Button size="icon-sm" onClick={onCreateOpen} title="Criar grupo">
-            <Plus className="size-4" />
           </Button>
         </div>
       </div>
@@ -516,12 +506,6 @@ function GroupListPanel({
                           Anúncio
                         </Badge>
                       )}
-                      {group.campaign_id && (
-                        <Badge variant="secondary" className="h-4 px-1 text-[10px] text-primary">
-                          <Link2 className="size-2.5 mr-0.5" />
-                          Campanha
-                        </Badge>
-                      )}
                     </div>
                   </div>
                 </button>
@@ -592,7 +576,6 @@ function GroupChatPanel({
   const [editCategory, setEditCategory] = React.useState(group.category);
   const [saving, setSaving] = React.useState(false);
   const [inviteLink, setInviteLink] = React.useState(group.invite_link || "");
-  const [resettingLink, setResettingLink] = React.useState(false);
   const [editLocked, setEditLocked] = React.useState(group.is_locked);
   const [editJoinApproval, setEditJoinApproval] = React.useState(group.is_join_approval_required);
   const [editMemberAddMode, setEditMemberAddMode] = React.useState<"all_member_add" | "admin_add">(group.member_add_mode);
@@ -838,10 +821,7 @@ function GroupChatPanel({
     }
   }
 
-  async function handleOpenMembers() {
-    setMembersOpen(true);
-    setSelectedMember(null);
-    setSelectedContact(null);
+  async function loadGroupContacts() {
     setMembersLoading(true);
     try {
       const members = await getGroupLeadMembers(group.id);
@@ -850,6 +830,22 @@ function GroupChatPanel({
       setGroupMembers([]);
     } finally {
       setMembersLoading(false);
+    }
+  }
+
+  async function handleOpenMembers() {
+    setMembersOpen(true);
+    setSelectedMember(null);
+    setSelectedContact(null);
+    await loadGroupContacts();
+  }
+
+  async function handleOpenGroupDetails() {
+    setSettingsOpen(true);
+    setSelectedMember(null);
+    setSelectedContact(null);
+    if (groupMembers.length === 0) {
+      await loadGroupContacts();
     }
   }
 
@@ -931,16 +927,6 @@ function GroupChatPanel({
     }
   }
 
-  async function handleGetInviteLink() {
-    try {
-      const link = await getInviteLink(group.id);
-      setInviteLink(link);
-      toast.success("Link obtido");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao obter link");
-    }
-  }
-
   async function handleSendInvite() {
     if (!selectedLeadId) return;
     setSendingInvite(true);
@@ -953,19 +939,6 @@ function GroupChatPanel({
       toast.error(err.message || "Erro ao enviar convite");
     } finally {
       setSendingInvite(false);
-    }
-  }
-
-  async function handleResetInviteLink() {
-    setResettingLink(true);
-    try {
-      const link = await resetInviteLink(group.id);
-      setInviteLink(link);
-      toast.success("Link de convite renovado");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao renovar link");
-    } finally {
-      setResettingLink(false);
     }
   }
 
@@ -1001,6 +974,17 @@ function GroupChatPanel({
     return new Date(a).toDateString() === new Date(b).toDateString();
   }
 
+  function formatFullDateTime(iso: string | null | undefined) {
+    if (!iso) return "";
+    return new Date(iso).toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function getMessageSenderKey(msg: GroupMessage): string {
     if (msg.direction === "outbound") return "outbound";
     return (
@@ -1018,6 +1002,9 @@ function GroupChatPanel({
       .filter((message) => Boolean(message.whatsapp_msg_id))
       .map((message) => [message.whatsapp_msg_id as string, message]),
   );
+  const mediaPreviewMessages = messages
+    .filter((message) => Boolean(message.media_url))
+    .slice(-4);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -1058,10 +1045,7 @@ function GroupChatPanel({
           >
             <UserCircle className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon-sm" onClick={() => setInviteOpen(true)} title="Enviar convite">
-            <Users className="size-4" />
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} title="ConfiguraÃ§Ãµes">
+          <Button variant="ghost" size="icon-sm" onClick={handleOpenGroupDetails} title="Dados do grupo">
             <Settings className="size-4" />
           </Button>
           <DropdownMenu>
@@ -1655,150 +1639,286 @@ function GroupChatPanel({
         </SheetContent>
       </Sheet>
 
-      {/* Settings Sheet */}
+      {/* Group details sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="right" className="w-full max-w-[480px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>ConfiguraÃ§Ãµes do Grupo</SheetTitle>
-            <SheetDescription>Edite nome, descriÃ§Ã£o, categoria e comportamento do grupo.</SheetDescription>
-          </SheetHeader>
-          <div className="px-card py-6 space-y-6">
-
-            {/* â"€â"€ Identidade â"€â"€ */}
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Identidade</p>
-              <div className="space-y-form">
-                <div className="space-y-1.5">
-                  <Label>Nome</Label>
-                  <Input name="group-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>DescriÃ§Ã£o</Label>
-                  <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="min-h-16" placeholder="DescriÃ§Ã£o..." />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Categoria</Label>
-                  <Select value={editCategory} onValueChange={(v) => setEditCategory(v ?? "geral")}>
-                    <SelectTrigger><SelectValue>{CATEGORY_LABELS[editCategory] ?? "Selecione"}</SelectValue></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="geral">Geral</SelectItem>
-                      <SelectItem value="aquecimento">Aquecimento</SelectItem>
-                      <SelectItem value="evento">Evento</SelectItem>
-                      <SelectItem value="oferta">Oferta</SelectItem>
-                      <SelectItem value="alunos">Alunos</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* â"€â"€ Comportamento â"€â"€ */}
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comportamento</p>
-              <div className="space-y-form">
-                <div className="space-y-1.5">
-                  <Label>Mensagens temporÃ¡rias</Label>
-                  <Select value={editEphemeral} onValueChange={(v) => setEditEphemeral((v ?? "off") as typeof editEphemeral)}>
-                    <SelectTrigger>
-                      <SelectValue>
-                        {{ off: "Desativado", "1d": "Sumem em 1 dia", "7d": "Sumem em 7 dias", "90d": "Sumem em 90 dias" }[editEphemeral]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="off">Desativado</SelectItem>
-                      <SelectItem value="1d">Sumem em 1 dia</SelectItem>
-                      <SelectItem value="7d">Sumem em 7 dias</SelectItem>
-                      <SelectItem value="90d">Sumem em 90 dias</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="rounded-lg border divide-y">
-                  <div className="flex items-center justify-between p-3">
-                    <div className="flex items-center gap-2">
-                      <Megaphone className="size-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">Modo AnÃºncio</p>
-                        <p className="text-xs text-muted-foreground">SÃ³ admins enviam mensagens</p>
-                      </div>
-                    </div>
-                    <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
-                  </div>
-                  <div className="flex items-center justify-between p-3">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="size-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">Bloquear grupo</p>
-                        <p className="text-xs text-muted-foreground">SÃ³ admins editam info do grupo</p>
-                      </div>
-                    </div>
-                    <Switch checked={editLocked} onCheckedChange={setEditLocked} />
-                  </div>
-                  <div className="flex items-center justify-between p-3">
-                    <div className="flex items-center gap-2">
-                      <Users className="size-4 text-muted-foreground shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium">AprovaÃ§Ã£o para entrar</p>
-                        <p className="text-xs text-muted-foreground">Admin aprova cada novo membro</p>
-                      </div>
-                    </div>
-                    <Switch checked={editJoinApproval} onCheckedChange={setEditJoinApproval} />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Quem pode adicionar membros</Label>
-                  <Select value={editMemberAddMode} onValueChange={(v) => setEditMemberAddMode((v ?? "all_member_add") as typeof editMemberAddMode)}>
-                    <SelectTrigger>
-                      <SelectValue>
-                        {{ all_member_add: "Todos os membros", admin_add: "Somente admins" }[editMemberAddMode]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all_member_add">Todos os membros</SelectItem>
-                      <SelectItem value="admin_add">Somente admins</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* â"€â"€ Convite â"€â"€ */}
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Link de Convite</p>
-              <div className="flex gap-2">
-                <Input name="invite-link" value={inviteLink} readOnly placeholder="Clique em obter..." className="font-mono text-xs" />
-                <Button variant="outline" size="icon-sm" title="Copiar link" onClick={() => {
-                  if (inviteLink) { navigator.clipboard.writeText(inviteLink); toast.success("Copiado!"); }
-                }} disabled={!inviteLink}>
-                  <Copy className="size-4" />
-                </Button>
-                <Button variant="outline" size="icon-sm" title="Obter link atual" onClick={handleGetInviteLink}>
-                  <RefreshCw className="size-4" />
-                </Button>
-                <Button variant="outline" size="icon-sm" title="Revogar e gerar novo link" onClick={handleResetInviteLink} disabled={resettingLink}>
-                  {resettingLink ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">Revogar invalida o link atual e gera um novo.</p>
-            </div>
-
-            <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              {saving ? "Salvando..." : "Salvar alteraÃ§Ãµes"}
-            </Button>
-
-            {/* â"€â"€ Zona de perigo â"€â"€ */}
-            <div className="pt-2 border-t">
-              <Button
-                variant="outline"
-                className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                onClick={handleLeaveGroup}
-                disabled={leavingGroup}
-              >
-                {leavingGroup ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
-                {leavingGroup ? "Saindo..." : "Sair do grupo"}
+        <SheetContent side="right" showCloseButton={false} className="w-full max-w-[480px] overflow-y-auto p-0">
+          <div className="flex min-h-full flex-col bg-background">
+            <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background px-4">
+              <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(false)} aria-label="Fechar">
+                <X className="size-5" />
               </Button>
-              <p className="text-[11px] text-muted-foreground text-center mt-1.5">
-                Remove o nÃºmero do WhatsApp do grupo e o exclui do CRM.
+              <p className="text-base font-medium">Dados do grupo</p>
+            </div>
+
+            <div className="flex flex-col items-center px-6 py-7 text-center">
+              <Avatar className="size-28">
+                {group.image_url ? <AvatarImage src={group.image_url} alt={group.name} /> : null}
+                <AvatarFallback className={hashGroupColor(group.name)}>
+                  <Users className="size-12 text-white" />
+                </AvatarFallback>
+              </Avatar>
+
+              <div className="mt-5 flex w-full items-center justify-center gap-2">
+                <Input
+                  name="group-details-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="max-w-[300px] border-0 bg-transparent text-center text-xl font-medium shadow-none focus-visible:ring-1"
+                />
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Grupo · <span className="font-semibold text-success">{group.participant_count} membros</span>
+              </p>
+
+              <div className="mt-5 flex items-center gap-4">
+                <Button variant="secondary" className="h-auto flex-col rounded-full px-5 py-3" onClick={() => setInviteOpen(true)}>
+                  <UserPlus className="size-5" />
+                  <span className="text-xs font-normal">Adicionar</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-auto flex-col rounded-full px-5 py-3"
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    void handleOpenMembers();
+                  }}
+                >
+                  <Search className="size-5" />
+                  <span className="text-xs font-normal">Pesquisar</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="border-t px-5 py-4">
+              <Textarea
+                name="group-details-description"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Adicionar descricao ao grupo"
+                className="min-h-16 resize-none border-0 px-0 shadow-none focus-visible:ring-0"
+              />
+            </div>
+
+            <div className="border-t px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Image className="size-5 text-muted-foreground" />
+                  <span className="text-sm font-medium">Midia, links e docs</span>
+                </div>
+                <span className="text-sm text-muted-foreground">{mediaPreviewMessages.length}</span>
+              </div>
+              {mediaPreviewMessages.length > 0 && (
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  {mediaPreviewMessages.map((message) => (
+                    <div key={message.id} className="aspect-square overflow-hidden rounded-md bg-muted">
+                      {message.media_type?.startsWith("image") || message.media_type === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={message.media_url ?? ""} alt="" className="size-full object-cover" />
+                      ) : (
+                        <div className="flex size-full items-center justify-center">
+                          <File className="size-5 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t py-2">
+              <div className="flex items-center gap-4 px-5 py-3">
+                <Heart className="size-5 text-muted-foreground" />
+                <span className="text-sm">Adicionar aos favoritos</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 px-5 py-3">
+                <div className="flex items-center gap-4">
+                  <Bell className="size-5 text-muted-foreground" />
+                  <span className="text-sm">Silenciar notificacoes</span>
+                </div>
+                <Switch checked={false} disabled />
+              </div>
+              <div className="mx-3 rounded-lg bg-muted/60 px-2 py-3">
+                <div className="flex items-start gap-4 px-3">
+                  <Lock className="mt-0.5 size-5 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm">Criptografia</p>
+                    <p className="text-xs text-muted-foreground">As mensagens sao protegidas com criptografia de ponta a ponta.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-5 py-3">
+                <RefreshCw className="size-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm">Mensagens temporarias</p>
+                  <Select value={editEphemeral} onValueChange={(v) => setEditEphemeral((v ?? "off") as typeof editEphemeral)}>
+                    <SelectTrigger className="mt-1 h-8 max-w-[180px]">
+                      <SelectValue>
+                        {{ off: "Desativadas", "1d": "1 dia", "7d": "7 dias", "90d": "90 dias" }[editEphemeral]}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="off">Desativadas</SelectItem>
+                      <SelectItem value="1d">1 dia</SelectItem>
+                      <SelectItem value="7d">7 dias</SelectItem>
+                      <SelectItem value="90d">90 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-5 py-3">
+                <ShieldCheck className="size-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm">Privacidade avancada da conversa</p>
+                  <p className="text-xs text-muted-foreground">Desativada</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t px-5 py-4">
+              <div className="mb-3 flex items-center gap-4">
+                <Settings className="size-5 text-muted-foreground" />
+                <p className="text-sm font-medium">Permissoes do grupo</p>
+              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm">Modo anuncio</p>
+                    <p className="text-xs text-muted-foreground">So admins enviam mensagens</p>
+                  </div>
+                  <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm">Editar dados do grupo</p>
+                    <p className="text-xs text-muted-foreground">Restrito a admins quando ativado</p>
+                  </div>
+                  <Switch checked={editLocked} onCheckedChange={setEditLocked} />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm">Aprovar novos membros</p>
+                    <p className="text-xs text-muted-foreground">Admin aprova entradas pelo link</p>
+                  </div>
+                  <Switch checked={editJoinApproval} onCheckedChange={setEditJoinApproval} />
+                </div>
+                <Select value={editMemberAddMode} onValueChange={(v) => setEditMemberAddMode((v ?? "all_member_add") as typeof editMemberAddMode)}>
+                  <SelectTrigger>
+                    <SelectValue>
+                      {{ all_member_add: "Todos podem adicionar membros", admin_add: "Somente admins adicionam membros" }[editMemberAddMode]}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all_member_add">Todos podem adicionar membros</SelectItem>
+                    <SelectItem value="admin_add">Somente admins adicionam membros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="border-t px-5 py-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-semibold">{groupMembers.length || group.participant_count} membros</p>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    void handleOpenMembers();
+                  }}
+                  title="Pesquisar membros"
+                >
+                  <Search className="size-4" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                <Button variant="ghost" className="h-auto w-full justify-start gap-4 px-0 py-3" onClick={() => setInviteOpen(true)}>
+                  <span className="flex size-10 items-center justify-center rounded-full bg-success text-success-foreground">
+                    <UserPlus className="size-5" />
+                  </span>
+                  <span>Adicionar membro</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-auto w-full justify-start gap-4 px-0 py-3"
+                  onClick={async () => {
+                    const link = inviteLink || await getInviteLink(group.id);
+                    setInviteLink(link);
+                    await navigator.clipboard.writeText(link);
+                    toast.success("Link de convite copiado");
+                  }}
+                >
+                  <span className="flex size-10 items-center justify-center rounded-full bg-success text-success-foreground">
+                    <Link2 className="size-5" />
+                  </span>
+                  <span>Convidar via link</span>
+                </Button>
+                {membersLoading ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  groupMembers.slice(0, 8).map((member) => {
+                    const contact = contactFromGroupMember(member);
+                    const displayName = contact.name || contact.phone || "Sem nome";
+                    const displayPhone = contact.phone || member.phone || "";
+                    const color = senderColorForKey(member.lead_id ?? member.phone ?? member.name ?? member.membership_id);
+
+                    return (
+                      <Button
+                        key={member.membership_id}
+                        variant="ghost"
+                        className="h-auto w-full justify-start gap-3 px-0 py-3 text-left"
+                        onClick={() => {
+                          setSelectedMember(member);
+                          setSettingsOpen(false);
+                          setMembersOpen(true);
+                        }}
+                      >
+                        <Avatar size="default" className="shrink-0">
+                          {contact.avatar_url ? <AvatarImage src={contact.avatar_url} alt={displayName} /> : null}
+                          <AvatarFallback style={{ backgroundColor: color.bg, color: color.fg }}>
+                            {displayName.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-medium">{displayName}</p>
+                            {member.lead ? <Badge variant="secondary">Lead</Badge> : null}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">{displayPhone}</p>
+                        </div>
+                      </Button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="border-t px-5 py-4">
+              <Button onClick={handleSaveSettings} disabled={saving || !editName.trim()} className="w-full">
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                {saving ? "Salvando..." : "Salvar dados do grupo"}
+              </Button>
+            </div>
+
+            <div className="px-5 pb-6">
+              <div className="space-y-1 rounded-lg bg-muted/40 py-2">
+                <Button
+                  variant="ghost"
+                  className="h-auto w-full justify-start gap-4 px-4 py-3 text-destructive"
+                  onClick={handleLeaveGroup}
+                  disabled={leavingGroup}
+                >
+                  {leavingGroup ? <Loader2 className="size-5 animate-spin" /> : <LogOut className="size-5" />}
+                  {leavingGroup ? "Saindo..." : "Sair do grupo"}
+                </Button>
+                <Button variant="ghost" className="h-auto w-full justify-start gap-4 px-4 py-3 text-destructive" onClick={() => onDelete(group.id)}>
+                  <Trash2 className="size-5" />
+                  Remover grupo do CRM
+                </Button>
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground">
+                Grupo criado em {formatFullDateTime(group.created_at)}
               </p>
             </div>
           </div>
@@ -2082,8 +2202,6 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const [groups, setGroups] = React.useState<Group[]>(initialGroups);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [leads, setLeads] = React.useState<Lead[]>([]);
-  const [campaigns, setCampaigns] = React.useState<GroupCampaign[]>([]);
-  const [orgSlug, setOrgSlug] = React.useState("");
   const [unreadCounts, setUnreadCounts] = React.useState<Record<string, number>>({});
   // Captura lastSeen durante o render (antes de qualquer effect) para evitar
   // race condition com useGroupsUnreadCount (Sidebar) que roda antes no DOM.
@@ -2143,15 +2261,6 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   const groupsRef = React.useRef<Group[]>(initialGroups);
   React.useEffect(() => { groupsRef.current = groups; }, [groups]);
 
-  // Create dialog
-  const [createOpen, setCreateOpen] = React.useState(false);
-  const [creating, setCreating] = React.useState(false);
-  const [newName, setNewName] = React.useState("");
-  const [newCategory, setNewCategory] = React.useState("geral");
-
-  // Campaign manager
-  const [campaignOpen, setCampaignOpen] = React.useState(false);
-
   // Sync
   const [syncing, setSyncing] = React.useState(false);
 
@@ -2171,14 +2280,6 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .order("name")
       .limit(200)
       .then(({ data }) => setLeads((data || []) as Lead[]));
-  }, []);
-
-  // Load campaigns + org slug
-  React.useEffect(() => {
-    getGroupCampaigns().then(setCampaigns, () => {});
-    const supabase = createClient();
-    supabase.from("organizations").select("slug").limit(1).single()
-      .then(({ data }) => { if (data?.slug) setOrgSlug(data.slug as string); }, () => {});
   }, []);
 
   // Global Realtime subscription â€" notifica mensagens de grupos nÃ£o selecionados
@@ -2243,24 +2344,6 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
     }
   }
 
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    setCreating(true);
-    try {
-      const newGroup = await createGroup(newName.trim(), [], newCategory);
-      setGroups((prev) => [newGroup as Group, ...prev]);
-      setCreateOpen(false);
-      setNewName("");
-      setNewCategory("geral");
-      setSelectedId((newGroup as Group).id);
-      toast.success("Grupo criado");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao criar grupo");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   function handleDelete(id: string) {
     deleteGroup(id)
       .then(() => {
@@ -2290,10 +2373,8 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           groups={groups}
           selectedId={selectedId}
           onSelect={handleSelectGroup}
-          onCreateOpen={() => setCreateOpen(true)}
           onSync={handleSync}
           syncing={syncing}
-          onCampaignOpen={() => setCampaignOpen(true)}
           search={search}
           onSearch={setSearch}
           categoryFilter={categoryFilter}
@@ -2324,56 +2405,6 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
         )}
       </div>
 
-      {/* Campaign Manager Sheet */}
-      <CampaignManagerSheet
-        open={campaignOpen}
-        onOpenChange={setCampaignOpen}
-        campaigns={campaigns}
-        groups={groups}
-        orgSlug={orgSlug}
-        onCampaignsChange={setCampaigns}
-      />
-
-      {/* Create Group Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Criar Grupo</DialogTitle>
-            <DialogDescription>Cria um novo grupo no WhatsApp com link de convite automÃ¡tico.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome do Grupo</Label>
-              <Input
-                name="group-name"
-                placeholder="Ex: Grupo VIP - LanÃ§amento X"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Categoria</Label>
-              <Select value={newCategory} onValueChange={(v) => setNewCategory(v ?? "geral")}>
-                <SelectTrigger><SelectValue>{CATEGORY_LABELS[newCategory] ?? "Selecione"}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="geral">Geral</SelectItem>
-                  <SelectItem value="aquecimento">Aquecimento</SelectItem>
-                  <SelectItem value="evento">Evento</SelectItem>
-                  <SelectItem value="oferta">Oferta</SelectItem>
-                  <SelectItem value="alunos">Alunos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-            <Button onClick={handleCreate} disabled={creating || !newName.trim()}>
-              {creating ? "Criando..." : "Criar Grupo"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
