@@ -941,6 +941,18 @@ function GroupChatPanel({
     return new Date(a).toDateString() === new Date(b).toDateString();
   }
 
+  function getMessageSenderKey(msg: GroupMessage): string {
+    if (msg.direction === "outbound") return "outbound";
+    return (
+      msg.sender_lead_id ??
+      msg.sender_membership_id ??
+      msg.sender_phone ??
+      msg.sender_jid ??
+      msg.sender_name ??
+      "unknown"
+    );
+  }
+
   const messagesByWhatsAppId = new Map(
     messages
       .filter((message) => Boolean(message.whatsapp_msg_id))
@@ -1037,6 +1049,14 @@ function GroupChatPanel({
             messages.map((msg, idx) => {
               const isOutbound = msg.direction === "outbound";
               const showDateSep = idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
+              const previousMsg = idx > 0 ? messages[idx - 1] : null;
+              const senderKey = getMessageSenderKey(msg);
+              const continuesPreviousBlock =
+                Boolean(previousMsg) &&
+                !showDateSep &&
+                previousMsg!.direction === msg.direction &&
+                getMessageSenderKey(previousMsg!) === senderKey;
+              const showBlockHeader = !continuesPreviousBlock;
               const senderLead = msg.sender_lead ?? null;
               const senderAvatarUrl = senderLead?.avatar_url ?? msg.sender_avatar_url;
               const senderDisplayName =
@@ -1063,31 +1083,35 @@ function GroupChatPanel({
                   )}
 
                   <div
-                    className={`group/msg flex max-w-[86%] items-end gap-1 sm:max-w-[72%] ${
+                    className={`group/msg flex max-w-[86%] items-start gap-1 sm:max-w-[72%] ${
                       isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
-                    }`}
+                    } ${showBlockHeader ? "mt-2" : "mt-0.5"}`}
                   >
                     {!isOutbound && (
-                      <button
-                        type="button"
-                        disabled={!senderLead}
-                        onClick={() => handleOpenSenderLead(msg)}
-                        className={`mb-1 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/40 bg-primary/10 text-[11px] font-semibold text-primary ${
-                          senderLead ? "cursor-pointer hover:ring-2 hover:ring-primary/25" : "cursor-default"
-                        }`}
-                        title={senderLead ? "Abrir perfil do lead" : senderSecondary ?? senderDisplayName}
-                      >
-                        {senderAvatarUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={senderAvatarUrl}
-                            alt=""
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          initialsFromName(senderDisplayName)
+                      <div className="mt-0.5 size-8 shrink-0">
+                        {showBlockHeader && (
+                          <button
+                            type="button"
+                            disabled={!senderLead}
+                            onClick={() => handleOpenSenderLead(msg)}
+                            className={`flex size-8 items-center justify-center overflow-hidden rounded-full border border-border/40 bg-primary/10 text-[11px] font-semibold text-primary ${
+                              senderLead ? "cursor-pointer hover:ring-2 hover:ring-primary/25" : "cursor-default"
+                            }`}
+                            title={senderLead ? "Abrir perfil do lead" : senderSecondary ?? senderDisplayName}
+                          >
+                            {senderAvatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={senderAvatarUrl}
+                                alt=""
+                                className="size-full object-cover"
+                              />
+                            ) : (
+                              initialsFromName(senderDisplayName)
+                            )}
+                          </button>
                         )}
-                      </button>
+                      </div>
                     )}
 
                     {/* Reaction + context menu â€" visible on hover */}
@@ -1162,9 +1186,9 @@ function GroupChatPanel({
                     {/* Bubble column */}
                     <div className={`flex flex-col gap-0.5 ${isOutbound ? "items-end" : "items-start"}`}>
                       {/* Sender label above bubble */}
-                      {isOutbound ? (
+                      {showBlockHeader && isOutbound ? (
                         <p className="text-[11px] px-1" style={{ color: "var(--chat-timestamp)" }}>VocÃª</p>
-                      ) : (
+                      ) : showBlockHeader ? (
                         <button
                           type="button"
                           disabled={!senderLead}
@@ -1181,8 +1205,8 @@ function GroupChatPanel({
                             </Badge>
                           )}
                         </button>
-                      )}
-                      {!isOutbound && senderSecondary && senderSecondary !== senderDisplayName && (
+                      ) : null}
+                      {showBlockHeader && !isOutbound && senderSecondary && senderSecondary !== senderDisplayName && (
                         <p className="max-w-[260px] truncate px-1 text-[10px] text-muted-foreground">
                           {senderSecondary}
                         </p>
