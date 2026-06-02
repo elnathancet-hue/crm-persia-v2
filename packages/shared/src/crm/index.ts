@@ -107,6 +107,13 @@ export {
 // Usado pelo listLeads pra aplicar filtro de segmento (segmentId ->
 // pre-fetcha matching leads -> aplica .in('id', leadIds) na query).
 export { findMatchingLeadIds } from "./segments/match-leads";
+// Etapa 3: validador compartilhado (client + server).
+export {
+  validateSegmentRules,
+  validateCondition,
+  isCompleteCondition,
+  type ValidationResult,
+} from "./segments/validate-rules";
 
 // Mutations CRM compartilhadas (CRUD de leads + tags + pipelines + deals).
 // Cada app passa { db, orgId, onLeadChanged? } depois de fazer auth.

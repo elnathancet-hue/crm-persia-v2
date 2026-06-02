@@ -10,7 +10,9 @@ import type { ActionResult } from "@persia/ui";
 import {
   createSegment,
   deleteSegment,
+  duplicateSegment,
   getSegments,
+  previewSegmentRules,
   updateSegment,
 } from "@/actions/segments";
 
@@ -23,4 +25,6 @@ export const crmSegmentsActions: SegmentsActions = {
     createSegment(input) as Promise<ActionResult<Segment>>,
   updateSegment: (id, input) => updateSegment(id, input),
   deleteSegment: (id) => deleteSegment(id),
+  previewSegmentRules: (rules) => previewSegmentRules(rules),
+  duplicateSegment: (id) => duplicateSegment(id) as Promise<ActionResult<Segment>>,
 };

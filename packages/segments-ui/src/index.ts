@@ -4,6 +4,8 @@ export type {
   SegmentsActions,
   CreateSegmentInput,
   UpdateSegmentInput,
+  SegmentPreviewResult,
+  SegmentPreviewSample,
 } from "./actions";
 export {
   SegmentsProvider,
@@ -15,4 +17,9 @@ export {
   SegmentsList,
   type SegmentsListProps,
 } from "./components/SegmentsList";
-export { ConditionBuilder } from "./components/ConditionBuilder";
+export {
+  ConditionBuilder,
+  type AssigneeOption,
+  type TagOption,
+  type SegmentCatalogs,
+} from "./components/ConditionBuilder";

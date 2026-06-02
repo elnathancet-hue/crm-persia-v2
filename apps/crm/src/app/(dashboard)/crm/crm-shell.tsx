@@ -281,6 +281,9 @@ export function CrmShell(props: CrmShellProps) {
           <SegmentList
             segments={props.segments as never}
             assignees={props.assignees}
+            tags={props.tags as never}
+            pipelines={props.pipelines as never}
+            stages={props.stages as never}
           />
         )}
         {activeTab === "tags" && canManageTags && (

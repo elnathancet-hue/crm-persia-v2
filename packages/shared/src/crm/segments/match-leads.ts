@@ -10,15 +10,17 @@
 // 1 query por condition em vez de query monolitica. Aceita pra orgs
 // ate ~10k leads. Otimizacao futura (SQL function ou view) deferida.
 //
-// Campos suportados nesta iteracao:
+// Campos suportados:
 //   - status, source, channel (eq, neq)
 //   - score (gt, lt, gte, lte)
 //   - tags (contains, not_contains) — via join lead_tags
-//   - assigned_to (eq, neq) — PR-CRMOPS3 NOVO
+//   - assigned_to (eq, neq, is_null) — PR-CRMOPS3
 //   - created_at, last_interaction_at (older_than_days, newer_than_days, is_null)
+//   - deal_pipeline_id (eq, neq) — Etapa 9: leads com deal no pipeline
+//   - deal_stage_id (eq, neq) — Etapa 9: leads com deal na etapa
+//   - deal_status (eq, neq, is_null) — Etapa 9: leads com deal no status; is_null = sem deal
 //
 // Fora de escopo (defer):
-//   - stage_id / pipeline (precisa join via deals — feature futura)
 //   - operadores avancados (regex, between)
 
 import type { SegmentRules, SegmentCondition } from "../types";
@@ -57,6 +59,13 @@ const DIRECT_FIELDS = new Set([
 const DATE_FIELDS = new Set([
   "created_at",
   "last_interaction_at",
+]);
+
+// Etapa 9: campos que exigem join via tabela deals.
+const DEAL_FIELDS = new Set([
+  "deal_pipeline_id",
+  "deal_stage_id",
+  "deal_status",
 ]);
 
 /**
@@ -137,7 +146,12 @@ async function resolveCondition(
     return resolveDirectCondition(db, orgId, field, op, value);
   }
 
-  // Field nao suportado nesta iteracao (ex: stage_id) — silencia.
+  // Etapa 9: campos via tabela deals.
+  if (DEAL_FIELDS.has(field)) {
+    return resolveDealCondition(db, orgId, field, op, value);
+  }
+
+  // Field nao suportado — silencia.
   return null;
 }
 
@@ -270,4 +284,70 @@ async function resolveDateCondition(
     return null;
   }
   return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
+}
+
+// Etapa 9: resolve conditions que exigem join via tabela deals.
+// Retorna o Set de lead_ids que possuem deal satisfazendo a condition.
+// Para "deal_status is_null" = "sem negócio aberto" — retorna leads
+// que NAO possuem deal com status='open'.
+async function resolveDealCondition(
+  db: MinimalDb,
+  orgId: string,
+  field: string,
+  op: string,
+  rawValue: string,
+): Promise<Set<string> | null> {
+  const baseQuery = db
+    .from("deals")
+    .select("lead_id")
+    .eq("organization_id", orgId) as unknown as QueryBuilderLike;
+
+  // "Sem negócio aberto" — is_null no deal_status.
+  if (op === "is_null") {
+    const { data, error } = await baseQuery.eq("status", "open").then((r) => r);
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.error("[segments/match-leads] resolveDeal is_null failed:", error.message);
+      return null;
+    }
+    const withOpenDeal = new Set(
+      ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
+    );
+    // Todos os leads do org menos os que têm deal open.
+    const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
+    const { data: allData, error: allErr } = await allQ.then((r) => r);
+    if (allErr) {
+      // eslint-disable-next-line no-console
+      console.error("[segments/match-leads] resolveDeal allLeads failed:", allErr.message);
+      return null;
+    }
+    const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
+    return new Set(all.filter((id) => !withOpenDeal.has(id)));
+  }
+
+  if (!rawValue) return null;
+
+  // Mapeia o campo virtual pro campo real na tabela deals.
+  const dbCol = field === "deal_pipeline_id" ? "pipeline_id"
+              : field === "deal_stage_id"    ? "stage_id"
+              : /* deal_status */               "status";
+
+  let query: QueryBuilderLike;
+  if (op === "eq") {
+    query = baseQuery.eq(dbCol, rawValue);
+  } else if (op === "neq") {
+    query = baseQuery.neq(dbCol, rawValue);
+  } else {
+    return null;
+  }
+
+  const { data, error } = await query.then((r) => r);
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("[segments/match-leads] resolveDeal failed:", error.message);
+    return null;
+  }
+  return new Set(
+    ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
+  );
 }

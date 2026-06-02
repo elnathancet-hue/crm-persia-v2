@@ -46,23 +46,27 @@ const FIELDS = [
   { value: "assigned_to", label: "Responsável" },
   { value: "created_at", label: "Data de criação" },
   { value: "last_interaction_at", label: "Última atividade" },
+  // Etapa 9: campos de funil/pipeline.
+  { value: "deal_pipeline_id", label: "Funil" },
+  { value: "deal_stage_id", label: "Etapa do funil" },
+  { value: "deal_status", label: "Status do negócio" },
 ];
 
 const OPERATORS: Record<string, { value: string; label: string }[]> = {
   status: [
-    { value: "eq", label: "é igual a" },
-    { value: "neq", label: "é diferente de" },
+    { value: "eq", label: "é" },
+    { value: "neq", label: "não é" },
   ],
   source: [
-    { value: "eq", label: "é igual a" },
-    { value: "neq", label: "é diferente de" },
+    { value: "eq", label: "é" },
+    { value: "neq", label: "não é" },
   ],
-  channel: [{ value: "eq", label: "é igual a" }],
+  channel: [{ value: "eq", label: "é" }],
   score: [
     { value: "gt", label: "maior que" },
+    { value: "gte", label: "maior ou igual a" },
     { value: "lt", label: "menor que" },
-    { value: "gte", label: "maior ou igual" },
-    { value: "lte", label: "menor ou igual" },
+    { value: "lte", label: "menor ou igual a" },
   ],
   tags: [
     { value: "contains", label: "contém" },
@@ -71,18 +75,37 @@ const OPERATORS: Record<string, { value: string; label: string }[]> = {
   assigned_to: [
     { value: "eq", label: "é" },
     { value: "neq", label: "não é" },
-    { value: "is_null", label: "sem responsável" },
+    { value: "is_null", label: "está vazio" },
   ],
   created_at: [
-    { value: "older_than_days", label: "há mais de X dias" },
-    { value: "newer_than_days", label: "há menos de X dias" },
+    { value: "older_than_days", label: "há mais de" },
+    { value: "newer_than_days", label: "há menos de" },
   ],
   last_interaction_at: [
-    { value: "older_than_days", label: "há mais de X dias" },
-    { value: "newer_than_days", label: "há menos de X dias" },
+    { value: "older_than_days", label: "há mais de" },
+    { value: "newer_than_days", label: "há menos de" },
     { value: "is_null", label: "nunca interagiu" },
   ],
+  // Etapa 9: operadores de deal.
+  deal_pipeline_id: [
+    { value: "eq", label: "é" },
+    { value: "neq", label: "não é" },
+  ],
+  deal_stage_id: [
+    { value: "eq", label: "é" },
+    { value: "neq", label: "não é" },
+  ],
+  deal_status: [
+    { value: "eq", label: "é" },
+    { value: "neq", label: "não é" },
+    { value: "is_null", label: "não tem negócio aberto" },
+  ],
 };
+
+// Campos que usam input numérico de dias (sufixo "dias").
+const DATE_DAY_OPS = new Set(["older_than_days", "newer_than_days"]);
+// Campos que usam input numérico puro (0-100).
+const NUMERIC_FIELDS = new Set(["score"]);
 
 function genId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID
@@ -96,14 +119,38 @@ export interface AssigneeOption {
   name: string;
 }
 
+/** Tag selecionável no builder — id salvo, nome+cor exibidos. */
+export interface TagOption {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+/**
+ * Catálogos com valores conhecidos pra cada campo.
+ * Quando presentes, o builder usa Select em vez de Input livre.
+ * Campos sem catálogo degradam graciosamente pra Input texto.
+ */
+export interface SegmentCatalogs {
+  tags?: TagOption[];
+  statuses?: Array<{ value: string; label: string }>;
+  channels?: Array<{ value: string; label: string }>;
+  sources?: Array<{ value: string; label: string }>;
+  // Etapa 9: funil/pipeline.
+  pipelines?: Array<{ id: string; name: string }>;
+  stages?: Array<{ id: string; pipeline_id: string; name: string; color: string | null }>;
+}
+
 export function ConditionBuilder({
   rules,
   onChange,
   assigneeOptions = [],
+  catalogs,
 }: {
   rules: Rules;
   onChange: (r: Rules) => void;
   assigneeOptions?: AssigneeOption[];
+  catalogs?: SegmentCatalogs;
 }) {
   const [ids, setIds] = useState<string[]>(() =>
     rules.conditions.map(() => genId()),
@@ -215,6 +262,7 @@ export function ConditionBuilder({
                 onUpdate={(updates) => updateCondition(index, updates)}
                 onRemove={() => removeCondition(index)}
                 assigneeOptions={assigneeOptions}
+                catalogs={catalogs}
               />
               {/* Conector E/OU entre regras (nao mostra apos a ultima) */}
               {!isLast && (
@@ -259,17 +307,66 @@ function ConditionRow({
   onUpdate,
   onRemove,
   assigneeOptions,
+  catalogs,
 }: {
   condition: Condition;
   onUpdate: (updates: Partial<Condition>) => void;
   onRemove: () => void;
   assigneeOptions: AssigneeOption[];
+  catalogs?: SegmentCatalogs;
 }) {
   // Selects e Input com altura padrao h-9 (DesignFlow). flex-wrap em
   // telas <sm pra nao espremer. Botao remover alinhado vertical.
   const showValueInput = condition.op !== "is_null";
+
+  // Catalogo disponivel pra este campo?
+  const catalogOptions: Array<{ value: string; label: string; color?: string | null }> =
+    (() => {
+      if (!showValueInput) return [];
+      switch (condition.field) {
+        case "tags":
+          return (catalogs?.tags ?? []).map((t) => ({
+            value: t.id,
+            label: t.name,
+            color: t.color,
+          }));
+        case "status":
+          return catalogs?.statuses ?? [];
+        case "source":
+          return catalogs?.sources ?? [];
+        case "channel":
+          return catalogs?.channels ?? [];
+        // Etapa 9: funil e etapa.
+        case "deal_pipeline_id":
+          return (catalogs?.pipelines ?? []).map((p) => ({
+            value: p.id,
+            label: p.name,
+          }));
+        case "deal_stage_id":
+          return (catalogs?.stages ?? []).map((s) => ({
+            value: s.id,
+            label: s.name,
+            color: s.color,
+          }));
+        case "deal_status":
+          return [
+            { value: "open", label: "Em andamento" },
+            { value: "won", label: "Ganho" },
+            { value: "lost", label: "Perdido" },
+          ];
+        default:
+          return [];
+      }
+    })();
+
+  const useCatalogSelect = catalogOptions.length > 0;
+
+  // Responsavel: dropdown separado (lista de members) ja existente.
   const useAssigneeDropdown =
-    condition.field === "assigned_to" && assigneeOptions.length > 0;
+    showValueInput &&
+    !useCatalogSelect &&
+    condition.field === "assigned_to" &&
+    assigneeOptions.length > 0;
 
   // Resolve o label do field selecionado pra renderizar no <SelectValue>
   // (corrige o "value cru" no SSR antes do SelectContent montar — bug
@@ -282,6 +379,20 @@ function ConditionRow({
   const assigneeLabel =
     assigneeOptions.find((a) => a.id === condition.value)?.name ??
     "Selecione responsável";
+
+  // Catalog select: valor atual pode não estar no catálogo (regra antiga ou
+  // tag/status removido). Nesse caso, adiciona opção-fantasma com aviso
+  // pra não perder o valor salvo e indicar ao user que precisa revisar.
+  const savedValueInCatalog = catalogOptions.some(
+    (o) => o.value === condition.value,
+  );
+  const showRemovedFallback =
+    useCatalogSelect && condition.value && !savedValueInCatalog;
+  const catalogLabel = showRemovedFallback
+    ? condition.field === "tags"
+      ? "Tag removida"
+      : `${condition.value} (removido)`
+    : (catalogOptions.find((o) => o.value === condition.value)?.label ?? "Selecione...");
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-card p-2">
@@ -324,7 +435,45 @@ function ConditionRow({
       </Select>
 
       {showValueInput && (
-        useAssigneeDropdown ? (
+        useCatalogSelect ? (
+          <Select
+            value={condition.value || "__none__"}
+            onValueChange={(v) => onUpdate({ value: v === "__none__" ? "" : (v ?? "") })}
+          >
+            <SelectTrigger
+              className={`h-9 min-w-0 flex-1 ${showRemovedFallback ? "border-destructive/40 text-destructive/80" : ""}`}
+            >
+              <SelectValue>{catalogLabel}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {/* Opção-fantasma quando valor salvo não está no catálogo */}
+              {showRemovedFallback && (
+                <SelectItem
+                  value={condition.value}
+                  className="text-destructive/70"
+                >
+                  {condition.field === "tags" ? "⚠ Tag removida" : `⚠ ${condition.value}`}
+                </SelectItem>
+              )}
+              {catalogOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.color ? (
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="inline-block size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: opt.color ?? undefined }}
+                        aria-hidden
+                      />
+                      {opt.label}
+                    </span>
+                  ) : (
+                    opt.label
+                  )}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : useAssigneeDropdown ? (
           <Select
             value={condition.value}
             onValueChange={(v) => onUpdate({ value: v ?? "" })}
@@ -340,11 +489,35 @@ function ConditionRow({
               ))}
             </SelectContent>
           </Select>
+        ) : DATE_DAY_OPS.has(condition.op) ? (
+          /* Input de dias: numérico com sufixo "dias" */
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <Input
+              type="number"
+              min="1"
+              value={condition.value}
+              onChange={(e) => onUpdate({ value: e.target.value })}
+              placeholder="30"
+              className="h-9 w-20 shrink-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+            <span className="shrink-0 text-sm text-muted-foreground">dias</span>
+          </div>
+        ) : NUMERIC_FIELDS.has(condition.field) ? (
+          /* Input numérico pra score */
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            value={condition.value}
+            onChange={(e) => onUpdate({ value: e.target.value })}
+            placeholder="0–100"
+            className="h-9 w-24 shrink-0 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
         ) : (
           <Input
             value={condition.value}
             onChange={(e) => onUpdate({ value: e.target.value })}
-            placeholder="Selecione ou digite um valor"
+            placeholder="Valor…"
             className="h-9 min-w-0 flex-1"
           />
         )
