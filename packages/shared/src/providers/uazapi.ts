@@ -292,7 +292,10 @@ export class UazapiAdapter implements WhatsAppProvider {
 
   async getChatImageUrl(chatId: string, opts?: { preview?: boolean }): Promise<string | null> {
     try {
-      const details = await this.client.getChatDetails(chatId, { preview: opts?.preview ?? true });
+      // UAZAPI /chat/details rejeita números com + — strip para contatos (JIDs de grupo
+      // como "120363...@g.us" não começam com + e passam sem modificação).
+      const normalizedId = chatId.startsWith("+") ? chatId.slice(1) : chatId;
+      const details = await this.client.getChatDetails(normalizedId, { preview: opts?.preview ?? true });
       // Procura URL em campos conhecidos (ordem de prioridade pela
       // qualidade típica: profilePicURL > imagePreview > image).
       const candidates = [

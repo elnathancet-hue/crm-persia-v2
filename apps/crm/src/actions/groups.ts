@@ -932,7 +932,7 @@ export async function getGroupMessages(groupId: string, limit = 50) {
   const avatarLookups = new Map<string, Array<(typeof rows)[number]>>();
   for (const row of rows) {
     if (row.direction !== "inbound" || row.sender_avatar_url) continue;
-    const lookup = row.sender_phone ?? row.sender_jid;
+    const lookup = (row.sender_phone ?? row.sender_jid)?.replace(/^\+/, "");
     if (!lookup) continue;
     const bucket = avatarLookups.get(lookup) ?? [];
     bucket.push(row);
