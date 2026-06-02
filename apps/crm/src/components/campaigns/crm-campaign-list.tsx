@@ -12,11 +12,11 @@ import {
 } from "@persia/ui/dropdown-menu";
 import { Input } from "@persia/ui/input";
 import {
-  Plus, Megaphone, MoreHorizontal, Pause, Play, X, Eye, Search,
+  Plus, Megaphone, MoreHorizontal, Pause, Play, X, Eye, Search, Trash2,
 } from "lucide-react";
 import type { CrmCampaign } from "@persia/shared/crm";
 import {
-  pauseCampaign, resumeCampaign, cancelCampaign,
+  pauseCampaign, resumeCampaign, cancelCampaign, deleteCrmCampaign,
 } from "@/actions/crm-campaigns";
 import { CrmCampaignWizard } from "./crm-campaign-wizard";
 
@@ -67,6 +67,15 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
   function handleCancel(id: string) {
     if (!confirm("Cancelar esta campanha? Jobs pendentes serão cancelados.")) return;
     startTransition(async () => { await cancelCampaign(id); });
+  }
+
+  function handleDelete(campaign: CrmCampaign) {
+    if (campaign.status === "scheduled" || campaign.status === "running") {
+      alert("Cancele ou pause a campanha antes de excluir.");
+      return;
+    }
+    if (!confirm(`Excluir a campanha "${campaign.name}"? Esta ação remove histórico, destinatários e jobs.`)) return;
+    startTransition(async () => { await deleteCrmCampaign(campaign.id); });
   }
 
   return (
@@ -161,6 +170,12 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
                           <X className="h-4 w-4 mr-2" /> Cancelar
                         </DropdownMenuItem>
                       )}
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => handleDelete(c)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" /> Excluir
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

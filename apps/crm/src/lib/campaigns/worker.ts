@@ -431,17 +431,23 @@ async function completeCampaignIfDone(
   supabase: ReturnType<typeof createClient>,
   campaignId: string,
 ): Promise<void> {
-  const { count } = await supabase
+  const { count: pendingCount } = await supabase
     .from("crm_campaign_message_jobs")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
     .in("status", ["queued", "sending"]);
 
-  if ((count ?? 0) > 0) return;
+  if ((pendingCount ?? 0) > 0) return;
+
+  const { count: failedCount } = await supabase
+    .from("crm_campaign_message_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "failed");
 
   await supabase
     .from("crm_campaigns")
-    .update({ status: "completed" } as never)
+    .update({ status: (failedCount ?? 0) > 0 ? "failed" : "completed" } as never)
     .eq("id", campaignId)
     .in("status", ["scheduled", "running"]);
 }

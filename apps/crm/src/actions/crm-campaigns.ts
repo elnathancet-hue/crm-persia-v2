@@ -4,6 +4,8 @@
 // Arquivo separado de campaigns.ts (legado) para não quebrar a UI antiga.
 
 import { requireRole } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadCampaignMedia } from "@/lib/campaigns/media-upload";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@persia/ui";
 import type {
@@ -15,6 +17,7 @@ import type {
   CrmCampaignRecipient,
 } from "@persia/shared/crm";
 import { resolveCampaignAudience } from "@persia/shared/crm";
+import type { MediaUploadResult } from "@/lib/campaigns/media-upload";
 
 function asErr(err: unknown, fallback = "Erro inesperado."): string {
   if (err instanceof Error && err.message) return err.message;
@@ -630,6 +633,39 @@ export async function getCampaignRecipients(
   return (data ?? []) as CrmCampaignRecipient[];
 }
 
+export async function deleteCrmCampaign(id: string): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: { from: (t: string) => any } = supabase as any;
+
+    const { data: campaign } = await db.from("crm_campaigns")
+      .select("status")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .single();
+
+    if (!campaign) return { error: "Campanha não encontrada" };
+
+    const status = (campaign as { status: string }).status;
+    if (status === "scheduled" || status === "running") {
+      return { error: "Cancele ou pause a campanha antes de excluir" };
+    }
+
+    const { error } = await db.from("crm_campaigns")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", orgId);
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/campaigns");
+    return;
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível excluir a campanha.") };
+  }
+}
+
 export async function listCampaignGroups(): Promise<Array<{ id: string; name: string; category: string | null; participant_count: number | null }>> {
   const { supabase, orgId } = await requireRole("agent");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -643,6 +679,31 @@ export async function listCampaignGroups(): Promise<Array<{ id: string; name: st
 
   if (error) throw new Error(error.message);
   return (data ?? []) as Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
+}
+
+export async function uploadCampaignMediaAction(formData: FormData): Promise<ActionResult<MediaUploadResult>> {
+  try {
+    const { orgId } = await requireRole("admin");
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "Arquivo não enviado" };
+
+    const admin = createAdminClient();
+    const { data: buckets } = await admin.storage.listBuckets();
+    if (!buckets?.some((bucket) => bucket.name === "campaign-media")) {
+      await admin.storage.createBucket("campaign-media", { public: true });
+    }
+
+    const result = await uploadCampaignMedia(admin, {
+      file,
+      orgId,
+      campaignId: `draft-${crypto.randomUUID()}`,
+    });
+
+    if ("error" in result) return { error: result.error };
+    return { data: result };
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível enviar a mídia.") };
+  }
 }
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────

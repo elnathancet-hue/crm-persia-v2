@@ -4,9 +4,19 @@
 import { NextResponse } from "next/server";
 import { processDueCampaignJobs } from "@/lib/campaigns/worker";
 
-export async function POST(req: Request) {
-  const secret = req.headers.get("x-cron-secret");
-  if (secret !== process.env.CRON_SECRET) {
+function isAuthorized(req: Request): boolean {
+  const bearer = req.headers.get("authorization");
+  const cronSecret = req.headers.get("x-cron-secret");
+  const schedulerSecret = req.headers.get("x-persia-scheduler-secret");
+  const expected = process.env.CRON_SECRET;
+  return Boolean(
+    expected
+      && (bearer === `Bearer ${expected}` || cronSecret === expected || schedulerSecret === expected)
+  );
+}
+
+async function handle(req: Request) {
+  if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -20,4 +30,12 @@ export async function POST(req: Request) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+export async function POST(req: Request) {
+  return handle(req);
+}
+
+export async function GET(req: Request) {
+  return handle(req);
 }

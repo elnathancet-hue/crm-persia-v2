@@ -17,13 +17,13 @@ import {
 } from "@persia/ui/select";
 import {
   MessageSquare, CheckCircle2, AlertCircle, Loader2,
-  ChevronRight, ChevronLeft,
+  ChevronRight, ChevronLeft, Upload, Trash2, FileText,
 } from "lucide-react";
 import type {
   CampaignKind, CreateCampaignDraftInput, CampaignAudiencePreview,
 } from "@persia/shared/crm";
 import {
-  createCampaignDraft, validateCampaign, scheduleCampaign,
+  createCampaignDraft, validateCampaign, scheduleCampaign, uploadCampaignMediaAction,
 } from "@/actions/crm-campaigns";
 
 interface Props {
@@ -74,6 +74,8 @@ interface MessageStep {
   media_type?: "none" | "image" | "video" | "audio" | "document";
   media_url?: string;
   media_filename?: string;
+  media_mime_type?: string | null;
+  media_size?: number | null;
 }
 
 export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipelines, stages, groups }: Props) {
@@ -93,6 +95,10 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const [mediaType, setMediaType] = useState<NonNullable<MessageStep["media_type"]>>("none");
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaFilename, setMediaFilename] = useState("");
+  const [mediaMimeType, setMediaMimeType] = useState<string | null>(null);
+  const [mediaSize, setMediaSize] = useState<number | null>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const [followupEnabled, setFollowupEnabled] = useState(false);
   const [followupText, setFollowupText] = useState("");
 
@@ -121,6 +127,9 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
     setMediaType("none");
     setMediaUrl("");
     setMediaFilename("");
+    setMediaMimeType(null);
+    setMediaSize(null);
+    setMediaUploadError(null);
     setFollowupEnabled(false);
     setFollowupText("");
     setSendMode("immediate");
@@ -179,10 +188,12 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
               position: 1,
               send_mode: sendMode,
               message_text: msgText,
-              scheduled_at: sendMode === "scheduled_at" ? scheduledAt : null,
+              scheduled_at: sendMode === "scheduled_at" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
               media_type: mediaType,
               media_url: mediaType === "none" ? null : mediaUrl.trim(),
               media_filename: mediaType === "none" ? null : mediaFilename.trim() || undefined,
+              media_mime_type: mediaMimeType,
+              media_size: mediaSize,
               caption: mediaType === "none" ? null : msgText,
             },
             ...(followupEnabled ? [{
@@ -220,6 +231,45 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
   function handleBack() {
     setStep((s) => Math.max(s - 1, 1) as Step);
+  }
+
+  async function handleMediaFile(file: File | null) {
+    setMediaUploadError(null);
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.set("file", file);
+    setMediaUploading(true);
+    try {
+      const result = await uploadCampaignMediaAction(formData);
+      if (result && "error" in result) {
+        setMediaUploadError(result.error ?? "Erro ao enviar mídia");
+        return;
+      }
+
+      const uploaded = result?.data;
+      if (!uploaded) {
+        setMediaUploadError("Upload sem retorno de mídia");
+        return;
+      }
+
+      setMediaType(uploaded.media_type);
+      setMediaUrl(uploaded.media_url);
+      setMediaFilename(uploaded.media_filename);
+      setMediaMimeType(uploaded.media_mime_type);
+      setMediaSize(uploaded.media_size);
+    } finally {
+      setMediaUploading(false);
+    }
+  }
+
+  function clearMedia() {
+    setMediaType("none");
+    setMediaUrl("");
+    setMediaFilename("");
+    setMediaMimeType(null);
+    setMediaSize(null);
+    setMediaUploadError(null);
   }
 
   const canNext =
@@ -391,58 +441,61 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                 </p>
               </div>
               <div className="grid gap-3 rounded-lg border p-3">
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <Label>Mídia</Label>
-                  <Select
-                    value={mediaType}
-                    onValueChange={(v) => {
-                      setMediaType(v as NonNullable<MessageStep["media_type"]>);
-                      if (v === "none") {
-                        setMediaUrl("");
-                        setMediaFilename("");
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue>
-                        {(v: string | null) =>
-                          v === "none" ? "Sem mídia"
-                          : v === "image" ? "Imagem"
-                          : v === "video" ? "Vídeo"
-                          : v === "audio" ? "Áudio"
-                          : v === "document" ? "Documento"
-                          : v ?? ""
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sem mídia</SelectItem>
-                      <SelectItem value="image">Imagem</SelectItem>
-                      <SelectItem value="video">Vídeo</SelectItem>
-                      <SelectItem value="audio">Áudio</SelectItem>
-                      <SelectItem value="document">Documento</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {!mediaUrl ? (
+                    <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 px-4 py-5 text-center transition-colors hover:bg-muted/50">
+                      {mediaUploading ? (
+                        <Loader2 className="mb-2 h-5 w-5 animate-spin text-muted-foreground" />
+                      ) : (
+                        <Upload className="mb-2 h-5 w-5 text-muted-foreground" />
+                      )}
+                      <span className="text-sm font-medium">
+                        {mediaUploading ? "Enviando mídia..." : "Selecionar imagem, vídeo, áudio ou documento"}
+                      </span>
+                      <span className="mt-1 text-xs text-muted-foreground">
+                        JPEG, PNG, WEBP, MP4, áudio, PDF, DOCX e XLSX
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                        disabled={mediaUploading}
+                        onChange={(e) => {
+                          void handleMediaFile(e.target.files?.[0] ?? null);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-background">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{mediaFilename || "Mídia anexada"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {mediaType} {mediaSize ? `• ${(mediaSize / 1024 / 1024).toFixed(1)} MB` : ""}
+                        </p>
+                      </div>
+                      <Button type="button" variant="ghost" size="icon" onClick={clearMedia}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  {mediaUploadError && (
+                    <p className="text-xs text-destructive">{mediaUploadError}</p>
+                  )}
                 </div>
-                {mediaType !== "none" && (
-                  <>
-                    <div className="space-y-1.5">
-                      <Label>URL do arquivo *</Label>
-                      <Input
-                        value={mediaUrl}
-                        onChange={(e) => setMediaUrl(e.target.value)}
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Nome do arquivo</Label>
-                      <Input
-                        value={mediaFilename}
-                        onChange={(e) => setMediaFilename(e.target.value)}
-                        placeholder="Ex: proposta.pdf"
-                      />
-                    </div>
-                  </>
+                {mediaUrl && (
+                  <div className="space-y-1.5">
+                    <Label>Nome do arquivo</Label>
+                    <Input
+                      value={mediaFilename}
+                      onChange={(e) => setMediaFilename(e.target.value)}
+                      placeholder="Ex: proposta.pdf"
+                    />
+                  </div>
                 )}
               </div>
               <div className="space-y-3 rounded-lg border p-3">
