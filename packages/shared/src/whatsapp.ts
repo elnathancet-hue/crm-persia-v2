@@ -270,6 +270,7 @@ export interface WhatsAppProvider {
    * (na criação do lead) e persistir em leads.avatar_url.
    */
   getContactProfilePic(phone: string): Promise<string | null>;
+  getChatImageUrl(chatId: string, opts?: { preview?: boolean }): Promise<string | null>;
 
   // Media download
   downloadMedia(messageId: string, opts?: {

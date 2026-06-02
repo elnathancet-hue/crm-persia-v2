@@ -93,7 +93,10 @@ export async function getAndCacheContactAvatar(input: {
   phone: string;
   currentAvatarUrl?: string | null;
   /** Provider WhatsApp para chamada getContactProfilePic */
-  provider: { getContactProfilePic(phone: string): Promise<string | null> };
+  provider: {
+    getContactProfilePic(phone: string): Promise<string | null>;
+    getChatImageUrl?(chatId: string, opts?: { preview?: boolean }): Promise<string | null>;
+  };
   force?: boolean;
 }): Promise<{ avatarUrl: string | null; updated: boolean }> {
   const { organizationId, leadId, phone, currentAvatarUrl, provider, force } = input;
@@ -104,7 +107,11 @@ export async function getAndCacheContactAvatar(input: {
   }
 
   try {
-    const remoteUrl = await provider.getContactProfilePic(phone);
+    const remoteUrl =
+      (provider.getChatImageUrl
+        ? await provider.getChatImageUrl(phone, { preview: true })
+        : null) ??
+      (await provider.getContactProfilePic(phone));
     if (!remoteUrl) {
       return { avatarUrl: currentAvatarUrl ?? null, updated: false };
     }

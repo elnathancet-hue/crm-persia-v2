@@ -112,6 +112,7 @@ interface Group {
   ephemeral_duration: "off" | "1d" | "7d" | "90d";
   category: string;
   campaign_id: string | null;
+  image_url: string | null;
   created_at: string;
   updated_at: string;
   last_message_text: string | null;
@@ -398,8 +399,13 @@ function GroupListPanel({
                 }`}
               >
                 {/* Avatar */}
-                <div className="size-11 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Users className="size-5 text-primary" />
+                <div className="size-11 overflow-hidden rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  {group.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={group.image_url} alt="" className="size-full object-cover" />
+                  ) : (
+                    <Users className="size-5 text-primary" />
+                  )}
                 </div>
 
                 {/* Info */}
@@ -825,8 +831,13 @@ function GroupChatPanel({
           <ArrowLeft className="size-4" />
         </Button>
 
-        <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          <Users className="size-5 text-primary" />
+        <div className="size-9 overflow-hidden rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          {group.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={group.image_url} alt="" className="size-full object-cover" />
+          ) : (
+            <Users className="size-5 text-primary" />
+          )}
         </div>
 
         <div className="flex-1 min-w-0">

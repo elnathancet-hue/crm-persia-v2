@@ -287,8 +287,12 @@ export class UazapiAdapter implements WhatsAppProvider {
    * fora do WhatsApp, rate limit, erro de rede) — caller no-op.
    */
   async getContactProfilePic(phone: string): Promise<string | null> {
+    return this.getChatImageUrl(phone, { preview: true });
+  }
+
+  async getChatImageUrl(chatId: string, opts?: { preview?: boolean }): Promise<string | null> {
     try {
-      const details = await this.client.getChatDetails(phone, { preview: true });
+      const details = await this.client.getChatDetails(chatId, { preview: opts?.preview ?? true });
       // Procura URL em campos conhecidos (ordem de prioridade pela
       // qualidade típica: profilePicURL > imagePreview > image).
       const candidates = [

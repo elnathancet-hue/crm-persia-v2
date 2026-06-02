@@ -27,6 +27,20 @@ async function getProvider(supabase: any, orgId: string) {
   return createProvider(connection);
 }
 
+async function getRemoteChatImageUrl(
+  provider: {
+    getChatImageUrl(chatId: string, opts?: { preview?: boolean }): Promise<string | null>;
+    getGroupInfo(jid: string, opts?: { force?: boolean }): Promise<{ imageUrl?: string | null }>;
+  },
+  chatId: string,
+): Promise<string | null> {
+  const detailsImage = await provider.getChatImageUrl(chatId, { preview: true }).catch(() => null);
+  if (detailsImage) return detailsImage;
+
+  const groupInfo = await provider.getGroupInfo(chatId, { force: true }).catch(() => null);
+  return groupInfo?.imageUrl ?? null;
+}
+
 // ── GroupParticipantView — modelo normalizado para UI (Etapa 1 do roadmap) ────
 export interface GroupParticipantView {
   /** Chave estável para a lista — rawJid ou fallback gerado. */
@@ -299,13 +313,16 @@ export async function syncGroups() {
       .select("id, image_url, image_fetched_at")
       .single() as any;
 
-    // Etapa 5: cachear foto do grupo se UAZAPI retornou imageUrl e não temos ainda
-    if (savedGroup?.id && group.imageUrl && !savedGroup.image_url) {
+    // Etapa 5: cachear foto do grupo, usando /chat/details como fallback.
+    if (savedGroup?.id && !savedGroup.image_url) {
       const { cacheGroupAvatarFromUrl } = await import("@/lib/lead-avatar-cache");
+      const remoteImageUrl =
+        group.imageUrl ??
+        await provider.getChatImageUrl(group.jid, { preview: true }).catch(() => null);
       cacheGroupAvatarFromUrl({
         organizationId: orgId,
         groupId: savedGroup.id,
-        remoteUrl: group.imageUrl,
+        remoteUrl: remoteImageUrl,
         currentImageUrl: savedGroup.image_url,
       }).catch(() => {});
     }
@@ -910,6 +927,55 @@ export async function getGroupMessages(groupId: string, limit = 50) {
           .is("sender_lead_id", null),
       ),
     );
+  }
+
+  const avatarLookups = new Map<string, Array<(typeof rows)[number]>>();
+  for (const row of rows) {
+    if (row.direction !== "inbound" || row.sender_avatar_url) continue;
+    const lookup = row.sender_phone ?? row.sender_jid;
+    if (!lookup) continue;
+    const bucket = avatarLookups.get(lookup) ?? [];
+    bucket.push(row);
+    avatarLookups.set(lookup, bucket);
+  }
+
+  if (avatarLookups.size > 0) {
+    const provider = await getProvider(supabase, orgId).catch(() => null);
+    if (provider) {
+      await Promise.allSettled(
+        Array.from(avatarLookups.entries()).slice(0, 8).map(async ([lookup, lookupRows]) => {
+          const avatarUrl = await provider.getChatImageUrl(lookup, { preview: true }).catch(() => null);
+          if (!avatarUrl) return;
+
+          for (const row of lookupRows) {
+            row.sender_avatar_url = avatarUrl;
+          }
+
+          await db
+            .from("group_messages")
+            .update({ sender_avatar_url: avatarUrl })
+            .eq("organization_id", orgId)
+            .eq("group_id", groupId)
+            .in("id", lookupRows.map((row) => row.id));
+
+          const first = lookupRows[0];
+          if (first?.sender_membership_id) {
+            await db
+              .from("group_memberships")
+              .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
+              .eq("id", first.sender_membership_id)
+              .eq("organization_id", orgId);
+          } else if (first?.sender_phone) {
+            await db
+              .from("group_memberships")
+              .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
+              .eq("organization_id", orgId)
+              .eq("group_id", groupId)
+              .eq("phone", first.sender_phone);
+          }
+        }),
+      );
+    }
   }
 
   const leadsById = new Map<string, {
@@ -1874,12 +1940,19 @@ export async function syncGroupImages(): Promise<BackfillAvatarsResult> {
   await Promise.allSettled(
     (groups as any[]).map(async (g) => {
       try {
-        const info = await provider.getGroupInfo(g.group_jid, { force: true });
-        if (!info.imageUrl) { skipped++; return; }
+        const remoteImageUrl = await getRemoteChatImageUrl(provider, g.group_jid);
+        if (!remoteImageUrl) {
+          await admin
+            .from("whatsapp_groups")
+            .update({ image_fetched_at: new Date().toISOString() })
+            .eq("id", g.id);
+          skipped++;
+          return;
+        }
         const cached = await cacheGroupAvatarFromUrl({
           organizationId: orgId,
           groupId: g.id,
-          remoteUrl: info.imageUrl,
+          remoteUrl: remoteImageUrl,
           currentImageUrl: g.image_url,
         });
         if (cached && cached !== g.image_url) updated++;

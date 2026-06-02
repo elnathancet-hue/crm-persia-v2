@@ -312,6 +312,10 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     return null;
   }
 
+  async getChatImageUrl(_chatId: string): Promise<string | null> {
+    return null;
+  }
+
   async downloadMedia(
     messageId: string,
   ): Promise<{ fileURL?: string; mimetype?: string; transcription?: string }> {

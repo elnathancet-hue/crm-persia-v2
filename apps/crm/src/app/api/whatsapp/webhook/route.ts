@@ -329,21 +329,25 @@ export async function POST(request: NextRequest) {
                 patchFields.sender_lead_id = resolvedLeadId;
               }
 
-              // Buscar avatar em background se ainda sem cache e há telefone real
-              if (!senderAvatarUrl && senderPhone && result.membershipId) {
+              // Buscar avatar em background se ainda sem cache.
+              if (!senderAvatarUrl && (senderPhone || rawSenderJid)) {
                 const { getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
-                const { avatarUrl, updated } = await getAndCacheContactAvatar({
-                  organizationId: matchedConn.organization_id,
-                  leadId: resolvedLeadId,
-                  phone: senderPhone,
-                  provider,
-                });
+                const { avatarUrl, updated } = senderPhone
+                  ? await getAndCacheContactAvatar({
+                    organizationId: matchedConn.organization_id,
+                    leadId: resolvedLeadId,
+                    phone: senderPhone,
+                    provider,
+                  })
+                  : { avatarUrl: await provider.getChatImageUrl(rawSenderJid!, { preview: true }), updated: false };
                 if (avatarUrl) {
                   patchFields.sender_avatar_url = avatarUrl;
-                  await supabase
-                    .from("group_memberships")
-                    .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
-                    .eq("id", result.membershipId) as any;
+                  if (result.membershipId) {
+                    await supabase
+                      .from("group_memberships")
+                      .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
+                      .eq("id", result.membershipId) as any;
+                  }
                   void updated;
                 }
               }
