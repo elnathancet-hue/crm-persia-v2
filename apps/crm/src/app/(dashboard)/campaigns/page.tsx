@@ -29,7 +29,6 @@ export default async function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <PageTitle size="compact">Campanhas WhatsApp</PageTitle>
       <CrmCampaignList
         campaigns={campaigns}
         segments={segmentItems}

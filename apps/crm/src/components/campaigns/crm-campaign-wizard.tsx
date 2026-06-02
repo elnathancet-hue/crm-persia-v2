@@ -329,28 +329,23 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   Etapa {step} de 6 - {STEP_LABELS[step]}
                 </p>
               </div>
-              <div className="grid grid-cols-6 gap-2">
-                {([1,2,3,4,5,6] as Step[]).map((s) => (
-                  <div key={s} className="min-w-0">
-                    <div className="flex items-center">
-                      <div
-                        className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-colors ${
-                          s < step
-                            ? "bg-success text-success-foreground"
-                            : s === step
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {s < step ? <CheckCircle2 className="size-3.5" /> : s}
-                      </div>
-                      <div className={`h-px flex-1 ${s < 6 ? s < step ? "bg-primary" : "bg-border" : "bg-transparent"}`} />
+              <div className="flex items-center pt-2">
+                {([1, 2, 3, 4, 5, 6] as Step[]).map((s) => (
+                  <div key={s} className={`flex items-center ${s < 6 ? "flex-1" : ""}`}>
+                    <div
+                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
+                        s < step
+                          ? "bg-success text-success-foreground"
+                          : s === step
+                            ? "bg-primary text-primary-foreground ring-4 ring-primary/10"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {s < step ? <CheckCircle2 className="size-3.5" /> : s}
                     </div>
-                    <p className={`mt-1 truncate text-[10px] font-semibold uppercase ${
-                      s === step ? "text-primary" : "text-muted-foreground"
-                    }`}>
-                      {STEP_SHORT_LABELS[s]}
-                    </p>
+                    {s < 6 && (
+                      <div className={`h-[2px] flex-1 mx-2 rounded-full transition-colors ${s < step ? "bg-success" : "bg-muted"}`} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -368,27 +363,28 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
             >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {KIND_OPTIONS.map((opt) => (
-                  <Button
+                  <button
                     key={opt.kind}
                     type="button"
-                    variant="ghost"
                     onClick={() => {
                       setKind(opt.kind);
                       setTargetKind(opt.kind === "group_campaign" ? "group" : "segment");
                       setTargetId("");
                     }}
-                    className={`h-36 w-full flex-col items-start justify-start gap-2 rounded-lg border p-5 text-left transition-colors ${
+                    className={`flex h-auto w-full flex-col items-start gap-3 rounded-xl border p-5 text-left transition-all hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       kind === opt.kind
-                        ? "border-primary bg-primary/5"
-                        : "border-border"
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border bg-card"
                     }`}
                   >
-                    <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                      {opt.kind === "lead_campaign" ? <Users className="size-4" /> : <MessageSquare className="size-4" />}
-                    </span>
-                    <span className="font-medium text-sm">{opt.label}</span>
-                    <span className="text-xs text-muted-foreground font-normal whitespace-normal">{opt.description}</span>
-                  </Button>
+                    <div className={`flex size-10 items-center justify-center rounded-lg ${kind === opt.kind ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                      {opt.kind === "lead_campaign" ? <Users className="size-5" /> : <MessageSquare className="size-5" />}
+                    </div>
+                    <div className="space-y-1">
+                      <span className="block font-semibold text-foreground text-sm">{opt.label}</span>
+                      <span className="block text-xs text-muted-foreground leading-relaxed">{opt.description}</span>
+                    </div>
+                  </button>
                 ))}
               </div>
               <div className="space-y-1.5">
