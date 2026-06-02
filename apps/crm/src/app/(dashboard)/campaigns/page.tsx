@@ -1,6 +1,6 @@
 import { PageTitle } from "@persia/ui/typography";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
-import { listCrmCampaigns } from "@/actions/crm-campaigns";
+import { listCampaignGroups, listCrmCampaigns } from "@/actions/crm-campaigns";
 import { getSegments } from "@/actions/segments";
 import { getTags } from "@/actions/tags";
 import { getPipelines, getAllStagesForOrg } from "@/actions/crm";
@@ -9,12 +9,13 @@ import { CrmCampaignList } from "@/components/campaigns/crm-campaign-list";
 export default async function CampaignsPage() {
   await requireAdminPageAccess();
 
-  const [campaigns, segments, tagsResult, pipelines, stages] = await Promise.all([
+  const [campaigns, segments, tagsResult, pipelines, stages, groups] = await Promise.all([
     listCrmCampaigns().catch(() => []),
     getSegments().catch(() => []),
     getTags().catch(() => []),
     getPipelines().catch(() => []),
     getAllStagesForOrg().catch(() => []),
+    listCampaignGroups().catch(() => []),
   ]);
 
   const segmentItems = (segments ?? []).map((s) => ({ id: s.id, name: s.name }));
@@ -35,6 +36,7 @@ export default async function CampaignsPage() {
         tags={tagItems}
         pipelines={pipelineItems}
         stages={stageItems}
+        groups={groups}
       />
     </div>
   );

@@ -344,8 +344,8 @@ export async function scheduleCampaign(id: string): Promise<ActionResult<void>> 
 
     const c = campaign as Record<string, unknown>;
     const status = c.status as string;
-    if (status !== "draft" && status !== "paused") {
-      return { error: "Só é possível agendar campanhas em rascunho ou pausadas" };
+    if (status !== "draft") {
+      return { error: "Só é possível agendar campanhas em rascunho. Use Retomar para campanhas pausadas." };
     }
 
     const steps = (c.crm_campaign_steps as Array<Record<string, unknown>>) ?? [];
@@ -395,10 +395,10 @@ export async function scheduleCampaign(id: string): Promise<ActionResult<void>> 
       return { error: "Nenhum destinatário elegível encontrado" };
     }
 
-    // Limpar recipients/jobs anteriores se draft
-    if (status === "draft") {
-      await db.from("crm_campaign_recipients").delete().eq("campaign_id", id);
-    }
+    // Rascunhos podem ser validados/agendados mais de uma vez durante a criação.
+    // Limpa snapshot anterior antes de congelar o público atual.
+    await db.from("crm_campaign_message_jobs").delete().eq("campaign_id", id);
+    await db.from("crm_campaign_recipients").delete().eq("campaign_id", id);
 
     // Inserir recipients
     const eligibleRecipients = preview.recipients.filter((r) => r.eligible);
@@ -450,22 +450,26 @@ export async function scheduleCampaign(id: string): Promise<ActionResult<void>> 
 
     const activeIds = ((activeRecipients ?? []) as { id: string }[]).map((r) => r.id);
 
-    // Criar jobs para cada step × recipient ativo
-    const now = new Date().toISOString();
+    // Criar jobs para cada step × recipient ativo, preservando delays como
+    // linha do tempo por destinatário.
+    const now = new Date();
     const jobRows: Array<Record<string, unknown>> = [];
+    const orderedSteps = [...steps].sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
 
-    for (const step of steps) {
-      const sendAt = computeSendAt(step, now);
-      for (const recipId of activeIds) {
+    for (const recipId of activeIds) {
+      let previousSendAt = now;
+      for (const step of orderedSteps) {
+        const sendAt = computeStepSendAt(step, now, previousSendAt);
         jobRows.push({
           organization_id: orgId,
           campaign_id: id,
           step_id: step.id,
           recipient_id: recipId,
-          send_at: sendAt,
+          send_at: sendAt.toISOString(),
           status: "queued",
           attempts: 0,
         });
+        previousSendAt = sendAt;
       }
     }
 
@@ -626,15 +630,30 @@ export async function getCampaignRecipients(
   return (data ?? []) as CrmCampaignRecipient[];
 }
 
+export async function listCampaignGroups(): Promise<Array<{ id: string; name: string; category: string | null; participant_count: number | null }>> {
+  const { supabase, orgId } = await requireRole("agent");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: { from: (t: string) => any } = supabase as any;
+
+  const { data, error } = await db.from("whatsapp_groups")
+    .select("id, name, category, participant_count")
+    .eq("organization_id", orgId)
+    .not("group_jid", "is", null)
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
+}
+
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
-function computeSendAt(step: Record<string, unknown>, baseNow: string): string {
+function computeStepSendAt(step: Record<string, unknown>, baseNow: Date, previousSendAt: Date): Date {
   const mode = step.send_mode as string;
 
   if (mode === "scheduled_at" && step.scheduled_at) {
     const scheduled = new Date(step.scheduled_at as string);
     // Se data no passado, usa agora
-    if (scheduled.getTime() > Date.now()) return scheduled.toISOString();
+    if (scheduled.getTime() > baseNow.getTime()) return scheduled;
   }
 
   if (mode === "delay_after_previous" && step.delay_amount && step.delay_unit) {
@@ -643,7 +662,7 @@ function computeSendAt(step: Record<string, unknown>, baseNow: string): string {
     const ms = unit === "minutes" ? amount * 60_000
               : unit === "hours"   ? amount * 3_600_000
               : /* days */            amount * 86_400_000;
-    return new Date(Date.now() + ms).toISOString();
+    return new Date(previousSendAt.getTime() + ms);
   }
 
   // immediate ou fallback

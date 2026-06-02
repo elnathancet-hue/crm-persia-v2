@@ -42,9 +42,10 @@ interface Props {
   tags: Array<{ id: string; name: string }>;
   pipelines: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; pipeline_id: string; name: string }>;
+  groups: Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
 }
 
-export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages }: Props) {
+export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups }: Props) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -177,6 +178,7 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages }
         tags={tags}
         pipelines={pipelines}
         stages={stages}
+        groups={groups}
       />
     </div>
   );

@@ -59,6 +59,7 @@ interface RecipientRow {
   status: string;
   phone: string | null;
   chat_jid: string | null;
+  display_name: string | null;
   lead_id: string | null;
   group_id: string | null;
 }
@@ -173,13 +174,14 @@ async function processJob(
 
     if (c.status !== "scheduled" && c.status !== "running") {
       await cancelJob(supabase, job.id, `Status inválido: ${c.status}`);
+      await completeCampaignIfDone(supabase, job.campaign_id);
       return "skipped";
     }
 
     // Buscar recipient
     const { data: recipient } = await supabase
       .from("crm_campaign_recipients")
-      .select("id, status, phone, chat_jid, lead_id, group_id")
+      .select("id, status, phone, chat_jid, display_name, lead_id, group_id")
       .eq("id", job.recipient_id)
       .single();
 
@@ -191,6 +193,7 @@ async function processJob(
     const r = recipient as RecipientRow;
     if (r.status === "stopped" || r.status === "failed" || r.status === "ineligible") {
       await updateJobStatus(supabase, job.id, "skipped");
+      await completeCampaignIfDone(supabase, job.campaign_id);
       return "skipped";
     }
 
@@ -243,29 +246,33 @@ async function processJob(
     if (!destination) {
       await cancelJob(supabase, job.id, "Sem telefone/JID para envio");
       await updateRecipientStatus(supabase, job.recipient_id, "failed");
+      await completeCampaignIfDone(supabase, job.campaign_id);
       return "failed";
     }
 
     // Enviar
     let providerId: string | undefined;
     try {
+      const message = interpolateMessage(s.message_text, r);
+      const caption = interpolateMessage(s.caption, r) ?? message ?? undefined;
       if (s.media_type !== "none" && s.media_url) {
         const result = await provider.sendMedia({
           phone: destination,
           type: s.media_type as "image" | "video" | "audio" | "document",
           media: s.media_url,
           fileName: s.media_filename ?? undefined,
-          caption: s.caption ?? undefined,
+          caption,
         });
         providerId = result.messageId;
-      } else if (s.message_text) {
+      } else if (message) {
         const result = await provider.sendText({
           phone: destination,
-          message: s.message_text,
+          message,
         });
         providerId = result.messageId;
       } else {
         await cancelJob(supabase, job.id, "Step sem conteúdo");
+        await completeCampaignIfDone(supabase, job.campaign_id);
         return "skipped";
       }
     } catch (sendErr) {
@@ -301,6 +308,9 @@ async function processJob(
         .eq("id", job.campaign_id)
         .eq("status", "scheduled");
     }
+
+    await markRecipientCompletedIfDone(supabase, job.recipient_id);
+    await completeCampaignIfDone(supabase, job.campaign_id);
 
     return "sent";
   } catch (err) {
@@ -359,6 +369,8 @@ async function retryOrFail(
       } as never)
       .eq("id", job.id);
     await logCampaignEvent(supabase, job.organization_id, job.campaign_id, job.id, job.recipient_id, "job_failed", { error: errMsg, attempts });
+    await updateRecipientStatus(supabase, job.recipient_id, "failed");
+    await completeCampaignIfDone(supabase, job.campaign_id);
   }
   return "failed";
 }
@@ -394,6 +406,44 @@ async function updateRecipientStatus(
     .from("crm_campaign_recipients")
     .update({ status } as never)
     .eq("id", recipientId);
+}
+
+async function markRecipientCompletedIfDone(
+  supabase: ReturnType<typeof createClient>,
+  recipientId: string,
+): Promise<void> {
+  const { count } = await supabase
+    .from("crm_campaign_message_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("recipient_id", recipientId)
+    .in("status", ["queued", "sending"]);
+
+  if ((count ?? 0) > 0) return;
+
+  await supabase
+    .from("crm_campaign_recipients")
+    .update({ status: "completed" } as never)
+    .eq("id", recipientId)
+    .eq("status", "active");
+}
+
+async function completeCampaignIfDone(
+  supabase: ReturnType<typeof createClient>,
+  campaignId: string,
+): Promise<void> {
+  const { count } = await supabase
+    .from("crm_campaign_message_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .in("status", ["queued", "sending"]);
+
+  if ((count ?? 0) > 0) return;
+
+  await supabase
+    .from("crm_campaigns")
+    .update({ status: "completed" } as never)
+    .eq("id", campaignId)
+    .in("status", ["scheduled", "running"]);
 }
 
 async function logCampaignEvent(
@@ -442,6 +492,18 @@ function isInSendWindow(start: string, end: string, timezone: string): boolean {
   } catch {
     return true; // se timezone inválida, permite envio
   }
+}
+
+function interpolateMessage(template: string | null, recipient: RecipientRow): string | null {
+  if (!template) return null;
+  const name = recipient.display_name?.trim() ?? "";
+  const firstName = name.split(/\s+/).filter(Boolean)[0] ?? "";
+  const phone = recipient.phone ?? recipient.chat_jid?.split("@")[0] ?? "";
+
+  return template
+    .replaceAll("{{nome}}", name)
+    .replaceAll("{{primeiro_nome}}", firstName)
+    .replaceAll("{{telefone}}", phone);
 }
 
 function nextWindowStart(windowStart: string, timezone: string): string {

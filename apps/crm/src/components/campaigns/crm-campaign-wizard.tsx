@@ -33,6 +33,7 @@ interface Props {
   tags: Array<{ id: string; name: string }>;
   pipelines: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; pipeline_id: string; name: string }>;
+  groups: Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
@@ -70,9 +71,12 @@ interface MessageStep {
   scheduled_at?: string;
   delay_amount?: number;
   delay_unit?: "minutes" | "hours" | "days";
+  media_type?: "none" | "image" | "video" | "audio" | "document";
+  media_url?: string;
+  media_filename?: string;
 }
 
-export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipelines, stages }: Props) {
+export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipelines, stages, groups }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [isPending, startTransition] = useTransition();
 
@@ -86,10 +90,17 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
   // Etapa 3
   const [msgText, setMsgText] = useState("");
+  const [mediaType, setMediaType] = useState<NonNullable<MessageStep["media_type"]>>("none");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaFilename, setMediaFilename] = useState("");
+  const [followupEnabled, setFollowupEnabled] = useState(false);
+  const [followupText, setFollowupText] = useState("");
 
   // Etapa 4
   const [sendMode, setSendMode] = useState<MessageStep["send_mode"]>("immediate");
   const [scheduledAt, setScheduledAt] = useState("");
+  const [followupDelayAmount, setFollowupDelayAmount] = useState(1);
+  const [followupDelayUnit, setFollowupDelayUnit] = useState<"hours" | "days">("days");
   const [stopOnReply, setStopOnReply] = useState(true);
 
   // Etapa 5
@@ -107,8 +118,15 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
     setTargetKind("segment");
     setTargetId("");
     setMsgText("");
+    setMediaType("none");
+    setMediaUrl("");
+    setMediaFilename("");
+    setFollowupEnabled(false);
+    setFollowupText("");
     setSendMode("immediate");
     setScheduledAt("");
+    setFollowupDelayAmount(1);
+    setFollowupDelayUnit("days");
     setStopOnReply(true);
     setPreview(null);
     setValidationError(null);
@@ -154,16 +172,27 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
         const input: CreateCampaignDraftInput = {
           name: name.trim() || "Nova Campanha",
           kind,
-          mode: "single",
-          stop_on_reply: stopOnReply,
+          mode: followupEnabled ? "sequence" : "single",
+          stop_on_reply: kind === "lead_campaign" ? stopOnReply : false,
           steps: [
             {
               position: 1,
               send_mode: sendMode,
               message_text: msgText,
               scheduled_at: sendMode === "scheduled_at" ? scheduledAt : null,
-              media_type: "none",
+              media_type: mediaType,
+              media_url: mediaType === "none" ? null : mediaUrl.trim(),
+              media_filename: mediaType === "none" ? null : mediaFilename.trim() || undefined,
+              caption: mediaType === "none" ? null : msgText,
             },
+            ...(followupEnabled ? [{
+              position: 2,
+              send_mode: "delay_after_previous" as const,
+              delay_amount: followupDelayAmount,
+              delay_unit: followupDelayUnit,
+              message_text: followupText,
+              media_type: "none" as const,
+            }] : []),
           ],
           targets: [
             {
@@ -196,8 +225,8 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const canNext =
     (step === 1 && name.trim().length > 0) ||
     (step === 2 && (targetId.trim().length > 0 || targetKind === "manual")) ||
-    (step === 3 && msgText.trim().length > 0) ||
-    step === 4 ||
+    (step === 3 && (msgText.trim().length > 0 || (mediaType !== "none" && mediaUrl.trim().length > 0)) && (!followupEnabled || followupText.trim().length > 0)) ||
+    (step === 4 && (sendMode !== "scheduled_at" || scheduledAt.trim().length > 0)) ||
     (step === 5 && preview !== null && preview.eligible_count > 0) ||
     step === 6;
 
@@ -217,6 +246,10 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
     : targetKind === "funnel_stage" ? stages.map((s) => ({
         id: s.id,
         name: `${pipelines.find((p) => p.id === s.pipeline_id)?.name ?? "?"} › ${s.name}`,
+      }))
+    : targetKind === "group" ? groups.map((g) => ({
+        id: g.id,
+        name: `${g.name}${g.participant_count ? ` (${g.participant_count})` : ""}`,
       }))
     : [];
 
@@ -249,7 +282,11 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                     key={opt.kind}
                     type="button"
                     variant="ghost"
-                    onClick={() => setKind(opt.kind)}
+                    onClick={() => {
+                      setKind(opt.kind);
+                      setTargetKind(opt.kind === "group_campaign" ? "group" : "segment");
+                      setTargetId("");
+                    }}
                     className={`h-auto w-full flex-col items-start gap-0.5 rounded-lg border p-4 text-left transition-colors ${
                       kind === opt.kind
                         ? "border-primary bg-primary/5"
@@ -297,7 +334,14 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
               {targetIdOptions.length > 0 && (
                 <div className="space-y-1.5">
-                  <Label>Selecionar {targetKind === "segment" ? "segmento" : targetKind === "tag" ? "tag" : "etapa"}</Label>
+                  <Label>
+                    Selecionar {
+                      targetKind === "segment" ? "segmento"
+                      : targetKind === "tag" ? "tag"
+                      : targetKind === "group" ? "grupo"
+                      : "etapa"
+                    }
+                  </Label>
                   <Select
                     value={targetId}
                     onValueChange={(v) => setTargetId(v ?? "")}
@@ -318,7 +362,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                 </div>
               )}
 
-              {(targetKind === "lead" || targetKind === "group") && (
+              {(targetKind === "lead" || (targetKind === "group" && targetIdOptions.length === 0)) && (
                 <div className="space-y-1.5">
                   <Label>ID do {targetKind === "lead" ? "lead" : "grupo"}</Label>
                   <Input
@@ -345,6 +389,84 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                 <p className="text-xs text-muted-foreground">
                   Variáveis: {`{{nome}}`}, {`{{primeiro_nome}}`}, {`{{telefone}}`}
                 </p>
+              </div>
+              <div className="grid gap-3 rounded-lg border p-3">
+                <div className="space-y-1.5">
+                  <Label>Mídia</Label>
+                  <Select
+                    value={mediaType}
+                    onValueChange={(v) => {
+                      setMediaType(v as NonNullable<MessageStep["media_type"]>);
+                      if (v === "none") {
+                        setMediaUrl("");
+                        setMediaFilename("");
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue>
+                        {(v: string | null) =>
+                          v === "none" ? "Sem mídia"
+                          : v === "image" ? "Imagem"
+                          : v === "video" ? "Vídeo"
+                          : v === "audio" ? "Áudio"
+                          : v === "document" ? "Documento"
+                          : v ?? ""
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sem mídia</SelectItem>
+                      <SelectItem value="image">Imagem</SelectItem>
+                      <SelectItem value="video">Vídeo</SelectItem>
+                      <SelectItem value="audio">Áudio</SelectItem>
+                      <SelectItem value="document">Documento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {mediaType !== "none" && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label>URL do arquivo *</Label>
+                      <Input
+                        value={mediaUrl}
+                        onChange={(e) => setMediaUrl(e.target.value)}
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Nome do arquivo</Label>
+                      <Input
+                        value={mediaFilename}
+                        onChange={(e) => setMediaFilename(e.target.value)}
+                        placeholder="Ex: proposta.pdf"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="followup-enabled"
+                    checked={followupEnabled}
+                    onCheckedChange={(v) => setFollowupEnabled(v === true)}
+                  />
+                  <Label htmlFor="followup-enabled" className="font-normal cursor-pointer">
+                    Adicionar follow-up
+                  </Label>
+                </div>
+                {followupEnabled && (
+                  <div className="space-y-1.5">
+                    <Label>Mensagem de follow-up *</Label>
+                    <Textarea
+                      value={followupText}
+                      onChange={(e) => setFollowupText(e.target.value)}
+                      rows={4}
+                      placeholder="Ainda posso te ajudar com isso?"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -383,16 +505,48 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   />
                 </div>
               )}
-              <div className="flex items-center gap-2 pt-1">
-                <Checkbox
-                  id="stop-on-reply"
-                  checked={stopOnReply}
-                  onCheckedChange={(v) => setStopOnReply(v === true)}
-                />
-                <Label htmlFor="stop-on-reply" className="font-normal cursor-pointer">
-                  Parar quando lead responder
-                </Label>
-              </div>
+              {followupEnabled && (
+                <div className="grid grid-cols-[1fr_140px] gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Delay do follow-up</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={followupDelayAmount}
+                      onChange={(e) => setFollowupDelayAmount(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Unidade</Label>
+                    <Select
+                      value={followupDelayUnit}
+                      onValueChange={(v) => setFollowupDelayUnit(v as "hours" | "days")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue>
+                          {(v: string | null) => v === "hours" ? "Horas" : "Dias"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="hours">Horas</SelectItem>
+                        <SelectItem value="days">Dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {kind === "lead_campaign" && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Checkbox
+                    id="stop-on-reply"
+                    checked={stopOnReply}
+                    onCheckedChange={(v) => setStopOnReply(v === true)}
+                  />
+                  <Label htmlFor="stop-on-reply" className="font-normal cursor-pointer">
+                    Parar quando lead responder
+                  </Label>
+                </div>
+              )}
             </div>
           )}
 
