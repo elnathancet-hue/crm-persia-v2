@@ -232,33 +232,50 @@ export async function POST(request: NextRequest) {
         // UAZAPI v2: sender fields (sender_pn, sender) ficam dentro de body.message,
         // não no root do envelope. Usar msgRaw para capturar o nível correto.
         const msgRaw = ((body as any).message || body) as Record<string, unknown>;
-        const senderJid =
+
+        // Etapa 1 (Identidade Rica): capturar rawSenderJid inclui @lid para detectar kind.
+        const rawSenderJid: string | null =
           (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
-          (typeof msgRaw.sender === "string" && msgRaw.sender && !msgRaw.sender.endsWith("@lid") ? msgRaw.sender : null);
+          (typeof msgRaw.sender === "string" && msgRaw.sender ? msgRaw.sender : null);
+        // senderJid sem @lid — usado para normalização de telefone + linkGroupMembership.
+        const senderJid =
+          rawSenderJid && !rawSenderJid.endsWith("@lid") ? rawSenderJid : null;
+        const senderIdentityKind: "phone" | "lid" | "unknown" =
+          rawSenderJid?.endsWith("@s.whatsapp.net") ? "phone" :
+          rawSenderJid?.endsWith("@lid") ? "lid" :
+          "unknown";
         const messageCreatedAt = new Date().toISOString();
 
-        // Etapa 4: resolver avatar cached do remetente antes do insert (sem UAZAPI call)
+        // Etapa 1: resolver identidade cached do remetente antes do insert (sem UAZAPI call).
         let senderAvatarUrl: string | null = null;
+        let senderPhone: string | null = null;
+        let senderLeadId: string | null = null;
+        let senderMembershipId: string | null = null;
+
         if (senderJid) {
           const { normalizePhoneBR } = await import("@/lib/whatsapp/group-join-pipeline");
-          const senderPhone = normalizePhoneBR(senderJid);
+          senderPhone = normalizePhoneBR(senderJid);
           if (senderPhone) {
-            // Prioridade: lead.avatar_url > membership.avatar_url
+            // Prioridade: membership cached → lead cached
             const { data: mem } = await supabase
               .from("group_memberships")
-              .select("avatar_url, lead_id")
+              .select("id, avatar_url, lead_id")
               .eq("group_id", grp.id as string)
               .eq("phone", senderPhone)
               .maybeSingle() as any;
-            if (mem?.avatar_url) {
-              senderAvatarUrl = mem.avatar_url;
-            } else if (mem?.lead_id) {
-              const { data: leadRow } = await supabase
-                .from("leads")
-                .select("avatar_url")
-                .eq("id", mem.lead_id)
-                .maybeSingle();
-              if ((leadRow as any)?.avatar_url) senderAvatarUrl = (leadRow as any).avatar_url;
+            if (mem) {
+              senderMembershipId = (mem.id as string) || null;
+              senderLeadId = (mem.lead_id as string) || null;
+              if (mem.avatar_url) {
+                senderAvatarUrl = mem.avatar_url;
+              } else if (mem.lead_id) {
+                const { data: leadRow } = await supabase
+                  .from("leads")
+                  .select("avatar_url")
+                  .eq("id", mem.lead_id)
+                  .maybeSingle();
+                if ((leadRow as any)?.avatar_url) senderAvatarUrl = (leadRow as any).avatar_url;
+              }
             }
           }
         }
@@ -270,6 +287,10 @@ export async function POST(request: NextRequest) {
           text: msg.text,
           sender_name: msg.pushName || null,
           sender_jid: senderJid || null,
+          sender_phone: senderPhone || null,
+          sender_lead_id: senderLeadId || null,
+          sender_membership_id: senderMembershipId || null,
+          sender_identity_kind: senderIdentityKind,
           sender_avatar_url: senderAvatarUrl,
           whatsapp_msg_id: msg.messageId || null,
           media_type: msg.type && msg.type !== "text" ? msg.type : null,
@@ -277,11 +298,10 @@ export async function POST(request: NextRequest) {
           created_at: messageCreatedAt,
         } as never);
 
-        // Bug C fix (mai/2026): vincular remetente como membro do grupo.
-        // Etapa 4: após vincular, buscar avatar em background se não havia cache.
+        // Vincular remetente como membro do grupo (fire-and-forget).
+        // Após vincular, atualizar identidade na mensagem se ainda incompleta.
         if (senderJid) {
-          const { linkGroupMembership, normalizePhoneBR } = await import("@/lib/whatsapp/group-join-pipeline");
-          const senderPhone = normalizePhoneBR(senderJid);
+          const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
           linkGroupMembership({
             supabase,
             orgId: matchedConn.organization_id,
@@ -298,32 +318,42 @@ export async function POST(request: NextRequest) {
                   p_group_id: grp.id,
                 });
               }
+
+              // Patch message com membership/lead recém-resolvidos (se não havia cache)
+              const patchFields: Record<string, unknown> = {};
+              if (result.membershipId && !senderMembershipId) {
+                patchFields.sender_membership_id = result.membershipId;
+              }
+              const resolvedLeadId = result.lead?.id ?? null;
+              if (resolvedLeadId && !senderLeadId) {
+                patchFields.sender_lead_id = resolvedLeadId;
+              }
+
               // Buscar avatar em background se ainda sem cache e há telefone real
               if (!senderAvatarUrl && senderPhone && result.membershipId) {
                 const { getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
                 const { avatarUrl, updated } = await getAndCacheContactAvatar({
                   organizationId: matchedConn.organization_id,
-                  leadId: (result as any).leadId ?? null,
+                  leadId: resolvedLeadId,
                   phone: senderPhone,
                   provider,
                 });
                 if (avatarUrl) {
-                  // Atualizar membership.avatar_url + sender_avatar_url na mensagem
-                  await Promise.all([
-                    supabase
-                      .from("group_memberships")
-                      .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
-                      .eq("id", result.membershipId) as any,
-                    msg.messageId
-                      ? supabase
-                          .from("group_messages")
-                          .update({ sender_avatar_url: avatarUrl })
-                          .eq("whatsapp_msg_id", msg.messageId)
-                          .eq("group_id", grp.id) as any
-                      : Promise.resolve(),
-                  ]);
-                  void updated; // satisfaz TS
+                  patchFields.sender_avatar_url = avatarUrl;
+                  await supabase
+                    .from("group_memberships")
+                    .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
+                    .eq("id", result.membershipId) as any;
+                  void updated;
                 }
+              }
+
+              if (msg.messageId && Object.keys(patchFields).length > 0) {
+                await supabase
+                  .from("group_messages")
+                  .update(patchFields)
+                  .eq("whatsapp_msg_id", msg.messageId)
+                  .eq("group_id", grp.id) as any;
               }
             })
             .catch(() => {});

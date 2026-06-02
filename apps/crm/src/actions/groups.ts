@@ -693,7 +693,11 @@ export async function deleteGroup(id: string) {
 }
 
 // ---- Send message to group ----
-export async function sendMessageToGroup(groupId: string, message: string) {
+export async function sendMessageToGroup(
+  groupId: string,
+  message: string,
+  replyToWamid?: string | null,
+) {
   const { supabase, orgId } = await requireRole("admin");
   const provider = await getProvider(supabase, orgId);
 
@@ -706,7 +710,11 @@ export async function sendMessageToGroup(groupId: string, message: string) {
 
   if (!group) throw new Error("Grupo nao encontrado");
 
-  const result = await provider.sendText({ phone: group.group_jid, message });
+  const result = await provider.sendText({
+    phone: group.group_jid,
+    message,
+    replyTo: replyToWamid || undefined,
+  });
 
   await (supabase as any).from("group_messages").insert({
     organization_id: orgId,
@@ -715,6 +723,7 @@ export async function sendMessageToGroup(groupId: string, message: string) {
     text: message,
     sender_name: null,
     whatsapp_msg_id: result.messageId || null,
+    reply_to_whatsapp_msg_id: replyToWamid || null,
   });
 
   return { sent: true };
@@ -822,7 +831,11 @@ export async function getGroupMessages(groupId: string, limit = 50) {
 
   const { data } = await (supabase as any)
     .from("group_messages")
-    .select("id, direction, text, sender_name, created_at, whatsapp_msg_id, media_url, media_type")
+    .select(
+      "id, direction, text, sender_name, sender_jid, sender_phone, " +
+      "sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, " +
+      "created_at, whatsapp_msg_id, media_url, media_type"
+    )
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
     .eq("is_deleted", false)
@@ -834,11 +847,58 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     direction: string;
     text: string | null;
     sender_name: string | null;
+    sender_jid: string | null;
+    sender_phone: string | null;
+    sender_lead_id: string | null;
+    sender_membership_id: string | null;
+    sender_identity_kind: "phone" | "lid" | "unknown" | null;
+    sender_avatar_url: string | null;
     created_at: string;
     whatsapp_msg_id: string | null;
     media_url: string | null;
     media_type: string | null;
   }>;
+}
+
+// ─── createLeadFromGroupParticipant (Etapa 2) ─────────────────────────────────
+// Cria ou vincula lead a partir de um participante do grupo.
+// Idempotente: createLead faz upsert por telefone.
+export async function createLeadFromGroupParticipant(input: {
+  groupId: string;
+  membershipId?: string | null;
+  phone: string;
+  name?: string | null;
+}): Promise<{ leadId: string }> {
+  const { orgId } = await requireRole("agent");
+  const adminDb = createAdminClient() as any;
+
+  const { createLead: createLeadShared } = await import("@persia/shared/crm");
+  const lead = await createLeadShared({ db: adminDb, orgId }, {
+    name: input.name || null,
+    phone: input.phone,
+    source: "group",
+  });
+
+  // Vincular membership ao lead criado
+  if (input.membershipId) {
+    await adminDb
+      .from("group_memberships")
+      .update({ lead_id: lead.id })
+      .eq("id", input.membershipId)
+      .eq("organization_id", orgId);
+  }
+
+  // Atualizar sender_lead_id em mensagens históricas deste telefone neste grupo
+  await adminDb
+    .from("group_messages")
+    .update({ sender_lead_id: lead.id })
+    .eq("group_id", input.groupId)
+    .eq("organization_id", orgId)
+    .eq("sender_phone", input.phone)
+    .is("sender_lead_id", null);
+
+  revalidatePath("/groups");
+  return { leadId: lead.id };
 }
 
 // ─── Group Campaigns ──────────────────────────────────────────────────────────

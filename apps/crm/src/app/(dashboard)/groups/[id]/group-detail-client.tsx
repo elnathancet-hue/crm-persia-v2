@@ -2,17 +2,29 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Copy,
+  ExternalLink,
+  FileText,
+  ImageIcon,
   Loader2,
   Megaphone,
+  MessageCircle,
+  Mic,
+  MoreVertical,
+  Paperclip,
   RefreshCw,
+  Reply,
   Save,
   Send,
+  UserPlus,
   Users,
   Link2,
+  X,
 } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@persia/ui/avatar";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import { Input } from "@persia/ui/input";
@@ -36,7 +48,21 @@ import {
   DialogFooter,
   DialogClose,
 } from "@persia/ui/dialog";
-import { updateGroup, getInviteLink, sendInviteToLead, sendMessageToGroup } from "@/actions/groups";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@persia/ui/dropdown-menu";
+import {
+  updateGroup,
+  getInviteLink,
+  sendInviteToLead,
+  sendMessageToGroup,
+  sendMediaToGroup,
+  createLeadFromGroupParticipant,
+} from "@/actions/groups";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
@@ -62,6 +88,15 @@ interface GroupMessage {
   direction: "inbound" | "outbound";
   text: string | null;
   sender_name: string | null;
+  sender_jid: string | null;
+  sender_phone: string | null;
+  sender_lead_id: string | null;
+  sender_membership_id: string | null;
+  sender_identity_kind: "phone" | "lid" | "unknown" | null;
+  sender_avatar_url: string | null;
+  media_type: string | null;
+  media_url: string | null;
+  whatsapp_msg_id: string | null;
   created_at: string;
 }
 
@@ -82,6 +117,7 @@ export function GroupDetailClient({
   leads: Lead[];
   initialMessages: GroupMessage[];
 }) {
+  const router = useRouter();
   const [name, setName] = React.useState(group.name);
   const [description, setDescription] = React.useState(group.description || "");
   const [isAnnounce, setIsAnnounce] = React.useState(group.is_announce);
@@ -99,7 +135,15 @@ export function GroupDetailClient({
   const [messages, setMessages] = React.useState<GroupMessage[]>(initialMessages);
   const [chatInput, setChatInput] = React.useState("");
   const [sendingMessage, setSendingMessage] = React.useState(false);
+  const [replyTo, setReplyTo] = React.useState<GroupMessage | null>(null);
+  const [creatingLeadFor, setCreatingLeadFor] = React.useState<string | null>(null);
+  const [attachedFile, setAttachedFile] = React.useState<File | null>(null);
+  const [attachedPreview, setAttachedPreview] = React.useState<string | null>(null);
+  const [attachedMediaType, setAttachedMediaType] = React.useState<"image" | "video" | "audio" | "document">("document");
+  const [sendingMedia, setSendingMedia] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Scroll to bottom on new messages
   React.useEffect(() => {
@@ -185,22 +229,119 @@ export function GroupDetailClient({
     }
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    let mt: "image" | "video" | "audio" | "document" = "document";
+    if (file.type.startsWith("image/")) mt = "image";
+    else if (file.type.startsWith("video/")) mt = "video";
+    else if (file.type.startsWith("audio/")) mt = "audio";
+    setAttachedMediaType(mt);
+    setAttachedFile(file);
+    if (mt === "image") {
+      const reader = new FileReader();
+      reader.onload = (ev) => setAttachedPreview(ev.target?.result as string ?? null);
+      reader.readAsDataURL(file);
+    } else {
+      setAttachedPreview(null);
+    }
+  }
+
+  function clearAttachment() {
+    setAttachedFile(null);
+    setAttachedPreview(null);
+  }
+
   async function handleSendMessage() {
+    // If there's a file attachment, send as media
+    if (attachedFile) {
+      const caption = chatInput.trim() || undefined;
+      const file = attachedFile;
+      const mt = attachedMediaType;
+      clearAttachment();
+      setChatInput("");
+      setSendingMedia(true);
+      try {
+        const reader = new FileReader();
+        await new Promise<void>((resolve, reject) => {
+          reader.onload = async (ev) => {
+            const base64 = ev.target?.result as string;
+            if (!base64) { reject(new Error("Falha ao ler arquivo")); return; }
+            try {
+              await sendMediaToGroup(group.id, base64, mt, caption, file.name);
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          };
+          reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+          reader.readAsDataURL(file);
+        });
+        toast.success("Mídia enviada");
+      } catch (err: any) {
+        toast.error(err.message || "Erro ao enviar mídia");
+      } finally {
+        setSendingMedia(false);
+      }
+      return;
+    }
+
     const text = chatInput.trim();
     if (!text) return;
     setSendingMessage(true);
+    const currentReply = replyTo;
     setChatInput("");
+    setReplyTo(null);
     try {
-      await sendMessageToGroup(group.id, text);
+      await sendMessageToGroup(group.id, text, currentReply?.whatsapp_msg_id ?? null);
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mensagem");
       setChatInput(text);
+      setReplyTo(currentReply);
     } finally {
       setSendingMessage(false);
     }
   }
 
+  async function handleCreateLead(msg: GroupMessage) {
+    if (!msg.sender_phone || msg.sender_lead_id) return;
+    setCreatingLeadFor(msg.id);
+    try {
+      const { leadId } = await createLeadFromGroupParticipant({
+        groupId: group.id,
+        membershipId: msg.sender_membership_id,
+        phone: msg.sender_phone,
+        name: msg.sender_name || undefined,
+      });
+      // Atualiza mensagens localmente com o novo lead_id
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.sender_phone === msg.sender_phone
+            ? { ...m, sender_lead_id: leadId }
+            : m
+        )
+      );
+      toast.success("Lead criado!", {
+        action: { label: "Ver perfil", onClick: () => router.push(`/leads/${leadId}`) },
+      });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao criar lead");
+    } finally {
+      setCreatingLeadFor(null);
+    }
+  }
+
+  function handleReply(msg: GroupMessage) {
+    setReplyTo(msg);
+    inputRef.current?.focus();
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Escape") {
+      setReplyTo(null);
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -257,52 +398,241 @@ export function GroupDetailClient({
                 Nenhuma mensagem ainda. Envie a primeira!
               </p>
             )}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.direction === "outbound" ? "justify-end" : "justify-start"}`}
-              >
+            {messages.map((msg, idx) => {
+              const isInbound = msg.direction === "inbound";
+              const nextMsg = messages[idx + 1];
+              const isLastInBlock = isInbound && (
+                !nextMsg ||
+                nextMsg.direction !== "inbound" ||
+                (nextMsg.sender_jid ?? nextMsg.sender_name) !== (msg.sender_jid ?? msg.sender_name)
+              );
+              const senderLabel = msg.sender_name || msg.sender_phone || "?";
+              const initials = senderLabel
+                .split(" ")
+                .map((w) => w[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
+              const isCreatingLead = creatingLeadFor === msg.id;
+              return (
                 <div
-                  className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                    msg.direction === "outbound"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background border"
-                  }`}
+                  key={msg.id}
+                  className={`group/msg flex items-end gap-1.5 ${isInbound ? "justify-start" : "justify-end"}`}
                 >
-                  {msg.direction === "inbound" && msg.sender_name && (
-                    <p className="text-xs font-semibold mb-1 text-primary">{msg.sender_name}</p>
+                  {/* Avatar (inbound only — último do bloco) */}
+                  {isInbound && (
+                    <div className="w-6 shrink-0 self-end mb-0.5">
+                      {isLastInBlock ? (
+                        <Avatar size="sm">
+                          {msg.sender_avatar_url ? (
+                            <AvatarImage src={msg.sender_avatar_url} alt={senderLabel} />
+                          ) : null}
+                          <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
+                        </Avatar>
+                      ) : null}
+                    </div>
                   )}
-                  <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                  <p
-                    className={`text-[10px] mt-1 text-right ${
-                      msg.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"
+
+                  {/* Bubble */}
+                  <div
+                    className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                      isInbound
+                        ? "bg-background border"
+                        : "bg-primary text-primary-foreground"
                     }`}
                   >
-                    {formatTime(msg.created_at)}
-                  </p>
+                    {isInbound && (
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        {msg.sender_name && (
+                          <span className="text-xs font-semibold text-primary leading-none">
+                            {msg.sender_name}
+                          </span>
+                        )}
+                        {msg.sender_phone && (
+                          <span className="text-[10px] text-muted-foreground leading-none">
+                            {msg.sender_phone}
+                          </span>
+                        )}
+                        {msg.sender_lead_id && (
+                          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 leading-none">
+                            lead
+                          </Badge>
+                        )}
+                        {msg.sender_identity_kind === "lid" && (
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 leading-none text-muted-foreground">
+                            sem tel.
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                    {msg.media_type && msg.media_url && (
+                      <p className="text-[11px] text-muted-foreground mb-1 italic">
+                        [{msg.media_type}]
+                      </p>
+                    )}
+                    {msg.text && (
+                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                    )}
+                    <p
+                      className={`text-[10px] mt-1 text-right ${
+                        isInbound ? "text-muted-foreground" : "text-primary-foreground/70"
+                      }`}
+                    >
+                      {formatTime(msg.created_at)}
+                    </p>
+                  </div>
+
+                  {/* Action menu (visible on hover) */}
+                  <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity self-center shrink-0">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6" />}>
+                        <MoreVertical className="size-3" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align={isInbound ? "start" : "end"} className="w-44">
+                        <DropdownMenuItem onClick={() => handleReply(msg)}>
+                          <Reply className="size-3.5 mr-2" />
+                          Responder
+                        </DropdownMenuItem>
+                        {msg.text && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.text!);
+                              toast.success("Copiado!");
+                            }}
+                          >
+                            <Copy className="size-3.5 mr-2" />
+                            Copiar texto
+                          </DropdownMenuItem>
+                        )}
+                        {isInbound && (msg.sender_lead_id || msg.sender_phone) && (
+                          <DropdownMenuSeparator />
+                        )}
+                        {isInbound && msg.sender_lead_id && (
+                          <>
+                            <DropdownMenuItem onClick={() => router.push(`/leads/${msg.sender_lead_id!}`)}>
+                              <ExternalLink className="size-3.5 mr-2" />
+                              Ver perfil
+                            </DropdownMenuItem>
+                            {msg.sender_phone && (
+                              <DropdownMenuItem onClick={() => router.push(`/chat?lead=${msg.sender_lead_id!}`)}>
+                                <MessageCircle className="size-3.5 mr-2" />
+                                Abrir chat 1:1
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                        {isInbound && !msg.sender_lead_id && msg.sender_phone && (
+                          <DropdownMenuItem
+                            onClick={() => handleCreateLead(msg)}
+                            disabled={isCreatingLead}
+                          >
+                            {isCreatingLead ? (
+                              <Loader2 className="size-3.5 mr-2 animate-spin" />
+                            ) : (
+                              <UserPlus className="size-3.5 mr-2" />
+                            )}
+                            Criar lead
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Reply context bar */}
+          {replyTo && (
+            <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/40 text-xs">
+              <Reply className="size-3 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground truncate flex-1">
+                Respondendo{replyTo.sender_name ? ` a ${replyTo.sender_name}` : ""}: {replyTo.text?.slice(0, 60) ?? "[mídia]"}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-5 shrink-0"
+                onClick={() => setReplyTo(null)}
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
+          )}
+
+          {/* Media preview bar */}
+          {attachedFile && (
+            <div className="flex items-center gap-3 px-4 py-2 border-t bg-muted/40">
+              {attachedPreview ? (
+                <img
+                  src={attachedPreview}
+                  alt="preview"
+                  className="h-14 w-14 rounded object-cover border shrink-0"
+                />
+              ) : (
+                <div className="h-14 w-14 rounded border bg-background flex items-center justify-center shrink-0">
+                  {attachedMediaType === "video" ? (
+                    <ImageIcon className="size-5 text-muted-foreground" />
+                  ) : attachedMediaType === "audio" ? (
+                    <Mic className="size-5 text-muted-foreground" />
+                  ) : (
+                    <FileText className="size-5 text-muted-foreground" />
+                  )}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{attachedFile.name}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {attachedMediaType} · {(attachedFile.size / 1024).toFixed(0)} KB
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-6 shrink-0"
+                onClick={clearAttachment}
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
+          )}
+
           {/* Input bar */}
           <div className="flex items-end gap-2 px-4 py-3 border-t">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="shrink-0 mb-0.5"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sendingMessage || sendingMedia}
+              title="Anexar arquivo"
+            >
+              <Paperclip className="size-4" />
+            </Button>
             <Textarea
+              ref={inputRef}
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Digite uma mensagem... (Enter para enviar)"
+              placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem... (Enter para enviar)"}
               className="min-h-[40px] max-h-32 resize-none"
               rows={1}
-              disabled={sendingMessage}
+              disabled={sendingMessage || sendingMedia}
             />
             <Button
               size="icon"
               onClick={handleSendMessage}
-              disabled={sendingMessage || !chatInput.trim()}
+              disabled={(sendingMessage || sendingMedia) || (!attachedFile && !chatInput.trim())}
             >
-              {sendingMessage ? (
+              {(sendingMessage || sendingMedia) ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Send className="size-4" />
