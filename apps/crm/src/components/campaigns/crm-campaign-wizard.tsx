@@ -4,6 +4,7 @@
 // Etapa 1: Objetivo (tipo) → 2: Público → 3: Mensagem → 4: Agenda → 5: Validação → 6: Confirmar
 
 import { useState, useTransition } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -18,6 +19,7 @@ import {
 import {
   MessageSquare, CheckCircle2, AlertCircle, Loader2,
   ChevronRight, ChevronLeft, Upload, Trash2, FileText,
+  Megaphone, Users, Send, CalendarClock, ShieldCheck,
 } from "lucide-react";
 import type {
   CampaignKind, CreateCampaignDraftInput, CampaignAudiencePreview,
@@ -305,27 +307,41 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <div className="flex items-center gap-2 mb-1">
-            {([1,2,3,4,5,6] as Step[]).map((s) => (
-              <div
-                key={s}
-                className={`h-1.5 flex-1 rounded-full transition-colors ${
-                  s <= step ? "bg-primary" : "bg-muted"
-                }`}
-              />
-            ))}
+      <DialogContent className="max-w-[560px] overflow-hidden p-0">
+        <DialogHeader className="border-b px-6 pb-4 pt-5">
+          <div className="flex items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <Megaphone className="size-5" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <div>
+                <DialogTitle className="text-lg">Nova campanha</DialogTitle>
+                <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                  Etapa {step} de 6 - {STEP_LABELS[step]}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {([1,2,3,4,5,6] as Step[]).map((s) => (
+                  <div
+                    key={s}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      s <= step ? "bg-primary" : "bg-muted"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
-          <DialogTitle className="text-base">
-            Etapa {step} — {STEP_LABELS[step]}
-          </DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-[260px] py-2">
+        <div className="max-h-[66vh] min-h-[340px] overflow-y-auto px-6 py-5">
           {/* Etapa 1: Objetivo */}
           {step === 1 && (
-            <div className="space-y-4">
+            <FormSection
+              icon={<Megaphone className="size-4 text-muted-foreground" />}
+              title="Objetivo"
+              description="Defina o publico da acao e identifique a campanha"
+            >
               <div className="grid grid-cols-1 gap-3">
                 {KIND_OPTIONS.map((opt) => (
                   <Button
@@ -357,12 +373,16 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   placeholder="Ex: Follow-up Leads Frios Junho"
                 />
               </div>
-            </div>
+            </FormSection>
           )}
 
           {/* Etapa 2: Público */}
           {step === 2 && (
-            <div className="space-y-4">
+            <FormSection
+              icon={<Users className="size-4 text-muted-foreground" />}
+              title="Publico"
+              description="Selecione a origem dos destinatarios"
+            >
               <div className="space-y-1.5">
                 <Label>Tipo de público</Label>
                 <Select
@@ -422,12 +442,16 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   />
                 </div>
               )}
-            </div>
+            </FormSection>
           )}
 
           {/* Etapa 3: Mensagem */}
           {step === 3 && (
-            <div className="space-y-4">
+            <FormSection
+              icon={<Send className="size-4 text-muted-foreground" />}
+              title="Mensagem"
+              description="Monte o conteudo principal e os anexos"
+            >
               <div className="space-y-1.5">
                 <Label>Mensagem *</Label>
                 <Textarea
@@ -521,12 +545,16 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   </div>
                 )}
               </div>
-            </div>
+            </FormSection>
           )}
 
           {/* Etapa 4: Agenda */}
           {step === 4 && (
-            <div className="space-y-4">
+            <FormSection
+              icon={<CalendarClock className="size-4 text-muted-foreground" />}
+              title="Agenda"
+              description="Configure envio, follow-up e parada por resposta"
+            >
               <div className="space-y-1.5">
                 <Label>Quando enviar</Label>
                 <Select
@@ -600,12 +628,16 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   </Label>
                 </div>
               )}
-            </div>
+            </FormSection>
           )}
 
           {/* Etapa 5: Validação */}
           {step === 5 && (
-            <div className="space-y-4">
+            <FormSection
+              icon={<ShieldCheck className="size-4 text-muted-foreground" />}
+              title="Validacao"
+              description="Confira os destinatarios encontrados antes de agendar"
+            >
               {isPending && (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -647,12 +679,16 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   )}
                 </div>
               )}
-            </div>
+            </FormSection>
           )}
 
           {/* Etapa 6: Confirmar */}
           {step === 6 && (
-            <div className="space-y-4">
+            <FormSection
+              icon={<CheckCircle2 className="size-4 text-muted-foreground" />}
+              title="Confirmar"
+              description="Revise os principais dados da campanha"
+            >
               <div className="rounded-lg bg-muted p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Nome</span>
@@ -681,11 +717,11 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
               <p className="text-xs text-muted-foreground">
                 Ao confirmar, a campanha será agendada. Os destinatários serão congelados agora.
               </p>
-            </div>
+            </FormSection>
           )}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 border-t bg-background px-6 py-4">
           {step > 1 && (
             <Button variant="ghost" onClick={handleBack} disabled={isPending}>
               <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
@@ -714,5 +750,32 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FormSection({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <header className="space-y-0.5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          {icon}
+          {title}
+        </h3>
+        {description && (
+          <p className="pl-6 text-xs text-muted-foreground">{description}</p>
+        )}
+      </header>
+      <div className="space-y-4">{children}</div>
+    </section>
   );
 }

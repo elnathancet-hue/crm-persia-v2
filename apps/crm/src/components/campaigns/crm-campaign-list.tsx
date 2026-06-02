@@ -80,9 +80,23 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+        <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Megaphone className="size-5" />
+        </div>
+        <div>
+          <p className="text-base font-semibold">
+            {campaigns.length} campanha{campaigns.length !== 1 ? "s" : ""} encontrada{campaigns.length !== 1 ? "s" : ""}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            WhatsApp para leads e grupos
+          </p>
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative w-full max-w-md">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar campanha..."
@@ -117,72 +131,74 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
           </CardContent>
         </Card>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Criada em</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {displayed.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.name}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {KIND_LABEL[c.kind] ?? c.kind}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={STATUS_UI[c.status]?.variant ?? "secondary"}>
-                    {STATUS_UI[c.status]?.label ?? c.status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {new Date(c.created_at).toLocaleDateString("pt-BR")}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} />}>
-                      <MoreHorizontal className="h-4 w-4" />
-                      <span className="sr-only">Ações</span>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem render={<a href={`/campaigns/${c.id}`} />}>
-                        <Eye className="h-4 w-4 mr-2" /> Ver detalhes
-                      </DropdownMenuItem>
-                      {(c.status === "scheduled" || c.status === "running") && (
-                        <DropdownMenuItem onClick={() => handlePause(c.id)}>
-                          <Pause className="h-4 w-4 mr-2" /> Pausar
+        <Card className="overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Criada em</TableHead>
+                <TableHead className="w-10" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayed.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-medium">{c.name}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {KIND_LABEL[c.kind] ?? c.kind}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={STATUS_UI[c.status]?.variant ?? "secondary"}>
+                      {STATUS_UI[c.status]?.label ?? c.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {new Date(c.created_at).toLocaleDateString("pt-BR")}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} />}>
+                        <MoreHorizontal className="h-4 w-4" />
+                        <span className="sr-only">Ações</span>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem render={<a href={`/campaigns/${c.id}`} />}>
+                          <Eye className="h-4 w-4 mr-2" /> Ver detalhes
                         </DropdownMenuItem>
-                      )}
-                      {c.status === "paused" && (
-                        <DropdownMenuItem onClick={() => handleResume(c.id)}>
-                          <Play className="h-4 w-4 mr-2" /> Retomar
-                        </DropdownMenuItem>
-                      )}
-                      {c.status !== "completed" && c.status !== "cancelled" && (
+                        {(c.status === "scheduled" || c.status === "running") && (
+                          <DropdownMenuItem onClick={() => handlePause(c.id)}>
+                            <Pause className="h-4 w-4 mr-2" /> Pausar
+                          </DropdownMenuItem>
+                        )}
+                        {c.status === "paused" && (
+                          <DropdownMenuItem onClick={() => handleResume(c.id)}>
+                            <Play className="h-4 w-4 mr-2" /> Retomar
+                          </DropdownMenuItem>
+                        )}
+                        {c.status !== "completed" && c.status !== "cancelled" && (
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleCancel(c.id)}
+                          >
+                            <X className="h-4 w-4 mr-2" /> Cancelar
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
-                          onClick={() => handleCancel(c.id)}
+                          onClick={() => handleDelete(c)}
                         >
-                          <X className="h-4 w-4 mr-2" /> Cancelar
+                          <Trash2 className="h-4 w-4 mr-2" /> Excluir
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => handleDelete(c)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
 
       {/* Wizard */}

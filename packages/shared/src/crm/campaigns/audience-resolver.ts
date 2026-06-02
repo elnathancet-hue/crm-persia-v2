@@ -161,7 +161,14 @@ async function fetchLeadsForTarget(
 
     case "funnel_stage": {
       if (!target.target_id) { errors.push("Funil/etapa: target_id ausente"); return []; }
-      // Busca leads via deals que estão na stage
+      // PR-K-CENTRIC: o Kanban do CRM usa leads.stage_id como source of truth.
+      // Mantem fallback em deals.stage_id para campanhas/schemas legados.
+      const leadsQuery = dbAny.from("leads").select("id").eq("stage_id", target.target_id).eq("organization_id", orgId);
+      const { data: leadRows, error: leadErr } = await leadsQuery.then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
+      if (leadErr) throw new StrictMatchError(`Funil/etapa "${target.target_id}": ${leadErr.message}`);
+      const leadIds = ((leadRows ?? []) as { id: string }[]).map((r) => r.id).filter(Boolean);
+      if (leadIds.length > 0) return fetchLeadsByIds(db, orgId, [...new Set(leadIds)]);
+
       const dealsQuery = dbAny.from("deals").select("lead_id").eq("stage_id", target.target_id).eq("organization_id", orgId);
       const { data: dealRows, error: dealErr } = await dealsQuery.then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
       if (dealErr) throw new StrictMatchError(`Funil/etapa "${target.target_id}": ${dealErr.message}`);

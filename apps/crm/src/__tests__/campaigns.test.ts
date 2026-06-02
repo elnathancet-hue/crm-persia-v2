@@ -300,6 +300,27 @@ describe("resolveCampaignAudience", () => {
     expect(result.found_count).toBe(2);
     expect(result.eligible_count).toBe(2); // l1 e l2 têm phone
   });
+
+  it("funil/etapa resolve pelo Kanban lead-centric usando leads.stage_id", async () => {
+    const db = makeDb({
+      leads: [
+        { id: "l1", phone: "5511999990001", name: "Lead 1", status: "new", source: "website", channel: "whatsapp", score: 80, stage_id: "s-kanban", organization_id: "org1" },
+        { id: "l2", phone: "5511999990002", name: "Lead 2", status: "qualified", source: "referral", channel: "whatsapp", score: 30, stage_id: "s-other", organization_id: "org1" },
+      ],
+      deals: [],
+    });
+
+    const result = await resolveCampaignAudience({
+      kind: "lead_campaign",
+      targets: [{ target_kind: "funnel_stage", target_id: "s-kanban" }],
+      db: db as never,
+      orgId: "org1",
+    });
+
+    expect(result.found_count).toBe(1);
+    expect(result.eligible_count).toBe(1);
+    expect(result.recipients[0]?.lead_id).toBe("l1");
+  });
 });
 
 // ─── Media upload validation ──────────────────────────────────────────────────
