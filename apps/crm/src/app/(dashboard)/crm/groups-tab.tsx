@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  ImageIcon,
   Loader2,
   MessageSquare,
   MoreHorizontal,
@@ -76,6 +77,8 @@ import {
   getGroupAutomations,
   upsertGroupAutomation,
   deleteGroupAutomation,
+  backfillGroupParticipantAvatars,
+  syncGroupImages,
   type GroupOverview,
   type GroupParticipantView,
   type GroupAutomation,
@@ -281,6 +284,8 @@ export function GroupsTab() {
   const [orgTags, setOrgTags] = React.useState<{ id: string; name: string; color: string }[]>([]);
   const [bulkTagId, setBulkTagId] = React.useState("");
   const [bulkLoading, setBulkLoading] = React.useState(false);
+  // Etapa 7: backfill de fotos
+  const [syncingPhotos, setSyncingPhotos] = React.useState(false);
   // Automations dialog — Etapa 8
   const [automsOpen, setAutomsOpen] = React.useState(false);
   const [automsGroup, setAutomsGroup] = React.useState<GroupOverview | null>(null);
@@ -468,6 +473,24 @@ export function GroupsTab() {
     }
   }
 
+  async function handleSyncPhotos() {
+    setSyncingPhotos(true);
+    try {
+      const result = await syncGroupImages();
+      if (result.updated > 0) {
+        const fresh = await getGroupsOverview();
+        setGroups(fresh);
+      }
+      toast.success(
+        `Fotos: ${result.processed} processados, ${result.updated} atualizados, ${result.skipped} sem foto, ${result.failed} falhas`,
+      );
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Erro ao atualizar fotos");
+    } finally {
+      setSyncingPhotos(false);
+    }
+  }
+
   async function handleCreateLead(participant: GroupParticipantView) {
     if (!participant.phone) return;
     setCreateLoadingJid(participant.rawJid);
@@ -566,6 +589,14 @@ export function GroupsTab() {
           >
             <Download className="size-4" />
             Exportar
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSyncPhotos} disabled={syncingPhotos || groups.length === 0} title="Buscar fotos dos grupos no WhatsApp">
+            {syncingPhotos ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <ImageIcon className="size-4" />
+            )}
+            Atualizar fotos
           </Button>
           <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
             {syncing ? (
@@ -708,8 +739,13 @@ export function GroupsTab() {
                       {/* Grupo */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                            <Users className="size-4 text-primary" />
+                          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                            {group.image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={group.image_url} alt="" className="size-8 object-cover" />
+                            ) : (
+                              <Users className="size-4 text-primary" />
+                            )}
                           </div>
                           <div className="min-w-0">
                             <p className="font-medium truncate max-w-[180px]">
@@ -821,6 +857,20 @@ export function GroupsTab() {
                             <DropdownMenuItem onClick={() => router.push("/groups")}>
                               <MessageSquare className="size-4" />
                               Ver chat
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                toast.info("Buscando fotos dos participantes...");
+                                try {
+                                  const r = await backfillGroupParticipantAvatars(group.id);
+                                  toast.success(`${r.processed} processados, ${r.updated} atualizados, ${r.failed} falhas`);
+                                } catch (err: unknown) {
+                                  toast.error((err as Error).message || "Erro ao buscar fotos");
+                                }
+                              }}
+                            >
+                              <ImageIcon className="size-4" />
+                              Atualizar fotos
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => exportGroupCSV(group)}>
                               <Download className="size-4" />

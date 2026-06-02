@@ -237,6 +237,32 @@ export async function POST(request: NextRequest) {
           (typeof msgRaw.sender === "string" && msgRaw.sender && !msgRaw.sender.endsWith("@lid") ? msgRaw.sender : null);
         const messageCreatedAt = new Date().toISOString();
 
+        // Etapa 4: resolver avatar cached do remetente antes do insert (sem UAZAPI call)
+        let senderAvatarUrl: string | null = null;
+        if (senderJid) {
+          const { normalizePhoneBR } = await import("@/lib/whatsapp/group-join-pipeline");
+          const senderPhone = normalizePhoneBR(senderJid);
+          if (senderPhone) {
+            // Prioridade: lead.avatar_url > membership.avatar_url
+            const { data: mem } = await supabase
+              .from("group_memberships")
+              .select("avatar_url, lead_id")
+              .eq("group_id", grp.id as string)
+              .eq("phone", senderPhone)
+              .maybeSingle() as any;
+            if (mem?.avatar_url) {
+              senderAvatarUrl = mem.avatar_url;
+            } else if (mem?.lead_id) {
+              const { data: leadRow } = await supabase
+                .from("leads")
+                .select("avatar_url")
+                .eq("id", mem.lead_id)
+                .maybeSingle();
+              if ((leadRow as any)?.avatar_url) senderAvatarUrl = (leadRow as any).avatar_url;
+            }
+          }
+        }
+
         await supabase.from("group_messages").insert({
           organization_id: matchedConn.organization_id,
           group_id: grp.id,
@@ -244,6 +270,7 @@ export async function POST(request: NextRequest) {
           text: msg.text,
           sender_name: msg.pushName || null,
           sender_jid: senderJid || null,
+          sender_avatar_url: senderAvatarUrl,
           whatsapp_msg_id: msg.messageId || null,
           media_type: msg.type && msg.type !== "text" ? msg.type : null,
           media_url: (msg as any).mediaUrl || null,
@@ -251,11 +278,10 @@ export async function POST(request: NextRequest) {
         } as never);
 
         // Bug C fix (mai/2026): vincular remetente como membro do grupo.
-        // UAZAPI "groups" event só dispara em join/leave; mensagens recebidas
-        // no grupo chegam via "messages" event. Ao salvar a mensagem, tentamos
-        // linkar o remetente como membro — idempotente via upsert.
+        // Etapa 4: após vincular, buscar avatar em background se não havia cache.
         if (senderJid) {
-          const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
+          const { linkGroupMembership, normalizePhoneBR } = await import("@/lib/whatsapp/group-join-pipeline");
+          const senderPhone = normalizePhoneBR(senderJid);
           linkGroupMembership({
             supabase,
             orgId: matchedConn.organization_id,
@@ -266,11 +292,39 @@ export async function POST(request: NextRequest) {
             source: "webhook",
             joinedAt: messageCreatedAt,
           })
-            .then((result) => {
-              if (!result.membershipId || result.wasActiveMember) return null;
-              return supabase.rpc("increment_group_participant_count", {
-                p_group_id: grp.id,
-              });
+            .then(async (result) => {
+              if (result.membershipId && !result.wasActiveMember) {
+                await supabase.rpc("increment_group_participant_count", {
+                  p_group_id: grp.id,
+                });
+              }
+              // Buscar avatar em background se ainda sem cache e há telefone real
+              if (!senderAvatarUrl && senderPhone && result.membershipId) {
+                const { getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
+                const { avatarUrl, updated } = await getAndCacheContactAvatar({
+                  organizationId: matchedConn.organization_id,
+                  leadId: (result as any).leadId ?? null,
+                  phone: senderPhone,
+                  provider,
+                });
+                if (avatarUrl) {
+                  // Atualizar membership.avatar_url + sender_avatar_url na mensagem
+                  await Promise.all([
+                    supabase
+                      .from("group_memberships")
+                      .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
+                      .eq("id", result.membershipId) as any,
+                    msg.messageId
+                      ? supabase
+                          .from("group_messages")
+                          .update({ sender_avatar_url: avatarUrl })
+                          .eq("whatsapp_msg_id", msg.messageId)
+                          .eq("group_id", grp.id) as any
+                      : Promise.resolve(),
+                  ]);
+                  void updated; // satisfaz TS
+                }
+              }
             })
             .catch(() => {});
         }

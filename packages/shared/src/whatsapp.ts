@@ -31,6 +31,8 @@ export interface GroupInfo {
   ephemeralDuration: number;
   ownerJid: string | null;
   createdAt: string | null;
+  /** URL remota da foto do grupo (UAZAPI). Cachear antes de usar na UI. */
+  imageUrl?: string | null;
 }
 
 export interface SendTextOptions {

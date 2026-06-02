@@ -70,6 +70,8 @@ export interface GroupOverview {
   engaged_count: number;
   /** Saídas nos últimos 7 dias. */
   recent_exits: number;
+  /** Imagem cacheada do grupo (Etapa 5). */
+  image_url: string | null;
 }
 
 // ---- Groups overview with membership stats ----
@@ -191,6 +193,7 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
     lid_count: lidByGroup.get(g.id as string) ?? 0,
     engaged_count: engagedByGroup.get(g.id as string)?.size ?? 0,
     recent_exits: recentExitsByGroup.get(g.id as string) ?? 0,
+    image_url: (g.image_url as string | null) ?? null,
   }));
 }
 
@@ -264,10 +267,12 @@ export async function syncGroups() {
     offset += PAGE_SIZE;
   }
 
+  const admin = createAdminClient() as any;
+
   for (const group of remoteGroups) {
     if (!group.jid) continue;
 
-    await supabase
+    const { data: savedGroup } = await supabase
       .from("whatsapp_groups")
       .upsert(
         {
@@ -284,9 +289,23 @@ export async function syncGroups() {
           updated_at: new Date().toISOString(),
         } as never,
         { onConflict: "organization_id,group_jid" }
-      );
+      )
+      .select("id, image_url, image_fetched_at")
+      .single() as any;
+
+    // Etapa 5: cachear foto do grupo se UAZAPI retornou imageUrl e não temos ainda
+    if (savedGroup?.id && group.imageUrl && !savedGroup.image_url) {
+      const { cacheGroupAvatarFromUrl } = await import("@/lib/lead-avatar-cache");
+      cacheGroupAvatarFromUrl({
+        organizationId: orgId,
+        groupId: savedGroup.id,
+        remoteUrl: group.imageUrl,
+        currentImageUrl: savedGroup.image_url,
+      }).catch(() => {});
+    }
   }
 
+  void admin; // satisfaz TS (usado apenas para tipo)
   revalidatePath("/groups");
   return { synced: remoteGroups.length };
 }
@@ -1600,4 +1619,129 @@ export async function bulkAddTagToGroupLeads(
 
   if (success > 0) revalidatePath("/crm");
   return { success, failed };
+}
+
+// ── Etapa 7: Backfill controlado de avatares ───────────────────────────────────
+
+export interface BackfillAvatarsResult {
+  processed: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+}
+
+// Preenche avatar_url de membros ativos sem avatar (lote máximo 30 para não
+// sobrecarregar UAZAPI). Respeita cache: pula membros com avatar_fetched_at
+// recente (< 24h) para evitar rate limit.
+export async function backfillGroupParticipantAvatars(
+  groupId: string,
+): Promise<BackfillAvatarsResult> {
+  const { orgId } = await requireRole("admin");
+  const admin = createAdminClient() as any;
+  const supabase = (await requireRole("admin")).supabase;
+
+  // Verificar que o grupo pertence à org
+  const { data: grp } = await supabase
+    .from("whatsapp_groups")
+    .select("id")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!grp) throw new Error("Grupo não encontrado");
+
+  // Membros ativos sem avatar ou com avatar buscado há mais de 24h
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: members } = await admin
+    .from("group_memberships")
+    .select("id, phone, lead_id, avatar_url, avatar_fetched_at")
+    .eq("group_id", groupId)
+    .eq("organization_id", orgId)
+    .is("left_at", null)
+    .or(`avatar_url.is.null,avatar_fetched_at.lt.${cutoff}`)
+    .limit(30);
+
+  if (!members || members.length === 0) return { processed: 0, updated: 0, skipped: 0, failed: 0 };
+
+  // Precisa do provider
+  const { supabase: supabaseForProvider } = await requireRole("admin");
+  const provider = await getProvider(supabaseForProvider, orgId);
+
+  const { getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
+
+  let updated = 0, skipped = 0, failed = 0;
+
+  await Promise.allSettled(
+    (members as any[]).map(async (m) => {
+      if (!m.phone) { skipped++; return; }
+      try {
+        const { avatarUrl, updated: wasUpdated } = await getAndCacheContactAvatar({
+          organizationId: orgId,
+          leadId: m.lead_id ?? null,
+          phone: m.phone,
+          currentAvatarUrl: m.avatar_url,
+          provider,
+        });
+        if (wasUpdated || (avatarUrl && avatarUrl !== m.avatar_url)) {
+          await admin
+            .from("group_memberships")
+            .update({ avatar_url: avatarUrl, avatar_fetched_at: new Date().toISOString() })
+            .eq("id", m.id);
+          updated++;
+        } else {
+          // Atualizar apenas o timestamp para não reprocessar na próxima rodada
+          await admin
+            .from("group_memberships")
+            .update({ avatar_fetched_at: new Date().toISOString() })
+            .eq("id", m.id);
+          skipped++;
+        }
+      } catch {
+        failed++;
+      }
+    }),
+  );
+
+  return { processed: members.length, updated, skipped, failed };
+}
+
+// Busca foto de todos os grupos da org sem imagem ou com imagem desatualizada.
+export async function syncGroupImages(): Promise<BackfillAvatarsResult> {
+  const { supabase, orgId } = await requireRole("admin");
+  const admin = createAdminClient() as any;
+
+  const { data: groups } = await admin
+    .from("whatsapp_groups")
+    .select("id, group_jid, image_url, image_fetched_at")
+    .eq("organization_id", orgId)
+    .or("image_url.is.null,image_fetched_at.is.null")
+    .limit(20);
+
+  if (!groups || groups.length === 0) return { processed: 0, updated: 0, skipped: 0, failed: 0 };
+
+  const provider = await getProvider(supabase, orgId);
+  const { cacheGroupAvatarFromUrl } = await import("@/lib/lead-avatar-cache");
+
+  let updated = 0, skipped = 0, failed = 0;
+
+  await Promise.allSettled(
+    (groups as any[]).map(async (g) => {
+      try {
+        const info = await provider.getGroupInfo(g.group_jid, { force: true });
+        if (!info.imageUrl) { skipped++; return; }
+        const cached = await cacheGroupAvatarFromUrl({
+          organizationId: orgId,
+          groupId: g.id,
+          remoteUrl: info.imageUrl,
+          currentImageUrl: g.image_url,
+        });
+        if (cached && cached !== g.image_url) updated++;
+        else skipped++;
+      } catch {
+        failed++;
+      }
+    }),
+  );
+
+  revalidatePath("/crm");
+  return { processed: groups.length, updated, skipped, failed };
 }

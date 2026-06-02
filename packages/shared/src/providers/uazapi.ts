@@ -416,6 +416,21 @@ export class UazapiAdapter implements WhatsAppProvider {
         };
       })
       .filter((p) => p.jid.length > 0);
+    // Etapa 5: foto do grupo — vários candidatos de campo (payload UAZAPI varia)
+    const raw = g as Record<string, unknown>;
+    const imageUrl: string | null =
+      (typeof raw.Picture === "string" && raw.Picture) ||
+      (typeof raw.picture === "string" && raw.picture) ||
+      (typeof raw.ProfilePicture === "string" && raw.ProfilePicture) ||
+      (typeof raw.profilePicture === "string" && raw.profilePicture) ||
+      (typeof raw.profilePicURL === "string" && raw.profilePicURL) ||
+      (typeof raw.profilePicUrl === "string" && raw.profilePicUrl) ||
+      (typeof raw.wa_profilePicURL === "string" && raw.wa_profilePicURL) ||
+      (typeof raw.wa_profilePicUrl === "string" && raw.wa_profilePicUrl) ||
+      (typeof raw.imagePreview === "string" && raw.imagePreview) ||
+      (typeof raw.image === "string" && raw.image) ||
+      null;
+
     return {
       jid: g.JID || "",
       name: g.Name || "",
@@ -430,6 +445,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       ephemeralDuration: g.DisappearingTimer || 0,
       ownerJid: g.OwnerJID || null,
       createdAt: g.GroupCreated || null,
+      imageUrl,
     };
   }
 

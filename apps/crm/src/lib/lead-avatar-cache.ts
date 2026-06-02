@@ -1,4 +1,5 @@
 export const LEAD_AVATARS_BUCKET = "lead-avatars";
+export const GROUP_AVATARS_BUCKET = "group-avatars";
 const MAX_AVATAR_BYTES = 1024 * 1024;
 
 const MIME_TO_EXT: Record<string, string> = {
@@ -138,5 +139,68 @@ export async function getAndCacheContactAvatar(input: {
   } catch {
     // Best-effort: falha de rede, rate limit, foto privada → retorna o que tinha
     return { avatarUrl: currentAvatarUrl ?? null, updated: false };
+  }
+}
+
+// ── cacheGroupAvatarFromUrl ────────────────────────────────────────────────────
+// Etapa 5: análogo a cacheLeadAvatarFromUrl mas para grupos.
+// Bucket: group-avatars / {orgId}/{groupId}.{ext}
+// Atualiza whatsapp_groups.image_url + image_fetched_at.
+export async function cacheGroupAvatarFromUrl(input: {
+  organizationId: string;
+  groupId: string;
+  remoteUrl: string | null | undefined;
+  currentImageUrl?: string | null;
+}): Promise<string | null> {
+  const remoteUrl = input.remoteUrl?.trim();
+  if (!remoteUrl) return input.currentImageUrl ?? null;
+
+  function isGroupStorageUrl(url: string) {
+    return url.includes(`/storage/v1/object/public/${GROUP_AVATARS_BUCKET}/`);
+  }
+  if (isGroupStorageUrl(remoteUrl)) return remoteUrl;
+  // Se já temos URL cacheada e não mudou, skip
+  if (input.currentImageUrl && isGroupStorageUrl(input.currentImageUrl)) {
+    return input.currentImageUrl;
+  }
+
+  try {
+    const response = await fetch(remoteUrl, {
+      headers: {
+        accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "user-agent": "Mozilla/5.0 (compatible; PersiaCRM/1.0; +https://persiacrm.com)",
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return input.currentImageUrl ?? null;
+
+    const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
+    if (!mimeType.startsWith("image/")) return input.currentImageUrl ?? null;
+
+    const bytes = await response.arrayBuffer();
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_AVATAR_BYTES) return input.currentImageUrl ?? null;
+
+    const ext = MIME_TO_EXT[mimeType.toLowerCase()] ?? "jpg";
+    const storagePath = `${input.organizationId}/${input.groupId}.${ext}`;
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+
+    const { error } = await admin.storage
+      .from(GROUP_AVATARS_BUCKET)
+      .upload(storagePath, bytes, { contentType: mimeType, upsert: true, cacheControl: "86400" });
+
+    if (error) return input.currentImageUrl ?? null;
+
+    const { data } = admin.storage.from(GROUP_AVATARS_BUCKET).getPublicUrl(storagePath);
+    const publicUrl = data.publicUrl;
+
+    // Persistir no DB (colunas adicionadas em migration 086, ainda fora dos tipos gerados)
+    await (admin.from("whatsapp_groups") as any)
+      .update({ image_url: publicUrl, image_fetched_at: new Date().toISOString() })
+      .eq("id", input.groupId);
+
+    return publicUrl;
+  } catch {
+    return input.currentImageUrl ?? null;
   }
 }
