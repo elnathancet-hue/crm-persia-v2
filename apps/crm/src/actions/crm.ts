@@ -24,6 +24,7 @@ import {
   listLossReasons as listLossReasonsShared,
   listPipelines,
   listStages,
+  listStagesForOrg,
   updateDeal as updateDealShared,
   updateLossReason as updateLossReasonShared,
   updatePipelineName as updatePipelineNameShared,
@@ -57,6 +58,11 @@ export async function createPipeline(formData: FormData) {
 export async function getStages(pipelineId: string) {
   const { supabase, orgId } = await requireRole("agent");
   return listStages({ db: supabase, orgId }, pipelineId);
+}
+
+export async function getAllStagesForOrg() {
+  const { supabase, orgId } = await requireRole("agent");
+  return listStagesForOrg({ db: supabase, orgId });
 }
 
 // Sprint 3e: createStage agora aceita objeto + retorna ActionResult.

@@ -107,6 +107,37 @@ export {
 // Usado pelo listLeads pra aplicar filtro de segmento (segmentId ->
 // pre-fetcha matching leads -> aplica .in('id', leadIds) na query).
 export { findMatchingLeadIds } from "./segments/match-leads";
+// Etapa 2 (campanhas): strict matcher — lança se qualquer condition falhar.
+export { findMatchingLeadIdsStrict, StrictMatchError } from "./segments/match-leads";
+
+// Módulo de campanhas — tipos + audience resolver.
+export type {
+  CampaignKind,
+  CampaignMode,
+  CampaignStatus,
+  StepSendMode,
+  StepDelayUnit,
+  StepMediaType,
+  TargetKind,
+  RecipientType,
+  RecipientStatus,
+  JobStatus,
+  CrmCampaign,
+  CrmCampaignStep,
+  CrmCampaignTarget,
+  CrmCampaignRecipient,
+  CrmCampaignMessageJob,
+  CrmCampaignEvent,
+  CreateCampaignDraftInput,
+  UpdateCampaignDraftInput,
+  CreateCampaignStepInput,
+  CreateCampaignTargetInput,
+  CampaignTargetInput,
+  AudienceRecipientPreview,
+  CampaignAudiencePreview,
+  CrmCampaignWithDetails,
+} from "./campaigns";
+export { resolveCampaignAudience } from "./campaigns";
 // Etapa 3: validador compartilhado (client + server).
 export {
   validateSegmentRules,

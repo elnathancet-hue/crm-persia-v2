@@ -28,6 +28,7 @@ import { OPEN_CONVERSATION_STATUSES } from "@persia/shared/crm";
 import { phoneBR } from "@persia/shared/validation";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 import { getAndCacheContactAvatar } from "@/lib/lead-avatar-cache";
+import { handleInboundReplyForCampaigns } from "@/lib/campaigns/stop-on-reply";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
@@ -353,6 +354,15 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   // Lead novo aparece na tab Leads na proxima navegacao do agente
   // (95% dos casos). User parado na tab so ve com Realtime/PR-O.
   await revalidateLeadAndChatCaches(lead.id);
+
+  // Stop-on-reply de campanhas: best-effort, nunca bloqueia pipeline.
+  void handleInboundReplyForCampaigns({
+    supabase: ctx.supabase,
+    orgId,
+    leadId: lead.id,
+    conversationId: conversation.id,
+    isGroup: false,
+  });
 
   // 7) Flow already handled it?
   if (keywordFlowTriggered) {

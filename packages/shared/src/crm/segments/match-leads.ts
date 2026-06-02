@@ -286,7 +286,236 @@ async function resolveDateCondition(
   return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
 }
 
-// Etapa 9: resolve conditions que exigem join via tabela deals.
+// ─── Strict mode (campanhas) ──────────────────────────────────────────────────
+//
+// Diferença do leniente:
+//   - Campo inválido → throw
+//   - Operador inválido → throw
+//   - DB error em qualquer condition → throw
+//   - null de resolução parcial → throw
+//   - Resultado vazio → [] sem erro (lista vazia é válida)
+//
+// Usado exclusivamente por resolveCampaignAudience — nunca pelo preview
+// visual de segmento.
+
+export class StrictMatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StrictMatchError";
+  }
+}
+
+export async function findMatchingLeadIdsStrict(
+  db: MinimalDb,
+  orgId: string,
+  rules: SegmentRules | null | undefined,
+): Promise<string[]> {
+  if (!rules || !Array.isArray(rules.conditions) || rules.conditions.length === 0) {
+    throw new StrictMatchError("Regras ausentes ou vazias");
+  }
+
+  const sets = await Promise.all(
+    rules.conditions.map((cond) => resolveConditionStrict(db, orgId, cond)),
+  );
+
+  if (rules.operator === "OR") {
+    const union = new Set<string>();
+    for (const s of sets) {
+      for (const id of s) union.add(id);
+    }
+    return Array.from(union);
+  }
+
+  // AND: intersecção — qualquer falha de DB já lançou acima
+  const [first, ...rest] = sets;
+  let result = new Set(first);
+  for (const s of rest) {
+    result = new Set([...result].filter((id) => s.has(id)));
+    if (result.size === 0) break;
+  }
+  return Array.from(result);
+}
+
+async function resolveConditionStrict(
+  db: MinimalDb,
+  orgId: string,
+  cond: SegmentCondition,
+): Promise<Set<string>> {
+  const field = typeof cond.field === "string" ? cond.field : null;
+  const op = typeof cond.op === "string" ? cond.op : null;
+  const value =
+    typeof cond.value === "string"
+      ? cond.value
+      : cond.value == null
+        ? ""
+        : String(cond.value);
+
+  if (!field) throw new StrictMatchError("Condition sem campo");
+  if (!op) throw new StrictMatchError(`Campo "${field}": operador ausente`);
+
+  if (field === "tags") {
+    return resolveTagsConditionStrict(db, orgId, op, value);
+  }
+  if (DATE_FIELDS.has(field)) {
+    return resolveDateConditionStrict(db, orgId, field, op, value);
+  }
+  if (DIRECT_FIELDS.has(field)) {
+    return resolveDirectConditionStrict(db, orgId, field, op, value);
+  }
+  if (DEAL_FIELDS.has(field)) {
+    return resolveDealConditionStrict(db, orgId, field, op, value);
+  }
+
+  throw new StrictMatchError(`Campo "${field}" não é suportado`);
+}
+
+async function resolveDirectConditionStrict(
+  db: MinimalDb,
+  orgId: string,
+  field: string,
+  op: string,
+  rawValue: string,
+): Promise<Set<string>> {
+  const baseQuery = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
+  const value: unknown = field === "score" ? Number(rawValue) : rawValue;
+
+  let query: QueryBuilderLike;
+  switch (op) {
+    case "eq": query = baseQuery.eq(field, value); break;
+    case "neq": query = baseQuery.neq(field, value); break;
+    case "gt": query = baseQuery.gt(field, value); break;
+    case "gte": query = baseQuery.gte(field, value); break;
+    case "lt": query = baseQuery.lt(field, value); break;
+    case "lte": query = baseQuery.lte(field, value); break;
+    case "is_null": query = baseQuery.is(field, null); break;
+    default: throw new StrictMatchError(`Campo "${field}": operador "${op}" inválido`);
+  }
+
+  const { data, error } = await query.then((r) => r);
+  if (error) throw new StrictMatchError(`DB error em "${field}": ${error.message}`);
+  return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
+}
+
+async function resolveTagsConditionStrict(
+  db: MinimalDb,
+  orgId: string,
+  op: string,
+  rawValue: string,
+): Promise<Set<string>> {
+  const tagIds = rawValue.split(",").map((t) => t.trim()).filter(Boolean);
+  if (tagIds.length === 0) throw new StrictMatchError("Campo tags: valor obrigatório");
+
+  const baseQuery = db
+    .from("lead_tags")
+    .select("lead_id")
+    .eq("organization_id", orgId) as unknown as QueryBuilderLike;
+  const query = baseQuery.in("tag_id", tagIds);
+
+  const { data, error } = await query.then((r) => r);
+  if (error) throw new StrictMatchError(`DB error em "tags": ${error.message}`);
+
+  const matched = new Set(
+    ((data ?? []) as { lead_id: string | null }[])
+      .map((r) => r.lead_id)
+      .filter((id): id is string => id !== null),
+  );
+
+  if (op === "contains") return matched;
+
+  if (op === "not_contains") {
+    const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
+    const { data: allData, error: allErr } = await allQ.then((r) => r);
+    if (allErr) throw new StrictMatchError(`DB error em "tags" not_contains: ${allErr.message}`);
+    const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
+    return new Set(all.filter((id) => !matched.has(id)));
+  }
+
+  throw new StrictMatchError(`Campo "tags": operador "${op}" inválido`);
+}
+
+async function resolveDateConditionStrict(
+  db: MinimalDb,
+  orgId: string,
+  field: string,
+  op: string,
+  rawValue: string,
+): Promise<Set<string>> {
+  const baseQuery = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
+
+  if (op === "is_null") {
+    const { data, error } = await baseQuery.is(field, null).then((r) => r);
+    if (error) throw new StrictMatchError(`DB error em "${field}" is_null: ${error.message}`);
+    return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
+  }
+
+  const days = Number(rawValue);
+  if (!Number.isFinite(days) || days < 0) {
+    throw new StrictMatchError(`Campo "${field}": valor de dias inválido`);
+  }
+  const threshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  let query: QueryBuilderLike;
+  if (op === "older_than_days") {
+    query = baseQuery.lt(field, threshold);
+  } else if (op === "newer_than_days") {
+    query = baseQuery.gt(field, threshold);
+  } else {
+    throw new StrictMatchError(`Campo "${field}": operador "${op}" inválido`);
+  }
+
+  const { data, error } = await query.then((r) => r);
+  if (error) throw new StrictMatchError(`DB error em "${field}": ${error.message}`);
+  return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
+}
+
+async function resolveDealConditionStrict(
+  db: MinimalDb,
+  orgId: string,
+  field: string,
+  op: string,
+  rawValue: string,
+): Promise<Set<string>> {
+  const baseQuery = db
+    .from("deals")
+    .select("lead_id")
+    .eq("organization_id", orgId) as unknown as QueryBuilderLike;
+
+  if (op === "is_null") {
+    const { data, error } = await baseQuery.eq("status", "open").then((r) => r);
+    if (error) throw new StrictMatchError(`DB error em "${field}" is_null: ${error.message}`);
+    const withOpenDeal = new Set(
+      ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
+    );
+    const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
+    const { data: allData, error: allErr } = await allQ.then((r) => r);
+    if (allErr) throw new StrictMatchError(`DB error em "allLeads" (deal is_null): ${allErr.message}`);
+    const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
+    return new Set(all.filter((id) => !withOpenDeal.has(id)));
+  }
+
+  if (!rawValue) throw new StrictMatchError(`Campo "${field}": valor obrigatório`);
+
+  const dbCol = field === "deal_pipeline_id" ? "pipeline_id"
+              : field === "deal_stage_id"    ? "stage_id"
+              : /* deal_status */               "status";
+
+  let query: QueryBuilderLike;
+  if (op === "eq") {
+    query = baseQuery.eq(dbCol, rawValue);
+  } else if (op === "neq") {
+    query = baseQuery.neq(dbCol, rawValue);
+  } else {
+    throw new StrictMatchError(`Campo "${field}": operador "${op}" inválido`);
+  }
+
+  const { data, error } = await query.then((r) => r);
+  if (error) throw new StrictMatchError(`DB error em "${field}": ${error.message}`);
+  return new Set(
+    ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
+  );
+}
+
+// ─── Etapa 9: resolve conditions que exigem join via tabela deals. ────────────
 // Retorna o Set de lead_ids que possuem deal satisfazendo a condition.
 // Para "deal_status is_null" = "sem negócio aberto" — retorna leads
 // que NAO possuem deal com status='open'.
