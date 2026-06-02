@@ -131,13 +131,111 @@ interface GroupMessage {
   direction: "inbound" | "outbound";
   text: string | null;
   sender_name: string | null;
+  sender_jid: string | null;
+  sender_phone: string | null;
+  sender_lead_id: string | null;
+  sender_membership_id: string | null;
+  sender_identity_kind: "phone" | "lid" | "unknown";
+  sender_avatar_url: string | null;
   created_at: string;
   whatsapp_msg_id: string | null;
   media_url: string | null;
   media_type: string | null;
+  reply_to_whatsapp_msg_id: string | null;
+  sender_lead?: GroupMessageSenderLead | null;
 }
 
 const QUICK_REACTIONS = ["ðŸ‘", "â¤ï¸", "ðŸ˜‚", "ðŸ˜®", "ðŸ˜¢", "ðŸ™", "ðŸ”¥", "ðŸ‘"];
+
+interface GroupMessageSenderLead {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  status: string | null;
+}
+
+async function enrichGroupMessagesWithLeads(
+  supabase: ReturnType<typeof createClient>,
+  groupId: string,
+  rows: GroupMessage[],
+): Promise<GroupMessage[]> {
+  const leadIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.sender_lead_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  const phones = Array.from(
+    new Set(
+      rows
+        .filter((row) => !row.sender_lead_id)
+        .map((row) => row.sender_phone)
+        .filter((phone): phone is string => Boolean(phone)),
+    ),
+  );
+
+  if (leadIds.length === 0 && phones.length === 0) return rows;
+
+  const leadsById = new Map<string, GroupMessageSenderLead>();
+  if (leadIds.length > 0) {
+    const { data } = await supabase
+      .from("leads")
+      .select("id, name, phone, email, avatar_url, status")
+      .in("id", leadIds);
+
+    for (const lead of (data ?? []) as GroupMessageSenderLead[]) {
+      leadsById.set(lead.id, lead);
+    }
+  }
+
+  const membershipByPhone = new Map<
+    string,
+    {
+      id: string;
+      lead_id: string | null;
+      avatar_url: string | null;
+      leads: GroupMessageSenderLead | null;
+    }
+  >();
+  if (phones.length > 0) {
+    const { data } = await (supabase as any)
+      .from("group_memberships")
+      .select("id, phone, lead_id, avatar_url, leads(id, name, phone, email, avatar_url, status)")
+      .eq("group_id", groupId)
+      .in("phone", phones)
+      .is("left_at", null);
+
+    for (const membership of (data ?? []) as Array<{
+      id: string;
+      phone: string | null;
+      lead_id: string | null;
+      avatar_url: string | null;
+      leads: GroupMessageSenderLead | null;
+    }>) {
+      if (membership.phone) membershipByPhone.set(membership.phone, membership);
+      if (membership.leads) leadsById.set(membership.leads.id, membership.leads);
+    }
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    sender_membership_id:
+      row.sender_membership_id ??
+      (row.sender_phone ? membershipByPhone.get(row.sender_phone)?.id ?? null : null),
+    sender_lead_id:
+      row.sender_lead_id ??
+      (row.sender_phone ? membershipByPhone.get(row.sender_phone)?.lead_id ?? null : null),
+    sender_avatar_url:
+      row.sender_avatar_url ??
+      (row.sender_phone ? membershipByPhone.get(row.sender_phone)?.avatar_url ?? null : null),
+    sender_lead:
+      (row.sender_lead_id ? leadsById.get(row.sender_lead_id) : null) ??
+      (row.sender_phone ? membershipByPhone.get(row.sender_phone)?.leads ?? null : null),
+  }));
+}
 
 function formatMsgTime(iso: string): string {
   const d = new Date(iso);
@@ -147,6 +245,16 @@ function formatMsgTime(iso: string): string {
   if (diffDays === 0) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   if (diffDays === 1) return "Ontem";
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function initialsFromName(name: string | null | undefined): string {
+  const parts = (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return "?";
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -424,13 +532,39 @@ function GroupChatPanel({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("group_messages")
-      .select("id, direction, text, sender_name, created_at, whatsapp_msg_id, media_url, media_type")
+      .select("id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id")
       .eq("group_id", group.id)
       .eq("is_deleted", false)
       .order("created_at", { ascending: true })
       .limit(50)
-      .then(({ data }: { data: GroupMessage[] | null }) => {
-        setMessages(data || []);
+      .then(async ({ data }: { data: GroupMessage[] | null }) => {
+        const enriched = await enrichGroupMessagesWithLeads(supabase, group.id, data || []);
+        setMessages(enriched);
+        setLoadingMsgs(false);
+      })
+      .catch(() => {
+        (supabase as any)
+          .from("group_messages")
+          .select("id, direction, text, sender_name, created_at, whatsapp_msg_id, media_url, media_type")
+          .eq("group_id", group.id)
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: true })
+          .limit(50)
+          .then(({ data }: { data: GroupMessage[] | null }) => {
+            setMessages(
+              (data || []).map((message) => ({
+                ...message,
+                sender_jid: null,
+                sender_phone: null,
+                sender_lead_id: null,
+                sender_membership_id: null,
+                sender_identity_kind: "unknown",
+                sender_avatar_url: null,
+                reply_to_whatsapp_msg_id: null,
+                sender_lead: null,
+              })),
+            );
+          });
         setLoadingMsgs(false);
       });
   }, [group.id]);
@@ -444,13 +578,28 @@ function GroupChatPanel({
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
         (payload: { new: GroupMessage }) => {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
+          void enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
+            if (!message) return;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === message.id)) return prev;
+              return [...prev, message];
+            });
           });
           // NÃ£o dispara toast aqui â€" o grupo estÃ¡ aberto e o usuÃ¡rio vÃª a mensagem
           // em tempo real. O toast para grupos nÃ£o selecionados Ã© gerenciado pelo
           // GlobalRealtimeSubscription em GroupsClient.
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
+        (payload: { new: GroupMessage }) => {
+          void enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
+            if (!message) return;
+            setMessages((prev) =>
+              prev.map((existing) => existing.id === message.id ? message : existing),
+            );
+          });
         },
       )
       .subscribe();
@@ -539,6 +688,30 @@ function GroupChatPanel({
     const members = await getGroupLeadMembers(group.id).catch(() => []);
     setGroupMembers(members);
     setMembersLoading(false);
+  }
+
+  function handleOpenSenderLead(msg: GroupMessage) {
+    const lead = msg.sender_lead;
+    if (!lead) return;
+    setMembersOpen(true);
+    setSelectedMember({
+      membership_id: msg.sender_membership_id ?? `message-${msg.id}`,
+      phone: msg.sender_phone ?? lead.phone,
+      name: msg.sender_name ?? lead.name,
+      lead_id: lead.id,
+      lead: {
+        id: lead.id,
+        name: lead.name,
+        phone: lead.phone,
+        email: lead.email,
+        avatar_url: lead.avatar_url,
+        status: lead.status,
+        source: null,
+        created_at: msg.created_at,
+        assigned_to: null,
+        lead_tags: [],
+      },
+    });
   }
 
   async function handleSaveSettings() {
@@ -718,6 +891,17 @@ function GroupChatPanel({
             messages.map((msg, idx) => {
               const isOutbound = msg.direction === "outbound";
               const showDateSep = idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
+              const senderLead = msg.sender_lead ?? null;
+              const senderAvatarUrl = senderLead?.avatar_url ?? msg.sender_avatar_url;
+              const senderDisplayName =
+                senderLead?.name ??
+                msg.sender_name ??
+                msg.sender_phone ??
+                (msg.sender_identity_kind === "lid" ? "Participante sem telefone" : "Participante");
+              const senderSecondary =
+                senderLead?.phone ??
+                msg.sender_phone ??
+                (msg.sender_identity_kind === "lid" ? "Telefone nao disponivel" : null);
 
               return (
                 <div key={msg.id}>
@@ -734,6 +918,29 @@ function GroupChatPanel({
                       isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
                     }`}
                   >
+                    {!isOutbound && (
+                      <button
+                        type="button"
+                        disabled={!senderLead}
+                        onClick={() => handleOpenSenderLead(msg)}
+                        className={`mb-1 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/40 bg-primary/10 text-[11px] font-semibold text-primary ${
+                          senderLead ? "cursor-pointer hover:ring-2 hover:ring-primary/25" : "cursor-default"
+                        }`}
+                        title={senderLead ? "Abrir perfil do lead" : senderSecondary ?? senderDisplayName}
+                      >
+                        {senderAvatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={senderAvatarUrl}
+                            alt=""
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          initialsFromName(senderDisplayName)
+                        )}
+                      </button>
+                    )}
+
                     {/* Reaction + context menu â€" visible on hover */}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
                       {/* Quick emoji reactions */}
@@ -798,9 +1005,29 @@ function GroupChatPanel({
                       {/* Sender label above bubble */}
                       {isOutbound ? (
                         <p className="text-[11px] px-1" style={{ color: "var(--chat-timestamp)" }}>VocÃª</p>
-                      ) : msg.sender_name ? (
-                        <p className="text-[11px] px-1 font-medium text-primary">{msg.sender_name}</p>
-                      ) : null}
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={!senderLead}
+                          onClick={() => handleOpenSenderLead(msg)}
+                          className={`flex max-w-[260px] items-center gap-1 px-1 text-left text-[11px] font-medium text-primary ${
+                            senderLead ? "hover:underline" : "cursor-default"
+                          }`}
+                          title={senderSecondary ?? undefined}
+                        >
+                          <span className="truncate">{senderDisplayName}</span>
+                          {senderLead && (
+                            <Badge variant="secondary" className="h-4 px-1 text-[9px] leading-none">
+                              Lead
+                            </Badge>
+                          )}
+                        </button>
+                      )}
+                      {!isOutbound && senderSecondary && senderSecondary !== senderDisplayName && (
+                        <p className="max-w-[260px] truncate px-1 text-[10px] text-muted-foreground">
+                          {senderSecondary}
+                        </p>
+                      )}
 
                       {/* Bubble */}
                       <div
