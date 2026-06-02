@@ -29,6 +29,8 @@ import {
   Link2,
   Save,
   X,
+  CornerUpLeft,
+  Sparkles,
   Zap,
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
@@ -66,6 +68,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
 import {
@@ -90,6 +93,7 @@ import {
   getGroupMessages,
   getGroupLeadMembers,
   backfillGroupMembers,
+  generateGroupMessageDraft,
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
@@ -551,8 +555,14 @@ function GroupChatPanel({
   const [sendingMessage, setSendingMessage] = React.useState(false);
   const [sendingMedia, setSendingMedia] = React.useState(false);
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
+  const [replyTo, setReplyTo] = React.useState<GroupMessage | null>(null);
+  const [aiOpen, setAiOpen] = React.useState(false);
+  const [aiPrompt, setAiPrompt] = React.useState("");
+  const [aiDraft, setAiDraft] = React.useState("");
+  const [aiLoading, setAiLoading] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
 
   // Settings sheet state
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -595,6 +605,10 @@ function GroupChatPanel({
     setMembersOpen(false);
     setSelectedMember(null);
     setGroupMembers([]);
+    setReplyTo(null);
+    setAiOpen(false);
+    setAiPrompt("");
+    setAiDraft("");
   }, [group.id]);
 
   // Load initial messages
@@ -696,11 +710,14 @@ function GroupChatPanel({
     if (!text) return;
     setSendingMessage(true);
     setChatInput("");
+    const replyingTo = replyTo;
+    setReplyTo(null);
     try {
-      await sendMessageToGroup(group.id, text);
+      await sendMessageToGroup(group.id, text, replyingTo?.whatsapp_msg_id ?? null);
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mensagem");
       setChatInput(text);
+      setReplyTo(replyingTo);
     } finally {
       setSendingMessage(false);
     }
@@ -722,16 +739,54 @@ function GroupChatPanel({
       const base64 = ev.target?.result as string;
       if (!base64) return;
       setSendingMedia(true);
+      const replyingTo = replyTo;
+      setReplyTo(null);
       try {
-        await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name);
+        await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name, replyingTo?.whatsapp_msg_id ?? null);
         toast.success("MÃ­dia enviada");
       } catch (err: any) {
         toast.error(err.message || "Erro ao enviar mÃ­dia");
+        setReplyTo(replyingTo);
       } finally {
         setSendingMedia(false);
       }
     };
     reader.readAsDataURL(file);
+  }
+
+  async function handleGenerateAiDraft() {
+    const prompt = aiPrompt.trim();
+    if (!prompt) return;
+    setAiLoading(true);
+    setAiDraft("");
+    try {
+      const result = await generateGroupMessageDraft(group.id, prompt);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        setAiDraft(result.suggestion);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar sugestao");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function getMessagePreview(msg: GroupMessage | null | undefined): string {
+    if (!msg) return "Mensagem";
+    if (msg.text?.trim()) return msg.text.trim();
+    if (msg.media_type === "image") return "Imagem";
+    if (msg.media_type === "video") return "Video";
+    if (msg.media_type === "audio") return "Audio";
+    if (msg.media_type === "document") return "Documento";
+    return "Midia";
+  }
+
+  function getSenderLabel(msg: GroupMessage | null | undefined): string {
+    if (!msg) return "Mensagem";
+    if (msg.direction === "outbound") return "Voce";
+    return msg.sender_lead?.name ?? msg.sender_name ?? msg.sender_phone ?? "Participante";
   }
 
   async function handleReact(msg: GroupMessage, emoji: string) {
@@ -886,6 +941,12 @@ function GroupChatPanel({
     return new Date(a).toDateString() === new Date(b).toDateString();
   }
 
+  const messagesByWhatsAppId = new Map(
+    messages
+      .filter((message) => Boolean(message.whatsapp_msg_id))
+      .map((message) => [message.whatsapp_msg_id as string, message]),
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header â€" WhatsApp style matching chat-window */}
@@ -987,6 +1048,9 @@ function GroupChatPanel({
                 senderLead?.phone ??
                 msg.sender_phone ??
                 (msg.sender_identity_kind === "lid" ? "Telefone nao disponivel" : null);
+              const repliedMessage = msg.reply_to_whatsapp_msg_id
+                ? messagesByWhatsAppId.get(msg.reply_to_whatsapp_msg_id) ?? null
+                : null;
 
               return (
                 <div key={msg.id}>
@@ -1066,12 +1130,22 @@ function GroupChatPanel({
                           <ChevronDown className="size-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align={isOutbound ? "end" : "start"} className="min-w-[140px]">
+                          <DropdownMenuItem onClick={() => setReplyTo(msg)}>
+                            <CornerUpLeft className="size-4" />
+                            Responder
+                          </DropdownMenuItem>
                           {msg.text && (
                             <DropdownMenuItem onClick={() => {
                               navigator.clipboard.writeText(msg.text!); toast.success("Copiado!");
                             }}>
                               <Copy className="size-4" />
                               Copiar
+                            </DropdownMenuItem>
+                          )}
+                          {msg.whatsapp_msg_id && (
+                            <DropdownMenuItem onClick={() => setReactingMsgId(msg.id)}>
+                              <Smile className="size-4" />
+                              Reagir
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
@@ -1125,6 +1199,22 @@ function GroupChatPanel({
                             : { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
                         }
                       >
+                        {repliedMessage && (
+                          <div
+                            className="mx-1.5 mt-1.5 rounded-md border-l-4 px-2 py-1.5 text-xs"
+                            style={{
+                              borderColor: "var(--chat-send-bg)",
+                              background: "rgba(0,0,0,0.06)",
+                            }}
+                          >
+                            <p className="truncate font-semibold text-[color:var(--chat-send-bg)]">
+                              {getSenderLabel(repliedMessage)}
+                            </p>
+                            <p className="line-clamp-2 text-muted-foreground">
+                              {getMessagePreview(repliedMessage)}
+                            </p>
+                          </div>
+                        )}
                         {/* Media content */}
                         {msg.media_type === "image" && msg.media_url && (
                           <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
@@ -1183,28 +1273,144 @@ function GroupChatPanel({
 
       {/* Input bar â€" matching MessageInput style */}
       <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2">
-        {/* Hidden file input */}
+        {replyTo && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-[color:var(--chat-send-bg)] bg-muted/50 px-3 py-2">
+            <CornerUpLeft className="size-3.5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] font-semibold text-[color:var(--chat-send-bg)]">
+                {getSenderLabel(replyTo)}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {getMessagePreview(replyTo)}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setReplyTo(null)}
+              aria-label="Cancelar resposta"
+              title="Cancelar resposta"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        )}
+
+        {aiOpen && (
+          <div className="mb-2 rounded-xl border bg-popover p-3 shadow-lg">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Assistente IA</p>
+                <Button type="button" variant="ghost" size="icon-sm" onClick={() => setAiOpen(false)} className="size-6" title="Fechar">
+                  <X className="size-3" />
+                </Button>
+              </div>
+              <Textarea
+                name="group-ai-prompt"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Ex: Responder confirmando a reunião..."
+                rows={2}
+                className="min-h-[64px] resize-none text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleGenerateAiDraft();
+                  }
+                }}
+              />
+              <Button size="sm" onClick={handleGenerateAiDraft} disabled={aiLoading || !aiPrompt.trim()} className="w-full">
+                {aiLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                {aiLoading ? "Gerando..." : "Gerar sugestao"}
+              </Button>
+              {aiDraft && (
+                <div className="space-y-2">
+                  <div className="max-h-36 overflow-y-auto rounded-lg bg-muted p-3 text-sm whitespace-pre-wrap">
+                    {aiDraft}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setChatInput(aiDraft);
+                      setAiOpen(false);
+                      toast.success("Sugestao adicionada");
+                    }}
+                  >
+                    <Copy className="size-3.5" />
+                    Usar no campo
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Hidden file inputs */}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*,video/*"
           className="hidden"
           onChange={handleFileSelect}
         />
         <div className="flex items-end gap-1">
-          {/* Attach button */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10 shrink-0 rounded-full hover:bg-transparent"
+                style={{ color: "var(--chat-header-fg)" }}
+                disabled={sendingMedia}
+                title="Mais opcoes"
+                aria-label="Mais opcoes"
+              />
+            }>
+              {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start">
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+                <Image className="size-4 text-primary" />
+                Fotos e videos
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                <Paperclip className="size-4 text-muted-foreground" />
+                Documento
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setAiOpen(true)}>
+                <Sparkles className="size-4 text-primary" />
+                Gerar com IA
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button
+            type="button"
             variant="ghost"
             size="icon"
             className="size-10 shrink-0 rounded-full hover:bg-transparent"
             style={{ color: "var(--chat-header-fg)" }}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={sendingMedia}
-            title="Anexar mÃ­dia"
+            title="Emoji"
+            aria-label="Emoji"
+            onClick={() => setChatInput((current) => `${current}🙂`)}
+            disabled={sendingMessage || sendingMedia}
           >
-            {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Paperclip className="size-5" />}
+            <Smile className="size-4" />
           </Button>
           <Textarea
+            name="group-message"
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => {

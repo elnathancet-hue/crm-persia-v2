@@ -759,6 +759,7 @@ export async function sendMediaToGroup(
   mediaType: "image" | "video" | "audio" | "document",
   caption?: string,
   fileName?: string,
+  replyToWamid?: string | null,
 ) {
   const { supabase, orgId } = await requireRole("admin");
   const provider = await getProvider(supabase, orgId);
@@ -778,6 +779,7 @@ export async function sendMediaToGroup(
     type: mediaType,
     caption,
     fileName,
+    replyTo: replyToWamid || undefined,
   });
 
   await (supabase as any).from("group_messages").insert({
@@ -789,9 +791,81 @@ export async function sendMediaToGroup(
     whatsapp_msg_id: result.messageId || null,
     media_type: mediaType,
     media_url: null, // base64 not stored; UAZAPI returns no URL
+    reply_to_whatsapp_msg_id: replyToWamid || null,
   });
 
   return { sent: true };
+}
+
+export async function generateGroupMessageDraft(
+  groupId: string,
+  prompt: string,
+): Promise<{ suggestion: string; error?: string }> {
+  const trimmed = prompt.trim();
+  if (!trimmed) return { suggestion: "", error: "Prompt vazio" };
+
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  const { data: group } = await db
+    .from("whatsapp_groups")
+    .select("name, category")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!group) return { suggestion: "", error: "Grupo nao encontrado" };
+
+  const { data: recentMessages } = await db
+    .from("group_messages")
+    .select("direction, text, sender_name, created_at, media_type")
+    .eq("organization_id", orgId)
+    .eq("group_id", groupId)
+    .eq("is_deleted", false)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  const history = ((recentMessages ?? []) as Array<{
+    direction: "inbound" | "outbound";
+    text: string | null;
+    sender_name: string | null;
+    media_type: string | null;
+  }>)
+    .reverse()
+    .map((message) => {
+      const sender = message.direction === "outbound"
+        ? "Operador"
+        : message.sender_name || "Participante";
+      return `${sender}: ${message.text || message.media_type || "Midia"}`;
+    })
+    .join("\n");
+
+  try {
+    const { chatCompletion } = await import("@/lib/ai/openai");
+    const suggestion = await chatCompletion(
+      [
+        "Voce e um assistente de atendimento para WhatsApp em grupos.",
+        "Gere uma resposta curta, clara e natural em portugues do Brasil.",
+        "Nao use saudacoes longas, nao invente dados e nao envie markdown.",
+      ].join(" "),
+      [{
+        role: "user",
+        content: [
+          `Grupo: ${group.name || "Grupo"} (${group.category || "geral"})`,
+          history ? `Historico recente:\n${history}` : "Historico recente: vazio",
+          `Pedido do operador: ${trimmed}`,
+        ].join("\n\n"),
+      }],
+      { temperature: 0.5, maxTokens: 280 },
+    );
+
+    return { suggestion: suggestion.trim() };
+  } catch (err) {
+    return {
+      suggestion: "",
+      error: err instanceof Error ? err.message : "Erro ao gerar sugestao",
+    };
+  }
 }
 
 // ---- Delete group message ----
