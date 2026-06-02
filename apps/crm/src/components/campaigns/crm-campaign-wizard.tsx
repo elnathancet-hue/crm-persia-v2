@@ -49,6 +49,15 @@ const STEP_LABELS: Record<Step, string> = {
   6: "Confirmar",
 };
 
+const STEP_SHORT_LABELS: Record<Step, string> = {
+  1: "Tipo",
+  2: "Público",
+  3: "Mensagem",
+  4: "Regras",
+  5: "Validação",
+  6: "Revisão",
+};
+
 const KIND_OPTIONS: Array<{ kind: CampaignKind; label: string; description: string }> = [
   {
     kind: "lead_campaign",
@@ -307,8 +316,8 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-[560px] overflow-hidden p-0">
-        <DialogHeader className="border-b px-6 pb-4 pt-5">
+      <DialogContent className="left-auto right-0 top-0 h-dvh max-h-dvh w-full max-w-[720px] translate-x-0 translate-y-0 overflow-hidden rounded-none border-l p-0 sm:rounded-none">
+        <DialogHeader className="border-b px-7 pb-5 pt-5">
           <div className="flex items-start gap-3">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
               <Megaphone className="size-5" />
@@ -320,21 +329,36 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   Etapa {step} de 6 - {STEP_LABELS[step]}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-6 gap-2">
                 {([1,2,3,4,5,6] as Step[]).map((s) => (
-                  <div
-                    key={s}
-                    className={`h-1.5 flex-1 rounded-full transition-colors ${
-                      s <= step ? "bg-primary" : "bg-muted"
-                    }`}
-                  />
+                  <div key={s} className="min-w-0">
+                    <div className="flex items-center">
+                      <div
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-colors ${
+                          s < step
+                            ? "bg-success text-success-foreground"
+                            : s === step
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s < step ? <CheckCircle2 className="size-3.5" /> : s}
+                      </div>
+                      <div className={`h-px flex-1 ${s < 6 ? s < step ? "bg-primary" : "bg-border" : "bg-transparent"}`} />
+                    </div>
+                    <p className={`mt-1 truncate text-[10px] font-semibold uppercase ${
+                      s === step ? "text-primary" : "text-muted-foreground"
+                    }`}>
+                      {STEP_SHORT_LABELS[s]}
+                    </p>
+                  </div>
                 ))}
               </div>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="max-h-[66vh] min-h-[340px] overflow-y-auto px-6 py-5">
+        <div className="h-[calc(100dvh-154px)] overflow-y-auto px-7 py-7">
           {/* Etapa 1: Objetivo */}
           {step === 1 && (
             <FormSection
@@ -342,7 +366,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
               title="Objetivo"
               description="Defina o publico da acao e identifique a campanha"
             >
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {KIND_OPTIONS.map((opt) => (
                   <Button
                     key={opt.kind}
@@ -353,12 +377,15 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                       setTargetKind(opt.kind === "group_campaign" ? "group" : "segment");
                       setTargetId("");
                     }}
-                    className={`h-auto w-full flex-col items-start gap-0.5 rounded-lg border p-4 text-left transition-colors ${
+                    className={`h-36 w-full flex-col items-start justify-start gap-2 rounded-lg border p-5 text-left transition-colors ${
                       kind === opt.kind
                         ? "border-primary bg-primary/5"
                         : "border-border"
                     }`}
                   >
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      {opt.kind === "lead_campaign" ? <Users className="size-4" /> : <MessageSquare className="size-4" />}
+                    </span>
                     <span className="font-medium text-sm">{opt.label}</span>
                     <span className="text-xs text-muted-foreground font-normal whitespace-normal">{opt.description}</span>
                   </Button>
