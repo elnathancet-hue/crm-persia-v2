@@ -6,7 +6,13 @@ import { createProvider } from "@/lib/whatsapp/providers";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createHash } from "crypto";
-import { linkGroupMembership, normalizePhoneBR, generatePhoneVariants } from "@/lib/whatsapp/group-join-pipeline";
+import {
+  linkGroupMembership,
+  normalizePhoneBR,
+  generatePhoneVariants,
+  matchLeadByName,
+  matchLeadByPhone,
+} from "@/lib/whatsapp/group-join-pipeline";
 
 async function getProvider(supabase: any, orgId: string) {
   const { data: connection } = await supabase
@@ -829,12 +835,13 @@ export async function reactToGroupMessage(
 export async function getGroupMessages(groupId: string, limit = 50) {
   const { supabase, orgId } = await requireRole("agent");
 
-  const { data } = await (supabase as any)
+  const db = supabase as any;
+  const { data } = await db
     .from("group_messages")
     .select(
       "id, direction, text, sender_name, sender_jid, sender_phone, " +
       "sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, " +
-      "created_at, whatsapp_msg_id, media_url, media_type"
+      "created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id"
     )
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
@@ -842,7 +849,7 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     .order("created_at", { ascending: true })
     .limit(limit);
 
-  return (data || []) as Array<{
+  const rows = ((data || []) as Array<{
     id: string;
     direction: string;
     text: string | null;
@@ -857,7 +864,88 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     whatsapp_msg_id: string | null;
     media_url: string | null;
     media_type: string | null;
-  }>;
+    reply_to_whatsapp_msg_id: string | null;
+    sender_lead?: {
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      avatar_url: string | null;
+      status: string | null;
+    } | null;
+  }>);
+
+  const resolvedLeadIds = new Set<string>();
+  const patches: Array<{ messageId: string; leadId: string }> = [];
+
+  for (const row of rows) {
+    if (row.sender_lead_id) {
+      resolvedLeadIds.add(row.sender_lead_id);
+      continue;
+    }
+
+    let match: { id: string } | null = null;
+    if (row.sender_phone) {
+      match = await matchLeadByPhone(supabase, orgId, row.sender_phone);
+    }
+    if (!match && row.sender_name && row.sender_name.trim().length >= 4) {
+      match = await matchLeadByName(supabase, orgId, row.sender_name.trim());
+    }
+
+    if (match?.id) {
+      row.sender_lead_id = match.id;
+      resolvedLeadIds.add(match.id);
+      patches.push({ messageId: row.id, leadId: match.id });
+    }
+  }
+
+  if (patches.length > 0) {
+    await Promise.allSettled(
+      patches.map((patch) =>
+        db
+          .from("group_messages")
+          .update({ sender_lead_id: patch.leadId })
+          .eq("id", patch.messageId)
+          .eq("organization_id", orgId)
+          .is("sender_lead_id", null),
+      ),
+    );
+  }
+
+  const leadsById = new Map<string, {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    avatar_url: string | null;
+    status: string | null;
+  }>();
+
+  if (resolvedLeadIds.size > 0) {
+    const { data: leads } = await db
+      .from("leads")
+      .select("id, name, phone, email, avatar_url, status")
+      .eq("organization_id", orgId)
+      .in("id", Array.from(resolvedLeadIds));
+
+    for (const lead of (leads || []) as Array<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+      avatar_url: string | null;
+      status: string | null;
+    }>) {
+      leadsById.set(lead.id, lead);
+    }
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    sender_lead: row.sender_lead_id
+      ? (leadsById.get(row.sender_lead_id) ?? null)
+      : null,
+  }));
 }
 
 // ─── createLeadFromGroupParticipant (Etapa 2) ─────────────────────────────────

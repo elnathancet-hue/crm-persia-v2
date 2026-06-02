@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
           (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
           (typeof msgRaw.sender === "string" && msgRaw.sender ? msgRaw.sender : null);
         // senderJid sem @lid — usado para normalização de telefone + linkGroupMembership.
-        const senderJid =
+        const senderPhoneJid =
           rawSenderJid && !rawSenderJid.endsWith("@lid") ? rawSenderJid : null;
         const senderIdentityKind: "phone" | "lid" | "unknown" =
           rawSenderJid?.endsWith("@s.whatsapp.net") ? "phone" :
@@ -252,9 +252,9 @@ export async function POST(request: NextRequest) {
         let senderLeadId: string | null = null;
         let senderMembershipId: string | null = null;
 
-        if (senderJid) {
+        if (senderPhoneJid) {
           const { normalizePhoneBR } = await import("@/lib/whatsapp/group-join-pipeline");
-          senderPhone = normalizePhoneBR(senderJid);
+          senderPhone = normalizePhoneBR(senderPhoneJid);
           if (senderPhone) {
             // Prioridade: membership cached → lead cached
             const { data: mem } = await supabase
@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
           direction: "inbound",
           text: msg.text,
           sender_name: msg.pushName || null,
-          sender_jid: senderJid || null,
+          sender_jid: rawSenderJid || null,
           sender_phone: senderPhone || null,
           sender_lead_id: senderLeadId || null,
           sender_membership_id: senderMembershipId || null,
@@ -300,14 +300,14 @@ export async function POST(request: NextRequest) {
 
         // Vincular remetente como membro do grupo (fire-and-forget).
         // Após vincular, atualizar identidade na mensagem se ainda incompleta.
-        if (senderJid) {
+        if (rawSenderJid) {
           const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
           linkGroupMembership({
             supabase,
             orgId: matchedConn.organization_id,
             groupId: grp.id as string,
             groupName: (grp.name as string) || "",
-            participantJid: senderJid,
+            participantJid: rawSenderJid,
             participantName: msg.pushName || null,
             source: "webhook",
             joinedAt: messageCreatedAt,

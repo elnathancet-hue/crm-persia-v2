@@ -85,6 +85,7 @@ import {
   deleteGroupCampaign,
   linkGroupToCampaign,
   setGroupCapacity,
+  getGroupMessages,
   getGroupLeadMembers,
   backfillGroupMembers,
   type GroupCampaign,
@@ -529,6 +530,12 @@ function GroupChatPanel({
     setLoadingMsgs(true);
     setMessages([]);
     const supabase = createClient();
+    getGroupMessages(group.id)
+      .then((data) => {
+        setMessages(data as GroupMessage[]);
+        setLoadingMsgs(false);
+      })
+      .catch(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("group_messages")
@@ -566,6 +573,7 @@ function GroupChatPanel({
             );
           });
         setLoadingMsgs(false);
+      });
       });
   }, [group.id]);
 
