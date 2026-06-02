@@ -23,7 +23,9 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
 
   const { data: group } = await supabase
     .from("whatsapp_groups")
-    .select("*")
+    .select(
+      "id, group_jid, name, description, invite_link, participant_count, is_announce, is_locked, category, image_url",
+    )
     .eq("id", id)
     .eq("organization_id", member.organization_id)
     .single();
@@ -40,11 +42,12 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
     .limit(200);
 
   // Initial group messages (last 50).
-  // Cast to any: group_messages type will be present after migration 078 is pushed.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: messages } = await (supabase as any)
     .from("group_messages")
-    .select("id, direction, text, sender_name, created_at")
+    .select(
+      "id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, media_type, media_url, whatsapp_msg_id, reply_to_whatsapp_msg_id, created_at",
+    )
     .eq("organization_id", member.organization_id)
     .eq("group_id", id)
     .order("created_at", { ascending: true })

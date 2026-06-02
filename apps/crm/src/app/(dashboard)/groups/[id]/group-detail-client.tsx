@@ -1,44 +1,45 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
+  ChevronDown,
   Copy,
   ExternalLink,
+  File,
   FileText,
+  FileVideo,
+  Image,
   ImageIcon,
+  Link2,
   Loader2,
   Megaphone,
   MessageCircle,
+  MessageSquare,
   Mic,
-  MoreVertical,
+  MoreHorizontal,
   Paperclip,
   RefreshCw,
   Reply,
   Save,
   Send,
+  Settings,
+  ShieldCheck,
+  Smile,
+  Trash2,
   UserPlus,
   Users,
-  Link2,
   X,
 } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from "@persia/ui/avatar";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
+import { EmptyState } from "@persia/ui/empty-state";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@persia/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -49,22 +50,78 @@ import {
   DialogClose,
 } from "@persia/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@persia/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
+import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
 import {
   updateGroup,
   getInviteLink,
+  resetInviteLink,
   sendInviteToLead,
   sendMessageToGroup,
   sendMediaToGroup,
+  deleteGroupMessage,
+  reactToGroupMessage,
   createLeadFromGroupParticipant,
 } from "@/actions/groups";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "💪"];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  geral: "Geral",
+  aquecimento: "Aquecimento",
+  evento: "Evento",
+  oferta: "Oferta",
+  alunos: "Alunos",
+};
+
+function initialsFromName(name: string | null | undefined): string {
+  const parts = (name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  if (parts.length === 0) return "?";
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateLabel(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const msgStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round((todayStart - msgStart) / 86400000);
+  if (diffDays === 0) return "Hoje";
+  if (diffDays === 1) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function isSameDay(a: string, b: string) {
+  return new Date(a).toDateString() === new Date(b).toDateString();
+}
 
 interface Group {
   id: string;
@@ -74,7 +131,9 @@ interface Group {
   invite_link: string | null;
   participant_count: number;
   is_announce: boolean;
+  is_locked: boolean;
   category: string;
+  image_url: string | null;
 }
 
 interface Lead {
@@ -97,16 +156,9 @@ interface GroupMessage {
   media_type: string | null;
   media_url: string | null;
   whatsapp_msg_id: string | null;
+  reply_to_whatsapp_msg_id: string | null;
   created_at: string;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  geral: "Geral",
-  aquecimento: "Aquecimento",
-  evento: "Evento",
-  oferta: "Oferta",
-  alunos: "Alunos",
-};
 
 export function GroupDetailClient({
   group,
@@ -118,16 +170,20 @@ export function GroupDetailClient({
   initialMessages: GroupMessage[];
 }) {
   const router = useRouter();
-  const [name, setName] = React.useState(group.name);
-  const [description, setDescription] = React.useState(group.description || "");
-  const [isAnnounce, setIsAnnounce] = React.useState(group.is_announce);
-  const [category, setCategory] = React.useState(group.category);
-  const [inviteLink, setInviteLink] = React.useState(group.invite_link || "");
-  const [saving, setSaving] = React.useState(false);
-  const [saved, setSaved] = React.useState(false);
 
-  // Send invite dialog
+  // Settings state
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [editName, setEditName] = React.useState(group.name);
+  const [editDescription, setEditDescription] = React.useState(group.description || "");
+  const [editCategory, setEditCategory] = React.useState(group.category);
+  const [editAnnounce, setEditAnnounce] = React.useState(group.is_announce);
+  const [editLocked, setEditLocked] = React.useState(group.is_locked);
+  const [saving, setSaving] = React.useState(false);
+
+  // Invite state
   const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [inviteLink, setInviteLink] = React.useState(group.invite_link || "");
+  const [resettingLink, setResettingLink] = React.useState(false);
   const [selectedLeadId, setSelectedLeadId] = React.useState("");
   const [sendingInvite, setSendingInvite] = React.useState(false);
 
@@ -139,31 +195,27 @@ export function GroupDetailClient({
   const [creatingLeadFor, setCreatingLeadFor] = React.useState<string | null>(null);
   const [attachedFile, setAttachedFile] = React.useState<File | null>(null);
   const [attachedPreview, setAttachedPreview] = React.useState<string | null>(null);
-  const [attachedMediaType, setAttachedMediaType] = React.useState<"image" | "video" | "audio" | "document">("document");
+  const [attachedMediaType, setAttachedMediaType] = React.useState<
+    "image" | "video" | "audio" | "document"
+  >("document");
   const [sendingMedia, setSendingMedia] = React.useState(false);
+  const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
+
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Scroll to bottom on new messages
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Supabase Realtime subscription for new group messages
   React.useEffect(() => {
     const supabase = createClient();
-
     const channel = supabase
-      .channel(`group_messages:${group.id}`)
+      .channel(`group_detail_messages:${group.id}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "group_messages",
-          filter: `group_id=eq.${group.id}`,
-        },
+        { event: "INSERT", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
         (payload) => {
           const row = payload.new as GroupMessage;
           setMessages((prev) => {
@@ -172,25 +224,38 @@ export function GroupDetailClient({
           });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
+        (payload) => {
+          const row = payload.new as GroupMessage;
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, ...row } : m)));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
+        (payload) => {
+          setMessages((prev) => prev.filter((m) => m.id !== payload.old.id));
+        },
+      )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [group.id]);
 
-  async function handleSave() {
+  async function handleSaveSettings() {
     setSaving(true);
-    setSaved(false);
     try {
       await updateGroup(group.id, {
-        name: name.trim(),
-        description: description.trim(),
-        is_announce: isAnnounce,
-        category,
+        name: editName.trim(),
+        description: editDescription.trim(),
+        is_announce: editAnnounce,
+        locked: editLocked,
+        category: editCategory,
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      toast.success("Configurações salvas");
+      setSettingsOpen(false);
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar");
     } finally {
@@ -208,10 +273,17 @@ export function GroupDetailClient({
     }
   }
 
-  function copyLink() {
-    if (!inviteLink) return;
-    navigator.clipboard.writeText(inviteLink);
-    toast.success("Link copiado!");
+  async function handleResetInviteLink() {
+    setResettingLink(true);
+    try {
+      const link = await resetInviteLink(group.id);
+      setInviteLink(link);
+      toast.success("Link renovado");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao renovar link");
+    } finally {
+      setResettingLink(false);
+    }
   }
 
   async function handleSendInvite() {
@@ -241,7 +313,7 @@ export function GroupDetailClient({
     setAttachedFile(file);
     if (mt === "image") {
       const reader = new FileReader();
-      reader.onload = (ev) => setAttachedPreview(ev.target?.result as string ?? null);
+      reader.onload = (ev) => setAttachedPreview((ev.target?.result as string) ?? null);
       reader.readAsDataURL(file);
     } else {
       setAttachedPreview(null);
@@ -254,7 +326,6 @@ export function GroupDetailClient({
   }
 
   async function handleSendMessage() {
-    // If there's a file attachment, send as media
     if (attachedFile) {
       const caption = chatInput.trim() || undefined;
       const file = attachedFile;
@@ -271,9 +342,7 @@ export function GroupDetailClient({
             try {
               await sendMediaToGroup(group.id, base64, mt, caption, file.name);
               resolve();
-            } catch (err) {
-              reject(err);
-            }
+            } catch (err) { reject(err); }
           };
           reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
           reader.readAsDataURL(file);
@@ -304,6 +373,26 @@ export function GroupDetailClient({
     }
   }
 
+  async function handleReact(msg: GroupMessage, emoji: string) {
+    setReactingMsgId(null);
+    if (!msg.whatsapp_msg_id) return;
+    try {
+      await reactToGroupMessage(group.id, msg.id, emoji);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao reagir");
+    }
+  }
+
+  async function handleDeleteMessage(msg: GroupMessage) {
+    if (!msg.whatsapp_msg_id) return;
+    try {
+      await deleteGroupMessage(group.id, msg.id, msg.whatsapp_msg_id);
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao apagar mensagem");
+    }
+  }
+
   async function handleCreateLead(msg: GroupMessage) {
     if (!msg.sender_phone || msg.sender_lead_id) return;
     setCreatingLeadFor(msg.id);
@@ -314,13 +403,8 @@ export function GroupDetailClient({
         phone: msg.sender_phone,
         name: msg.sender_name || undefined,
       });
-      // Atualiza mensagens localmente com o novo lead_id
       setMessages((prev) =>
-        prev.map((m) =>
-          m.sender_phone === msg.sender_phone
-            ? { ...m, sender_lead_id: leadId }
-            : m
-        )
+        prev.map((m) => (m.sender_phone === msg.sender_phone ? { ...m, sender_lead_id: leadId } : m)),
       );
       toast.success("Lead criado!", {
         action: { label: "Ver perfil", onClick: () => router.push(`/leads/${leadId}`) },
@@ -338,433 +422,659 @@ export function GroupDetailClient({
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Escape") {
-      setReplyTo(null);
-      return;
-    }
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  }
-
-  function formatTime(iso: string) {
-    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (e.key === "Escape") { setReplyTo(null); return; }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header — WhatsApp style */}
+      <div
+        className="flex h-[59px] shrink-0 items-center gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        style={{ background: "var(--chat-header-bg)", color: "var(--chat-header-fg)" }}
+      >
         <Link href="/groups">
           <Button variant="ghost" size="icon-sm">
             <ArrowLeft className="size-4" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{group.name}</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <Badge variant="secondary" className="text-xs">
-              <Users className="size-3 mr-1" />
-              {group.participant_count} membros
-            </Badge>
-            <Badge variant="secondary" className="text-xs">
-              {CATEGORY_LABELS[group.category] || group.category}
-            </Badge>
-            {group.is_announce && (
-              <Badge variant="outline" className="text-xs">
-                <Megaphone className="size-3 mr-1" />
-                Modo anuncio
-              </Badge>
-            )}
-          </div>
+
+        <div className="size-9 overflow-hidden rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          {group.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={group.image_url} alt="" className="size-full object-cover" />
+          ) : (
+            <Users className="size-5 text-primary" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-[15px] leading-5 truncate">{group.name}</p>
+          <p className="text-[13px] leading-5 text-muted-foreground truncate">
+            {group.participant_count} membros · {CATEGORY_LABELS[group.category] || group.category}
+            {group.is_announce && " · Anúncio"}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="icon-sm" onClick={() => setInviteOpen(true)} title="Convidar lead">
+            <Link2 className="size-4" />
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} title="Configurações">
+            <Settings className="size-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  if (inviteLink) {
+                    navigator.clipboard.writeText(inviteLink);
+                    toast.success("Link copiado!");
+                  } else {
+                    toast.error("Sem link de convite. Obtenha nas configurações.");
+                  }
+                }}
+              >
+                <Copy className="size-4" />
+                Copiar link de convite
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Chat */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Send className="size-4" />
-            Chat do Grupo
-          </CardTitle>
-          <CardDescription>Mensagens enviadas e recebidas no grupo</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {/* Message list */}
-          <div className="h-72 overflow-y-auto px-4 py-3 space-y-2 bg-muted/30">
-            {messages.length === 0 && (
-              <p className="text-center text-xs text-muted-foreground pt-8">
-                Nenhuma mensagem ainda. Envie a primeira!
-              </p>
-            )}
-            {messages.map((msg, idx) => {
-              const isInbound = msg.direction === "inbound";
-              const nextMsg = messages[idx + 1];
-              const isLastInBlock = isInbound && (
-                !nextMsg ||
-                nextMsg.direction !== "inbound" ||
-                (nextMsg.sender_jid ?? nextMsg.sender_name) !== (msg.sender_jid ?? msg.sender_name)
-              );
-              const senderLabel = msg.sender_name || msg.sender_phone || "?";
-              const initials = senderLabel
-                .split(" ")
-                .map((w) => w[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase();
+      {/* Messages — WhatsApp wallpaper */}
+      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
+        <div className="flex flex-col gap-1 py-4">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center py-16">
+              <EmptyState
+                variant="subtle"
+                icon={<MessageSquare />}
+                title="Nenhuma mensagem ainda"
+                description="Envie a primeira mensagem para o grupo"
+              />
+            </div>
+          ) : (
+            messages.map((msg, idx) => {
+              const isOutbound = msg.direction === "outbound";
+              const showDateSep = idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
+              const prevMsg = idx > 0 ? messages[idx - 1] : null;
+              const prevSameSender =
+                !showDateSep &&
+                prevMsg &&
+                prevMsg.direction === msg.direction &&
+                (prevMsg.sender_jid ?? prevMsg.sender_name) ===
+                  (msg.sender_jid ?? msg.sender_name);
               const isCreatingLead = creatingLeadFor === msg.id;
+
+              const senderDisplayName =
+                msg.sender_name ??
+                msg.sender_phone ??
+                (msg.sender_identity_kind === "lid" ? "Participante sem telefone" : "Participante");
+              const senderSecondary =
+                msg.sender_phone ??
+                (msg.sender_identity_kind === "lid" ? "Telefone não disponível" : null);
+
               return (
-                <div
-                  key={msg.id}
-                  className={`group/msg flex items-end gap-1.5 ${isInbound ? "justify-start" : "justify-end"}`}
-                >
-                  {/* Avatar (inbound only — último do bloco) */}
-                  {isInbound && (
-                    <div className="w-6 shrink-0 self-end mb-0.5">
-                      {isLastInBlock ? (
-                        <Avatar size="sm">
-                          {msg.sender_avatar_url ? (
-                            <AvatarImage src={msg.sender_avatar_url} alt={senderLabel} />
-                          ) : null}
-                          <AvatarFallback className="text-[9px]">{initials}</AvatarFallback>
-                        </Avatar>
-                      ) : null}
+                <div key={msg.id} className={prevSameSender ? "mt-0.5" : showDateSep ? "" : "mt-2"}>
+                  {showDateSep && (
+                    <div className="flex items-center justify-center py-3">
+                      <span className="rounded-lg bg-[color:var(--chat-header-bg)] px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-sm">
+                        {formatDateLabel(msg.created_at)}
+                      </span>
                     </div>
                   )}
 
-                  {/* Bubble */}
                   <div
-                    className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
-                      isInbound
-                        ? "bg-background border"
-                        : "bg-primary text-primary-foreground"
+                    className={`group/msg flex max-w-[86%] items-end gap-1 sm:max-w-[72%] ${
+                      isOutbound ? "ml-auto flex-row-reverse" : "flex-row"
                     }`}
                   >
-                    {isInbound && (
-                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                        {msg.sender_name && (
-                          <span className="text-xs font-semibold text-primary leading-none">
-                            {msg.sender_name}
-                          </span>
+                    {/* Avatar (inbound only) */}
+                    {!isOutbound && (
+                      <button
+                        type="button"
+                        disabled={!msg.sender_lead_id}
+                        onClick={() =>
+                          msg.sender_lead_id && router.push(`/leads/${msg.sender_lead_id}`)
+                        }
+                        className={`mb-1 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/40 bg-primary/10 text-[11px] font-semibold text-primary ${
+                          msg.sender_lead_id
+                            ? "cursor-pointer hover:ring-2 hover:ring-primary/25"
+                            : "cursor-default"
+                        }`}
+                        title={
+                          msg.sender_lead_id
+                            ? "Abrir perfil do lead"
+                            : (senderSecondary ?? senderDisplayName)
+                        }
+                      >
+                        {msg.sender_avatar_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={msg.sender_avatar_url} alt="" className="size-full object-cover" />
+                        ) : (
+                          initialsFromName(senderDisplayName)
                         )}
-                        {msg.sender_phone && (
-                          <span className="text-[10px] text-muted-foreground leading-none">
-                            {msg.sender_phone}
-                          </span>
-                        )}
-                        {msg.sender_lead_id && (
-                          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 leading-none">
-                            lead
-                          </Badge>
-                        )}
-                        {msg.sender_identity_kind === "lid" && (
-                          <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 leading-none text-muted-foreground">
-                            sem tel.
-                          </Badge>
-                        )}
-                      </div>
+                      </button>
                     )}
-                    {msg.media_type && msg.media_url && (
-                      <p className="text-[11px] text-muted-foreground mb-1 italic">
-                        [{msg.media_type}]
-                      </p>
-                    )}
-                    {msg.text && (
-                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-                    )}
-                    <p
-                      className={`text-[10px] mt-1 text-right ${
-                        isInbound ? "text-muted-foreground" : "text-primary-foreground/70"
-                      }`}
-                    >
-                      {formatTime(msg.created_at)}
-                    </p>
-                  </div>
 
-                  {/* Action menu (visible on hover) */}
-                  <div className="opacity-0 group-hover/msg:opacity-100 transition-opacity self-center shrink-0">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className="size-6" />}>
-                        <MoreVertical className="size-3" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align={isInbound ? "start" : "end"} className="w-44">
-                        <DropdownMenuItem onClick={() => handleReply(msg)}>
-                          <Reply className="size-3.5 mr-2" />
-                          Responder
-                        </DropdownMenuItem>
-                        {msg.text && (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              navigator.clipboard.writeText(msg.text!);
-                              toast.success("Copiado!");
-                            }}
+                    {/* Reaction + context menu — visible on hover */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
+                      {msg.whatsapp_msg_id && (
+                        <DropdownMenu
+                          open={reactingMsgId === msg.id}
+                          onOpenChange={(o) => setReactingMsgId(o ? msg.id : null)}
+                        >
+                          <DropdownMenuTrigger
+                            className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                            title="Reagir"
                           >
-                            <Copy className="size-3.5 mr-2" />
-                            Copiar texto
+                            <Smile className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align={isOutbound ? "end" : "start"}
+                            className="flex gap-1 p-1.5 min-w-0"
+                          >
+                            {QUICK_REACTIONS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => handleReact(msg, emoji)}
+                                className="text-lg hover:scale-125 transition-transform px-0.5"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                          title="Mais opções"
+                        >
+                          <ChevronDown className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align={isOutbound ? "end" : "start"}
+                          className="min-w-[150px]"
+                        >
+                          <DropdownMenuItem onClick={() => handleReply(msg)}>
+                            <Reply className="size-4" />
+                            Responder
                           </DropdownMenuItem>
-                        )}
-                        {isInbound && (msg.sender_lead_id || msg.sender_phone) && (
-                          <DropdownMenuSeparator />
-                        )}
-                        {isInbound && msg.sender_lead_id && (
-                          <>
-                            <DropdownMenuItem onClick={() => router.push(`/leads/${msg.sender_lead_id!}`)}>
-                              <ExternalLink className="size-3.5 mr-2" />
-                              Ver perfil
+                          {msg.text && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                navigator.clipboard.writeText(msg.text!);
+                                toast.success("Copiado!");
+                              }}
+                            >
+                              <Copy className="size-4" />
+                              Copiar
                             </DropdownMenuItem>
-                            {msg.sender_phone && (
-                              <DropdownMenuItem onClick={() => router.push(`/chat?lead=${msg.sender_lead_id!}`)}>
-                                <MessageCircle className="size-3.5 mr-2" />
-                                Abrir chat 1:1
+                          )}
+                          {!isOutbound && (msg.sender_lead_id || msg.sender_phone) && (
+                            <DropdownMenuSeparator />
+                          )}
+                          {!isOutbound && msg.sender_lead_id && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => router.push(`/leads/${msg.sender_lead_id!}`)}
+                              >
+                                <ExternalLink className="size-4" />
+                                Ver perfil
                               </DropdownMenuItem>
+                              {msg.sender_phone && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    router.push(`/chat?lead=${msg.sender_lead_id!}`)
+                                  }
+                                >
+                                  <MessageCircle className="size-4" />
+                                  Abrir chat 1:1
+                                </DropdownMenuItem>
+                              )}
+                            </>
+                          )}
+                          {!isOutbound && !msg.sender_lead_id && msg.sender_phone && (
+                            <DropdownMenuItem
+                              onClick={() => handleCreateLead(msg)}
+                              disabled={isCreatingLead}
+                            >
+                              {isCreatingLead ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <UserPlus className="size-4" />
+                              )}
+                              Criar lead
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => handleDeleteMessage(msg)}
+                          >
+                            <Trash2 className="size-4" />
+                            Apagar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    {/* Bubble column */}
+                    <div
+                      className={`flex flex-col gap-0.5 ${isOutbound ? "items-end" : "items-start"}`}
+                    >
+                      {/* Sender label above bubble (first of block only) */}
+                      {!prevSameSender && (
+                        isOutbound ? (
+                          <p
+                            className="text-[11px] px-1"
+                            style={{ color: "var(--chat-timestamp)" }}
+                          >
+                            Você
+                          </p>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={!msg.sender_lead_id}
+                              onClick={() =>
+                                msg.sender_lead_id &&
+                                router.push(`/leads/${msg.sender_lead_id}`)
+                              }
+                              className={`flex max-w-[260px] items-center gap-1 px-1 text-left text-[11px] font-medium text-primary ${
+                                msg.sender_lead_id ? "hover:underline" : "cursor-default"
+                              }`}
+                              title={senderSecondary ?? undefined}
+                            >
+                              <span className="truncate">{senderDisplayName}</span>
+                              {msg.sender_lead_id && (
+                                <Badge
+                                  variant="secondary"
+                                  className="h-4 px-1 text-[9px] leading-none"
+                                >
+                                  Lead
+                                </Badge>
+                              )}
+                            </button>
+                            {senderSecondary && senderSecondary !== senderDisplayName && (
+                              <p className="max-w-[260px] truncate px-1 text-[10px] text-muted-foreground">
+                                {senderSecondary}
+                              </p>
                             )}
                           </>
+                        )
+                      )}
+
+                      {/* Bubble */}
+                      <div
+                        className={`rounded-[7.5px] shadow-sm overflow-hidden ${
+                          isOutbound ? "rounded-br-sm" : "rounded-bl-sm"
+                        }`}
+                        style={
+                          isOutbound
+                            ? {
+                                background: "var(--chat-bubble-out)",
+                                color: "var(--chat-bubble-out-text)",
+                              }
+                            : {
+                                background: "var(--chat-bubble-in)",
+                                color: "var(--chat-bubble-in-text)",
+                              }
+                        }
+                      >
+                        {/* Media content */}
+                        {msg.media_type === "image" && msg.media_url && (
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={msg.media_url}
+                              alt="Imagem"
+                              className="max-w-[240px] max-h-[200px] object-cover"
+                            />
+                          </a>
                         )}
-                        {isInbound && !msg.sender_lead_id && msg.sender_phone && (
-                          <DropdownMenuItem
-                            onClick={() => handleCreateLead(msg)}
-                            disabled={isCreatingLead}
+                        {msg.media_type === "image" && !msg.media_url && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <Image className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Imagem</span>
+                          </div>
+                        )}
+                        {msg.media_type === "video" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <FileVideo className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
+                          </div>
+                        )}
+                        {msg.media_type === "audio" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <Mic className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Áudio</span>
+                          </div>
+                        )}
+                        {msg.media_type === "document" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                            <File className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Documento</span>
+                          </div>
+                        )}
+                        {/* Text / caption */}
+                        <div className="px-2.5 py-1.5 text-[14.2px] leading-5">
+                          {msg.text && (
+                            <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                          )}
+                          <span
+                            className="text-[10px] float-right ml-2 mt-1"
+                            style={{ color: "var(--chat-timestamp)" }}
                           >
-                            {isCreatingLead ? (
-                              <Loader2 className="size-3.5 mr-2 animate-spin" />
-                            ) : (
-                              <UserPlus className="size-3.5 mr-2" />
-                            )}
-                            Criar lead
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                            {formatTime(msg.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Reply context bar */}
-          {replyTo && (
-            <div className="flex items-center gap-2 px-4 py-2 border-t bg-muted/40 text-xs">
-              <Reply className="size-3 shrink-0 text-muted-foreground" />
-              <span className="text-muted-foreground truncate flex-1">
-                Respondendo{replyTo.sender_name ? ` a ${replyTo.sender_name}` : ""}: {replyTo.text?.slice(0, 60) ?? "[mídia]"}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-5 shrink-0"
-                onClick={() => setReplyTo(null)}
-              >
-                <X className="size-3" />
-              </Button>
-            </div>
+            })
           )}
-
-          {/* Media preview bar */}
-          {attachedFile && (
-            <div className="flex items-center gap-3 px-4 py-2 border-t bg-muted/40">
-              {attachedPreview ? (
-                <img
-                  src={attachedPreview}
-                  alt="preview"
-                  className="h-14 w-14 rounded object-cover border shrink-0"
-                />
-              ) : (
-                <div className="h-14 w-14 rounded border bg-background flex items-center justify-center shrink-0">
-                  {attachedMediaType === "video" ? (
-                    <ImageIcon className="size-5 text-muted-foreground" />
-                  ) : attachedMediaType === "audio" ? (
-                    <Mic className="size-5 text-muted-foreground" />
-                  ) : (
-                    <FileText className="size-5 text-muted-foreground" />
-                  )}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate">{attachedFile.name}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {attachedMediaType} · {(attachedFile.size / 1024).toFixed(0)} KB
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="size-6 shrink-0"
-                onClick={clearAttachment}
-              >
-                <X className="size-3" />
-              </Button>
-            </div>
-          )}
-
-          {/* Input bar */}
-          <div className="flex items-end gap-2 px-4 py-3 border-t">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0 mb-0.5"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={sendingMessage || sendingMedia}
-              title="Anexar arquivo"
-            >
-              <Paperclip className="size-4" />
-            </Button>
-            <Textarea
-              ref={inputRef}
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem... (Enter para enviar)"}
-              className="min-h-[40px] max-h-32 resize-none"
-              rows={1}
-              disabled={sendingMessage || sendingMedia}
-            />
-            <Button
-              size="icon"
-              onClick={handleSendMessage}
-              disabled={(sendingMessage || sendingMedia) || (!attachedFile && !chatInput.trim())}
-            >
-              {(sendingMessage || sendingMedia) ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Invite Link Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Link2 className="size-5" />
-            Link de Convite
-          </CardTitle>
-          <CardDescription>
-            Envie este link para leads entrarem no grupo de forma segura
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input
-              value={inviteLink}
-              readOnly
-              placeholder="Clique em obter link..."
-              className="font-mono text-xs"
-            />
-            <Button variant="outline" size="sm" onClick={copyLink} disabled={!inviteLink}>
-              <Copy className="size-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleGetInviteLink}>
-              <RefreshCw className="size-4" />
-            </Button>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => setInviteOpen(true)}>
-              <Send className="size-4" />
-              Enviar convite para lead
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Settings Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Configurações</CardTitle>
-          <CardDescription>
-            Altere nome, descrição e modo do grupo
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Nome</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Descrição</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="min-h-16"
-              placeholder="Descrição do grupo..."
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Categoria</Label>
-            <Select value={category} onValueChange={(v) => setCategory(v ?? "geral")}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="geral">Geral</SelectItem>
-                <SelectItem value="aquecimento">Aquecimento</SelectItem>
-                <SelectItem value="evento">Evento</SelectItem>
-                <SelectItem value="oferta">Oferta</SelectItem>
-                <SelectItem value="alunos">Alunos</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div>
-              <p className="text-sm font-medium">Modo Anuncio</p>
-              <p className="text-xs text-muted-foreground">
-                Apenas administradores podem enviar mensagens
-              </p>
-            </div>
-            <Switch checked={isAnnounce} onCheckedChange={setIsAnnounce} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Save */}
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {saving ? "Salvando..." : "Salvar"}
-        </Button>
-        {saved && <span className="text-sm text-success">Salvo!</span>}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      {/* Send Invite Dialog */}
+      {/* Reply context bar */}
+      {replyTo && (
+        <div
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-xs border-t border-[color:var(--chat-sidebar-divider)]"
+          style={{ background: "var(--chat-input-bar-bg)" }}
+        >
+          <Reply className="size-3 shrink-0 text-muted-foreground" />
+          <span className="text-muted-foreground truncate flex-1">
+            Respondendo{replyTo.sender_name ? ` a ${replyTo.sender_name}` : ""}:{" "}
+            {replyTo.text?.slice(0, 60) ?? "[mídia]"}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-5 shrink-0"
+            onClick={() => setReplyTo(null)}
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
+
+      {/* Media preview bar */}
+      {attachedFile && (
+        <div
+          className="shrink-0 flex items-center gap-3 px-4 py-2 border-t border-[color:var(--chat-sidebar-divider)]"
+          style={{ background: "var(--chat-input-bar-bg)" }}
+        >
+          {attachedPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={attachedPreview}
+              alt="preview"
+              className="h-14 w-14 rounded object-cover border shrink-0"
+            />
+          ) : (
+            <div className="h-14 w-14 rounded border bg-background flex items-center justify-center shrink-0">
+              {attachedMediaType === "video" ? (
+                <ImageIcon className="size-5 text-muted-foreground" />
+              ) : attachedMediaType === "audio" ? (
+                <Mic className="size-5 text-muted-foreground" />
+              ) : (
+                <FileText className="size-5 text-muted-foreground" />
+              )}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium truncate">{attachedFile.name}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {attachedMediaType} · {(attachedFile.size / 1024).toFixed(0)} KB
+            </p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-6 shrink-0"
+            onClick={clearAttachment}
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
+
+      {/* Input bar */}
+      <div
+        className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2"
+        style={{ background: "var(--chat-input-bar-bg)" }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        <div className="flex items-end gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-10 shrink-0 rounded-full hover:bg-transparent"
+            style={{ color: "var(--chat-header-fg)" }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sendingMedia}
+            title="Anexar mídia"
+          >
+            {sendingMedia ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <Paperclip className="size-5" />
+            )}
+          </Button>
+          <Textarea
+            ref={inputRef}
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
+            className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
+            style={{
+              background: "var(--chat-input-field-bg)",
+              color: "var(--chat-header-fg)",
+              border: "none",
+              boxShadow: "none",
+            }}
+            rows={1}
+            disabled={sendingMessage || sendingMedia}
+          />
+          <Button
+            size="icon"
+            onClick={handleSendMessage}
+            disabled={
+              sendingMessage || sendingMedia || (!attachedFile && !chatInput.trim())
+            }
+            className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
+            style={{
+              backgroundColor: "var(--chat-send-bg)",
+              color: "var(--chat-send-fg)",
+            }}
+          >
+            {sendingMessage ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Settings Sheet */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent side="right" className="w-full max-w-[480px] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Configurações do Grupo</SheetTitle>
+            <SheetDescription>
+              Edite nome, descrição, categoria e comportamento do grupo.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="px-card py-6 space-y-6">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Identidade
+              </p>
+              <div className="space-y-form">
+                <div className="space-y-1.5">
+                  <Label>Nome</Label>
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Descrição</Label>
+                  <Textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="min-h-16"
+                    placeholder="Descrição..."
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Categoria</Label>
+                  <Select
+                    value={editCategory}
+                    onValueChange={(v) => setEditCategory(v ?? "geral")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue>
+                        {CATEGORY_LABELS[editCategory] ?? "Selecione"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="geral">Geral</SelectItem>
+                      <SelectItem value="aquecimento">Aquecimento</SelectItem>
+                      <SelectItem value="evento">Evento</SelectItem>
+                      <SelectItem value="oferta">Oferta</SelectItem>
+                      <SelectItem value="alunos">Alunos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Comportamento
+              </p>
+              <div className="rounded-lg border divide-y">
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-2">
+                    <Megaphone className="size-4 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">Modo Anúncio</p>
+                      <p className="text-xs text-muted-foreground">Só admins enviam mensagens</p>
+                    </div>
+                  </div>
+                  <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
+                </div>
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="size-4 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium">Bloquear grupo</p>
+                      <p className="text-xs text-muted-foreground">
+                        Só admins editam info do grupo
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={editLocked} onCheckedChange={setEditLocked} />
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
+              {saving ? (
+                <Loader2 className="size-4 animate-spin mr-2" />
+              ) : (
+                <Save className="size-4 mr-2" />
+              )}
+              {saving ? "Salvando..." : "Salvar configurações"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Invite Dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Enviar Convite</DialogTitle>
+            <DialogTitle>Link de Convite</DialogTitle>
             <DialogDescription>
-              O lead recebera uma mensagem no WhatsApp com o link de convite do grupo.
+              Obtenha ou renove o link e envie para um lead diretamente pelo WhatsApp.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>Selecione o Lead</Label>
-            <Select value={selectedLeadId} onValueChange={(v) => setSelectedLeadId(v ?? "")}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Buscar lead..." />
-              </SelectTrigger>
-              <SelectContent>
-                {leads.map((lead) => (
-                  <SelectItem key={lead.id} value={lead.id}>
-                    {lead.name} {lead.phone ? `(${lead.phone})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Input
+                value={inviteLink}
+                readOnly
+                placeholder="Clique em obter link..."
+                className="font-mono text-xs"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteLink);
+                  toast.success("Copiado!");
+                }}
+                disabled={!inviteLink}
+              >
+                <Copy className="size-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={inviteLink ? handleResetInviteLink : handleGetInviteLink}
+                disabled={resettingLink}
+              >
+                {resettingLink ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Enviar convite para lead</Label>
+              <Select
+                value={selectedLeadId}
+                onValueChange={(v) => setSelectedLeadId(v ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecionar lead..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {leads.map((lead) => (
+                    <SelectItem key={lead.id} value={lead.id}>
+                      {lead.name} {lead.phone ? `(${lead.phone})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
             <Button onClick={handleSendInvite} disabled={sendingInvite || !selectedLeadId}>
-              {sendingInvite ? "Enviando..." : "Enviar Convite"}
+              {sendingInvite ? "Enviando..." : "Enviar convite"}
             </Button>
           </DialogFooter>
         </DialogContent>
