@@ -3,7 +3,7 @@
 // Wizard de criação de campanha — 6 etapas conforme roadmap.
 // Etapa 1: Objetivo (tipo) → 2: Público → 3: Mensagem → 4: Agenda → 5: Validação → 6: Confirmar
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -11,12 +11,12 @@ import { Textarea } from "@persia/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@persia/ui/dialog";
-import { Badge } from "@persia/ui/badge";
+import { Checkbox } from "@persia/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@persia/ui/select";
 import {
-  Users, MessageSquare, CheckCircle2, AlertCircle, Loader2,
+  MessageSquare, CheckCircle2, AlertCircle, Loader2,
   ChevronRight, ChevronLeft,
 } from "lucide-react";
 import type {
@@ -245,19 +245,20 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3">
                 {KIND_OPTIONS.map((opt) => (
-                  <button
+                  <Button
                     key={opt.kind}
                     type="button"
+                    variant="ghost"
                     onClick={() => setKind(opt.kind)}
-                    className={`text-left rounded-lg border p-4 transition-colors ${
+                    className={`h-auto w-full flex-col items-start gap-0.5 rounded-lg border p-4 text-left transition-colors ${
                       kind === opt.kind
                         ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
+                        : "border-border"
                     }`}
                   >
-                    <div className="font-medium text-sm">{opt.label}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{opt.description}</div>
-                  </button>
+                    <span className="font-medium text-sm">{opt.label}</span>
+                    <span className="text-xs text-muted-foreground font-normal whitespace-normal">{opt.description}</span>
+                  </Button>
                 ))}
               </div>
               <div className="space-y-1.5">
@@ -282,7 +283,9 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   onValueChange={(v) => { setTargetKind(v as AudienceTarget["target_kind"]); setTargetId(""); }}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>
+                      {(v: string | null) => targetOptions.find((o) => o.value === v)?.label ?? v ?? ""}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {targetOptions.map((o) => (
@@ -295,9 +298,16 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
               {targetIdOptions.length > 0 && (
                 <div className="space-y-1.5">
                   <Label>Selecionar {targetKind === "segment" ? "segmento" : targetKind === "tag" ? "tag" : "etapa"}</Label>
-                  <Select value={targetId} onValueChange={(v) => setTargetId(v ?? "")}>
+                  <Select
+                    value={targetId}
+                    onValueChange={(v) => setTargetId(v ?? "")}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue>
+                        {(v: string | null) =>
+                          v ? targetIdOptions.find((o) => o.id === v)?.name ?? v : "Selecione..."
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {targetIdOptions.map((o) => (
@@ -344,9 +354,18 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label>Quando enviar</Label>
-                <Select value={sendMode} onValueChange={(v) => setSendMode(v as MessageStep["send_mode"])}>
+                <Select
+                  value={sendMode}
+                  onValueChange={(v) => setSendMode(v as MessageStep["send_mode"])}
+                >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>
+                      {(v: string | null) =>
+                        v === "immediate" ? "Enviar assim que agendado"
+                        : v === "scheduled_at" ? "Em uma data/hora específica"
+                        : v ?? ""
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="immediate">Enviar assim que agendado</SelectItem>
@@ -365,12 +384,10 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                 </div>
               )}
               <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
+                <Checkbox
                   id="stop-on-reply"
                   checked={stopOnReply}
-                  onChange={(e) => setStopOnReply(e.target.checked)}
-                  className="h-4 w-4 rounded border-border"
+                  onCheckedChange={(v) => setStopOnReply(v === true)}
                 />
                 <Label htmlFor="stop-on-reply" className="font-normal cursor-pointer">
                   Parar quando lead responder
