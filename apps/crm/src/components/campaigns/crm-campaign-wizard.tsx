@@ -316,7 +316,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="left-auto right-0 top-0 h-dvh max-h-dvh w-full max-w-[720px] translate-x-0 translate-y-0 overflow-hidden rounded-none border-l p-0 sm:rounded-none">
+      <DialogContent className="flex flex-col left-auto right-0 top-0 h-dvh max-h-dvh w-full max-w-[720px] translate-x-0 translate-y-0 overflow-hidden rounded-none border-l p-0 sm:rounded-none">
         <DialogHeader className="border-b px-7 pb-5 pt-5">
           <div className="flex items-start gap-3">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
@@ -329,31 +329,33 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   Etapa {step} de 6 - {STEP_LABELS[step]}
                 </p>
               </div>
-              <div className="flex items-center pt-2">
-                {([1, 2, 3, 4, 5, 6] as Step[]).map((s) => (
-                  <div key={s} className={`flex items-center ${s < 6 ? "flex-1" : ""}`}>
-                    <div
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
-                        s < step
-                          ? "bg-success text-success-foreground"
-                          : s === step
-                            ? "bg-primary text-primary-foreground ring-4 ring-primary/10"
-                            : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {s < step ? <CheckCircle2 className="size-3.5" /> : s}
+              <div className="flex justify-center pt-2">
+                <div className="flex items-center w-full max-w-sm">
+                  {([1, 2, 3, 4, 5, 6] as Step[]).map((s) => (
+                    <div key={s} className={`flex items-center ${s < 6 ? "flex-1" : ""}`}>
+                      <div
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
+                          s < step
+                            ? "bg-success text-success-foreground"
+                            : s === step
+                              ? "bg-primary text-primary-foreground ring-4 ring-primary/10"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s < step ? <CheckCircle2 className="size-3.5" /> : s}
+                      </div>
+                      {s < 6 && (
+                        <div className={`h-[2px] flex-1 mx-2 rounded-full transition-colors ${s < step ? "bg-success" : "bg-muted"}`} />
+                      )}
                     </div>
-                    {s < 6 && (
-                      <div className={`h-[2px] flex-1 mx-2 rounded-full transition-colors ${s < step ? "bg-success" : "bg-muted"}`} />
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="h-[calc(100dvh-154px)] overflow-y-auto px-7 py-7">
+        <div className="flex-1 overflow-y-auto px-7 py-7">
           {/* Etapa 1: Objetivo */}
           {step === 1 && (
             <FormSection

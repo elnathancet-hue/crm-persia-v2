@@ -141,10 +141,8 @@
   --muted-foreground: hsl(0, 0%, 35%);     /* #595959 - 4.5:1 on white */
   --accent: hsl(230, 12%, 90%);            /* navy-tinted accent */
   --accent-foreground: hsl(0, 0%, 5%);     /* #0D0D0D */
-  /* Regra global DS (mai/2026): destructive red 700 firme. Antes red 600
-     ainda parecia rosa em UI clara — user pediu igual cor do texto
-     da pill "Falha". */
-  --destructive: hsl(0, 75%, 35%);         /* red 700 ~ #A91B1B */
+  /* O vermelho destrutivo foi revertido para o vermelho padrão a pedido do usuário */
+  --destructive: hsl(0, 84%, 60%);         /* red 500 */
   --destructive-foreground: hsl(0, 0%, 100%);
   --border: hsl(0, 0%, 90%);               /* #E5E5E5 */
   --input: hsl(0, 0%, 75%);                /* #BFBFBF */
