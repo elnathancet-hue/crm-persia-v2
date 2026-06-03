@@ -108,7 +108,10 @@ export async function runFollowupsTick(
 
     const templates = await loadTemplatesForFollowups(db, group.followups);
     const readyFollowups = group.followups.filter((followup) => {
-      const template = templates.get(followup.template_id);
+      if (followup.message_text?.trim()) return true;
+      const template = followup.template_id
+        ? templates.get(followup.template_id) ?? null
+        : null;
       return template?.status === "active";
     });
     if (readyFollowups.length === 0) continue;
@@ -155,8 +158,10 @@ export async function runFollowupsTick(
         result.skipped++;
         continue;
       }
-      const template = templates.get(followup.template_id);
-      if (!template) {
+      const template = followup.template_id
+        ? templates.get(followup.template_id) ?? null
+        : null;
+      if (!template && !followup.message_text?.trim()) {
         result.skipped++;
         continue;
       }
@@ -275,7 +280,13 @@ async function loadTemplatesForFollowups(
   db: AgentDb,
   followups: AgentFollowup[],
 ): Promise<Map<string, AgentNotificationTemplate>> {
-  const ids = [...new Set(followups.map((f) => f.template_id))];
+  const ids = [
+    ...new Set(
+      followups
+        .map((f) => f.template_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
   const orgId = followups[0]?.organization_id;
   if (!orgId || ids.length === 0) return new Map();
   const { data, error } = await db
@@ -594,7 +605,7 @@ async function persistConversationState(
 interface DispatchParams {
   db: AgentDb;
   followup: AgentFollowup;
-  template: AgentNotificationTemplate;
+  template: AgentNotificationTemplate | null;
   agentName: string;
   conversation: ConversationRow;
   provider: WhatsAppProvider;
@@ -648,7 +659,8 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
 
   let renderedBody: string;
   try {
-    renderedBody = renderNotificationTemplate(template.body_template, fixed, undefined);
+    const bodyTemplate = template?.body_template ?? followup.message_text ?? "";
+    renderedBody = renderNotificationTemplate(bodyTemplate, fixed, undefined);
   } catch (err: unknown) {
     await markRunFailed(db, conversation, followup, `render failed: ${errorMessage(err)}`);
     return { fired: false, error: `render failed: ${errorMessage(err)}` };

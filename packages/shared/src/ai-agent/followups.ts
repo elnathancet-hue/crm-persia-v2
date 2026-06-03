@@ -26,6 +26,8 @@ export const FOLLOWUP_DELAY_HOURS_MAX = 24 * 30; // 720h
 // Tamanho do nome ("Follow-up 1", "Lembrete 24h sem resposta", etc.).
 export const FOLLOWUP_NAME_MIN_CHARS = 3;
 export const FOLLOWUP_NAME_MAX_CHARS = 80;
+export const FOLLOWUP_MESSAGE_MIN_CHARS = 1;
+export const FOLLOWUP_MESSAGE_MAX_CHARS = 4000;
 
 export function clampFollowupDelayHours(value: number | null | undefined): number {
   if (value == null || !Number.isFinite(value)) return 24;
@@ -84,7 +86,8 @@ export interface AgentFollowup {
   name: string;
   // Aponta pra um agent_notification_template (msg WhatsApp pre-aprovada).
   // Reusa o mesmo motor de envio do scheduled-jobs / handoff.
-  template_id: string;
+  template_id: string | null;
+  message_text: string | null;
   // Horas de inatividade da conversa apos as quais o follow-up dispara.
   // E contado a partir do `last_inbound_message_at` da conversation
   // (NAO da ultima msg do agente). Se o lead respondeu, conta zera.
@@ -148,7 +151,8 @@ export interface AgentFollowupConversationState {
 export interface CreateFollowupInput {
   config_id: string;
   name: string;
-  template_id: string;
+  template_id?: string | null;
+  message_text?: string | null;
   delay_hours: number;
   is_enabled?: boolean;
   send_window_start?: string;
@@ -158,7 +162,8 @@ export interface CreateFollowupInput {
 
 export interface UpdateFollowupInput {
   name?: string;
-  template_id?: string;
+  template_id?: string | null;
+  message_text?: string | null;
   delay_hours?: number;
   is_enabled?: boolean;
   order_index?: number;
@@ -174,12 +179,14 @@ export interface UpdateFollowupInput {
 export interface FollowupValidationErrors {
   name?: string;
   template_id?: string;
+  message_text?: string;
   delay_hours?: string;
   send_window?: string;
 }
 
 export function validateFollowupInput(
-  input: Pick<CreateFollowupInput, "name" | "template_id" | "delay_hours"> &
+  input: Pick<CreateFollowupInput, "name" | "delay_hours"> &
+    Partial<Pick<CreateFollowupInput, "template_id" | "message_text">> &
     Partial<Pick<CreateFollowupInput, "send_window_start" | "send_window_end">>,
 ): FollowupValidationErrors {
   const errors: FollowupValidationErrors = {};
@@ -191,8 +198,11 @@ export function validateFollowupInput(
   } else if (name.length > FOLLOWUP_NAME_MAX_CHARS) {
     errors.name = `Máximo ${FOLLOWUP_NAME_MAX_CHARS} caracteres`;
   }
-  if (!input.template_id) {
-    errors.template_id = "Selecione um template ativo";
+  const message = input.message_text?.trim() ?? "";
+  if (!input.template_id && !message) {
+    errors.message_text = "Mensagem e obrigatoria";
+  } else if (message.length > FOLLOWUP_MESSAGE_MAX_CHARS) {
+    errors.message_text = `Maximo ${FOLLOWUP_MESSAGE_MAX_CHARS} caracteres`;
   }
   if (
     input.delay_hours == null ||

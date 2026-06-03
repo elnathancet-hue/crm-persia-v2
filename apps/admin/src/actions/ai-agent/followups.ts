@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   clampFollowupDelayHours,
+  FOLLOWUP_MESSAGE_MAX_CHARS,
   FOLLOWUPS_MAX_PER_AGENT,
   FOLLOWUP_NAME_MAX_CHARS,
   FOLLOWUP_NAME_MIN_CHARS,
@@ -55,13 +56,20 @@ export async function createFollowup(
     const errors = validateFollowupInput(input);
     if (Object.keys(errors).length > 0) {
       throw new Error(
-        errors.name || errors.template_id || errors.delay_hours || "Dados invalidos",
+        errors.name ||
+          errors.message_text ||
+          errors.template_id ||
+          errors.delay_hours ||
+          "Dados invalidos",
       );
     }
 
     await assertConfigBelongsToOrg(db, orgId, input.config_id);
     await assertFollowupLimit(db, orgId, input.config_id);
-    await assertTemplateBelongsToOrg(db, orgId, input.template_id);
+    const createTemplateId = input.template_id ?? null;
+    if (createTemplateId) {
+      await assertTemplateBelongsToOrg(db, orgId, createTemplateId);
+    }
 
     const nextOrder = await getNextOrderIndex(db, orgId, input.config_id);
 
@@ -70,7 +78,9 @@ export async function createFollowup(
         organization_id: orgId,
         config_id: input.config_id,
         name: input.name.trim().slice(0, FOLLOWUP_NAME_MAX_CHARS),
-        template_id: input.template_id,
+        template_id: createTemplateId,
+        message_text:
+          input.message_text?.trim().slice(0, FOLLOWUP_MESSAGE_MAX_CHARS) || null,
         delay_hours: clampFollowupDelayHours(input.delay_hours),
         is_enabled: input.is_enabled ?? true,
         order_index: nextOrder,
@@ -144,8 +154,19 @@ export async function updateFollowup(
     }
 
     if (input.template_id !== undefined) {
-      await assertTemplateBelongsToOrg(db, orgId, input.template_id);
-      updates.template_id = input.template_id;
+      const updateTemplateId = input.template_id ?? null;
+      if (updateTemplateId) {
+        await assertTemplateBelongsToOrg(db, orgId, updateTemplateId);
+      }
+      updates.template_id = updateTemplateId;
+    }
+
+    if (input.message_text !== undefined) {
+      const messageText = input.message_text?.trim() ?? "";
+      if (messageText.length > FOLLOWUP_MESSAGE_MAX_CHARS) {
+        throw new Error(`Mensagem deve ter no maximo ${FOLLOWUP_MESSAGE_MAX_CHARS} caracteres`);
+      }
+      updates.message_text = messageText || null;
     }
 
     if (input.delay_hours !== undefined) {

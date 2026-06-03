@@ -699,13 +699,14 @@ export type Database = {
           delay_hours: number
           id: string
           is_enabled: boolean
+          message_text: string | null
           name: string
           order_index: number
           organization_id: string
           require_ai_active: boolean
           send_window_end: string
           send_window_start: string
-          template_id: string
+          template_id: string | null
           updated_at: string
         }
         Insert: {
@@ -714,13 +715,14 @@ export type Database = {
           delay_hours: number
           id?: string
           is_enabled?: boolean
+          message_text?: string | null
           name: string
           order_index?: number
           organization_id: string
           require_ai_active?: boolean
           send_window_end?: string
           send_window_start?: string
-          template_id: string
+          template_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -729,13 +731,14 @@ export type Database = {
           delay_hours?: number
           id?: string
           is_enabled?: boolean
+          message_text?: string | null
           name?: string
           order_index?: number
           organization_id?: string
           require_ai_active?: boolean
           send_window_end?: string
           send_window_start?: string
-          template_id?: string
+          template_id?: string | null
           updated_at?: string
         }
         Relationships: [

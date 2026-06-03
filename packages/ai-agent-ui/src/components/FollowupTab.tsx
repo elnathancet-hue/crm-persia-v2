@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import { Switch } from "@persia/ui/switch";
+import { Textarea } from "@persia/ui/textarea";
 import { cn } from "@persia/ui/utils";
 import { useAgentActions } from "../context";
 
@@ -62,6 +63,7 @@ interface EditorState {
   source: AgentFollowup | null;
   name: string;
   template_id: string;
+  message_text: string;
   delay_hours: number;
   delay_preset: string;
   send_window_start: string;
@@ -73,6 +75,7 @@ const EMPTY_EDITOR: EditorState = {
   source: null,
   name: "",
   template_id: "",
+  message_text: "",
   delay_hours: 24,
   delay_preset: "24",
   send_window_start: FOLLOWUP_DEFAULT_SEND_WINDOW_START,
@@ -87,11 +90,6 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
 
-  const activeTemplates = React.useMemo(
-    () => templates.filter((template) => template.status === "active"),
-    [templates],
-  );
-
   const sorted = React.useMemo(
     () => followups.slice().sort((a, b) => a.order_index - b.order_index),
     [followups],
@@ -104,7 +102,6 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
     setEditor({
       ...EMPTY_EDITOR,
       open: true,
-      template_id: activeTemplates[0]?.id ?? "",
       delay_hours: suggestedDelay,
       delay_preset: String(suggestedDelay),
     });
@@ -118,7 +115,11 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       open: true,
       source: followup,
       name: followup.name,
-      template_id: followup.template_id,
+      template_id: followup.template_id ?? "",
+      message_text:
+        followup.message_text ??
+        templates.find((template) => template.id === followup.template_id)?.body_template ??
+        "",
       delay_hours: followup.delay_hours,
       delay_preset: matchingPreset ? String(followup.delay_hours) : "custom",
       send_window_start:
@@ -132,6 +133,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       validateFollowupInput({
         name: editor.name,
         template_id: editor.template_id,
+        message_text: editor.message_text,
         delay_hours: editor.delay_hours,
         send_window_start: editor.send_window_start,
         send_window_end: editor.send_window_end,
@@ -139,6 +141,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
     [
       editor.name,
       editor.template_id,
+      editor.message_text,
       editor.delay_hours,
       editor.send_window_start,
       editor.send_window_end,
@@ -152,7 +155,8 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       try {
         const payload = {
           name: editor.name,
-          template_id: editor.template_id,
+          template_id: editor.template_id || null,
+          message_text: editor.message_text,
           delay_hours: editor.delay_hours,
           send_window_start: editor.send_window_start,
           send_window_end: editor.send_window_end,
@@ -237,7 +241,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
               </p>
             </div>
           </div>
-          <Button onClick={openNew} disabled={reachedCap || activeTemplates.length === 0}>
+          <Button onClick={openNew} disabled={reachedCap}>
             <Plus className="size-4" />
             Nova etapa
           </Button>
@@ -269,17 +273,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
         </div>
       </div>
 
-      {activeTemplates.length === 0 ? (
-        <Card className="border-warning-ring bg-warning-soft/50">
-          <CardContent className="p-4 text-sm">
-            <p className="font-medium">Nenhum template de notificacao ativo</p>
-            <p className="text-muted-foreground mt-0.5">
-              Crie um template na area de notificacoes antes de configurar
-              follow-ups.
-            </p>
-          </CardContent>
-        </Card>
-      ) : sorted.length === 0 ? (
+      {sorted.length === 0 ? (
         <EmptyFollowups onCreate={openNew} />
       ) : (
         <div className="space-y-3">
@@ -315,7 +309,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
                       sem resposta · {followup.send_window_start ?? "08:00"}-
                       {followup.send_window_end ?? "18:00"} · template{" "}
                       <span className="font-mono text-foreground/80">
-                        {template?.name ?? "(removido)"}
+                        {followup.message_text?.trim() ? "mensagem propria" : template?.name ?? "(removido)"}
                       </span>
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -410,35 +404,29 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="followup-template">Template a disparar</Label>
-                <Select
-                  value={editor.template_id}
-                  onValueChange={(v) =>
-                    setEditor((prev) => ({ ...prev, template_id: v ?? "" }))
+                <Label htmlFor="followup-message">Mensagem</Label>
+                <Textarea
+                  id="followup-message"
+                  value={editor.message_text}
+                  onChange={(e) =>
+                    setEditor((prev) => ({ ...prev, message_text: e.target.value }))
                   }
+                  placeholder="Ex: Oi {{lead_name}}, passando para saber se posso te ajudar com mais alguma coisa."
+                  rows={6}
                   disabled={isPending}
-                >
-                  <SelectTrigger
-                    id="followup-template"
-                    aria-invalid={!!errors.template_id}
-                    className={errors.template_id ? "border-destructive" : undefined}
-                  >
-                    <SelectValue placeholder="Selecione um template">
-                      {activeTemplates.find((t) => t.id === editor.template_id)?.name ??
-                        "Selecione um template"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {activeTemplates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        {template.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.template_id ? (
-                  <p className="text-xs text-destructive">{errors.template_id}</p>
-                ) : null}
+                  aria-invalid={!!errors.message_text}
+                  className={cn(
+                    errors.message_text &&
+                      "border-destructive focus-visible:ring-destructive/40",
+                  )}
+                />
+                {errors.message_text ? (
+                  <p className="text-xs text-destructive">{errors.message_text}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Variaveis disponiveis: {"{{lead_name}}"}, {"{{lead_phone}}"}, {"{{agent_name}}"}.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -549,7 +537,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
               </p>
               <div className="mt-4 space-y-3 text-xs">
                 <ValidationLine ok={!errors.name} label="Nome preenchido" />
-                <ValidationLine ok={!errors.template_id} label="Template ativo" />
+                <ValidationLine ok={!errors.message_text} label="Mensagem preenchida" />
                 <ValidationLine ok={!errors.delay_hours} label="Tempo valido" />
                 <ValidationLine
                   ok={isValidFollowupWindow(
