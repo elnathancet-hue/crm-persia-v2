@@ -2,7 +2,7 @@ import { PageTitle } from "@persia/ui/typography";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
 import {
   listCampaignGroups, listCrmCampaigns,
-  getCampaignJobProgress, getWhatsAppConnectionStatus,
+  getWhatsAppConnectionStatus,
 } from "@/actions/crm-campaigns";
 import { getSegments } from "@/actions/segments";
 import { getTags } from "@/actions/tags";
@@ -21,11 +21,9 @@ export default async function CampaignsPage() {
     listCampaignGroups().catch(() => []),
   ]);
 
-  const campaignIds = campaigns.map((c) => c.id);
-  const [jobProgress, whatsappStatus] = await Promise.all([
-    getCampaignJobProgress(campaignIds).catch(() => []),
-    getWhatsAppConnectionStatus().catch(() => ({ connected: false, provider: null, phone: null })),
-  ]);
+  const whatsappStatus = await getWhatsAppConnectionStatus().catch(
+    () => ({ connected: false, provider: null, phone: null }),
+  );
 
   const segmentItems = (segments ?? []).map((s) => ({ id: s.id, name: s.name }));
   const tagItems = (tagsResult ?? []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name }));
@@ -45,7 +43,6 @@ export default async function CampaignsPage() {
         pipelines={pipelineItems}
         stages={stageItems}
         groups={groups}
-        jobProgress={jobProgress}
         whatsappStatus={whatsappStatus}
       />
     </div>

@@ -70,6 +70,10 @@ export interface CrmCampaign {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // Contagens denormalizadas — mantidas pelo trigger trg_sync_campaign_counts (migration 090)
+  total_count: number;
+  sent_count: number;
+  failed_count: number;
 }
 
 export interface CrmCampaignStep {

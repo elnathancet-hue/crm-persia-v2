@@ -38,43 +38,12 @@ export async function listCrmCampaigns(): Promise<CrmCampaign[]> {
   return (data ?? []) as CrmCampaign[];
 }
 
-// ─── Progresso de jobs e saúde do WhatsApp ────────────────────────────────────
-
-export interface CampaignJobProgress {
-  campaign_id: string;
-  total: number;
-  sent: number;
-  failed: number;
-}
+// ─── Saúde do WhatsApp ────────────────────────────────────────────────────────
 
 export interface WhatsAppConnectionStatus {
   connected: boolean;
   provider: string | null;
   phone: string | null;
-}
-
-export async function getCampaignJobProgress(campaignIds: string[]): Promise<CampaignJobProgress[]> {
-  if (!campaignIds.length) return [];
-  const { supabase, orgId } = await requireRole("agent");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db: { from: (t: string) => any } = supabase as any;
-
-  const { data } = await db.from("crm_campaign_message_jobs")
-    .select("campaign_id, status")
-    .eq("organization_id", orgId)
-    .in("campaign_id", campaignIds)
-    .neq("status", "cancelled");
-
-  const rows = (data ?? []) as { campaign_id: string; status: string }[];
-  const map = new Map<string, { total: number; sent: number; failed: number }>();
-  for (const row of rows) {
-    const e = map.get(row.campaign_id) ?? { total: 0, sent: 0, failed: 0 };
-    e.total++;
-    if (row.status === "sent") e.sent++;
-    if (row.status === "failed") e.failed++;
-    map.set(row.campaign_id, e);
-  }
-  return Array.from(map.entries()).map(([campaign_id, counts]) => ({ campaign_id, ...counts }));
 }
 
 export async function getWhatsAppConnectionStatus(): Promise<WhatsAppConnectionStatus> {

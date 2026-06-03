@@ -19,7 +19,7 @@ import type { CrmCampaign } from "@persia/shared/crm";
 import {
   pauseCampaign, resumeCampaign, cancelCampaign, deleteCrmCampaign,
 } from "@/actions/crm-campaigns";
-import type { CampaignJobProgress, WhatsAppConnectionStatus } from "@/actions/crm-campaigns";
+import type { WhatsAppConnectionStatus } from "@/actions/crm-campaigns";
 import { CrmCampaignWizard } from "./crm-campaign-wizard";
 
 const STATUS_UI: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -45,11 +45,10 @@ interface Props {
   pipelines: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; pipeline_id: string; name: string }>;
   groups: Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
-  jobProgress: CampaignJobProgress[];
   whatsappStatus: WhatsAppConnectionStatus;
 }
 
-export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups, jobProgress, whatsappStatus }: Props) {
+export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups, whatsappStatus }: Props) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -59,11 +58,6 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
     const q = search.toLowerCase();
     return campaigns.filter((c) => c.name.toLowerCase().includes(q));
   }, [campaigns, search]);
-
-  const progressMap = useMemo(
-    () => new Map(jobProgress.map((p) => [p.campaign_id, p])),
-    [jobProgress],
-  );
 
   const activeCount = campaigns.filter((c) => c.status === "scheduled" || c.status === "running").length;
   const scheduledCount = campaigns.filter((c) => c.status === "scheduled").length;
@@ -183,10 +177,9 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
               </TableHeader>
               <TableBody>
                 {displayed.map((c) => {
-                  const prog = progressMap.get(c.id);
                   const progress =
                     c.status === "completed" ? 100
-                    : prog && prog.total > 0 ? Math.round((prog.sent / prog.total) * 100)
+                    : c.total_count > 0 ? Math.round((c.sent_count / c.total_count) * 100)
                     : 0;
                   return (
                     <TableRow key={c.id}>
