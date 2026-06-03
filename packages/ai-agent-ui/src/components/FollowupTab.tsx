@@ -1,19 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { Clock, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Bot,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   formatFollowupDelay,
+  FOLLOWUP_DEFAULT_SEND_WINDOW_END,
+  FOLLOWUP_DEFAULT_SEND_WINDOW_START,
   FOLLOWUPS_MAX_PER_AGENT,
   FOLLOWUP_DELAY_HOURS_MAX,
   FOLLOWUP_DELAY_HOURS_MIN,
   FOLLOWUP_DELAY_PRESETS,
   FOLLOWUP_NAME_MAX_CHARS,
+  isValidFollowupWindow,
   validateFollowupInput,
   type AgentFollowup,
   type AgentNotificationTemplate,
 } from "@persia/shared/ai-agent";
+import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import {
@@ -50,7 +63,9 @@ interface EditorState {
   name: string;
   template_id: string;
   delay_hours: number;
-  delay_preset: string; // "" = custom
+  delay_preset: string;
+  send_window_start: string;
+  send_window_end: string;
 }
 
 const EMPTY_EDITOR: EditorState = {
@@ -60,6 +75,8 @@ const EMPTY_EDITOR: EditorState = {
   template_id: "",
   delay_hours: 24,
   delay_preset: "24",
+  send_window_start: FOLLOWUP_DEFAULT_SEND_WINDOW_START,
+  send_window_end: FOLLOWUP_DEFAULT_SEND_WINDOW_END,
 };
 
 export function FollowupTab({ configId, followups, templates, onChange }: Props) {
@@ -71,7 +88,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
   const [isPending, startTransition] = React.useTransition();
 
   const activeTemplates = React.useMemo(
-    () => templates.filter((t) => t.status === "active"),
+    () => templates.filter((template) => template.status === "active"),
     [templates],
   );
 
@@ -83,19 +100,19 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
   const reachedCap = sorted.length >= FOLLOWUPS_MAX_PER_AGENT;
 
   const openNew = () => {
+    const suggestedDelay = nextSuggestedDelay(sorted);
     setEditor({
       ...EMPTY_EDITOR,
       open: true,
       template_id: activeTemplates[0]?.id ?? "",
-      // Sugere delay próximo (24h, 48h, 72h...) baseado no que já existe.
-      delay_hours: nextSuggestedDelay(sorted),
-      delay_preset: String(nextSuggestedDelay(sorted)),
+      delay_hours: suggestedDelay,
+      delay_preset: String(suggestedDelay),
     });
   };
 
   const openEdit = (followup: AgentFollowup) => {
     const matchingPreset = FOLLOWUP_DELAY_PRESETS.find(
-      (p) => p.hours === followup.delay_hours,
+      (preset) => preset.hours === followup.delay_hours,
     );
     setEditor({
       open: true,
@@ -103,7 +120,10 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       name: followup.name,
       template_id: followup.template_id,
       delay_hours: followup.delay_hours,
-      delay_preset: matchingPreset ? String(followup.delay_hours) : "",
+      delay_preset: matchingPreset ? String(followup.delay_hours) : "custom",
+      send_window_start:
+        followup.send_window_start ?? FOLLOWUP_DEFAULT_SEND_WINDOW_START,
+      send_window_end: followup.send_window_end ?? FOLLOWUP_DEFAULT_SEND_WINDOW_END,
     });
   };
 
@@ -113,8 +133,16 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
         name: editor.name,
         template_id: editor.template_id,
         delay_hours: editor.delay_hours,
+        send_window_start: editor.send_window_start,
+        send_window_end: editor.send_window_end,
       }),
-    [editor.name, editor.template_id, editor.delay_hours],
+    [
+      editor.name,
+      editor.template_id,
+      editor.delay_hours,
+      editor.send_window_start,
+      editor.send_window_end,
+    ],
   );
   const hasErrors = Object.keys(errors).length > 0;
 
@@ -122,23 +150,22 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
     if (hasErrors) return;
     startTransition(async () => {
       try {
+        const payload = {
+          name: editor.name,
+          template_id: editor.template_id,
+          delay_hours: editor.delay_hours,
+          send_window_start: editor.send_window_start,
+          send_window_end: editor.send_window_end,
+          require_ai_active: true,
+        };
         if (editor.source) {
-          const updated = await updateFollowup(editor.source.id, {
-            name: editor.name,
-            template_id: editor.template_id,
-            delay_hours: editor.delay_hours,
-          });
+          const updated = await updateFollowup(editor.source.id, payload);
           onChange(followups.map((f) => (f.id === updated.id ? updated : f)));
-          toast.success("Follow-up atualizado");
+          toast.success("Etapa atualizada");
         } else {
-          const created = await createFollowup({
-            config_id: configId,
-            name: editor.name,
-            template_id: editor.template_id,
-            delay_hours: editor.delay_hours,
-          });
+          const created = await createFollowup({ config_id: configId, ...payload });
           onChange([...followups, created]);
-          toast.success("Follow-up criado");
+          toast.success("Etapa criada");
         }
         setEditor(EMPTY_EDITOR);
       } catch (err) {
@@ -170,7 +197,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
         await deleteFollowup(target.id);
         onChange(followups.filter((f) => f.id !== target.id));
         setDeleteTarget(null);
-        toast.success("Follow-up removido");
+        toast.success("Etapa removida");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Falha ao remover");
       } finally {
@@ -180,67 +207,120 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
   };
 
   const handlePresetChange = (value: string | null) => {
-    if (!value) {
-      // "Personalizado": mantem hours atual.
-      setEditor((e) => ({ ...e, delay_preset: "" }));
+    const nextValue = value ?? "custom";
+    if (nextValue === "custom") {
+      setEditor((prev) => ({ ...prev, delay_preset: "custom" }));
       return;
     }
-    const hours = Number(value);
+    const hours = Number(nextValue);
     if (!Number.isFinite(hours)) return;
-    setEditor((e) => ({ ...e, delay_preset: value, delay_hours: hours }));
+    setEditor((prev) => ({ ...prev, delay_preset: nextValue, delay_hours: hours }));
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="space-y-5">
+      <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              <Bot className="size-3.5" />
+              Automacao de conversa
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold tracking-tight">
+                Follow-up automatico
+              </h2>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                Configure uma sequencia para quando o lead nao responder depois
+                da ultima mensagem da empresa. Se o lead responder, a fila e
+                cancelada automaticamente.
+              </p>
+            </div>
+          </div>
+          <Button onClick={openNew} disabled={reachedCap || activeTemplates.length === 0}>
+            <Plus className="size-4" />
+            Nova etapa
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <MetricCard
+            label="Etapas ativas"
+            value={String(sorted.filter((f) => f.is_enabled).length)}
+          />
+          <MetricCard
+            label="Janela padrao"
+            value={`${FOLLOWUP_DEFAULT_SEND_WINDOW_START}-${FOLLOWUP_DEFAULT_SEND_WINDOW_END}`}
+          />
+          <MetricCard label="Protecao" value="Cancela se lead responder" />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Clock className="size-5 text-primary" />
-            <h2 className="font-semibold">Follow-up automático</h2>
+            <ShieldCheck className="size-5 text-primary" />
+            <h3 className="font-semibold">Sequencia configurada</h3>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Configure mensagens de acompanhamento para manter seus leads engajados.
-            Disparam automaticamente após X horas sem resposta do lead em uma conversa.
+            As etapas rodam em ordem. Cada conversa so avanca para a proxima
+            etapa se continuar sem resposta do lead.
           </p>
         </div>
-        <Button onClick={openNew} disabled={reachedCap || activeTemplates.length === 0}>
-          <Plus className="size-4" />
-          Adicionar follow-up
-        </Button>
       </div>
 
       {activeTemplates.length === 0 ? (
         <Card className="border-warning-ring bg-warning-soft/50">
           <CardContent className="p-4 text-sm">
-            <p className="font-medium">Nenhum template de notificação ativo</p>
+            <p className="font-medium">Nenhum template de notificacao ativo</p>
             <p className="text-muted-foreground mt-0.5">
-              Crie um template na aba <strong>Notificações</strong> antes de
-              configurar follow-ups.
+              Crie um template na area de notificacoes antes de configurar
+              follow-ups.
             </p>
           </CardContent>
         </Card>
       ) : sorted.length === 0 ? (
         <EmptyFollowups onCreate={openNew} />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {sorted.map((followup) => {
             const template = templates.find((t) => t.id === followup.template_id);
             return (
               <Card key={followup.id} className="transition-shadow hover:shadow-sm">
                 <CardContent className="p-4 flex items-start gap-4">
-                  <div className="size-10 rounded-lg bg-warning-soft text-warning-soft-foreground flex items-center justify-center shrink-0">
-                    <Clock className="size-5" />
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div className="size-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-semibold">
+                      {followup.order_index + 1}
+                    </div>
+                    {followup.is_enabled ? (
+                      <CheckCircle2 className="size-4 text-success" />
+                    ) : (
+                      <Clock className="size-4 text-muted-foreground" />
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0 space-y-0.5">
-                    <p className="font-semibold text-sm tracking-tight">
-                      {followup.name}
-                    </p>
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-sm tracking-tight">
+                        {followup.name}
+                      </p>
+                      <Badge
+                        variant={followup.is_enabled ? "secondary" : "outline"}
+                        className="text-[11px]"
+                      >
+                        {followup.is_enabled ? "Ativa" : "Pausada"}
+                      </Badge>
+                    </div>
                     <p className="text-xs text-muted-foreground">
-                      Após <strong>{formatFollowupDelay(followup.delay_hours)}</strong> sem
-                      resposta · template{" "}
+                      Apos <strong>{formatFollowupDelay(followup.delay_hours)}</strong>{" "}
+                      sem resposta · {followup.send_window_start ?? "08:00"}-
+                      {followup.send_window_end ?? "18:00"} · template{" "}
                       <span className="font-mono text-foreground/80">
                         {template?.name ?? "(removido)"}
                       </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Revalida IA ativa, conversa aberta e ultima mensagem da
+                      empresa antes de enviar.
                     </p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -249,7 +329,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
                       onCheckedChange={(v) => handleToggle(followup, v)}
                       disabled={pendingId === followup.id || isPending}
                       aria-label={
-                        followup.is_enabled ? "Desativar follow-up" : "Ativar follow-up"
+                        followup.is_enabled ? "Desativar etapa" : "Ativar etapa"
                       }
                     />
                     <Button
@@ -283,8 +363,8 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
           })}
           {reachedCap ? (
             <p className="text-xs text-muted-foreground text-center pt-2">
-              Limite de {FOLLOWUPS_MAX_PER_AGENT} follow-ups por agente atingido.
-              Remova um antes de criar outro.
+              Limite de {FOLLOWUPS_MAX_PER_AGENT} etapas atingido. Remova uma
+              antes de criar outra.
             </p>
           ) : null}
         </div>
@@ -294,134 +374,200 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
         open={editor.open}
         onOpenChange={(open) => !open && setEditor(EMPTY_EDITOR)}
       >
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              {editor.source ? "Editar follow-up" : "Novo follow-up"}
+              {editor.source ? "Editar etapa de follow-up" : "Nova etapa de follow-up"}
             </DialogTitle>
             <DialogDescription>
-              Quando uma conversa fica inativa pelo tempo configurado, o agente
-              dispara o template selecionado pra reativar o lead.
+              Configure quando esta etapa entra na fila e qual mensagem sera enviada.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="followup-name">Nome</Label>
-              <Input
-                id="followup-name"
-                value={editor.name}
-                onChange={(e) =>
-                  setEditor((prev) => ({ ...prev, name: e.target.value }))
-                }
-                placeholder="Ex: Lembrete 24h sem resposta"
-                maxLength={FOLLOWUP_NAME_MAX_CHARS}
-                disabled={isPending}
-                aria-invalid={!!errors.name}
-                className={
-                  errors.name
-                    ? "border-destructive focus-visible:ring-destructive/40"
-                    : undefined
-                }
-              />
-              {errors.name ? (
-                <p className="text-xs text-destructive">{errors.name}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="followup-template">Template a disparar</Label>
-              <Select
-                value={editor.template_id}
-                onValueChange={(v) =>
-                  setEditor((prev) => ({ ...prev, template_id: v ?? "" }))
-                }
-                disabled={isPending}
-              >
-                <SelectTrigger
-                  id="followup-template"
-                  aria-invalid={!!errors.template_id}
-                  className={errors.template_id ? "border-destructive" : undefined}
-                >
-                  <SelectValue placeholder="Selecione um template">
-                    {activeTemplates.find((t) => t.id === editor.template_id)?.name ??
-                      "Selecione um template"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {activeTemplates.length === 0 ? (
-                    <SelectItem value="_empty" disabled>
-                      Nenhum template ativo
-                    </SelectItem>
-                  ) : (
-                    activeTemplates.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {errors.template_id ? (
-                <p className="text-xs text-destructive">{errors.template_id}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="followup-delay">Disparar após</Label>
-              <Select
-                value={editor.delay_preset}
-                onValueChange={handlePresetChange}
-                disabled={isPending}
-              >
-                <SelectTrigger id="followup-delay">
-                  <SelectValue placeholder="Personalizado">
-                    {FOLLOWUP_DELAY_PRESETS.find(
-                      (p) => String(p.hours) === editor.delay_preset,
-                    )?.label ??
-                      (editor.delay_preset === ""
-                        ? `Personalizado (${formatFollowupDelay(editor.delay_hours)})`
-                        : `${editor.delay_hours} horas`)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {FOLLOWUP_DELAY_PRESETS.map((p) => (
-                    <SelectItem key={p.hours} value={String(p.hours)}>
-                      {p.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="">Personalizado</SelectItem>
-                </SelectContent>
-              </Select>
-              {editor.delay_preset === "" ? (
+          <div className="grid gap-4 md:grid-cols-[1fr_15rem]">
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="followup-name">Nome</Label>
                 <Input
-                  type="number"
-                  min={FOLLOWUP_DELAY_HOURS_MIN}
-                  max={FOLLOWUP_DELAY_HOURS_MAX}
-                  value={editor.delay_hours}
+                  id="followup-name"
+                  value={editor.name}
                   onChange={(e) =>
-                    setEditor((prev) => ({
-                      ...prev,
-                      delay_hours: Number(e.target.value) || prev.delay_hours,
-                    }))
+                    setEditor((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  placeholder="Ex: Lembrete 24h sem resposta"
+                  maxLength={FOLLOWUP_NAME_MAX_CHARS}
+                  disabled={isPending}
+                  aria-invalid={!!errors.name}
+                  className={
+                    errors.name
+                      ? "border-destructive focus-visible:ring-destructive/40"
+                      : undefined
+                  }
+                />
+                {errors.name ? (
+                  <p className="text-xs text-destructive">{errors.name}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="followup-template">Template a disparar</Label>
+                <Select
+                  value={editor.template_id}
+                  onValueChange={(v) =>
+                    setEditor((prev) => ({ ...prev, template_id: v ?? "" }))
                   }
                   disabled={isPending}
-                  aria-invalid={!!errors.delay_hours}
-                  className={cn(
-                    errors.delay_hours &&
-                      "border-destructive focus-visible:ring-destructive/40",
-                  )}
-                />
-              ) : null}
-              {errors.delay_hours ? (
-                <p className="text-xs text-destructive">{errors.delay_hours}</p>
+                >
+                  <SelectTrigger
+                    id="followup-template"
+                    aria-invalid={!!errors.template_id}
+                    className={errors.template_id ? "border-destructive" : undefined}
+                  >
+                    <SelectValue placeholder="Selecione um template">
+                      {activeTemplates.find((t) => t.id === editor.template_id)?.name ??
+                        "Selecione um template"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeTemplates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.template_id ? (
+                  <p className="text-xs text-destructive">{errors.template_id}</p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="followup-delay">Entrar na fila apos</Label>
+                <Select
+                  value={editor.delay_preset}
+                  onValueChange={handlePresetChange}
+                  disabled={isPending}
+                >
+                  <SelectTrigger id="followup-delay">
+                    <SelectValue placeholder="Personalizado">
+                      {FOLLOWUP_DELAY_PRESETS.find(
+                        (preset) => String(preset.hours) === editor.delay_preset,
+                      )?.label ??
+                        (editor.delay_preset === "custom"
+                          ? `Personalizado (${formatFollowupDelay(editor.delay_hours)})`
+                          : `${editor.delay_hours} horas`)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FOLLOWUP_DELAY_PRESETS.map((preset) => (
+                      <SelectItem key={preset.hours} value={String(preset.hours)}>
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="custom">Personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+                {editor.delay_preset === "custom" ? (
+                  <Input
+                    type="number"
+                    min={FOLLOWUP_DELAY_HOURS_MIN}
+                    max={FOLLOWUP_DELAY_HOURS_MAX}
+                    value={editor.delay_hours}
+                    onChange={(e) =>
+                      setEditor((prev) => ({
+                        ...prev,
+                        delay_hours: Number(e.target.value) || prev.delay_hours,
+                      }))
+                    }
+                    disabled={isPending}
+                    aria-invalid={!!errors.delay_hours}
+                    className={cn(
+                      errors.delay_hours &&
+                        "border-destructive focus-visible:ring-destructive/40",
+                    )}
+                  />
+                ) : null}
+                {errors.delay_hours ? (
+                  <p className="text-xs text-destructive">{errors.delay_hours}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Entra na fila se o lead ficar{" "}
+                    <strong>{formatFollowupDelay(editor.delay_hours)}</strong> sem responder.
+                  </p>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="followup-window-start">Inicio da janela</Label>
+                  <Input
+                    id="followup-window-start"
+                    type="time"
+                    value={editor.send_window_start}
+                    onChange={(e) =>
+                      setEditor((prev) => ({
+                        ...prev,
+                        send_window_start: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="followup-window-end">Fim da janela</Label>
+                  <Input
+                    id="followup-window-end"
+                    type="time"
+                    value={editor.send_window_end}
+                    onChange={(e) =>
+                      setEditor((prev) => ({
+                        ...prev,
+                        send_window_end: e.target.value,
+                      }))
+                    }
+                    disabled={isPending}
+                  />
+                </div>
+              </div>
+              {errors.send_window ? (
+                <p className="text-xs text-destructive">{errors.send_window}</p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Disparado se o lead ficar{" "}
-                  <strong>{formatFollowupDelay(editor.delay_hours)}</strong> sem responder.
-                  O contador zera a cada nova mensagem do lead.
+                  Fora da janela, a conversa pausa e reagenda para o proximo
+                  horario permitido.
                 </p>
               )}
+              <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+                Protecao fixa: antes de enviar, o sistema confirma IA ativa,
+                conversa aberta, sem handoff humano e sem resposta nova do lead.
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-muted/20 p-4">
+              <p className="text-xs font-semibold uppercase text-muted-foreground">
+                Validacao
+              </p>
+              <div className="mt-4 space-y-3 text-xs">
+                <ValidationLine ok={!errors.name} label="Nome preenchido" />
+                <ValidationLine ok={!errors.template_id} label="Template ativo" />
+                <ValidationLine ok={!errors.delay_hours} label="Tempo valido" />
+                <ValidationLine
+                  ok={isValidFollowupWindow(
+                    editor.send_window_start,
+                    editor.send_window_end,
+                  )}
+                  label="Janela valida"
+                />
+              </div>
+              <div className="mt-5 rounded-lg bg-card p-3 shadow-sm">
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  Previa da regra
+                </p>
+                <p className="mt-1 text-sm">
+                  Enviar apos {formatFollowupDelay(editor.delay_hours)}, entre{" "}
+                  {editor.send_window_start} e {editor.send_window_end}.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -435,7 +581,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             </Button>
             <Button onClick={handleSave} disabled={isPending || hasErrors}>
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Salvar
+              Salvar etapa
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -447,13 +593,12 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remover follow-up?</DialogTitle>
+            <DialogTitle>Remover etapa?</DialogTitle>
             <DialogDescription>
               {deleteTarget ? (
                 <>
-                  O follow-up <strong>{deleteTarget.name}</strong> não será mais
-                  disparado. Conversas que já receberam o lembrete não são
-                  afetadas. Esta ação não pode ser desfeita.
+                  A etapa <strong>{deleteTarget.name}</strong> nao sera mais
+                  enviada. Conversas historicas continuam registradas.
                 </>
               ) : null}
             </DialogDescription>
@@ -471,12 +616,38 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
               disabled={isPending}
               className="bg-destructive hover:bg-destructive/90"
             >
-              {isPending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Trash2 className="size-4" />
+              )}
               Remover
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border bg-muted/20 p-3">
+      <p className="text-[11px] font-semibold uppercase text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function ValidationLine({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <CheckCircle2
+        className={cn("size-4", ok ? "text-success" : "text-muted-foreground/50")}
+      />
+      <span className={ok ? "text-foreground" : "text-muted-foreground"}>{label}</span>
     </div>
   );
 }
@@ -489,28 +660,25 @@ function EmptyFollowups({ onCreate }: { onCreate: () => void }) {
           <Clock className="size-6 text-muted-foreground" />
         </div>
         <div className="max-w-md space-y-1">
-          <p className="font-semibold text-sm">Mantenha leads engajados</p>
+          <p className="font-semibold text-sm">Crie a primeira etapa</p>
           <p className="text-xs text-muted-foreground">
-            Crie lembretes em cascata (24h, 48h, 72h sem resposta...) que reativam
-            conversas automaticamente. O contador zera a cada nova mensagem do
-            lead — sem spam.
+            Use uma sequencia simples, como 24h, 48h e 72h sem resposta.
+            Cada envio revalida o estado da conversa antes de sair.
           </p>
         </div>
         <Button onClick={onCreate}>
           <Plus className="size-4" />
-          Criar primeiro follow-up
+          Criar primeira etapa
         </Button>
       </CardContent>
     </Card>
   );
 }
 
-// Sugere o proximo delay tipico baseado no que ja existe (cascade
-// 24h → 48h → 72h → 1 semana). Se cliente ja tem 24+48+72, sugere 168.
 function nextSuggestedDelay(existing: AgentFollowup[]): number {
   const used = new Set(existing.map((f) => f.delay_hours));
   for (const preset of FOLLOWUP_DELAY_PRESETS) {
     if (!used.has(preset.hours)) return preset.hours;
   }
-  return 24; // fallback se cliente preencheu todos os presets
+  return 24;
 }

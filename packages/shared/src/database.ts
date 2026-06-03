@@ -558,27 +558,122 @@ export type Database = {
           },
         ]
       }
+      agent_followup_conversation_states: {
+        Row: {
+          agent_conversation_id: string
+          cancel_reason: string | null
+          config_id: string
+          created_at: string
+          current_followup_id: string | null
+          current_order_index: number
+          finalized_at: string | null
+          id: string
+          last_company_message_at: string | null
+          last_lead_message_at: string | null
+          last_sent_at: string | null
+          next_run_at: string | null
+          organization_id: string
+          pause_reason: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_conversation_id: string
+          cancel_reason?: string | null
+          config_id: string
+          created_at?: string
+          current_followup_id?: string | null
+          current_order_index?: number
+          finalized_at?: string | null
+          id?: string
+          last_company_message_at?: string | null
+          last_lead_message_at?: string | null
+          last_sent_at?: string | null
+          next_run_at?: string | null
+          organization_id: string
+          pause_reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_conversation_id?: string
+          cancel_reason?: string | null
+          config_id?: string
+          created_at?: string
+          current_followup_id?: string | null
+          current_order_index?: number
+          finalized_at?: string | null
+          id?: string
+          last_company_message_at?: string | null
+          last_lead_message_at?: string | null
+          last_sent_at?: string | null
+          next_run_at?: string | null
+          organization_id?: string
+          pause_reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_followup_conversation_states_agent_conversation_id_fkey"
+            columns: ["agent_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "agent_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_followup_conversation_states_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "agent_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_followup_conversation_states_current_followup_id_fkey"
+            columns: ["current_followup_id"]
+            isOneToOne: false
+            referencedRelation: "agent_followups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_followup_conversation_states_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_followup_runs: {
         Row: {
           conversation_id: string
+          error_message: string | null
           fired_at: string
           followup_id: string
           id: string
           organization_id: string
+          sent_at: string | null
+          status: string
         }
         Insert: {
           conversation_id: string
+          error_message?: string | null
           fired_at?: string
           followup_id: string
           id?: string
           organization_id: string
+          sent_at?: string | null
+          status?: string
         }
         Update: {
           conversation_id?: string
+          error_message?: string | null
           fired_at?: string
           followup_id?: string
           id?: string
           organization_id?: string
+          sent_at?: string | null
+          status?: string
         }
         Relationships: [
           {
@@ -607,6 +702,9 @@ export type Database = {
           name: string
           order_index: number
           organization_id: string
+          require_ai_active: boolean
+          send_window_end: string
+          send_window_start: string
           template_id: string
           updated_at: string
         }
@@ -619,6 +717,9 @@ export type Database = {
           name: string
           order_index?: number
           organization_id: string
+          require_ai_active?: boolean
+          send_window_end?: string
+          send_window_start?: string
           template_id: string
           updated_at?: string
         }
@@ -631,6 +732,9 @@ export type Database = {
           name?: string
           order_index?: number
           organization_id?: string
+          require_ai_active?: boolean
+          send_window_end?: string
+          send_window_start?: string
           template_id?: string
           updated_at?: string
         }

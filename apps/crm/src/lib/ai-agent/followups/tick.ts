@@ -13,79 +13,58 @@ import { errorMessage, logError, logInfo } from "@/lib/observability";
 import { asAgentDb, type AgentDb } from "../db";
 import { buildNotificationWaLink } from "../notifications";
 
-// PR4 (mai/2026): runtime real de agent_followups. Antes desta PR
-// schema (027), UI (CRUD em apps/crm/src/actions/ai-agent/followups.ts)
-// e modelo de domain (packages/shared/src/ai-agent/followups.ts) ja
-// estavam prontos — mas nenhum cron tickava. Cliente configurava
-// "Avisar lead 24h sem resposta" e nada acontecia.
-//
-// PIPELINE
-// --------
-// 1. Carrega TODOS os agent_followups com is_enabled=true (cross-org,
-//    service role bypassa RLS).
-// 2. Pra cada followup: encontra agent_conversations que:
-//    - pertencem ao mesmo config_id
-//    - last_interaction_at < now() - delay_hours
-//    - human_handoff_at IS NULL (humano assumiu, nao spamar)
-//    - NAO tem row em agent_followup_runs pra (followup_id, conv_id)
-// 3. Pra cada conversation match:
-//    a. INSERT em agent_followup_runs ANTES de qualquer side effect
-//       (UNIQUE(followup_id, conversation_id) garante que 2 ticks
-//       concorrentes nao disparam pro mesmo lead 2x — o segundo cai
-//       em 23505 e a iteracao pula).
-//    b. Carrega lead.phone + template.body_template.
-//    c. Renderiza body com vars do lead + agent.
-//    d. provider.sendText pra lead.phone (NAO pra template.target_address —
-//       template aqui e usado so como corpo da mensagem reutilizavel;
-//       destino e sempre o lead).
-// 4. Stats agregadas no retorno.
-//
-// LIMITES E TRADE-OFFS
-// --------------------
-// - **Sem business_hours check**: o tick pode disparar 3am se a janela
-//   bate. Mitigacao do cliente: configurar delays compativeis ("48h"
-//   em vez de "24h" pra evitar madrugada). TODO follow-up: integrar
-//   isWithinBusinessHours via humanization_config do agent_config.
-// - **last_interaction_at e atualizado em QUALQUER atividade**, nao so
-//   inbound do lead. Se o agente respondeu HA POUCO, o relogio reinicia.
-//   Isso e OK pro caso "lembrete X horas sem resposta" porque dura: lead
-//   respondeu => relogio zera; agente respondeu mas lead nao => relogio
-//   zera tambem (potencial false negative). Refinamento futuro: campo
-//   separado last_inbound_message_at.
-// - **MAX_PROCESSED_PER_TICK**: limita carga por tick. Em escala alta,
-//   adicionar pagination/cursor. Hoje: 200 conversas por tick comfortable.
-// - **Cleanup de agent_followup_runs**: nao implementado aqui. Migration
-//   027 sugere >90d. Pode virar job de manutencao depois.
-
 const MAX_PROCESSED_PER_TICK = 200;
-
 const DEFAULT_APP_URL = "https://crm.funilpersia.top";
-
-// ============================================================================
-// Tipos do tick result
-// ============================================================================
 
 export interface FollowupTickResult {
   started_at: string;
   finished_at: string;
-  /** Total de followups (is_enabled=true) carregados em todas as orgs. */
   followups_loaded: number;
-  /** Total de conversations que matcharam (antes de filtrar idempotency). */
   conversations_matched: number;
-  /** Quantos disparos efetivos (INSERT + sendText ok). */
   fired: number;
-  /** Skipados por idempotency (insert deu UNIQUE violation = outro tick
-   * fez antes, ou lead sem phone, ou agent_config arquivado, etc). */
   skipped: number;
-  /** Erros recuperaveis (insert ok mas sendText falhou — log sem rollback;
-   * a row em agent_followup_runs fica pra evitar retry-spam). */
+  paused: number;
+  cancelled: number;
+  finished: number;
   errors: number;
-  /** Amostras de erros pra debug rapido sem precisar do log central. */
   error_samples: Array<{
     followup_id: string;
     conversation_id: string;
     error: string;
   }>;
+}
+
+type ConfigRow = { name: string; status: string } | null;
+
+interface ConversationRow {
+  id: string;
+  organization_id: string;
+  config_id: string;
+  lead_id: string | null;
+  crm_conversation_id: string | null;
+  last_interaction_at: string | null;
+  human_handoff_at: string | null;
+}
+
+interface MessageRow {
+  id?: string;
+  sender: string;
+  created_at: string | null;
+}
+
+interface LeadRow {
+  name?: string | null;
+  phone?: string | null;
+}
+
+interface Evaluation {
+  status: "waiting" | "eligible" | "paused" | "cancelled" | "finished";
+  followup?: AgentFollowup;
+  nextRunAt?: Date;
+  lastCompanyMessageAt?: string | null;
+  lastLeadMessageAt?: string | null;
+  lastSentAt?: string | null;
+  reason?: string;
 }
 
 function idleResult(now: Date): FollowupTickResult {
@@ -97,21 +76,19 @@ function idleResult(now: Date): FollowupTickResult {
     conversations_matched: 0,
     fired: 0,
     skipped: 0,
+    paused: 0,
+    cancelled: 0,
+    finished: 0,
     errors: 0,
     error_samples: [],
   };
 }
-
-// ============================================================================
-// Entry point
-// ============================================================================
 
 export async function runFollowupsTick(
   db: AgentDb = asAgentDb(createAdminClient()),
 ): Promise<FollowupTickResult> {
   const startedAt = new Date();
   const result = idleResult(startedAt);
-
   const followups = await loadEnabledFollowups(db);
   result.followups_loaded = followups.length;
   if (followups.length === 0) {
@@ -119,64 +96,94 @@ export async function runFollowupsTick(
     return result;
   }
 
-  // Cache de provider por org — evita carregar varias vezes quando varios
-  // followups da mesma org disparam no mesmo tick. Tambem cacheamos null
-  // pra orgs SEM whatsapp_connections (skip rapido nas proximas
-  // iteracoes).
+  const groups = groupFollowups(followups);
   const providerCache = new Map<string, WhatsAppProvider | null>();
-  // Cache de agent_configs.name + status pra render de vars + skip de
-  // configs arquivados.
-  const configCache = new Map<string, { name: string; status: string } | null>();
+  const configCache = new Map<string, ConfigRow>();
 
-  for (const followup of followups) {
-    if (result.fired + result.skipped + result.errors >= MAX_PROCESSED_PER_TICK) {
-      // Atingiu o cap deste tick — proximo tick continua.
-      break;
-    }
+  for (const group of groups) {
+    if (processedCount(result) >= MAX_PROCESSED_PER_TICK) break;
 
-    const config = await getOrLoadConfig(db, followup.organization_id, followup.config_id, configCache);
-    if (!config || config.status !== "active") {
-      // Config arquivado ou nao encontrado — skip todo o followup.
-      continue;
-    }
+    const config = await getOrLoadConfig(db, group.organizationId, group.configId, configCache);
+    if (!config || config.status !== "active") continue;
 
-    const template = await loadTemplateForFollowup(db, followup);
-    if (!template || template.status !== "active") {
-      // Template removido ou arquivado — skip.
-      continue;
-    }
+    const templates = await loadTemplatesForFollowups(db, group.followups);
+    const readyFollowups = group.followups.filter((followup) => {
+      const template = templates.get(followup.template_id);
+      return template?.status === "active";
+    });
+    if (readyFollowups.length === 0) continue;
 
-    const due = await loadDueConversations(db, followup);
-    result.conversations_matched += due.matchedCount;
-    if (due.pending.length === 0) continue;
+    const candidates = await loadCandidateConversations(db, {
+      organizationId: group.organizationId,
+      configId: group.configId,
+      minDelayHours: Math.min(...readyFollowups.map((f) => f.delay_hours)),
+    });
+    result.conversations_matched += candidates.length;
+    if (candidates.length === 0) continue;
 
-    const provider = await getOrLoadProvider(db, followup.organization_id, providerCache);
+    const provider = await getOrLoadProvider(db, group.organizationId, providerCache);
     if (!provider) {
-      // Org sem WhatsApp conectado — skip os matches. Cliente vai conectar
-      // antes do proximo tick.
-      result.skipped += due.pending.length;
+      result.skipped += candidates.length;
       continue;
     }
 
-    for (const conv of due.pending) {
-      if (result.fired + result.skipped + result.errors >= MAX_PROCESSED_PER_TICK) break;
+    for (const conversation of candidates) {
+      if (processedCount(result) >= MAX_PROCESSED_PER_TICK) break;
+
+      const evaluation = await evaluateConversation(db, readyFollowups, conversation, new Date());
+      await persistConversationState(db, conversation, evaluation);
+
+      if (evaluation.status === "waiting") {
+        result.skipped++;
+        continue;
+      }
+      if (evaluation.status === "paused") {
+        result.paused++;
+        continue;
+      }
+      if (evaluation.status === "cancelled") {
+        result.cancelled++;
+        continue;
+      }
+      if (evaluation.status === "finished") {
+        result.finished++;
+        continue;
+      }
+
+      const followup = evaluation.followup;
+      if (!followup) {
+        result.skipped++;
+        continue;
+      }
+      const template = templates.get(followup.template_id);
+      if (!template) {
+        result.skipped++;
+        continue;
+      }
 
       const outcome = await dispatchFollowup({
         db,
         followup,
         template,
         agentName: config.name,
-        conversation: conv,
+        conversation,
         provider,
       });
+
       if (outcome.fired) {
         result.fired++;
+        await persistConversationState(db, conversation, {
+          ...evaluation,
+          status: "waiting",
+          nextRunAt: nextFollowupRunDate(readyFollowups, followup, new Date()),
+          lastSentAt: new Date().toISOString(),
+        });
       } else if (outcome.error) {
         result.errors++;
         if (result.error_samples.length < 5) {
           result.error_samples.push({
             followup_id: followup.id,
-            conversation_id: conv.id,
+            conversation_id: conversation.id,
             error: outcome.error,
           });
         }
@@ -194,23 +201,57 @@ export async function runFollowupsTick(
     conversations_matched: result.conversations_matched,
     fired: result.fired,
     skipped: result.skipped,
+    paused: result.paused,
+    cancelled: result.cancelled,
+    finished: result.finished,
     errors: result.errors,
   });
   return result;
 }
 
-// ============================================================================
-// Helpers — carregamento
-// ============================================================================
+function processedCount(result: FollowupTickResult): number {
+  return (
+    result.fired +
+    result.skipped +
+    result.paused +
+    result.cancelled +
+    result.finished +
+    result.errors
+  );
+}
+
+function groupFollowups(followups: AgentFollowup[]) {
+  const grouped = new Map<string, {
+    organizationId: string;
+    configId: string;
+    followups: AgentFollowup[];
+  }>();
+  for (const followup of followups) {
+    const key = `${followup.organization_id}:${followup.config_id}`;
+    const group = grouped.get(key) ?? {
+      organizationId: followup.organization_id,
+      configId: followup.config_id,
+      followups: [],
+    };
+    group.followups.push(followup);
+    grouped.set(key, group);
+  }
+  return [...grouped.values()].map((group) => ({
+    ...group,
+    followups: group.followups
+      .slice()
+      .sort((a, b) => a.order_index - b.order_index || a.delay_hours - b.delay_hours),
+  }));
+}
 
 async function loadEnabledFollowups(db: AgentDb): Promise<AgentFollowup[]> {
-  // Cross-org: service_role bypassa RLS. Listamos TODOS pra um unico tick
-  // cobrir multi-tenant. order_index nao importa aqui (cada followup tem
-  // seu proprio gatilho independente).
   const { data, error } = await db
     .from("agent_followups")
     .select("*")
-    .eq("is_enabled", true);
+    .eq("is_enabled", true)
+    .order("organization_id", { ascending: true })
+    .order("config_id", { ascending: true })
+    .order("order_index", { ascending: true });
   if (error) {
     logError("ai_agent_followups_tick_load_failed", {
       organization_id: null,
@@ -218,37 +259,48 @@ async function loadEnabledFollowups(db: AgentDb): Promise<AgentFollowup[]> {
     });
     return [];
   }
-  return (data ?? []) as AgentFollowup[];
+  return ((data ?? []) as AgentFollowup[]).map(withFollowupDefaults);
 }
 
-async function loadTemplateForFollowup(
+function withFollowupDefaults(followup: AgentFollowup): AgentFollowup {
+  return {
+    ...followup,
+    send_window_start: followup.send_window_start ?? "08:00",
+    send_window_end: followup.send_window_end ?? "18:00",
+    require_ai_active: followup.require_ai_active ?? true,
+  };
+}
+
+async function loadTemplatesForFollowups(
   db: AgentDb,
-  followup: AgentFollowup,
-): Promise<AgentNotificationTemplate | null> {
+  followups: AgentFollowup[],
+): Promise<Map<string, AgentNotificationTemplate>> {
+  const ids = [...new Set(followups.map((f) => f.template_id))];
+  const orgId = followups[0]?.organization_id;
+  if (!orgId || ids.length === 0) return new Map();
   const { data, error } = await db
     .from("agent_notification_templates")
     .select("*")
-    .eq("organization_id", followup.organization_id)
-    .eq("id", followup.template_id)
-    .maybeSingle();
+    .eq("organization_id", orgId)
+    .in("id", ids);
   if (error) {
     logError("ai_agent_followups_template_load_failed", {
-      organization_id: followup.organization_id,
-      followup_id: followup.id,
-      template_id: followup.template_id,
+      organization_id: orgId,
       error: error.message,
     });
-    return null;
+    return new Map();
   }
-  return (data as AgentNotificationTemplate | null) ?? null;
+  return new Map(
+    ((data ?? []) as AgentNotificationTemplate[]).map((template) => [template.id, template]),
+  );
 }
 
 async function getOrLoadConfig(
   db: AgentDb,
   orgId: string,
   configId: string,
-  cache: Map<string, { name: string; status: string } | null>,
-): Promise<{ name: string; status: string } | null> {
+  cache: Map<string, ConfigRow>,
+): Promise<ConfigRow> {
   if (cache.has(configId)) return cache.get(configId) ?? null;
   const { data } = await db
     .from("agent_configs")
@@ -256,7 +308,7 @@ async function getOrLoadConfig(
     .eq("organization_id", orgId)
     .eq("id", configId)
     .maybeSingle();
-  const value = (data as { name: string; status: string } | null) ?? null;
+  const value = (data as ConfigRow) ?? null;
   cache.set(configId, value);
   return value;
 }
@@ -293,78 +345,250 @@ async function getOrLoadProvider(
   }
 }
 
-// ============================================================================
-// Helpers — query de conversations elegiveis + disparo individual
-// ============================================================================
-
-interface DueConversation {
-  id: string;
-  organization_id: string;
-  lead_id: string;
-  crm_conversation_id: string | null;
-  last_interaction_at: string | null;
-}
-
-interface DueConversationsResult {
-  /** Conversas que estouraram o threshold + estao fora de handoff (PRE-dedupe). */
-  matchedCount: number;
-  /** Subset prontas pra dispatch (POS-dedupe contra agent_followup_runs). */
-  pending: DueConversation[];
-}
-
-async function loadDueConversations(
+async function loadCandidateConversations(
   db: AgentDb,
-  followup: AgentFollowup,
-): Promise<DueConversationsResult> {
-  const threshold = new Date(Date.now() - followup.delay_hours * 60 * 60 * 1000).toISOString();
-
-  // Step 1: conversations que estouraram o threshold + nao estao em handoff
-  const { data: convs, error } = await db
+  params: { organizationId: string; configId: string; minDelayHours: number },
+): Promise<ConversationRow[]> {
+  const threshold = new Date(
+    Date.now() - params.minDelayHours * 60 * 60 * 1000,
+  ).toISOString();
+  const { data, error } = await db
     .from("agent_conversations")
-    .select("id, organization_id, lead_id, crm_conversation_id, last_interaction_at, human_handoff_at")
-    .eq("organization_id", followup.organization_id)
-    .eq("config_id", followup.config_id)
+    .select("id, organization_id, config_id, lead_id, crm_conversation_id, last_interaction_at, human_handoff_at")
+    .eq("organization_id", params.organizationId)
+    .eq("config_id", params.configId)
     .is("human_handoff_at", null)
     .lt("last_interaction_at", threshold)
     .order("last_interaction_at", { ascending: true })
     .limit(MAX_PROCESSED_PER_TICK);
   if (error) {
     logError("ai_agent_followups_due_load_failed", {
-      organization_id: followup.organization_id,
-      followup_id: followup.id,
+      organization_id: params.organizationId,
+      config_id: params.configId,
       error: error.message,
     });
-    return { matchedCount: 0, pending: [] };
+    return [];
   }
-  const candidates = (convs ?? []) as Array<DueConversation & { human_handoff_at: string | null }>;
-  if (candidates.length === 0) return { matchedCount: 0, pending: [] };
+  return (data ?? []) as ConversationRow[];
+}
 
-  // Step 2: filtra conversas que ja foram disparadas pra este followup.
-  // Idealmente seria um LEFT JOIN... IS NULL, mas Supabase JS client nao
-  // suporta join direto cross-table. Buscamos os runs ja registrados e
-  // filtramos em memoria. Lista limitada por MAX_PROCESSED_PER_TICK
-  // (200), entao .in(...) e tranquilo.
-  const ids = candidates.map((c) => c.id);
-  const { data: runs } = await db
-    .from("agent_followup_runs")
-    .select("conversation_id")
-    .eq("followup_id", followup.id)
-    .in("conversation_id", ids);
-  const firedSet = new Set(
-    ((runs ?? []) as Array<{ conversation_id: string }>).map((r) => r.conversation_id),
+async function evaluateConversation(
+  db: AgentDb,
+  followups: AgentFollowup[],
+  conversation: ConversationRow,
+  now: Date,
+): Promise<Evaluation> {
+  if (!conversation.lead_id || !conversation.crm_conversation_id) {
+    return { status: "cancelled", reason: "missing_lead_or_conversation" };
+  }
+
+  const conversationStatus = await loadCrmConversationStatus(db, conversation);
+  if (conversationStatus === "closed") {
+    return { status: "cancelled", reason: "conversation_closed" };
+  }
+
+  const messages = await loadRecentMessages(db, conversation);
+  const lastCompany = messages.find((m) => isCompanySender(m.sender));
+  const lastLead = messages.find((m) => m.sender === "lead");
+  const latest = messages[0];
+
+  if (!latest || !lastCompany?.created_at) {
+    return { status: "waiting", reason: "no_company_message" };
+  }
+
+  if (latest.sender === "lead") {
+    return {
+      status: "cancelled",
+      reason: "lead_replied",
+      lastCompanyMessageAt: lastCompany.created_at,
+      lastLeadMessageAt: lastLead?.created_at ?? null,
+    };
+  }
+
+  if (
+    lastLead?.created_at &&
+    new Date(lastLead.created_at).getTime() > new Date(lastCompany.created_at).getTime()
+  ) {
+    return {
+      status: "cancelled",
+      reason: "lead_replied_after_company",
+      lastCompanyMessageAt: lastCompany.created_at,
+      lastLeadMessageAt: lastLead.created_at,
+    };
+  }
+
+  const sentRuns = await loadSentRuns(db, conversation, followups);
+  const next = followups.find((followup) => !sentRuns.has(followup.id));
+  if (!next) {
+    return {
+      status: "finished",
+      reason: "sequence_completed",
+      lastCompanyMessageAt: lastCompany.created_at,
+      lastLeadMessageAt: lastLead?.created_at ?? null,
+    };
+  }
+
+  const baseAt = lastSequenceTouchAt(followups, sentRuns, lastCompany.created_at);
+  const dueAt = new Date(
+    new Date(baseAt).getTime() + next.delay_hours * 60 * 60 * 1000,
   );
+  if (now.getTime() < dueAt.getTime()) {
+    return {
+      status: "waiting",
+      followup: next,
+      nextRunAt: dueAt,
+      lastCompanyMessageAt: lastCompany.created_at,
+      lastLeadMessageAt: lastLead?.created_at ?? null,
+    };
+  }
 
-  const pending = candidates
-    .filter((c) => !firedSet.has(c.id))
-    .map((c) => ({
-      id: c.id,
-      organization_id: c.organization_id,
-      lead_id: c.lead_id,
-      crm_conversation_id: c.crm_conversation_id,
-      last_interaction_at: c.last_interaction_at,
-    }));
+  const window = evaluateSendWindow(now, next);
+  if (!window.allowed) {
+    return {
+      status: "paused",
+      followup: next,
+      nextRunAt: window.nextRunAt,
+      reason: "outside_send_window",
+      lastCompanyMessageAt: lastCompany.created_at,
+      lastLeadMessageAt: lastLead?.created_at ?? null,
+    };
+  }
 
-  return { matchedCount: candidates.length, pending };
+  return {
+    status: "eligible",
+    followup: next,
+    nextRunAt: now,
+    lastCompanyMessageAt: lastCompany.created_at,
+    lastLeadMessageAt: lastLead?.created_at ?? null,
+  };
+}
+
+async function loadRecentMessages(
+  db: AgentDb,
+  conversation: ConversationRow,
+): Promise<MessageRow[]> {
+  if (!conversation.crm_conversation_id) return [];
+  const { data, error } = await db
+    .from("messages")
+    .select("id, sender, created_at")
+    .eq("organization_id", conversation.organization_id)
+    .eq("conversation_id", conversation.crm_conversation_id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) return [];
+  return (data ?? []) as MessageRow[];
+}
+
+async function loadCrmConversationStatus(
+  db: AgentDb,
+  conversation: ConversationRow,
+): Promise<string | null> {
+  if (!conversation.crm_conversation_id) return null;
+  const { data, error } = await db
+    .from("conversations")
+    .select("status")
+    .eq("organization_id", conversation.organization_id)
+    .eq("id", conversation.crm_conversation_id)
+    .maybeSingle();
+  if (error) return null;
+  return (data as { status?: string | null } | null)?.status ?? null;
+}
+
+async function loadSentRuns(
+  db: AgentDb,
+  conversation: ConversationRow,
+  followups: AgentFollowup[],
+): Promise<Map<string, string>> {
+  const { data } = await db
+    .from("agent_followup_runs")
+    .select("followup_id, status, sent_at, fired_at")
+    .eq("organization_id", conversation.organization_id)
+    .eq("conversation_id", conversation.id)
+    .in("followup_id", followups.map((f) => f.id))
+    .eq("status", "sent");
+  return new Map(
+    ((data ?? []) as Array<{ followup_id: string; sent_at?: string | null; fired_at?: string | null }>)
+      .map((row) => [row.followup_id, row.sent_at ?? row.fired_at ?? new Date(0).toISOString()]),
+  );
+}
+
+function lastSequenceTouchAt(
+  followups: AgentFollowup[],
+  sentRuns: Map<string, string>,
+  fallback: string,
+): string {
+  let latest = fallback;
+  for (const followup of followups) {
+    const sentAt = sentRuns.get(followup.id);
+    if (!sentAt) continue;
+    if (new Date(sentAt).getTime() > new Date(latest).getTime()) {
+      latest = sentAt;
+    }
+  }
+  return latest;
+}
+
+function isCompanySender(sender: string): boolean {
+  return sender === "ai" || sender === "agent";
+}
+
+function evaluateSendWindow(
+  now: Date,
+  followup: AgentFollowup,
+): { allowed: true; nextRunAt: Date } | { allowed: false; nextRunAt: Date } {
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMinutes = parseTimeMinutes(followup.send_window_start);
+  const endMinutes = parseTimeMinutes(followup.send_window_end);
+  if (nowMinutes >= startMinutes && nowMinutes < endMinutes) {
+    return { allowed: true, nextRunAt: now };
+  }
+  const next = new Date(now);
+  next.setSeconds(0, 0);
+  if (nowMinutes >= endMinutes) {
+    next.setDate(next.getDate() + 1);
+  }
+  next.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+  return { allowed: false, nextRunAt: next };
+}
+
+function parseTimeMinutes(value: string): number {
+  const [h, m] = value.split(":").map((part) => Number(part));
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 8 * 60;
+  return h * 60 + m;
+}
+
+function nextFollowupRunDate(
+  followups: AgentFollowup[],
+  current: AgentFollowup,
+  sentAt: Date,
+): Date | undefined {
+  const index = followups.findIndex((followup) => followup.id === current.id);
+  const next = index >= 0 ? followups[index + 1] : undefined;
+  if (!next) return undefined;
+  return new Date(sentAt.getTime() + next.delay_hours * 60 * 60 * 1000);
+}
+
+async function persistConversationState(
+  db: AgentDb,
+  conversation: ConversationRow,
+  evaluation: Evaluation,
+): Promise<void> {
+  await db.from("agent_followup_conversation_states").upsert({
+    organization_id: conversation.organization_id,
+    config_id: conversation.config_id,
+    agent_conversation_id: conversation.id,
+    current_followup_id: evaluation.followup?.id ?? null,
+    current_order_index: evaluation.followup?.order_index ?? 0,
+    status: evaluation.status === "eligible" ? "eligible" : evaluation.status,
+    next_run_at: evaluation.nextRunAt?.toISOString() ?? null,
+    last_company_message_at: evaluation.lastCompanyMessageAt ?? null,
+    last_lead_message_at: evaluation.lastLeadMessageAt ?? null,
+    last_sent_at: evaluation.lastSentAt ?? null,
+    pause_reason: evaluation.status === "paused" ? evaluation.reason ?? null : null,
+    cancel_reason: evaluation.status === "cancelled" ? evaluation.reason ?? null : null,
+    finalized_at: evaluation.status === "finished" ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "agent_conversation_id" });
 }
 
 interface DispatchParams {
@@ -372,23 +596,23 @@ interface DispatchParams {
   followup: AgentFollowup;
   template: AgentNotificationTemplate;
   agentName: string;
-  conversation: DueConversation;
+  conversation: ConversationRow;
   provider: WhatsAppProvider;
 }
 
 interface DispatchOutcome {
-  /** True se o INSERT em agent_followup_runs + sendText completaram. */
   fired: boolean;
-  /** Texto curto do erro quando algo falhou apos o INSERT (pra error_samples). */
   error?: string;
 }
 
 async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome> {
   const { db, followup, template, agentName, conversation, provider } = params;
 
-  // 1. Carrega lead.name + phone PRIMEIRO. Se nao tem phone, abortamos
-  // ANTES do INSERT — assim nao queimamos a oportunidade de disparar
-  // se o cliente adicionar o phone depois.
+  const recheck = await evaluateConversation(db, [followup], conversation, new Date());
+  if (recheck.status !== "eligible") {
+    return { fired: false };
+  }
+
   const { data: leadRow, error: leadError } = await db
     .from("leads")
     .select("name, phone")
@@ -398,34 +622,21 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
   if (leadError) {
     return { fired: false, error: `lead lookup failed: ${leadError.message}` };
   }
-  const lead = (leadRow as { name?: string | null; phone?: string | null } | null) ?? null;
-  if (!lead || !lead.phone) {
-    // Sem phone — skip silencioso (volta a tentar quando phone for setado).
-    return { fired: false };
-  }
+  const lead = (leadRow as LeadRow | null) ?? null;
+  if (!lead?.phone) return { fired: false };
 
-  // 2. Idempotency lock: INSERT antes de qualquer side effect. UNIQUE
-  // (followup_id, conversation_id) — se 2 ticks rodam simultaneo, um
-  // ganha (insert ok), outro cai em 23505 e skipa silencioso.
   const { error: runInsertError } = await db.from("agent_followup_runs").insert({
     organization_id: conversation.organization_id,
     followup_id: followup.id,
     conversation_id: conversation.id,
+    status: "sending",
   });
   if (runInsertError) {
     const code = (runInsertError as { code?: string }).code;
-    // 23505 = unique_violation. Significa que outro tick (ou esse mesmo
-    // numa retry concorrente) ja disparou — comportamento esperado, skip.
-    if (code === "23505") {
-      return { fired: false };
-    }
+    if (code === "23505") return { fired: false };
     return { fired: false, error: `run insert failed: ${runInsertError.message}` };
   }
 
-  // 3. Render body. Followups enviam pro LEAD (nao pra equipe), entao
-  // wa_link aponta pra conversation do CRM e lead_phone na fixed vars
-  // e o numero DO LEAD (nao o destino da mensagem — paridade com o
-  // trigger_notification handler).
   const fixed: NotificationFixedVariables = {
     lead_name: lead.name?.trim() || "cliente",
     lead_phone: lead.phone.replace(/\D/g, ""),
@@ -439,21 +650,25 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
   try {
     renderedBody = renderNotificationTemplate(template.body_template, fixed, undefined);
   } catch (err: unknown) {
+    await markRunFailed(db, conversation, followup, `render failed: ${errorMessage(err)}`);
     return { fired: false, error: `render failed: ${errorMessage(err)}` };
   }
 
-  // 4. Envia pra LEAD. Se sendText falhar, a row em agent_followup_runs
-  // FICA (nao rollbackamos) — preferimos NAO re-tentar disparo
-  // automaticamente, pra evitar spam quando provider esta flaky. Cliente
-  // que reportar pode revisitar o run manualmente.
   try {
     await provider.sendText({
       phone: fixed.lead_phone,
       message: renderedBody,
     });
+    await db
+      .from("agent_followup_runs")
+      .update({ status: "sent", sent_at: new Date().toISOString() })
+      .eq("organization_id", conversation.organization_id)
+      .eq("followup_id", followup.id)
+      .eq("conversation_id", conversation.id);
     return { fired: true };
   } catch (err: unknown) {
     const message = errorMessage(err);
+    await markRunFailed(db, conversation, followup, `send failed: ${message}`);
     logError("ai_agent_followups_send_failed", {
       organization_id: conversation.organization_id,
       followup_id: followup.id,
@@ -463,4 +678,18 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
     });
     return { fired: false, error: `send failed: ${message}` };
   }
+}
+
+async function markRunFailed(
+  db: AgentDb,
+  conversation: ConversationRow,
+  followup: AgentFollowup,
+  message: string,
+): Promise<void> {
+  await db
+    .from("agent_followup_runs")
+    .update({ status: "failed", error_message: message })
+    .eq("organization_id", conversation.organization_id)
+    .eq("followup_id", followup.id)
+    .eq("conversation_id", conversation.id);
 }

@@ -2,14 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runFollowupsTick } from "@/lib/ai-agent/followups/tick";
 import { createSupabaseMock } from "@/test/helpers/supabase-mock";
 
-// PR4 (mai/2026): testes do runtime de agent_followups. Foco em:
-//   - Idempotency via UNIQUE constraint (INSERT antes do send)
-//   - Filtro: handoff_at, last_interaction_at, is_enabled
-//   - Render: corpo usa vars do lead + agent
-//   - Skip silencioso pra: sem provider, sem phone, config archived,
-//     template archived
-//   - Cap: respeita MAX_PROCESSED_PER_TICK (200)
-
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/observability", () => ({
   errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
@@ -19,8 +11,6 @@ vi.mock("@/lib/observability", () => ({
   getRequestId: vi.fn(() => "req-test"),
 }));
 
-// Provider stub global — registramos `sendText` mockado pra observar
-// argumentos. `createProvider` retorna o mesmo stub sempre.
 const providerSendText = vi.fn();
 vi.mock("@/lib/whatsapp/providers", () => ({
   createProvider: vi.fn(() => ({
@@ -35,8 +25,10 @@ vi.mock("@/lib/supabase/admin", () => ({
 const ORG = "org-a";
 const CONFIG = "cfg-a";
 const FOLLOWUP = "fup-a";
+const FOLLOWUP_2 = "fup-b";
 const TEMPLATE = "tpl-a";
 const CONV = "conv-a";
+const CRM_CONV = "crm-conv-a";
 const LEAD = "lead-a";
 
 function makeFollowup(overrides: Partial<Record<string, unknown>> = {}) {
@@ -46,9 +38,12 @@ function makeFollowup(overrides: Partial<Record<string, unknown>> = {}) {
     config_id: CONFIG,
     name: "Lembrete 24h",
     template_id: TEMPLATE,
-    delay_hours: 24,
+    delay_hours: 1,
     is_enabled: true,
     order_index: 0,
+    send_window_start: "00:00",
+    send_window_end: "23:59",
+    require_ai_active: true,
     created_at: "2026-05-01T00:00:00.000Z",
     updated_at: "2026-05-01T00:00:00.000Z",
     ...overrides,
@@ -64,7 +59,7 @@ function makeTemplate(overrides: Partial<Record<string, unknown>> = {}) {
     description: null,
     target_type: "phone",
     target_address: "5511999999999",
-    body_template: "Oi {{lead_name}}, voce esqueceu de mim? — {{agent_name}}",
+    body_template: "Oi {{lead_name}}, voce esqueceu de mim? - {{agent_name}}",
     status: "active",
     created_at: "2026-05-01T00:00:00.000Z",
     updated_at: "2026-05-01T00:00:00.000Z",
@@ -75,12 +70,46 @@ function makeConversation(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: CONV,
     organization_id: ORG,
+    config_id: CONFIG,
     lead_id: LEAD,
-    crm_conversation_id: "crm-conv-a",
-    last_interaction_at: "2026-04-30T00:00:00.000Z", // bem antigo
+    crm_conversation_id: CRM_CONV,
+    last_interaction_at: "2026-04-30T00:00:00.000Z",
     human_handoff_at: null,
     ...overrides,
   };
+}
+
+function queueHappyPathBase(supabase: ReturnType<typeof createSupabaseMock>, followups = [makeFollowup()]) {
+  supabase.queue("agent_followups", { data: followups, error: null });
+  supabase.queue("agent_configs", {
+    data: { name: "Vendedora", status: "active" },
+    error: null,
+  });
+  supabase.queue("agent_notification_templates", {
+    data: [makeTemplate()],
+    error: null,
+  });
+  supabase.queue("agent_conversations", {
+    data: [makeConversation()],
+    error: null,
+  });
+  supabase.queue("whatsapp_connections", {
+    data: {
+      provider: "uazapi",
+      instance_url: "https://example.com",
+      instance_token: "tok",
+    },
+    error: null,
+  });
+}
+
+function queueEligibleEvaluation(supabase: ReturnType<typeof createSupabaseMock>) {
+  supabase.queue("conversations", { data: { status: "active" }, error: null });
+  supabase.queue("messages", {
+    data: [{ id: "m1", sender: "ai", created_at: "2026-04-30T00:00:00.000Z" }],
+    error: null,
+  });
+  supabase.queue("agent_followup_runs", { data: [], error: null });
 }
 
 beforeEach(() => {
@@ -89,204 +118,122 @@ beforeEach(() => {
 });
 
 describe("runFollowupsTick", () => {
-  it("dispara INSERT antes do sendText + envia pro phone do lead", async () => {
+  it("envia a proxima etapa elegivel e marca o run como sent", async () => {
     const supabase = createSupabaseMock();
-    // 1. agent_followups (enabled=true)
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    // 2. agent_configs (lookup do nome — active)
-    supabase.queue("agent_configs", {
-      data: { name: "Vendedora", status: "active" },
-      error: null,
-    });
-    // 3. agent_notification_templates
-    supabase.queue("agent_notification_templates", { data: makeTemplate(), error: null });
-    // 4. agent_conversations (due — last_interaction muito antigo)
-    supabase.queue("agent_conversations", { data: [makeConversation()], error: null });
-    // 5. agent_followup_runs lookup pra dedupe (vazio = nunca disparou)
-    supabase.queue("agent_followup_runs", { data: [], error: null });
-    // 6. whatsapp_connections (provider load)
-    supabase.queue("whatsapp_connections", {
-      data: {
-        provider: "uazapi",
-        instance_url: "https://example.com",
-        instance_token: "tok",
-      },
-      error: null,
-    });
-    // 7. leads (phone lookup pra dispatch)
+    queueHappyPathBase(supabase);
+    queueEligibleEvaluation(supabase);
+    // Revalidacao antes do envio.
+    queueEligibleEvaluation(supabase);
     supabase.queue("leads", {
       data: { name: "Maria", phone: "+55 11 98888-7777" },
       error: null,
     });
-    // 8. agent_followup_runs INSERT (sem erro = lock obtido)
+    supabase.queue("agent_followup_runs", { data: null, error: null });
     supabase.queue("agent_followup_runs", { data: null, error: null });
 
     const result = await runFollowupsTick(supabase as never);
 
     expect(result.fired).toBe(1);
-    expect(result.skipped).toBe(0);
     expect(result.errors).toBe(0);
-
-    // Confirma que INSERT em agent_followup_runs aconteceu ANTES do send
-    // (estrutura do dispatch: insert → render → sendText).
-    expect(supabase.inserts.agent_followup_runs).toHaveLength(1);
     expect(supabase.inserts.agent_followup_runs?.[0]).toMatchObject({
       followup_id: FOLLOWUP,
       conversation_id: CONV,
       organization_id: ORG,
+      status: "sending",
     });
-
-    // Confirma que sendText foi chamado pro PHONE DO LEAD (normalizado),
-    // nao pro target_address do template.
-    expect(providerSendText).toHaveBeenCalledTimes(1);
-    expect(providerSendText.mock.calls[0]?.[0]).toMatchObject({
-      phone: "5511988887777",
+    expect(supabase.updates.agent_followup_runs?.[0]).toMatchObject({
+      status: "sent",
     });
-    // Body renderizado com vars do lead + agent.
-    expect(providerSendText.mock.calls[0]?.[0].message).toContain("Maria");
-    expect(providerSendText.mock.calls[0]?.[0].message).toContain("Vendedora");
+    expect(providerSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: "5511988887777",
+        message: expect.stringContaining("Maria"),
+      }),
+    );
   });
 
-  it("idempotency: 23505 no INSERT = skip silencioso, NAO sendText", async () => {
+  it("cancela a fila quando a ultima mensagem e do lead", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    supabase.queue("agent_configs", {
-      data: { name: "Agente", status: "active" },
+    queueHappyPathBase(supabase);
+    supabase.queue("conversations", { data: { status: "active" }, error: null });
+    supabase.queue("messages", {
+      data: [
+        { id: "m2", sender: "lead", created_at: "2026-04-30T02:00:00.000Z" },
+        { id: "m1", sender: "ai", created_at: "2026-04-30T00:00:00.000Z" },
+      ],
       error: null,
-    });
-    supabase.queue("agent_notification_templates", { data: makeTemplate(), error: null });
-    supabase.queue("agent_conversations", { data: [makeConversation()], error: null });
-    supabase.queue("agent_followup_runs", { data: [], error: null });
-    supabase.queue("whatsapp_connections", {
-      data: { provider: "uazapi", instance_url: "https://ex.com", instance_token: "t" },
-      error: null,
-    });
-    supabase.queue("leads", {
-      data: { name: "Joao", phone: "5511977776666" },
-      error: null,
-    });
-    // INSERT colide com row ja existente (outro tick) — unique_violation
-    supabase.queue("agent_followup_runs", {
-      data: null,
-      error: { message: "duplicate", code: "23505" },
     });
 
     const result = await runFollowupsTick(supabase as never);
 
-    expect(result.fired).toBe(0);
+    expect(result.cancelled).toBe(1);
+    expect(providerSendText).not.toHaveBeenCalled();
+    expect(supabase.inserts.agent_followup_runs ?? []).toHaveLength(0);
+    expect(supabase.inserts.agent_followup_conversation_states?.[0]).toMatchObject({
+      status: "cancelled",
+      cancel_reason: "lead_replied",
+    });
+  });
+
+  it("pausa e reagenda quando esta fora da janela de envio", async () => {
+    const supabase = createSupabaseMock();
+    queueHappyPathBase(supabase, [
+      makeFollowup({ send_window_start: "23:58", send_window_end: "23:59" }),
+    ]);
+    queueEligibleEvaluation(supabase);
+
+    const result = await runFollowupsTick(supabase as never);
+
+    expect(result.paused).toBe(1);
+    expect(providerSendText).not.toHaveBeenCalled();
+    expect(supabase.inserts.agent_followup_conversation_states?.[0]).toMatchObject({
+      status: "paused",
+      pause_reason: "outside_send_window",
+    });
+  });
+
+  it("usa sent_at da etapa anterior para calcular a proxima etapa", async () => {
+    const supabase = createSupabaseMock();
+    queueHappyPathBase(supabase, [
+      makeFollowup(),
+      makeFollowup({ id: FOLLOWUP_2, order_index: 1, delay_hours: 720 }),
+    ]);
+    supabase.queue("conversations", { data: { status: "active" }, error: null });
+    supabase.queue("messages", {
+      data: [{ id: "m1", sender: "ai", created_at: "2026-04-30T00:00:00.000Z" }],
+      error: null,
+    });
+    supabase.queue("agent_followup_runs", {
+      data: [{ followup_id: FOLLOWUP, status: "sent", sent_at: new Date().toISOString() }],
+      error: null,
+    });
+
+    const result = await runFollowupsTick(supabase as never);
+
     expect(result.skipped).toBe(1);
-    expect(result.errors).toBe(0);
     expect(providerSendText).not.toHaveBeenCalled();
   });
 
-  it("dedupe pre-tick: conversation ja em agent_followup_runs e excluida", async () => {
+  it("skip lead sem phone sem inserir run", async () => {
     const supabase = createSupabaseMock();
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    supabase.queue("agent_configs", {
-      data: { name: "X", status: "active" },
-      error: null,
-    });
-    supabase.queue("agent_notification_templates", { data: makeTemplate(), error: null });
-    supabase.queue("agent_conversations", { data: [makeConversation()], error: null });
-    // RUNS lookup retorna a conversa ja disparada
-    supabase.queue("agent_followup_runs", {
-      data: [{ conversation_id: CONV }],
-      error: null,
-    });
-
-    const result = await runFollowupsTick(supabase as never);
-
-    expect(result.conversations_matched).toBe(1);
-    // Filtrada antes de chegar no dispatch — provider nem foi carregado
-    expect(result.fired).toBe(0);
-    expect(providerSendText).not.toHaveBeenCalled();
-  });
-
-  it("skip lead sem phone — NAO insere agent_followup_runs", async () => {
-    const supabase = createSupabaseMock();
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    supabase.queue("agent_configs", {
-      data: { name: "X", status: "active" },
-      error: null,
-    });
-    supabase.queue("agent_notification_templates", { data: makeTemplate(), error: null });
-    supabase.queue("agent_conversations", { data: [makeConversation()], error: null });
-    supabase.queue("agent_followup_runs", { data: [], error: null });
-    supabase.queue("whatsapp_connections", {
-      data: { provider: "uazapi", instance_url: "https://ex.com", instance_token: "t" },
-      error: null,
-    });
-    // lead sem phone
+    queueHappyPathBase(supabase);
+    queueEligibleEvaluation(supabase);
+    queueEligibleEvaluation(supabase);
     supabase.queue("leads", { data: { name: "Sem Phone", phone: null }, error: null });
 
     const result = await runFollowupsTick(supabase as never);
 
-    expect(result.fired).toBe(0);
-    expect(result.skipped).toBe(1);
-    // CRITICO: NAO podemos ter inserido em runs — senao perdemos
-    // chance de re-tentar quando o phone for adicionado.
-    expect(supabase.inserts.agent_followup_runs ?? []).toHaveLength(0);
-    expect(providerSendText).not.toHaveBeenCalled();
-  });
-
-  it("skip org sem whatsapp_connection conectado", async () => {
-    const supabase = createSupabaseMock();
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    supabase.queue("agent_configs", {
-      data: { name: "X", status: "active" },
-      error: null,
-    });
-    supabase.queue("agent_notification_templates", { data: makeTemplate(), error: null });
-    supabase.queue("agent_conversations", { data: [makeConversation()], error: null });
-    supabase.queue("agent_followup_runs", { data: [], error: null });
-    // whatsapp_connections retorna null = sem provider conectado
-    supabase.queue("whatsapp_connections", { data: null, error: null });
-
-    const result = await runFollowupsTick(supabase as never);
-
-    expect(result.fired).toBe(0);
     expect(result.skipped).toBe(1);
     expect(supabase.inserts.agent_followup_runs ?? []).toHaveLength(0);
     expect(providerSendText).not.toHaveBeenCalled();
   });
 
-  it("skip config arquivado — nao toca template/conv/provider", async () => {
-    const supabase = createSupabaseMock();
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    supabase.queue("agent_configs", {
-      data: { name: "X", status: "paused" },
-      error: null,
-    });
-
-    const result = await runFollowupsTick(supabase as never);
-
-    expect(result.followups_loaded).toBe(1);
-    expect(result.fired).toBe(0);
-    expect(result.skipped).toBe(0);
-    expect(providerSendText).not.toHaveBeenCalled();
-  });
-
-  it("template archived = skip todo o followup", async () => {
-    const supabase = createSupabaseMock();
-    supabase.queue("agent_followups", { data: [makeFollowup()], error: null });
-    supabase.queue("agent_configs", {
-      data: { name: "X", status: "active" },
-      error: null,
-    });
-    supabase.queue("agent_notification_templates", {
-      data: { ...makeTemplate(), status: "archived" },
-      error: null,
-    });
-
-    const result = await runFollowupsTick(supabase as never);
-    expect(result.fired).toBe(0);
-    expect(providerSendText).not.toHaveBeenCalled();
-  });
-
-  it("zero followups enabled = idle result com fired=0", async () => {
+  it("zero followups enabled = idle", async () => {
     const supabase = createSupabaseMock();
     supabase.queue("agent_followups", { data: [], error: null });
+
     const result = await runFollowupsTick(supabase as never);
+
     expect(result.followups_loaded).toBe(0);
     expect(result.fired).toBe(0);
     expect(result.errors).toBe(0);

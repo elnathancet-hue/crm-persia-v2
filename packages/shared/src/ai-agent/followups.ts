@@ -61,6 +61,18 @@ export const FOLLOWUP_DELAY_PRESETS: ReadonlyArray<{ hours: number; label: strin
   { hours: 336, label: "2 semanas" },
 ];
 
+export const FOLLOWUP_DEFAULT_SEND_WINDOW_START = "08:00";
+export const FOLLOWUP_DEFAULT_SEND_WINDOW_END = "18:00";
+
+export function normalizeFollowupWindowTime(value: string | null | undefined): string {
+  const trimmed = (value ?? "").trim();
+  return /^\d{2}:\d{2}$/.test(trimmed) ? trimmed : FOLLOWUP_DEFAULT_SEND_WINDOW_START;
+}
+
+export function isValidFollowupWindow(start: string, end: string): boolean {
+  return /^\d{2}:\d{2}$/.test(start) && /^\d{2}:\d{2}$/.test(end) && start < end;
+}
+
 // ============================================================================
 // Domain types — mirror agent_followups + agent_followup_runs
 // ============================================================================
@@ -81,6 +93,9 @@ export interface AgentFollowup {
   // Ordem de exibicao no editor. Disparo NAO depende de ordem — cada
   // follow-up tem seu proprio gatilho independente.
   order_index: number;
+  send_window_start: string;
+  send_window_end: string;
+  require_ai_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -94,6 +109,36 @@ export interface AgentFollowupRun {
   organization_id: string;
   conversation_id: string;
   fired_at: string;
+  status: "sending" | "sent" | "failed" | "skipped";
+  error_message: string | null;
+  sent_at: string | null;
+}
+
+export type AgentFollowupConversationStatus =
+  | "waiting"
+  | "eligible"
+  | "sent"
+  | "paused"
+  | "cancelled"
+  | "finished";
+
+export interface AgentFollowupConversationState {
+  id: string;
+  organization_id: string;
+  config_id: string;
+  agent_conversation_id: string;
+  current_followup_id: string | null;
+  current_order_index: number;
+  status: AgentFollowupConversationStatus;
+  next_run_at: string | null;
+  last_company_message_at: string | null;
+  last_lead_message_at: string | null;
+  last_sent_at: string | null;
+  pause_reason: string | null;
+  cancel_reason: string | null;
+  finalized_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ============================================================================
@@ -106,6 +151,9 @@ export interface CreateFollowupInput {
   template_id: string;
   delay_hours: number;
   is_enabled?: boolean;
+  send_window_start?: string;
+  send_window_end?: string;
+  require_ai_active?: boolean;
 }
 
 export interface UpdateFollowupInput {
@@ -114,6 +162,9 @@ export interface UpdateFollowupInput {
   delay_hours?: number;
   is_enabled?: boolean;
   order_index?: number;
+  send_window_start?: string;
+  send_window_end?: string;
+  require_ai_active?: boolean;
 }
 
 // ============================================================================
@@ -124,10 +175,12 @@ export interface FollowupValidationErrors {
   name?: string;
   template_id?: string;
   delay_hours?: string;
+  send_window?: string;
 }
 
 export function validateFollowupInput(
-  input: Pick<CreateFollowupInput, "name" | "template_id" | "delay_hours">,
+  input: Pick<CreateFollowupInput, "name" | "template_id" | "delay_hours"> &
+    Partial<Pick<CreateFollowupInput, "send_window_start" | "send_window_end">>,
 ): FollowupValidationErrors {
   const errors: FollowupValidationErrors = {};
   const name = input.name?.trim() ?? "";
@@ -148,6 +201,11 @@ export function validateFollowupInput(
     input.delay_hours > FOLLOWUP_DELAY_HOURS_MAX
   ) {
     errors.delay_hours = `Entre ${FOLLOWUP_DELAY_HOURS_MIN}h e ${FOLLOWUP_DELAY_HOURS_MAX}h`;
+  }
+  const start = input.send_window_start ?? FOLLOWUP_DEFAULT_SEND_WINDOW_START;
+  const end = input.send_window_end ?? FOLLOWUP_DEFAULT_SEND_WINDOW_END;
+  if (!isValidFollowupWindow(start, end)) {
+    errors.send_window = "A janela deve ter inicio menor que o fim";
   }
   return errors;
 }
