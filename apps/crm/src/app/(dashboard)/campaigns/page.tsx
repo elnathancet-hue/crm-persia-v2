@@ -2,23 +2,26 @@ import { PageTitle } from "@persia/ui/typography";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
 import {
   listCampaignGroups, listCrmCampaigns,
-  getWhatsAppConnectionStatus,
+  getWhatsAppConnectionStatus, getCrmCampaignDetails
 } from "@/actions/crm-campaigns";
 import { getSegments } from "@/actions/segments";
 import { getTags } from "@/actions/tags";
 import { getPipelines, getAllStagesForOrg } from "@/actions/crm";
 import { CrmCampaignList } from "@/components/campaigns/crm-campaign-list";
 
-export default async function CampaignsPage() {
+export default async function CampaignsPage({ searchParams }: { searchParams: { edit?: string } }) {
   await requireAdminPageAccess();
 
-  const [campaigns, segments, tagsResult, pipelines, stages, groups] = await Promise.all([
+  const editId = searchParams.edit;
+
+  const [campaigns, segments, tagsResult, pipelines, stages, groups, editData] = await Promise.all([
     listCrmCampaigns().catch(() => []),
     getSegments().catch(() => []),
     getTags().catch(() => []),
     getPipelines().catch(() => []),
     getAllStagesForOrg().catch(() => []),
     listCampaignGroups().catch(() => []),
+    editId ? getCrmCampaignDetails(editId).catch(() => null) : Promise.resolve(null),
   ]);
 
   const whatsappStatus = await getWhatsAppConnectionStatus().catch(
@@ -44,6 +47,7 @@ export default async function CampaignsPage() {
         stages={stageItems}
         groups={groups}
         whatsappStatus={whatsappStatus}
+        initialEditData={editData}
       />
     </div>
   );

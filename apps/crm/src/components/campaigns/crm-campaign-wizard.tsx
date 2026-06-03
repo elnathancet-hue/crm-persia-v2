@@ -3,7 +3,7 @@
 // Wizard de criação de campanha — 6 etapas conforme roadmap.
 // Etapa 1: Objetivo (tipo) → 2: Público → 3: Mensagem → 4: Agenda → 5: Validação → 6: Confirmar
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
@@ -23,10 +23,10 @@ import {
   UserCircle, LayoutTemplate, Zap, Save,
 } from "lucide-react";
 import type {
-  CampaignKind, CreateCampaignDraftInput, CampaignAudiencePreview,
+  CampaignKind, CreateCampaignDraftInput, CampaignAudiencePreview, CrmCampaignWithDetails
 } from "@persia/shared/crm";
 import {
-  createCampaignDraft, validateCampaign, scheduleCampaign, uploadCampaignMediaAction,
+  createCampaignDraft, updateCampaignDraft, validateCampaign, previewCampaignAudience, scheduleCampaign, uploadCampaignMediaAction,
 } from "@/actions/crm-campaigns";
 
 interface Props {
@@ -37,6 +37,7 @@ interface Props {
   pipelines: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; pipeline_id: string; name: string }>;
   groups: Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
+  initialData?: CrmCampaignWithDetails | null;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
@@ -90,7 +91,7 @@ interface MessageStep {
   media_size?: number | null;
 }
 
-export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipelines, stages, groups }: Props) {
+export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipelines, stages, groups, initialData }: Props) {
   const [step, setStep] = useState<Step>(1);
   const [isPending, startTransition] = useTransition();
 
@@ -141,11 +142,92 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const [scheduledAt, setScheduledAt] = useState("");
   const [followupDelayAmount, setFollowupDelayAmount] = useState(1);
   const [followupDelayUnit, setFollowupDelayUnit] = useState<"hours" | "days">("days");
+
+  // Regras Avançadas
+  const [sendWindowStart, setSendWindowStart] = useState<string>("");
+  const [sendWindowEnd, setSendWindowEnd] = useState<string>("");
+  const [rateLimit, setRateLimit] = useState<string>("");
   const [stopOnReply, setStopOnReply] = useState(true);
 
   // Etapa 5
   const [preview, setPreview] = useState<CampaignAudiencePreview | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  // Efeito para carregar a prévia ao vivo na Etapa 2
+  useEffect(() => {
+    if (step === 2 && targetId) {
+      setIsPreviewLoading(true);
+      previewCampaignAudience(kind === "group_campaign" ? "group_campaign" : "lead_campaign", [
+        {
+          target_kind: targetKind,
+          target_id: targetId,
+          filters: { responsible, ...advancedFilters }
+        }
+      ]).then((result) => {
+        setIsPreviewLoading(false);
+        if (result && "data" in result && result.data) {
+          setPreview(result.data);
+        } else {
+          setPreview(null);
+        }
+      });
+    }
+  }, [step, targetId, targetKind, kind, responsible, advancedFilters]);
+
+  // Efeito para repopular os dados se formos editar ou duplicar
+  useEffect(() => {
+    if (open && initialData) {
+      setCreatedId(initialData.id);
+      setKind(initialData.kind);
+      setName(initialData.name);
+      setStopOnReply(initialData.stop_on_reply);
+      setSendWindowStart(initialData.send_window_start ?? "");
+      setSendWindowEnd(initialData.send_window_end ?? "");
+      setRateLimit(initialData.rate_limit_per_minute ? String(initialData.rate_limit_per_minute) : "");
+
+      if (initialData.targets && initialData.targets.length > 0) {
+        const t = initialData.targets[0];
+        setTargetKind(t.target_kind);
+        setTargetId(t.target_id ?? "");
+        const f = t.filters as any;
+        if (f) {
+          setResponsible(f.responsible ?? "all");
+          setAdvancedFilters({
+            excludeDuplicates: f.excludeDuplicates ?? true,
+            excludeOptOut: f.excludeOptOut ?? true,
+            excludeBlocked: f.excludeBlocked ?? true,
+            onlyWithPhone: f.onlyWithPhone ?? true,
+          });
+        }
+      }
+
+      if (initialData.steps && initialData.steps.length > 0) {
+        const step1 = initialData.steps.find((s) => s.position === 1);
+        if (step1) {
+          setMsgText(step1.message_text ?? "");
+          setMediaType(step1.media_type);
+          setMediaUrl(step1.media_url ?? "");
+          setMediaFilename(step1.media_filename ?? "");
+          setMediaMimeType(step1.media_mime_type);
+          setMediaSize(step1.media_size);
+          setSendMode(step1.send_mode);
+          setScheduledAt(step1.scheduled_at ? step1.scheduled_at.substring(0, 16) : "");
+        }
+
+        const step2 = initialData.steps.find((s) => s.position === 2);
+        if (step2) {
+          setFollowupEnabled(true);
+          setFollowupText(step2.message_text ?? "");
+          setFollowupDelayAmount(step2.delay_amount ?? 1);
+          setFollowupDelayUnit((step2.delay_unit as any) ?? "days");
+        } else {
+          setFollowupEnabled(false);
+          setFollowupText("");
+        }
+      }
+    }
+  }, [open, initialData]);
 
   // Etapa 6
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -170,6 +252,9 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
     setScheduledAt("");
     setFollowupDelayAmount(1);
     setFollowupDelayUnit("days");
+    setSendWindowStart("");
+    setSendWindowEnd("");
+    setRateLimit("");
     setStopOnReply(true);
     setPreview(null);
     setValidationError(null);
@@ -207,51 +292,93 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
     });
   }
 
-  // Avança para próxima etapa (criando rascunho na transição 4→5)
-  function handleNext() {
-    if (step === 4) {
-      // Criar rascunho e validar
-      startTransition(async () => {
-        const input: CreateCampaignDraftInput = {
-          name: name.trim() || "Nova Campanha",
-          kind,
-          mode: followupEnabled ? "sequence" : "single",
-          stop_on_reply: kind === "lead_campaign" ? stopOnReply : false,
-          steps: [
-            {
-              position: 1,
-              send_mode: sendMode,
-              message_text: msgText,
-              scheduled_at: sendMode === "scheduled_at" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
-              media_type: mediaType,
-              media_url: mediaType === "none" ? null : mediaUrl.trim(),
-              media_filename: mediaType === "none" ? null : mediaFilename.trim() || undefined,
-              media_mime_type: mediaMimeType,
-              media_size: mediaSize,
-              caption: mediaType === "none" ? null : msgText,
-            },
-            ...(followupEnabled ? [{
-              position: 2,
-              send_mode: "delay_after_previous" as const,
-              delay_amount: followupDelayAmount,
-              delay_unit: followupDelayUnit,
-              message_text: followupText,
-              media_type: "none" as const,
-            }] : []),
-          ],
-          targets: [{ target_kind: targetKind, target_id: targetId || null }],
-        };
-        const result = await createCampaignDraft(input);
-        const id = (result?.data as { id: string } | undefined)?.id;
-        if (id) {
-          setCreatedId(id);
-          await runValidation(id);
-        }
-        setStep(5);
-      });
-      return;
+  // Salva rascunho (cria ou atualiza)
+  async function saveDraftSilent() {
+    const rateLimitNum = rateLimit ? parseInt(rateLimit, 10) : null;
+    const input: CreateCampaignDraftInput = {
+      name: name.trim() || "Nova Campanha",
+      kind,
+      mode: followupEnabled ? "sequence" : "single",
+      timezone: "America/Sao_Paulo",
+      send_window_start: sendWindowStart || null,
+      send_window_end: sendWindowEnd || null,
+      rate_limit_per_minute: !isNaN(rateLimitNum as number) && rateLimitNum !== null ? rateLimitNum : null,
+      stop_on_reply: kind === "lead_campaign" ? stopOnReply : false,
+      steps: [
+        {
+          position: 1,
+          send_mode: sendMode,
+          message_text: msgText || "...", // Fallback to avoid null constraint se for cedo
+          scheduled_at: sendMode === "scheduled_at" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          media_type: mediaType,
+          media_url: mediaType === "none" ? null : mediaUrl.trim(),
+          media_filename: mediaType === "none" ? null : mediaFilename.trim() || undefined,
+          media_mime_type: mediaMimeType,
+          media_size: mediaSize,
+          caption: mediaType === "none" ? null : msgText || null,
+        },
+        ...(followupEnabled ? [{
+          position: 2,
+          send_mode: "delay_after_previous" as const,
+          delay_amount: followupDelayAmount,
+          delay_unit: followupDelayUnit,
+          message_text: followupText || "...",
+          media_type: "none" as const,
+        }] : []),
+      ],
+      targets: [
+        {
+          target_kind: targetKind,
+          target_id: targetId || null,
+          filters: {
+            responsible,
+            ...advancedFilters
+          }
+        },
+      ],
+    };
+
+    if (createdId) {
+      const updateRes = await updateCampaignDraft(createdId, input);
+      if (updateRes && "error" in updateRes) {
+        setFinalError(updateRes.error ?? "Erro ao atualizar rascunho");
+        return null;
+      }
+      return createdId;
+    } else {
+      const result = await createCampaignDraft(input);
+      if (result && "error" in result) {
+        setFinalError(result.error ?? "Erro ao criar rascunho");
+        return null;
+      }
+      const id = (result?.data as { id: string } | undefined)?.id;
+      if (id) setCreatedId(id);
+      return id ?? null;
     }
-    setStep((s) => Math.min(s + 1, 6) as Step);
+  }
+
+  // Avança para próxima etapa
+  function handleNext() {
+    startTransition(async () => {
+      if (step === 4) {
+        setFinalError(null);
+        const id = await saveDraftSilent();
+        if (!id) return; // Erro ao salvar
+        await runValidation(id);
+      }
+
+      setStep((s) => Math.min(s + 1, 6) as Step);
+    });
+  }
+
+  // Ação explícita do botão "Salvar rascunho"
+  function handleDraft() {
+    startTransition(async () => {
+      const id = await saveDraftSilent();
+      if (id) {
+        handleClose(false);
+      }
+    });
   }
 
   function handleBack() {
@@ -394,28 +521,12 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                     label: "Aviso para Grupos",
                     description: "Enviar comunicados para grupos de WhatsApp selecionados.",
                     icon: <Users className="size-5" />
-                  },
-                  {
-                    kind: "mixed_campaign" as CampaignKind,
-                    label: "Leads + Grupos",
-                    description: "Enviar para ambos, evitando mensagens duplicadas para o mesmo número.",
-                    icon: <LayoutTemplate className="size-5" />,
-                    disabled: true
-                  },
-                  {
-                    kind: "auto_followup" as CampaignKind,
-                    label: "Follow-up Automático",
-                    description: "Sequência de mensagens que para quando o lead responder.",
-                    icon: <Zap className="size-5" />,
-                    disabled: true
                   }
                 ].map((opt) => (
                   <button
                     key={opt.kind}
                     type="button"
-                    disabled={opt.disabled}
                     onClick={() => {
-                      if (opt.disabled) return;
                       setKind(opt.kind);
                       setTargetKind(opt.kind === "group_campaign" ? "group" : "segment");
                       setTargetId("");
@@ -424,7 +535,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                       kind === opt.kind
                         ? "border-primary bg-primary/5 ring-1 ring-primary"
                         : "border-border bg-card"
-                    } ${opt.disabled ? 'opacity-60 cursor-not-allowed hover:border-border' : ''}`}
+                    }`}
                   >
                     <div className={`flex size-10 items-center justify-center rounded-lg ${kind === opt.kind ? 'bg-primary text-primary-foreground' : 'bg-muted/60 text-foreground/80'}`}>
                       {opt.icon}
@@ -500,25 +611,34 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
                 {/* Right Col: Preview */}
                 <div className="rounded-xl border p-5 bg-card flex flex-col gap-4 h-fit">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><CheckCircle2 className="size-4 text-muted-foreground" /> Prévia do público</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Encontrados</span>
-                      <span className="font-bold">{preview?.found_count ?? 0}</span>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <CheckCircle2 className="size-4 text-muted-foreground" /> Prévia do público
+                  </h3>
+                  {isPreviewLoading ? (
+                    <div className="flex flex-col items-center justify-center py-6 gap-2 text-muted-foreground">
+                      <Loader2 className="size-6 animate-spin" />
+                      <span className="text-xs font-semibold uppercase tracking-wider">Calculando...</span>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Enviáveis</span>
-                      <span className="font-bold text-success">{preview?.eligible_count ?? 0}</span>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Encontrados</span>
+                        <span className="font-bold">{preview?.found_count ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Enviáveis</span>
+                        <span className="font-bold text-success">{preview?.eligible_count ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Duplicados</span>
+                        <span className="font-bold text-warning">{preview?.duplicate_count ?? 0}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Bloqueados</span>
+                        <span className="font-bold text-destructive">{preview?.ineligible_count ?? 0}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Duplicados</span>
-                      <span className="font-bold text-warning">{preview?.duplicate_count ?? 0}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Bloqueados</span>
-                      <span className="font-bold text-destructive">{preview?.ineligible_count ?? 0}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -653,10 +773,40 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                     </div>
                   )}
 
-                  <div className="space-y-1.5 pt-4 border-t">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase">Intervalo entre msg (seg)</Label>
-                    <div className="w-24">
-                      <Input type="number" defaultValue="45" className="h-10 text-center font-bold" />
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Limite de envios por min.</Label>
+                      <div className="w-32 relative">
+                        <Input
+                          type="number"
+                          value={rateLimit}
+                          onChange={e => setRateLimit(e.target.value)}
+                          placeholder="Padrão"
+                          className="h-10 pl-3 pr-10 font-medium"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">/min</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Deixe vazio para velocidade máxima do provedor.</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Janela de Envio Seguro</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="time"
+                          value={sendWindowStart}
+                          onChange={e => setSendWindowStart(e.target.value)}
+                          className="h-10 w-28 text-center font-medium"
+                        />
+                        <span className="text-muted-foreground text-sm font-semibold">até</span>
+                        <Input
+                          type="time"
+                          value={sendWindowEnd}
+                          onChange={e => setSendWindowEnd(e.target.value)}
+                          className="h-10 w-28 text-center font-medium"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Pausa envios automaticamente fora deste horário (Fuso: SP).</p>
                     </div>
                   </div>
                 </div>
@@ -692,15 +842,33 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   </div>
                   
                   {followupEnabled && (
-                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <Label className="text-xs font-semibold text-muted-foreground uppercase">Mensagem do Follow-up</Label>
-                      <Textarea
-                        value={followupText}
-                        onChange={(e) => setFollowupText(e.target.value)}
-                        placeholder="Ex: Ainda posso te ajudar com isso?"
-                        rows={3}
-                        className="resize-none"
-                      />
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Mensagem do Follow-up</Label>
+                        <Textarea
+                          value={followupText}
+                          onChange={(e) => setFollowupText(e.target.value)}
+                          placeholder="Ex: Ainda posso te ajudar com isso?"
+                          rows={3}
+                          className="resize-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {kind === "lead_campaign" && (
+                    <div className="pt-4 border-t flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-semibold text-foreground">Parar se responder</Label>
+                        <p className="text-xs text-muted-foreground">A campanha pausa se o lead mandar mensagem.</p>
+                      </div>
+                      <Checkbox
+                        checked={stopOnReply}
+                        onCheckedChange={(c) => setStopOnReply(!!c)}
+                        className="rounded-full w-10 h-5 border-2 border-transparent bg-muted data-[state=checked]:bg-primary relative transition-colors"
+                      >
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${stopOnReply ? "translate-x-5" : "translate-x-0"}`} />
+                      </Checkbox>
                     </div>
                   )}
                 </div>
@@ -856,7 +1024,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
               </Button>
             ) : <div />}
             <div className="flex items-center gap-3">
-              <Button variant="outline" disabled={isPending}>
+              <Button variant="outline" onClick={handleDraft} disabled={isPending}>
                 <Save className="h-4 w-4 mr-1.5" />
                 Salvar rascunho
               </Button>

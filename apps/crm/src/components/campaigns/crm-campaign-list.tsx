@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import { Card, CardContent } from "@persia/ui/card";
@@ -15,7 +15,7 @@ import {
   Plus, Megaphone, MoreHorizontal, Pause, Play, X, Eye, Search, Trash2,
   CalendarDays, Send, AlertCircle, Activity, RefreshCw,
 } from "lucide-react";
-import type { CrmCampaign } from "@persia/shared/crm";
+import type { CrmCampaign, CrmCampaignWithDetails } from "@persia/shared/crm";
 import {
   pauseCampaign, resumeCampaign, cancelCampaign, deleteCrmCampaign,
 } from "@/actions/crm-campaigns";
@@ -46,12 +46,20 @@ interface Props {
   stages: Array<{ id: string; pipeline_id: string; name: string }>;
   groups: Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
   whatsappStatus: WhatsAppConnectionStatus;
+  initialEditData?: CrmCampaignWithDetails | null;
 }
 
-export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups, whatsappStatus }: Props) {
-  const [wizardOpen, setWizardOpen] = useState(false);
+export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups, whatsappStatus, initialEditData }: Props) {
+  const [wizardOpen, setWizardOpen] = useState(!!initialEditData);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  // Se vier initialEditData, o React garante que na inicialização o wizard abra
+  useEffect(() => {
+    if (initialEditData) {
+      setWizardOpen(true);
+    }
+  }, [initialEditData]);
 
   const displayed = useMemo(() => {
     if (!search.trim()) return campaigns;
@@ -196,11 +204,17 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="w-28">
-                          <div className="h-1.5 rounded-full bg-muted">
-                            <div className="h-1.5 rounded-full bg-primary" style={{ width: `${progress}%` }} />
+                        <div className="w-40">
+                          <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                            <span className="text-success" title="Enviadas">{c.sent_count} env.</span>
+                            {c.failed_count > 0 && <span className="text-destructive" title="Falhas">{c.failed_count} err.</span>}
+                            <span title="Total">{c.total_count} total</span>
                           </div>
-                          <p className="mt-1 text-[11px] text-muted-foreground">{progress}%</p>
+                          <div className="h-1.5 rounded-full bg-muted flex overflow-hidden">
+                            <div className="h-full bg-success" style={{ width: `${c.total_count > 0 ? (c.sent_count / c.total_count) * 100 : 0}%` }} />
+                            <div className="h-full bg-destructive" style={{ width: `${c.total_count > 0 ? (c.failed_count / c.total_count) * 100 : 0}%` }} />
+                          </div>
+                          <p className="mt-1 text-[11px] text-muted-foreground font-medium">{progress}% concluído</p>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -301,12 +315,21 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
       {/* Wizard */}
       <CrmCampaignWizard
         open={wizardOpen}
-        onOpenChange={setWizardOpen}
+        onOpenChange={(v) => {
+          setWizardOpen(v);
+          if (!v && initialEditData) {
+            // Remove edit from URL on close
+            const url = new URL(window.location.href);
+            url.searchParams.delete("edit");
+            window.history.replaceState({}, "", url);
+          }
+        }}
         segments={segments}
         tags={tags}
         pipelines={pipelines}
         stages={stages}
         groups={groups}
+        initialData={initialEditData}
       />
     </div>
   );

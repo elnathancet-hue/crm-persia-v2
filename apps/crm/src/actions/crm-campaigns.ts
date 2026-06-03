@@ -15,7 +15,9 @@ import type {
   UpdateCampaignDraftInput,
   CampaignAudiencePreview,
   CrmCampaignRecipient,
+  CrmCampaignEvent,
 } from "@persia/shared/crm";
+import { createProvider } from "@persia/shared/providers";
 import { resolveCampaignAudience } from "@persia/shared/crm";
 import type { MediaUploadResult } from "@/lib/campaigns/media-upload";
 
@@ -355,6 +357,37 @@ export async function validateCampaign(id: string): Promise<ActionResult<Campaig
     return { data: preview };
   } catch (err) {
     return { error: asErr(err, "Não foi possível validar a campanha.") };
+  }
+}
+
+export async function previewCampaignAudience(
+  kind: "lead_campaign" | "group_campaign",
+  targets: Array<{ target_kind: string; target_id: string | null; filters?: Record<string, unknown> }>
+): Promise<ActionResult<CampaignAudiencePreview>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+
+    if (targets.length === 0) return { error: "Configure pelo menos um público" };
+
+    const preview = await resolveCampaignAudience({
+      kind,
+      targets: targets.map((t) => ({
+        target_kind: t.target_kind as never,
+        target_id: t.target_id,
+        filters: t.filters ?? {},
+      })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      db: supabase as any,
+      orgId,
+    });
+
+    if (preview.errors.length > 0) {
+      return { error: preview.errors[0] };
+    }
+
+    return { data: preview };
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível buscar a prévia de público.") };
   }
 }
 
@@ -759,6 +792,233 @@ export async function uploadCampaignMediaAction(formData: FormData): Promise<Act
   }
 }
 
+// ─── Eventos e Reprocessamento ──────────────────────────────────────────────────
+
+export async function getCampaignEvents(campaignId: string): Promise<CrmCampaignEvent[]> {
+  const { supabase, orgId } = await requireRole("agent");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: { from: (t: string) => any } = supabase as any;
+
+  const { data, error } = await db.from("crm_campaign_events")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as CrmCampaignEvent[];
+}
+
+export async function reprocessCampaignFailures(campaignId: string): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: { from: (t: string) => any } = supabase as any;
+
+    const { data: campaign } = await db.from("crm_campaigns")
+      .select("status")
+      .eq("id", campaignId)
+      .eq("organization_id", orgId)
+      .single();
+
+    if (!campaign) return { error: "Campanha não encontrada" };
+    const { data: failedJobs, error: listErr } = await db.from("crm_campaign_message_jobs")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("organization_id", orgId)
+      .eq("status", "failed");
+
+    if (listErr) return { error: `Erro ao buscar falhas: ${listErr.message}` };
+    const failedIds = ((failedJobs ?? []) as Array<{ id: string }>).map((job) => job.id);
+    if (failedIds.length === 0) return;
+
+    // Altera os jobs com falha de volta para a fila
+    const { error: jobsErr } = await db.from("crm_campaign_message_jobs")
+      .update({ status: "queued", attempts: 0, last_error: null, locked_at: null, locked_by: null })
+      .eq("campaign_id", campaignId)
+      .eq("organization_id", orgId)
+      .in("id", failedIds);
+
+    if (jobsErr) return { error: `Erro ao reprocessar jobs: ${jobsErr.message}` };
+
+    const reprocessedCount = failedIds.length;
+
+    if (reprocessedCount > 0) {
+      // Se estava concluída, volta para scheduled ou running
+      if (campaign.status === "completed" || campaign.status === "failed") {
+        await db.from("crm_campaigns")
+          .update({ status: "scheduled" })
+          .eq("id", campaignId)
+          .eq("organization_id", orgId);
+      }
+
+      await db.from("crm_campaign_events")
+        .insert({
+          organization_id: orgId,
+          campaign_id: campaignId,
+          event_type: "campaign_failures_reprocessed",
+          payload: { reprocessed_count: reprocessedCount },
+        });
+    }
+
+    revalidatePath("/campaigns");
+    revalidatePath(`/campaigns/${campaignId}`);
+    return;
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível reprocessar as falhas.") };
+  }
+}
+
+export async function duplicateCrmCampaign(id: string): Promise<ActionResult<string>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: { from: (t: string) => any } = supabase as any;
+
+    // Busca original com relacionamentos
+    const { data: original, error: fetchErr } = await db.from("crm_campaigns")
+      .select("*, crm_campaign_steps(*), crm_campaign_targets(*)")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .single();
+
+    if (fetchErr || !original) return { error: "Campanha original não encontrada" };
+
+    const c = original as Record<string, unknown>;
+    const newName = `${c.name} (Cópia)`;
+
+    // Cria a nova campanha como draft
+    const { data: newCampaign, error: insertErr } = await db.from("crm_campaigns")
+      .insert({
+        organization_id: orgId,
+        name: newName,
+        description: c.description,
+        kind: c.kind,
+        mode: c.mode,
+        status: "draft", // forçamos para draft
+        timezone: c.timezone,
+        send_window_start: c.send_window_start,
+        send_window_end: c.send_window_end,
+        rate_limit_per_minute: c.rate_limit_per_minute,
+        stop_on_reply: c.stop_on_reply,
+      })
+      .select("id")
+      .single();
+
+    if (insertErr || !newCampaign) return { error: insertErr?.message ?? "Falha ao duplicar" };
+
+    const newId = newCampaign.id as string;
+
+    // Copia os steps
+    const steps = (c.crm_campaign_steps as any[]) ?? [];
+    if (steps.length > 0) {
+      const newSteps = steps.map(s => ({
+        organization_id: orgId,
+        campaign_id: newId,
+        position: s.position,
+        send_mode: s.send_mode,
+        delay_amount: s.delay_amount,
+        delay_unit: s.delay_unit,
+        scheduled_at: s.scheduled_at,
+        message_text: s.message_text,
+        media_type: s.media_type,
+        media_url: s.media_url,
+        media_filename: s.media_filename,
+        media_mime_type: s.media_mime_type,
+        media_size: s.media_size,
+        caption: s.caption,
+      }));
+      await db.from("crm_campaign_steps").insert(newSteps);
+    }
+
+    // Copia os targets
+    const targets = (c.crm_campaign_targets as any[]) ?? [];
+    if (targets.length > 0) {
+      const newTargets = targets.map(t => ({
+        organization_id: orgId,
+        campaign_id: newId,
+        target_kind: t.target_kind,
+        target_id: t.target_id,
+        filters: t.filters,
+      }));
+      await db.from("crm_campaign_targets").insert(newTargets);
+    }
+
+    revalidatePath("/campaigns");
+    return { data: newId };
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível duplicar a campanha.") };
+  }
+}
+
+export async function sendCampaignTestMessage(campaignId: string, phone: string): Promise<ActionResult<void>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: { from: (t: string) => any } = supabase as any;
+
+    const { data: campaign } = await db.from("crm_campaigns")
+      .select("id, crm_campaign_steps(*)")
+      .eq("id", campaignId)
+      .eq("organization_id", orgId)
+      .single();
+
+    if (!campaign) return { error: "Campanha não encontrada" };
+
+    const steps = ((campaign.crm_campaign_steps as any[]) ?? [])
+      .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0));
+    if (steps.length === 0) return { error: "Campanha sem mensagens para testar" };
+
+    const cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone) return { error: "Número inválido" };
+
+    const { data: conn } = await supabase
+      .from("whatsapp_connections")
+      .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+      .eq("organization_id", orgId)
+      .eq("status", "connected")
+      .limit(1)
+      .maybeSingle();
+
+    if (!conn) return { error: "Nenhum WhatsApp conectado para enviar o teste" };
+
+    const provider = createProvider(conn as never);
+    const recipient = {
+      display_name: "Teste Interno",
+      phone: cleanPhone,
+      chat_jid: null,
+    };
+
+    for (const step of steps) {
+      const message = interpolateCampaignTestText(step.message_text ?? null, recipient);
+      const caption = interpolateCampaignTestText(step.caption ?? null, recipient) ?? message ?? undefined;
+      if (step.media_type !== "none" && step.media_url) {
+        await provider.sendMedia({
+          phone: cleanPhone,
+          type: step.media_type as "image" | "video" | "audio" | "document",
+          media: step.media_url,
+          fileName: step.media_filename ?? undefined,
+          caption,
+        });
+      } else if (message) {
+        await provider.sendText({ phone: cleanPhone, message });
+      }
+    }
+
+    await db.from("crm_campaign_events")
+      .insert({
+        organization_id: orgId,
+        campaign_id: campaignId,
+        event_type: "campaign_test_sent",
+        payload: { phone: cleanPhone, step_count: steps.length },
+      });
+
+    return;
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível enviar o teste.") };
+  }
+}
+
 // ─── Helpers internos ─────────────────────────────────────────────────────────
 
 function computeStepSendAt(step: Record<string, unknown>, baseNow: Date, previousSendAt: Date): Date {
@@ -781,4 +1041,17 @@ function computeStepSendAt(step: Record<string, unknown>, baseNow: Date, previou
 
   // immediate ou fallback
   return baseNow;
+}
+
+function interpolateCampaignTestText(
+  template: string | null,
+  recipient: { display_name: string; phone: string; chat_jid: string | null },
+): string | null {
+  if (!template) return null;
+  const name = recipient.display_name.trim();
+  const firstName = name.split(/\s+/).filter(Boolean)[0] ?? "";
+  return template
+    .replaceAll("{{nome}}", name)
+    .replaceAll("{{primeiro_nome}}", firstName)
+    .replaceAll("{{telefone}}", recipient.phone);
 }
