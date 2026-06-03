@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition, useMemo, useEffect } from "react";
+import { useState, useTransition, useMemo, useEffect, useCallback } from "react";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import { Card, CardContent } from "@persia/ui/card";
+import { Checkbox } from "@persia/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@persia/ui/table";
@@ -13,11 +14,12 @@ import {
 import { Input } from "@persia/ui/input";
 import {
   Plus, Megaphone, MoreHorizontal, Pause, Play, X, Eye, Search, Trash2,
-  CalendarDays, Send, AlertCircle, Activity, RefreshCw,
+  CalendarDays, Send, AlertCircle, Activity, RefreshCw, Pencil,
 } from "lucide-react";
 import type { CrmCampaign, CrmCampaignWithDetails } from "@persia/shared/crm";
 import {
   pauseCampaign, resumeCampaign, cancelCampaign, deleteCrmCampaign,
+  bulkDeleteCrmCampaigns, getCrmCampaignDetails,
 } from "@/actions/crm-campaigns";
 import type { WhatsAppConnectionStatus } from "@/actions/crm-campaigns";
 import { CrmCampaignWizard } from "./crm-campaign-wizard";
@@ -51,12 +53,14 @@ interface Props {
 
 export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups, whatsappStatus, initialEditData }: Props) {
   const [wizardOpen, setWizardOpen] = useState(!!initialEditData);
+  const [editData, setEditData] = useState<CrmCampaignWithDetails | null>(initialEditData ?? null);
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
 
-  // Se vier initialEditData, o React garante que na inicialização o wizard abra
   useEffect(() => {
     if (initialEditData) {
+      setEditData(initialEditData);
       setWizardOpen(true);
     }
   }, [initialEditData]);
@@ -66,6 +70,33 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
     const q = search.toLowerCase();
     return campaigns.filter((c) => c.name.toLowerCase().includes(q));
   }, [campaigns, search]);
+
+  const handleEdit = useCallback((id: string) => {
+    startTransition(async () => {
+      const data = await getCrmCampaignDetails(id);
+      if (data) {
+        setEditData(data);
+        setWizardOpen(true);
+      }
+    });
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelected((prev) =>
+      prev.size === displayed.length
+        ? new Set()
+        : new Set(displayed.map((c) => c.id)),
+    );
+  }, [displayed]);
 
   const activeCount = campaigns.filter((c) => c.status === "scheduled" || c.status === "running").length;
   const scheduledCount = campaigns.filter((c) => c.status === "scheduled").length;
@@ -99,6 +130,20 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
     }
     if (!confirm(`Excluir a campanha "${campaign.name}"? Esta ação remove histórico, destinatários e jobs.`)) return;
     startTransition(async () => { await deleteCrmCampaign(campaign.id); });
+  }
+
+  function handleBulkDelete() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!confirm(`Excluir ${ids.length} campanha(s) selecionada(s)? Campanhas ativas (enviando/agendadas) serão ignoradas.`)) return;
+    startTransition(async () => {
+      const result = await bulkDeleteCrmCampaigns(ids);
+      if (result?.data) {
+        const { deleted, skipped } = result.data;
+        if (skipped > 0) alert(`${deleted} excluída(s). ${skipped} ignorada(s) por estarem ativas — cancele-as primeiro.`);
+      }
+      setSelected(new Set());
+    });
   }
 
   return (
@@ -171,95 +216,129 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Campanha</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Envio</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Progresso</TableHead>
-                  <TableHead className="w-10">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayed.map((c) => {
-                  const progress =
-                    c.status === "completed" ? 100
-                    : c.total_count > 0 ? Math.round((c.sent_count / c.total_count) * 100)
-                    : 0;
-                  return (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {KIND_LABEL[c.kind] ?? c.kind}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {c.status === "scheduled" ? "Agendada" : new Date(c.created_at).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_UI[c.status]?.variant ?? "secondary"}>
-                          {STATUS_UI[c.status]?.label ?? c.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="w-40">
-                          <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                            <span className="text-success" title="Enviadas">{c.sent_count} env.</span>
-                            {c.failed_count > 0 && <span className="text-destructive" title="Falhas">{c.failed_count} err.</span>}
-                            <span title="Total">{c.total_count} total</span>
+          <div className="space-y-2">
+            {selected.size > 0 && (
+              <div className="flex items-center justify-between rounded-lg border bg-muted/50 px-4 py-2">
+                <span className="text-sm font-medium">{selected.size} selecionada(s)</span>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+                    Limpar seleção
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={handleBulkDelete} disabled={isPending}>
+                    <Trash2 className="h-4 w-4 mr-1.5" /> Excluir selecionadas
+                  </Button>
+                </div>
+              </div>
+            )}
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={displayed.length > 0 && selected.size === displayed.length}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Selecionar todas"
+                      />
+                    </TableHead>
+                    <TableHead>Campanha</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Envio</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Progresso</TableHead>
+                    <TableHead className="w-10">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayed.map((c) => {
+                    const progress =
+                      c.status === "completed" ? 100
+                      : c.total_count > 0 ? Math.round((c.sent_count / c.total_count) * 100)
+                      : 0;
+                    return (
+                      <TableRow key={c.id} data-selected={selected.has(c.id)}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selected.has(c.id)}
+                            onCheckedChange={() => toggleSelect(c.id)}
+                            aria-label={`Selecionar ${c.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{c.name}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {KIND_LABEL[c.kind] ?? c.kind}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {c.status === "scheduled" ? "Agendada" : new Date(c.created_at).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={STATUS_UI[c.status]?.variant ?? "secondary"}>
+                            {STATUS_UI[c.status]?.label ?? c.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="w-40">
+                            <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                              <span className="text-success" title="Enviadas">{c.sent_count} env.</span>
+                              {c.failed_count > 0 && <span className="text-destructive" title="Falhas">{c.failed_count} err.</span>}
+                              <span title="Total">{c.total_count} total</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-muted flex overflow-hidden">
+                              <div className="h-full bg-success" style={{ width: `${c.total_count > 0 ? (c.sent_count / c.total_count) * 100 : 0}%` }} />
+                              <div className="h-full bg-destructive" style={{ width: `${c.total_count > 0 ? (c.failed_count / c.total_count) * 100 : 0}%` }} />
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted-foreground font-medium">{progress}% concluído</p>
                           </div>
-                          <div className="h-1.5 rounded-full bg-muted flex overflow-hidden">
-                            <div className="h-full bg-success" style={{ width: `${c.total_count > 0 ? (c.sent_count / c.total_count) * 100 : 0}%` }} />
-                            <div className="h-full bg-destructive" style={{ width: `${c.total_count > 0 ? (c.failed_count / c.total_count) * 100 : 0}%` }} />
-                          </div>
-                          <p className="mt-1 text-[11px] text-muted-foreground font-medium">{progress}% concluído</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} />}>
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Ações</span>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem render={<a href={`/campaigns/${c.id}`} />}>
-                              <Eye className="h-4 w-4 mr-2" /> Ver detalhes
-                            </DropdownMenuItem>
-                            {(c.status === "scheduled" || c.status === "running") && (
-                              <DropdownMenuItem onClick={() => handlePause(c.id)}>
-                                <Pause className="h-4 w-4 mr-2" /> Pausar
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="h-7 w-7" disabled={isPending} />}>
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Ações</span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem render={<a href={`/campaigns/${c.id}`} />}>
+                                <Eye className="h-4 w-4 mr-2" /> Ver detalhes
                               </DropdownMenuItem>
-                            )}
-                            {c.status === "paused" && (
-                              <DropdownMenuItem onClick={() => handleResume(c.id)}>
-                                <Play className="h-4 w-4 mr-2" /> Retomar
-                              </DropdownMenuItem>
-                            )}
-                            {c.status !== "completed" && c.status !== "cancelled" && (
+                              {c.status === "draft" && (
+                                <DropdownMenuItem onClick={() => handleEdit(c.id)} disabled={isPending}>
+                                  <Pencil className="h-4 w-4 mr-2" /> Editar
+                                </DropdownMenuItem>
+                              )}
+                              {(c.status === "scheduled" || c.status === "running") && (
+                                <DropdownMenuItem onClick={() => handlePause(c.id)}>
+                                  <Pause className="h-4 w-4 mr-2" /> Pausar
+                                </DropdownMenuItem>
+                              )}
+                              {c.status === "paused" && (
+                                <DropdownMenuItem onClick={() => handleResume(c.id)}>
+                                  <Play className="h-4 w-4 mr-2" /> Retomar
+                                </DropdownMenuItem>
+                              )}
+                              {c.status !== "completed" && c.status !== "cancelled" && (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  onClick={() => handleCancel(c.id)}
+                                >
+                                  <X className="h-4 w-4 mr-2" /> Cancelar
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
-                                onClick={() => handleCancel(c.id)}
+                                onClick={() => handleDelete(c)}
                               >
-                                <X className="h-4 w-4 mr-2" /> Cancelar
+                                <Trash2 className="h-4 w-4 mr-2" /> Excluir
                               </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onClick={() => handleDelete(c)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" /> Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </Card>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
+          </div>
 
           <div className="space-y-4">
             <Card>
@@ -317,11 +396,13 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
         open={wizardOpen}
         onOpenChange={(v) => {
           setWizardOpen(v);
-          if (!v && initialEditData) {
-            // Remove edit from URL on close
-            const url = new URL(window.location.href);
-            url.searchParams.delete("edit");
-            window.history.replaceState({}, "", url);
+          if (!v) {
+            setEditData(null);
+            if (initialEditData) {
+              const url = new URL(window.location.href);
+              url.searchParams.delete("edit");
+              window.history.replaceState({}, "", url);
+            }
           }
         }}
         segments={segments}
@@ -329,7 +410,7 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
         pipelines={pipelines}
         stages={stages}
         groups={groups}
-        initialData={initialEditData}
+        initialData={editData}
       />
     </div>
   );

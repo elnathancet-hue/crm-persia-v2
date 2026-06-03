@@ -772,6 +772,33 @@ export async function deleteCrmCampaign(id: string): Promise<ActionResult<void>>
   }
 }
 
+export async function bulkDeleteCrmCampaigns(ids: string[]): Promise<ActionResult<{ deleted: number; skipped: number }>> {
+  try {
+    if (!ids.length) return { data: { deleted: 0, skipped: 0 } };
+    const { supabase, orgId } = await requireRole("admin");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db: { from: (t: string) => any } = supabase as any;
+
+    const { data: campaigns } = await db.from("crm_campaigns")
+      .select("id, status")
+      .eq("organization_id", orgId)
+      .in("id", ids);
+
+    const rows = (campaigns ?? []) as { id: string; status: string }[];
+    const deletable = rows.filter((c) => c.status !== "scheduled" && c.status !== "running").map((c) => c.id);
+    const skipped = ids.length - deletable.length;
+
+    if (deletable.length > 0) {
+      await db.from("crm_campaigns").delete().eq("organization_id", orgId).in("id", deletable);
+    }
+
+    revalidatePath("/campaigns");
+    return { data: { deleted: deletable.length, skipped } };
+  } catch (err) {
+    return { error: asErr(err, "Não foi possível excluir as campanhas.") };
+  }
+}
+
 export async function listCampaignGroups(): Promise<Array<{ id: string; name: string; category: string | null; participant_count: number | null }>> {
   const { supabase, orgId } = await requireRole("agent");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
