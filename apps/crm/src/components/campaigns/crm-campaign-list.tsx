@@ -19,6 +19,7 @@ import type { CrmCampaign } from "@persia/shared/crm";
 import {
   pauseCampaign, resumeCampaign, cancelCampaign, deleteCrmCampaign,
 } from "@/actions/crm-campaigns";
+import type { CampaignJobProgress, WhatsAppConnectionStatus } from "@/actions/crm-campaigns";
 import { CrmCampaignWizard } from "./crm-campaign-wizard";
 
 const STATUS_UI: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -44,9 +45,11 @@ interface Props {
   pipelines: Array<{ id: string; name: string }>;
   stages: Array<{ id: string; pipeline_id: string; name: string }>;
   groups: Array<{ id: string; name: string; category: string | null; participant_count: number | null }>;
+  jobProgress: CampaignJobProgress[];
+  whatsappStatus: WhatsAppConnectionStatus;
 }
 
-export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups }: Props) {
+export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, groups, jobProgress, whatsappStatus }: Props) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -56,6 +59,11 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
     const q = search.toLowerCase();
     return campaigns.filter((c) => c.name.toLowerCase().includes(q));
   }, [campaigns, search]);
+
+  const progressMap = useMemo(
+    () => new Map(jobProgress.map((p) => [p.campaign_id, p])),
+    [jobProgress],
+  );
 
   const activeCount = campaigns.filter((c) => c.status === "scheduled" || c.status === "running").length;
   const scheduledCount = campaigns.filter((c) => c.status === "scheduled").length;
@@ -175,11 +183,10 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
               </TableHeader>
               <TableBody>
                 {displayed.map((c) => {
+                  const prog = progressMap.get(c.id);
                   const progress =
                     c.status === "completed" ? 100
-                    : c.status === "running" ? 48
-                    : c.status === "scheduled" ? 4
-                    : c.status === "cancelled" || c.status === "failed" ? 0
+                    : prog && prog.total > 0 ? Math.round((prog.sent / prog.total) * 100)
                     : 0;
                   return (
                     <TableRow key={c.id}>
@@ -254,10 +261,20 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
                   <Activity className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">Saúde do WhatsApp</h2>
                 </div>
-                <HealthRow label="Instância conectada" value="Ativa" ok />
-                <HealthRow label="Limite seguro" value="80 msg/h" />
-                <HealthRow label="Presença" value="Disponível" ok />
-                <HealthRow label="Risco de bloqueio" value="Baixo" ok />
+                <HealthRow
+                  label="Instância"
+                  value={whatsappStatus.connected ? "Conectada" : "Desconectada"}
+                  ok={whatsappStatus.connected}
+                />
+                {whatsappStatus.provider && (
+                  <HealthRow
+                    label="Provider"
+                    value={whatsappStatus.provider === "meta" ? "Meta Cloud" : "UAZAPI"}
+                  />
+                )}
+                {whatsappStatus.phone && (
+                  <HealthRow label="Número" value={whatsappStatus.phone} />
+                )}
                 <Button variant="secondary" size="sm" className="w-full gap-2">
                   <RefreshCw className="size-4" />
                   Diagnosticar conexão
@@ -265,14 +282,25 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
               </CardContent>
             </Card>
 
-            <Card className="bg-primary text-primary-foreground">
-              <CardContent className="p-5">
-                <p className="font-semibold">Envio seguro ativo</p>
-                <p className="mt-2 text-sm text-primary-foreground/80">
-                  Sua conta está usando intervalos humanos e controle de velocidade.
-                </p>
-              </CardContent>
-            </Card>
+            {whatsappStatus.connected ? (
+              <Card className="bg-primary text-primary-foreground">
+                <CardContent className="p-5">
+                  <p className="font-semibold">Envio seguro ativo</p>
+                  <p className="mt-2 text-sm text-primary-foreground/80">
+                    Sua conta está usando intervalos humanos e controle de velocidade.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-destructive/30 bg-destructive/5">
+                <CardContent className="p-5">
+                  <p className="font-semibold text-destructive">WhatsApp desconectado</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Conecte o WhatsApp para poder enviar campanhas.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       )}

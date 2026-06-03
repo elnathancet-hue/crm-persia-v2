@@ -38,6 +38,66 @@ export async function listCrmCampaigns(): Promise<CrmCampaign[]> {
   return (data ?? []) as CrmCampaign[];
 }
 
+// ─── Progresso de jobs e saúde do WhatsApp ────────────────────────────────────
+
+export interface CampaignJobProgress {
+  campaign_id: string;
+  total: number;
+  sent: number;
+  failed: number;
+}
+
+export interface WhatsAppConnectionStatus {
+  connected: boolean;
+  provider: string | null;
+  phone: string | null;
+}
+
+export async function getCampaignJobProgress(campaignIds: string[]): Promise<CampaignJobProgress[]> {
+  if (!campaignIds.length) return [];
+  const { supabase, orgId } = await requireRole("agent");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db: { from: (t: string) => any } = supabase as any;
+
+  const { data } = await db.from("crm_campaign_message_jobs")
+    .select("campaign_id, status")
+    .eq("organization_id", orgId)
+    .in("campaign_id", campaignIds)
+    .neq("status", "cancelled");
+
+  const rows = (data ?? []) as { campaign_id: string; status: string }[];
+  const map = new Map<string, { total: number; sent: number; failed: number }>();
+  for (const row of rows) {
+    const e = map.get(row.campaign_id) ?? { total: 0, sent: 0, failed: 0 };
+    e.total++;
+    if (row.status === "sent") e.sent++;
+    if (row.status === "failed") e.failed++;
+    map.set(row.campaign_id, e);
+  }
+  return Array.from(map.entries()).map(([campaign_id, counts]) => ({ campaign_id, ...counts }));
+}
+
+export async function getWhatsAppConnectionStatus(): Promise<WhatsAppConnectionStatus> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const { data } = await supabase
+      .from("whatsapp_connections")
+      .select("provider, status, phone_number_id")
+      .eq("organization_id", orgId)
+      .limit(1)
+      .maybeSingle();
+    if (!data) return { connected: false, provider: null, phone: null };
+    const row = data as { provider: string; status: string; phone_number_id: string | null };
+    return {
+      connected: row.status === "connected",
+      provider: row.provider ?? null,
+      phone: row.phone_number_id ?? null,
+    };
+  } catch {
+    return { connected: false, provider: null, phone: null };
+  }
+}
+
 export async function getCrmCampaignDetails(id: string): Promise<CrmCampaignWithDetails | null> {
   const { supabase, orgId } = await requireRole("agent");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
