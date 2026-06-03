@@ -168,7 +168,7 @@ async function processJob(
 
     if (c.status === "paused") {
       // Libera lock, volta para queued
-      await updateJobStatus(supabase, job.id, "queued");
+      await releaseJobWithoutAttempt(supabase, job);
       return "skipped";
     }
 
@@ -204,7 +204,7 @@ async function processJob(
         const nextSendAt = nextWindowStart(c.send_window_start, c.timezone);
         await supabase
           .from("crm_campaign_message_jobs")
-          .update({ status: "queued", send_at: nextSendAt, locked_at: null, locked_by: null } as never)
+          .update({ status: "queued", send_at: nextSendAt, attempts: job.attempts, locked_at: null, locked_by: null } as never)
           .eq("id", job.id);
         return "rescheduled";
       }
@@ -386,6 +386,21 @@ async function updateJobStatus(
     .eq("id", jobId);
 }
 
+async function releaseJobWithoutAttempt(
+  supabase: ReturnType<typeof createClient>,
+  job: JobRow,
+): Promise<void> {
+  await supabase
+    .from("crm_campaign_message_jobs")
+    .update({
+      status: "queued",
+      attempts: job.attempts,
+      locked_at: null,
+      locked_by: null,
+    } as never)
+    .eq("id", job.id);
+}
+
 async function cancelJob(
   supabase: ReturnType<typeof createClient>,
   jobId: string,
@@ -494,7 +509,11 @@ function isInSendWindow(start: string, end: string, timezone: string): boolean {
     const startMinutes = startH * 60 + startM;
     const endMinutes = endH * 60 + endM;
 
-    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    if (startMinutes <= endMinutes) {
+      return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    }
+
+    return currentMinutes >= startMinutes || currentMinutes < endMinutes;
   } catch {
     return true; // se timezone inválida, permite envio
   }

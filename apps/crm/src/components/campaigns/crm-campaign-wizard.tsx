@@ -636,7 +636,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                         <span className="font-bold text-warning">{preview?.duplicate_count ?? 0}</span>
                       </div>
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-muted-foreground">Bloqueados</span>
+                        <span className="text-muted-foreground">Inelegíveis</span>
                         <span className="font-bold text-destructive">{preview?.ineligible_count ?? 0}</span>
                       </div>
                     </div>
@@ -933,8 +933,8 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                       <span className="text-2xl font-bold text-success mt-2">{preview.eligible_count}</span>
                     </div>
                     <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Descartados</span>
-                      <span className="text-2xl font-bold text-warning mt-2">{preview.ineligible_count - preview.duplicate_count}</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Inelegíveis</span>
+                      <span className="text-2xl font-bold text-warning mt-2">{preview.ineligible_count}</span>
                     </div>
                     <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Duplicados</span>

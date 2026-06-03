@@ -63,12 +63,12 @@ export function detectMediaType(mime: string): StepMediaType {
 }
 
 export function validateMediaFile(file: File): MediaValidationError | null {
-  const mediaType = detectMediaType(file.type);
-  const maxBytes = MAX_SIZE[mediaType];
-
-  if (mediaType === "none") {
-    return { error: `Tipo de arquivo não suportado: ${file.type}` };
+  const mediaType = MIME_TO_TYPE[file.type.toLowerCase()];
+  if (!mediaType) {
+    return { error: `Tipo de arquivo não suportado: ${file.type || "desconhecido"}` };
   }
+
+  const maxBytes = MAX_SIZE[mediaType];
 
   if (file.size > maxBytes) {
     const maxMb = maxBytes / 1024 / 1024;
@@ -103,7 +103,6 @@ export async function uploadCampaignMedia(
   if (validationError) return validationError;
 
   const mediaType = detectMediaType(file.type);
-  const ext = file.name.split(".").pop() ?? "";
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${orgId}/${campaignId}/${Date.now()}_${safeName}`;
 

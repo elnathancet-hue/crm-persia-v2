@@ -8,10 +8,15 @@ function isAuthorized(req: Request): boolean {
   const bearer = req.headers.get("authorization");
   const cronSecret = req.headers.get("x-cron-secret");
   const schedulerSecret = req.headers.get("x-persia-scheduler-secret");
-  const expected = process.env.CRON_SECRET;
+  const expectedSecrets = [
+    process.env.CRON_SECRET,
+    process.env.SCHEDULER_TICK_SECRET,
+  ].filter((secret): secret is string => Boolean(secret));
   return Boolean(
-    expected
-      && (bearer === `Bearer ${expected}` || cronSecret === expected || schedulerSecret === expected)
+    expectedSecrets.length > 0
+      && expectedSecrets.some((expected) => (
+        bearer === `Bearer ${expected}` || cronSecret === expected || schedulerSecret === expected
+      ))
   );
 }
 

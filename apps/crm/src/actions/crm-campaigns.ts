@@ -563,8 +563,13 @@ export async function scheduleCampaign(id: string): Promise<ActionResult<void>> 
     // Inserir jobs em batches (idempotente: constraint unique garante)
     for (let i = 0; i < jobRows.length; i += 500) {
       const batch = jobRows.slice(i, i + 500);
-      await db.from("crm_campaign_message_jobs")
+      const { error: jobsErr } = await db.from("crm_campaign_message_jobs")
         .upsert(batch, { onConflict: "campaign_id,step_id,recipient_id" });
+      if (jobsErr) {
+        await db.from("crm_campaign_message_jobs").delete().eq("campaign_id", id);
+        await db.from("crm_campaign_recipients").delete().eq("campaign_id", id);
+        return { error: `Erro ao criar fila de envio: ${jobsErr.message ?? "erro"}` };
+      }
     }
 
     // Atualizar status
@@ -911,23 +916,31 @@ export async function duplicateCrmCampaign(id: string): Promise<ActionResult<str
 
     // Copia os steps
     const steps = (c.crm_campaign_steps as any[]) ?? [];
+    const nowMs = Date.now();
     if (steps.length > 0) {
-      const newSteps = steps.map(s => ({
-        organization_id: orgId,
-        campaign_id: newId,
-        position: s.position,
-        send_mode: s.send_mode,
-        delay_amount: s.delay_amount,
-        delay_unit: s.delay_unit,
-        scheduled_at: s.scheduled_at,
-        message_text: s.message_text,
-        media_type: s.media_type,
-        media_url: s.media_url,
-        media_filename: s.media_filename,
-        media_mime_type: s.media_mime_type,
-        media_size: s.media_size,
-        caption: s.caption,
-      }));
+      const newSteps = steps.map(s => {
+        const scheduledAt = typeof s.scheduled_at === "string" ? s.scheduled_at : null;
+        const scheduledIsPast = s.send_mode === "scheduled_at"
+          && scheduledAt
+          && new Date(scheduledAt).getTime() <= nowMs;
+
+        return {
+          organization_id: orgId,
+          campaign_id: newId,
+          position: s.position,
+          send_mode: scheduledIsPast ? "immediate" : s.send_mode,
+          delay_amount: scheduledIsPast ? null : s.delay_amount,
+          delay_unit: scheduledIsPast ? null : s.delay_unit,
+          scheduled_at: scheduledIsPast ? null : s.scheduled_at,
+          message_text: s.message_text,
+          media_type: s.media_type,
+          media_url: s.media_url,
+          media_filename: s.media_filename,
+          media_mime_type: s.media_mime_type,
+          media_size: s.media_size,
+          caption: s.caption,
+        };
+      });
       const { error: stepsErr } = await db.from("crm_campaign_steps").insert(newSteps);
       if (stepsErr) {
         await db.from("crm_campaigns").delete().eq("id", newId).eq("organization_id", orgId);
