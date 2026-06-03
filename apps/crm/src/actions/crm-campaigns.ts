@@ -81,38 +81,53 @@ export async function getCrmCampaignDetails(id: string): Promise<CrmCampaignWith
     .single();
   if (error || !campaign) return null;
 
-  const [stepsRes, targetsRes, recipCountRes, jobCountRes] = await Promise.all([
+  const countByStatus = async (table: string, campaignId: string, status: string) => {
+    const { count } = await db.from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId)
+      .eq("status", status);
+    return count ?? 0;
+  };
+
+  const [stepsRes, targetsRes,
+    recipTotal, recipPending, recipActive, recipCompleted, recipStopped, recipFailed, recipIneligible,
+    jobQueued, jobSent, jobFailed, jobSkipped, jobCancelled,
+  ] = await Promise.all([
     db.from("crm_campaign_steps").select("*").eq("campaign_id", id).order("position"),
     db.from("crm_campaign_targets").select("*").eq("campaign_id", id),
-    db.from("crm_campaign_recipients").select("status").eq("campaign_id", id),
-    db.from("crm_campaign_message_jobs").select("status").eq("campaign_id", id),
+    db.from("crm_campaign_recipients").select("id", { count: "exact", head: true }).eq("campaign_id", id).then((r: { count: number | null }) => r.count ?? 0),
+    countByStatus("crm_campaign_recipients", id, "pending"),
+    countByStatus("crm_campaign_recipients", id, "active"),
+    countByStatus("crm_campaign_recipients", id, "completed"),
+    countByStatus("crm_campaign_recipients", id, "stopped"),
+    countByStatus("crm_campaign_recipients", id, "failed"),
+    countByStatus("crm_campaign_recipients", id, "ineligible"),
+    countByStatus("crm_campaign_message_jobs", id, "queued"),
+    countByStatus("crm_campaign_message_jobs", id, "sent"),
+    countByStatus("crm_campaign_message_jobs", id, "failed"),
+    countByStatus("crm_campaign_message_jobs", id, "skipped"),
+    countByStatus("crm_campaign_message_jobs", id, "cancelled"),
   ]);
-
-  const recipRows = (recipCountRes.data ?? []) as { status: string }[];
-  const jobRows = (jobCountRes.data ?? []) as { status: string }[];
-
-  const countBy = <T extends { status: string }>(rows: T[], key: string) =>
-    rows.filter((r) => r.status === key).length;
 
   return {
     ...(campaign as CrmCampaign),
     steps: (stepsRes.data ?? []) as never,
     targets: (targetsRes.data ?? []) as never,
     recipient_counts: {
-      total: recipRows.length,
-      pending: countBy(recipRows, "pending"),
-      active: countBy(recipRows, "active"),
-      completed: countBy(recipRows, "completed"),
-      stopped: countBy(recipRows, "stopped"),
-      failed: countBy(recipRows, "failed"),
-      ineligible: countBy(recipRows, "ineligible"),
+      total: recipTotal,
+      pending: recipPending,
+      active: recipActive,
+      completed: recipCompleted,
+      stopped: recipStopped,
+      failed: recipFailed,
+      ineligible: recipIneligible,
     },
     job_counts: {
-      queued: countBy(jobRows, "queued"),
-      sent: countBy(jobRows, "sent"),
-      failed: countBy(jobRows, "failed"),
-      skipped: countBy(jobRows, "skipped"),
-      cancelled: countBy(jobRows, "cancelled"),
+      queued: jobQueued,
+      sent: jobSent,
+      failed: jobFailed,
+      skipped: jobSkipped,
+      cancelled: jobCancelled,
     },
   };
 }
@@ -939,6 +954,7 @@ export async function duplicateCrmCampaign(id: string): Promise<ActionResult<str
           media_mime_type: s.media_mime_type,
           media_size: s.media_size,
           caption: s.caption,
+          stop_if_replied: s.stop_if_replied ?? null,
         };
       });
       const { error: stepsErr } = await db.from("crm_campaign_steps").insert(newSteps);
