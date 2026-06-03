@@ -20,7 +20,7 @@ import {
   MessageSquare, CheckCircle2, AlertCircle, Loader2,
   ChevronRight, ChevronLeft, Upload, Trash2, FileText,
   Megaphone, Users, Send, CalendarClock, ShieldCheck,
-  UserCircle, LayoutTemplate, Zap, Save,
+  UserCircle, Zap, Save,
 } from "lucide-react";
 import type {
   CampaignKind, CreateCampaignDraftInput, CampaignAudiencePreview, CrmCampaignWithDetails
@@ -74,7 +74,7 @@ const KIND_OPTIONS: Array<{ kind: CampaignKind; label: string; description: stri
 ];
 
 interface AudienceTarget {
-  target_kind: "segment" | "tag" | "funnel_stage" | "lead" | "group" | "manual";
+  target_kind: "segment" | "tag" | "funnel_stage" | "group" | "manual";
   target_id?: string | null;
 }
 
@@ -104,9 +104,6 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const [targetId, setTargetId] = useState("");
   const [responsible, setResponsible] = useState<string>("all");
   const [advancedFilters, setAdvancedFilters] = useState({
-    excludeDuplicates: true,
-    excludeOptOut: true,
-    excludeBlocked: true,
     onlyWithPhone: true,
   });
 
@@ -120,6 +117,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const [mediaUploading, setMediaUploading] = useState(false);
   const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
 
   function insertVariable(variable: string) {
     const start = textareaRef.current?.selectionStart ?? msgText.length;
@@ -153,26 +151,38 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
   const [preview, setPreview] = useState<CampaignAudiencePreview | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [finalError, setFinalError] = useState<string | null>(null);
 
   // Efeito para carregar a prévia ao vivo na Etapa 2
   useEffect(() => {
-    if (step === 2 && targetId) {
-      setIsPreviewLoading(true);
-      previewCampaignAudience(kind === "group_campaign" ? "group_campaign" : "lead_campaign", [
-        {
-          target_kind: targetKind,
-          target_id: targetId,
-          filters: { responsible, ...advancedFilters }
-        }
-      ]).then((result) => {
-        setIsPreviewLoading(false);
-        if (result && "data" in result && result.data) {
-          setPreview(result.data);
-        } else {
-          setPreview(null);
-        }
-      });
+    if (step !== 2 || !targetId) {
+      setPreview(null);
+      setIsPreviewLoading(false);
+      return;
     }
+
+    let cancelled = false;
+    setIsPreviewLoading(true);
+    previewCampaignAudience(kind === "group_campaign" ? "group_campaign" : "lead_campaign", [
+      {
+        target_kind: targetKind,
+        target_id: targetId,
+        filters: { responsible, ...advancedFilters }
+      }
+    ]).then((result) => {
+      if (cancelled) return;
+      setIsPreviewLoading(false);
+      if (result && "data" in result && result.data) {
+        setPreview(result.data);
+      } else {
+        setPreview(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [step, targetId, targetKind, kind, responsible, advancedFilters]);
 
   // Efeito para repopular os dados se formos editar ou duplicar
@@ -188,15 +198,13 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
       if (initialData.targets && initialData.targets.length > 0) {
         const t = initialData.targets[0];
-        setTargetKind(t.target_kind);
-        setTargetId(t.target_id ?? "");
+        const safeTargetKind = t.target_kind === "lead" ? "segment" : t.target_kind;
+        setTargetKind(safeTargetKind);
+        setTargetId(t.target_kind === "lead" ? "" : t.target_id ?? "");
         const f = t.filters as any;
         if (f) {
           setResponsible(f.responsible ?? "all");
           setAdvancedFilters({
-            excludeDuplicates: f.excludeDuplicates ?? true,
-            excludeOptOut: f.excludeOptOut ?? true,
-            excludeBlocked: f.excludeBlocked ?? true,
             onlyWithPhone: f.onlyWithPhone ?? true,
           });
         }
@@ -228,10 +236,6 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
       }
     }
   }, [open, initialData]);
-
-  // Etapa 6
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const [finalError, setFinalError] = useState<string | null>(null);
 
   function reset() {
     setStep(1);
@@ -422,6 +426,7 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
     setMediaMimeType(null);
     setMediaSize(null);
     setMediaUploadError(null);
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   }
 
   const canNext =
@@ -439,7 +444,6 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
           { value: "segment", label: "Segmento" },
           { value: "tag", label: "Tag" },
           { value: "funnel_stage", label: "Etapa do funil" },
-          { value: "lead", label: "Lead específico" },
         ];
 
   const targetIdOptions: Array<{ id: string; name: string }> =
@@ -600,12 +604,10 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
 
                   <div className="space-y-3 pt-2 border-t mt-4">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase pt-4 block">Filtros Avançados</Label>
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-4">
-                      <label className="flex items-center gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.excludeDuplicates} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, excludeDuplicates: !!c }))} /> Excluir duplicados</label>
-                      <label className="flex items-start gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.excludeBlocked} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, excludeBlocked: !!c }))} /> <span className="leading-tight">Excluir contatos bloqueados</span></label>
-                      <label className="flex items-center gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.excludeOptOut} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, excludeOptOut: !!c }))} /> Excluir opt-out</label>
+                    <div className="grid grid-cols-1 gap-y-3 gap-x-4">
                       <label className="flex items-start gap-2 text-sm cursor-pointer"><Checkbox checked={advancedFilters.onlyWithPhone} onCheckedChange={(c) => setAdvancedFilters(prev => ({ ...prev, onlyWithPhone: !!c }))} /> <span className="leading-tight">Apenas leads com telefone</span></label>
                     </div>
+                    <p className="text-xs text-muted-foreground">Duplicados são removidos automaticamente antes do envio.</p>
                   </div>
                 </div>
 
@@ -683,13 +685,39 @@ export function CrmCampaignWizard({ open, onOpenChange, segments, tags, pipeline
                   </div>
 
                   <div className="flex items-center gap-4 pt-2">
-                    <Button variant="outline" size="sm" className="h-9">
-                      <Upload className="size-4 mr-2" /> Adicionar mídia
+                    <input
+                      ref={mediaInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                      onChange={(event) => void handleMediaFile(event.target.files?.[0] ?? null)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9"
+                      disabled={mediaUploading}
+                      onClick={() => mediaInputRef.current?.click()}
+                    >
+                      {mediaUploading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <Upload className="size-4 mr-2" />}
+                      {mediaUploading ? "Enviando..." : "Adicionar mídia"}
                     </Button>
-                    <button className="text-sm text-primary font-semibold hover:underline">
-                      Enviar teste para meu número
-                    </button>
                   </div>
+                  {mediaUploadError && (
+                    <p className="text-xs font-medium text-destructive">{mediaUploadError}</p>
+                  )}
+                  {mediaType !== "none" && mediaUrl && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{mediaFilename || "Mídia anexada"}</p>
+                        <p className="text-xs text-muted-foreground">{mediaMimeType ?? mediaType}</p>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={clearMedia}>
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right Col: WhatsApp Preview */}

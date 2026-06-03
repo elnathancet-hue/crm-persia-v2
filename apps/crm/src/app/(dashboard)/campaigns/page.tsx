@@ -1,4 +1,3 @@
-import { PageTitle } from "@persia/ui/typography";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
 import {
   listCampaignGroups, listCrmCampaigns,
@@ -9,10 +8,15 @@ import { getTags } from "@/actions/tags";
 import { getPipelines, getAllStagesForOrg } from "@/actions/crm";
 import { CrmCampaignList } from "@/components/campaigns/crm-campaign-list";
 
-export default async function CampaignsPage({ searchParams }: { searchParams: { edit?: string } }) {
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string | string[] | undefined }>;
+}) {
   await requireAdminPageAccess();
 
-  const editId = searchParams.edit;
+  const resolvedSearchParams = await searchParams;
+  const editId = typeof resolvedSearchParams.edit === "string" ? resolvedSearchParams.edit : undefined;
 
   const [campaigns, segments, tagsResult, pipelines, stages, groups, editData] = await Promise.all([
     listCrmCampaigns().catch(() => []),

@@ -928,7 +928,11 @@ export async function duplicateCrmCampaign(id: string): Promise<ActionResult<str
         media_size: s.media_size,
         caption: s.caption,
       }));
-      await db.from("crm_campaign_steps").insert(newSteps);
+      const { error: stepsErr } = await db.from("crm_campaign_steps").insert(newSteps);
+      if (stepsErr) {
+        await db.from("crm_campaigns").delete().eq("id", newId).eq("organization_id", orgId);
+        return { error: `Erro ao copiar mensagens: ${stepsErr.message ?? "erro"}` };
+      }
     }
 
     // Copia os targets
@@ -941,7 +945,11 @@ export async function duplicateCrmCampaign(id: string): Promise<ActionResult<str
         target_id: t.target_id,
         filters: t.filters,
       }));
-      await db.from("crm_campaign_targets").insert(newTargets);
+      const { error: targetsErr } = await db.from("crm_campaign_targets").insert(newTargets);
+      if (targetsErr) {
+        await db.from("crm_campaigns").delete().eq("id", newId).eq("organization_id", orgId);
+        return { error: `Erro ao copiar público: ${targetsErr.message ?? "erro"}` };
+      }
     }
 
     revalidatePath("/campaigns");

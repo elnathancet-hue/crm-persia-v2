@@ -41,18 +41,15 @@ export async function resolveCampaignAudience(input: {
   // Acumula candidatos: lead_id → dados / group_id → dados
   const leadMap = new Map<string, AudienceRecipientPreview>();
   const groupMap = new Map<string, AudienceRecipientPreview>();
-  let duplicateCount = 0;
+  const stats = { duplicateCount: 0 };
 
   for (const target of targets) {
     if (kind === "lead_campaign") {
-      await resolveLeadTarget(db, orgId, target, leadMap, errors, warnings);
+      await resolveLeadTarget(db, orgId, target, leadMap, errors, warnings, stats);
     } else {
-      await resolveGroupTarget(db, orgId, target, groupMap, errors, warnings);
+      await resolveGroupTarget(db, orgId, target, groupMap, errors, warnings, stats);
     }
   }
-
-  // Conta duplicatas (adicionados mais de uma vez ao mesmo mapa)
-  duplicateCount = 0; // Maps já deduplicam — count de colisões calculado dentro das funções
 
   const allRecipients: AudienceRecipientPreview[] = [
     ...leadMap.values(),
@@ -68,7 +65,7 @@ export async function resolveCampaignAudience(input: {
     found_count: allRecipients.length,
     eligible_count: eligible.length,
     ineligible_count: ineligible.length,
-    duplicate_count: duplicateCount,
+    duplicate_count: stats.duplicateCount,
     recipients: allRecipients,
     warnings,
     errors,
@@ -85,18 +82,22 @@ async function resolveLeadTarget(
   out: Map<string, AudienceRecipientPreview>,
   errors: string[],
   warnings: string[],
+  stats: { duplicateCount: number },
 ): Promise<void> {
   try {
     const leads = await fetchLeadsForTarget(db, orgId, target, errors);
+    const requiresPhone = target.filters?.onlyWithPhone !== false;
     for (const lead of leads) {
       if (out.has(lead.id)) {
-        // já presente — duplicata, silencia
+        stats.duplicateCount++;
         continue;
       }
-      const eligible = Boolean(lead.phone || lead.chat_jid);
+      const eligible = requiresPhone ? Boolean(lead.phone) : Boolean(lead.phone || lead.chat_jid);
       const ineligible_reason = eligible
         ? undefined
-        : "Sem telefone ou JID WhatsApp";
+        : requiresPhone
+          ? "Sem telefone"
+          : "Sem telefone ou JID WhatsApp";
       out.set(lead.id, {
         recipient_type: "lead",
         lead_id: lead.id,
@@ -227,11 +228,15 @@ async function resolveGroupTarget(
   out: Map<string, AudienceRecipientPreview>,
   errors: string[],
   _warnings: string[],
+  stats: { duplicateCount: number },
 ): Promise<void> {
   try {
     const groups = await fetchGroupsForTarget(db, orgId, target, errors);
     for (const group of groups) {
-      if (out.has(group.id)) continue;
+      if (out.has(group.id)) {
+        stats.duplicateCount++;
+        continue;
+      }
       const eligible = Boolean(group.group_jid);
       out.set(group.id, {
         recipient_type: "group",
