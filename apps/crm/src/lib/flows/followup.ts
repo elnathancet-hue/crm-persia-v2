@@ -23,7 +23,7 @@ export async function processFollowUps(): Promise<{
   // Find executions that are waiting and due to resume
   const { data: executions, error } = await supabase
     .from("flow_executions")
-    .select("id, data")
+    .select("id, metadata")
     .eq("status", "waiting")
     .order("started_at", { ascending: true })
     .limit(50); // Process max 50 at a time
@@ -35,7 +35,7 @@ export async function processFollowUps(): Promise<{
 
   // Filter to only those whose resume_at has passed
   const dueExecutions = executions.filter((exec) => {
-    const resumeAt = exec.data?.resume_at;
+    const resumeAt = exec.metadata?.resume_at;
     if (!resumeAt) return false;
     return new Date(resumeAt) <= new Date(now);
   });
