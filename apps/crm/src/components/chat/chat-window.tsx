@@ -1804,6 +1804,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           {leadForPanel && (
             <LeadContactPanel
               lead={leadForPanel}
+              conversationId={conversationId}
               onClose={() => setContactPanelOpen(false)}
             />
           )}

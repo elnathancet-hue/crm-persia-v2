@@ -407,6 +407,28 @@ export async function sendMessageViaWhatsApp(
   return { data: { ...(message as Message), status: "sent" } };
 }
 
+export async function getConversationMediaFiles(
+  conversationId: string,
+): Promise<{ id: string; type: string; media_url: string | null; content: string | null; created_at: string }[]> {
+  const { supabase, orgId } = await requireRole("agent");
+  const { data } = await supabase
+    .from("messages")
+    .select("id, type, media_url, content, created_at")
+    .eq("organization_id", orgId)
+    .eq("conversation_id", conversationId)
+    .in("type", ["image", "video", "document", "audio", "ptt"])
+    .not("media_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return (data ?? []).map((m) => ({
+    id: m.id,
+    type: m.type ?? "unknown",
+    media_url: m.media_url,
+    content: m.content,
+    created_at: m.created_at ?? "",
+  }));
+}
+
 export async function forwardMessagesToConversations(
   messageIds: string[],
   targetConversationIds: string[],
