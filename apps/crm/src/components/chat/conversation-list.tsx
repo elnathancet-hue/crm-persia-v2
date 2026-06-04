@@ -53,7 +53,6 @@ import {
   MessageSquare,
   Search,
   SlidersHorizontal,
-  Tags,
   UserPlus,
   Volume2,
   VolumeX,
@@ -390,6 +389,7 @@ export function ConversationList({
   const selectedTagName = dbTags.find((tag) => tag.id === bulkTagId)?.name;
   const selectedPipelineName = pipelines.find((pipeline) => pipeline.id === bulkPipelineId)?.name;
   const selectedStageName = stages.find((stage) => stage.id === bulkStageId)?.name;
+  const hasBulkChanges = Boolean(bulkTagId || bulkStageId);
 
   const toggleConversationSelection = (conversationId: string) => {
     setSelectedConversationIds((prev) => {
@@ -427,6 +427,45 @@ export function ConversationList({
       await loadConversations();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Nao foi possivel concluir a acao");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const runBulkChanges = async () => {
+    if (selectedCount === 0) {
+      toast.error("Selecione pelo menos uma conversa");
+      return;
+    }
+    if (!hasBulkChanges) {
+      toast.error("Escolha uma tag ou uma etapa do funil");
+      return;
+    }
+
+    setBulkBusy(true);
+    try {
+      const conversationIds = [...selectedConversationIds];
+      const results: string[] = [];
+
+      if (bulkTagId) {
+        const result = await bulkApplyTagToConversationLeads(conversationIds, bulkTagId);
+        results.push(`tag em ${result.updated_count}`);
+      }
+
+      if (bulkStageId) {
+        const result = await bulkMoveConversationLeads(conversationIds, bulkStageId);
+        results.push(`funil em ${result.updated_count}`);
+      }
+
+      toast.success(`Alterações aplicadas: ${results.join(" | ")}`);
+      setSelectedConversationIds(new Set());
+      setBulkTagId("");
+      setBulkPipelineId("");
+      setBulkStageId("");
+      setBulkMode(false);
+      await loadConversations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel aplicar as alteracoes");
     } finally {
       setBulkBusy(false);
     }
@@ -835,8 +874,8 @@ export function ConversationList({
       </div>
 
       {bulkMode && (
-        <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] bg-card p-3 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-2 z-20">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="fixed left-1/2 top-1/2 z-40 w-[min(420px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card p-4 shadow-xl animate-in fade-in-0 zoom-in-95">
+          <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Seleção em massa</p>
               <p className="text-[11px] text-muted-foreground">
@@ -856,7 +895,7 @@ export function ConversationList({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="h-7 w-7 bg-muted/50 hover:bg-muted"
+                className="h-7 w-7"
                 onClick={exitBulkMode}
                 aria-label="Sair da selecao em massa"
               >
@@ -894,9 +933,10 @@ export function ConversationList({
             </div>
 
             {/* Adicionar Tag */}
-            <div className="flex items-center gap-2 rounded-md border bg-muted/20 p-1.5">
+            <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Tag</Label>
               <Select value={bulkTagId} onValueChange={(value) => setBulkTagId(value ?? "")}>
-                <SelectTrigger className="h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none text-xs focus:ring-0">
+                <SelectTrigger className="h-9 min-w-0 text-xs">
                   <span className={cn("flex-1 truncate text-left", !bulkTagId && "text-muted-foreground")}>
                     {bulkTagId ? (selectedTagName ?? "Tag") : "Adicionar tag"}
                   </span>
@@ -909,27 +949,13 @@ export function ConversationList({
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                type="button"
-                className="h-8 shrink-0 px-3 text-xs"
-                size="sm"
-                disabled={bulkBusy || selectedCount === 0 || !bulkTagId}
-                onClick={() =>
-                  runBulkAction(
-                    () => bulkApplyTagToConversationLeads([...selectedConversationIds], bulkTagId),
-                    "Tags aplicadas",
-                  )
-                }
-              >
-                <Tags className="mr-1.5 size-3.5" />
-                Aplicar
-              </Button>
             </div>
 
             {/* Mover Funil */}
-            <div className="rounded-md border bg-muted/20 p-1.5 space-y-1.5">
+            <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Funil</Label>
               <Select value={bulkPipelineId} onValueChange={(value) => setBulkPipelineId(value ?? "")}>
-                <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs focus:ring-0">
+                <SelectTrigger className="h-9 text-xs">
                   <span className={cn("flex-1 truncate text-left", !bulkPipelineId && "text-muted-foreground")}>
                     {bulkPipelineId ? (selectedPipelineName ?? "Funil") : "Escolher funil"}
                   </span>
@@ -944,7 +970,7 @@ export function ConversationList({
               </Select>
               <div className="flex items-center gap-2">
                 <Select value={bulkStageId} onValueChange={(value) => setBulkStageId(value ?? "")} disabled={!bulkPipelineId}>
-                  <SelectTrigger className="h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none text-xs focus:ring-0">
+                  <SelectTrigger className="h-9 min-w-0 flex-1 text-xs">
                     <span className={cn("flex-1 truncate text-left", !bulkStageId && "text-muted-foreground")}>
                       {bulkStageId ? (selectedStageName ?? "Etapa") : "Escolher etapa"}
                     </span>
@@ -957,22 +983,28 @@ export function ConversationList({
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  type="button"
-                  className="h-8 shrink-0 px-3 text-xs"
-                  size="sm"
-                  disabled={bulkBusy || selectedCount === 0 || !bulkStageId}
-                  onClick={() =>
-                    runBulkAction(
-                      () => bulkMoveConversationLeads([...selectedConversationIds], bulkStageId),
-                      "Leads movidos",
-                    )
-                  }
-                >
-                  <GitBranch className="mr-1.5 size-3.5" />
-                  Mover
-                </Button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={exitBulkMode}
+                disabled={bulkBusy}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={bulkBusy || selectedCount === 0 || !hasBulkChanges}
+                onClick={runBulkChanges}
+              >
+                {bulkBusy ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <GitBranch className="mr-1.5 size-3.5" />}
+                Aplicar alterações
+              </Button>
             </div>
           </div>
         </div>
