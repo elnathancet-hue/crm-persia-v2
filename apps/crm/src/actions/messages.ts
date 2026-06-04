@@ -407,6 +407,70 @@ export async function sendMessageViaWhatsApp(
   return { data: { ...(message as Message), status: "sent" } };
 }
 
+export async function forwardMessagesToConversations(
+  messageIds: string[],
+  targetConversationIds: string[],
+): Promise<{ sent_count: number; skipped_count: number; error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const uniqueMessageIds = [...new Set(messageIds)].filter(Boolean).slice(0, 10);
+  const uniqueTargetIds = [...new Set(targetConversationIds)].filter(Boolean).slice(0, 20);
+
+  if (uniqueMessageIds.length === 0) return { sent_count: 0, skipped_count: 0, error: "Selecione pelo menos uma mensagem" };
+  if (uniqueTargetIds.length === 0) return { sent_count: 0, skipped_count: 0, error: "Selecione pelo menos uma conversa" };
+
+  const { data: sourceMessages, error: sourceError } = await supabase
+    .from("messages")
+    .select("id, content, type, status, created_at")
+    .eq("organization_id", orgId)
+    .in("id", uniqueMessageIds)
+    .order("created_at", { ascending: true });
+
+  if (sourceError) return { sent_count: 0, skipped_count: 0, error: sourceError.message };
+
+  const forwardableMessages = (sourceMessages ?? []).filter(
+    (message) =>
+      typeof message.content === "string" &&
+      message.content.trim().length > 0 &&
+      message.status !== "deleted",
+  );
+
+  if (forwardableMessages.length === 0) {
+    return {
+      sent_count: 0,
+      skipped_count: uniqueMessageIds.length,
+      error: "Nenhuma mensagem de texto selecionada para encaminhar",
+    };
+  }
+
+  const { data: targetConversations, error: targetError } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", orgId)
+    .in("id", uniqueTargetIds);
+
+  if (targetError) return { sent_count: 0, skipped_count: 0, error: targetError.message };
+
+  const allowedTargetIds = new Set((targetConversations ?? []).map((conversation) => conversation.id));
+  let sentCount = 0;
+  let skippedCount = uniqueMessageIds.length - forwardableMessages.length;
+
+  for (const targetId of uniqueTargetIds) {
+    if (!allowedTargetIds.has(targetId)) {
+      skippedCount += forwardableMessages.length;
+      continue;
+    }
+
+    for (const message of forwardableMessages) {
+      const result = await sendMessageViaWhatsApp(targetId, message.content!.trim());
+      if (result.error) skippedCount += 1;
+      else sentCount += 1;
+    }
+  }
+
+  return { sent_count: sentCount, skipped_count: skippedCount };
+}
+
 /**
  * Envia midia (imagem, audio, video, documento) via WhatsApp.
  * 1. Salva a midia no bucket privado chat-media

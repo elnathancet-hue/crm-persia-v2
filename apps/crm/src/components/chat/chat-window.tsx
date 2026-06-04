@@ -3,14 +3,17 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
-import { getConversation } from "@/actions/conversations";
+import { getConversation, getConversations, type ConversationWithLead } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
-import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, type Message } from "@/actions/messages";
+import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, forwardMessagesToConversations, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
+import { Checkbox } from "@persia/ui/checkbox";
 import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
+import { Textarea } from "@persia/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +52,7 @@ import {
   ChevronDown,
   Copy,
   FileText,
+  Forward,
   Info,
   Loader2,
   MessageSquare,
@@ -62,6 +66,7 @@ import {
   Reply,
   RotateCw,
   Search,
+  Send,
   Smile,
   Sparkles,
   Trash2,
@@ -321,40 +326,63 @@ function ScheduleMessageDialog({
     }
   };
 
+  const setQuickSchedule = (minutes: number) => {
+    const date = new Date(Date.now() + minutes * 60_000);
+    setScheduleDate(date.toISOString().slice(0, 16));
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Agendar Mensagem</DialogTitle>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader className="space-y-2">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Calendar className="size-5" />
+          </div>
+          <DialogTitle>Agendar mensagem</DialogTitle>
           <DialogDescription>
-            A mensagem sera enviada automaticamente na data e hora escolhidas.
+            Programe uma mensagem para ser enviada automaticamente nesta conversa.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Mensagem</label>
-            <textarea
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <Label htmlFor="scheduled-message-content">Mensagem</Label>
+              <span className="text-xs text-muted-foreground">{messageText.length}/1000</span>
+            </div>
+            <Textarea
+              id="scheduled-message-content"
+              name="scheduled_message_content"
               value={messageText}
               onChange={(e) => setMessageText(e.target.value.slice(0, 1000))}
               placeholder="Digite sua mensagem..."
-              rows={4}
-              className="w-full min-h-[80px] rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:ring-2 focus:ring-primary focus:ring-offset-2 outline-none resize-none"
+              className="min-h-[128px] resize-none"
+              maxLength={1000}
             />
-            <p className="text-[11px] text-muted-foreground text-right">
-              {messageText.length}/1000
-            </p>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Data e hora de envio</label>
-            <input
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <Label htmlFor="scheduled-message-date">Data e hora de envio</Label>
+            <Input
+              id="scheduled-message-date"
+              name="scheduled_message_date"
               type="datetime-local"
               value={scheduleDate}
               onChange={(e) => setScheduleDate(e.target.value)}
               min={new Date().toISOString().slice(0, 16)}
-              className="w-full h-10 rounded-md border bg-transparent px-3 text-sm focus:ring-2 focus:ring-primary focus:ring-offset-2 outline-none"
+              className="mt-2"
             />
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setQuickSchedule(60)}>
+                +1h
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setQuickSchedule(24 * 60)}>
+                Amanhã
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setQuickSchedule(48 * 60)}>
+                +2 dias
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -363,7 +391,7 @@ function ScheduleMessageDialog({
             Cancelar
           </DialogClose>
           <Button onClick={handleSchedule} disabled={saving}>
-            {saving ? "Agendando..." : "Agendar Mensagem"}
+            {saving ? "Agendando..." : "Agendar mensagem"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -547,6 +575,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [messageSearch, setMessageSearch] = useState("");
+  const [forwardMode, setForwardMode] = useState(false);
+  const [forwarding, setForwarding] = useState(false);
+  const [forwardMessageIds, setForwardMessageIds] = useState<Set<string>>(new Set());
+  const [forwardTargetIds, setForwardTargetIds] = useState<Set<string>>(new Set());
+  const [forwardConversations, setForwardConversations] = useState<ConversationWithLead[]>([]);
+  const [forwardSearch, setForwardSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -646,6 +680,84 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     const result = await resolveMessageMediaUrl(message.id).catch(() => null);
     return result?.url ? { ...message, media_url: result.url } : message;
   }, []);
+
+  const startForward = useCallback((messageId: string) => {
+    setForwardMode(true);
+    setForwardMessageIds(new Set([messageId]));
+    setForwardTargetIds(new Set());
+    setForwardSearch("");
+  }, []);
+
+  const cancelForward = useCallback(() => {
+    setForwardMode(false);
+    setForwardMessageIds(new Set());
+    setForwardTargetIds(new Set());
+    setForwardSearch("");
+  }, []);
+
+  const toggleForwardMessage = useCallback((messageId: string) => {
+    setForwardMessageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  }, []);
+
+  const toggleForwardTarget = useCallback((targetId: string) => {
+    setForwardTargetIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(targetId)) next.delete(targetId);
+      else next.add(targetId);
+      return next;
+    });
+  }, []);
+
+  const handleForwardMessages = useCallback(async () => {
+    if (forwardMessageIds.size === 0) {
+      toast.error("Selecione pelo menos uma mensagem");
+      return;
+    }
+    if (forwardTargetIds.size === 0) {
+      toast.error("Selecione pelo menos uma conversa");
+      return;
+    }
+
+    setForwarding(true);
+    try {
+      const result = await forwardMessagesToConversations([...forwardMessageIds], [...forwardTargetIds]);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Mensagens encaminhadas: ${result.sent_count}`);
+      if (result.skipped_count > 0) {
+        toast.warning(`${result.skipped_count} item(ns) nao foram encaminhados`);
+      }
+      cancelForward();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel encaminhar");
+    } finally {
+      setForwarding(false);
+    }
+  }, [cancelForward, forwardMessageIds, forwardTargetIds]);
+
+  useEffect(() => {
+    if (!forwardMode) return;
+
+    let cancelled = false;
+    getConversations(orgId, { search: forwardSearch })
+      .then((result) => {
+        if (!cancelled) setForwardConversations(result.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setForwardConversations([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [forwardMode, forwardSearch, orgId]);
 
   // Load conversation + messages when selected conversation changes
   useEffect(() => {
@@ -1224,6 +1336,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                             <Smile className="size-4" />
                             Reagir
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => startForward(msg.id)}
+                            disabled={!msg.content?.trim()}
+                          >
+                            <Forward className="size-4" />
+                            Encaminhar
+                          </DropdownMenuItem>
                           {canModify && (
                             <>
                               <DropdownMenuSeparator />
@@ -1270,6 +1389,16 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                         isLead ? "flex-row" : "ml-auto flex-row-reverse"
                       )}
                     >
+                      {forwardMode && (
+                        <div className="flex w-6 shrink-0 items-start justify-center pt-6">
+                          <Checkbox
+                            checked={forwardMessageIds.has(msg.id)}
+                            onCheckedChange={() => toggleForwardMessage(msg.id)}
+                            disabled={!msg.content?.trim()}
+                            aria-label="Selecionar mensagem para encaminhar"
+                          />
+                        </div>
+                      )}
                       {/* Avatar do lead — alinhado ao topo do bloco */}
                       {isLead && (
                         <div className="w-6 shrink-0 self-start mt-0.5">
@@ -1458,6 +1587,97 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {forwardMode && (
+        <div className="fixed left-1/2 top-1/2 z-40 w-[min(460px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card p-4 shadow-xl animate-in fade-in-0 zoom-in-95">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Encaminhar mensagens</p>
+              <p className="text-[11px] text-muted-foreground">
+                {forwardMessageIds.size} mensagem{forwardMessageIds.size === 1 ? "" : "s"} e {forwardTargetIds.size} conversa{forwardTargetIds.size === 1 ? "" : "s"} selecionada{forwardTargetIds.size === 1 ? "" : "s"}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-7 w-7"
+              onClick={cancelForward}
+              aria-label="Cancelar encaminhamento"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <Label htmlFor="forward-conversation-search" className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Destinos
+              </Label>
+              <div className="relative mt-2">
+                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="forward-conversation-search"
+                  name="forward_conversation_search"
+                  value={forwardSearch}
+                  onChange={(event) => setForwardSearch(event.target.value)}
+                  placeholder="Buscar conversa..."
+                  className="pl-8"
+                />
+              </div>
+              <div className="mt-3 max-h-64 space-y-1 overflow-y-auto pr-1">
+                {forwardConversations.filter((item) => item.id !== conversationId).slice(0, 25).map((item) => {
+                  const lead = item.leads;
+                  const title = lead?.name || lead?.phone || "Sem nome";
+                  const selected = forwardTargetIds.has(item.id);
+
+                  return (
+                    <Button
+                      key={item.id}
+                      type="button"
+                      variant="ghost"
+                      onClick={() => toggleForwardTarget(item.id)}
+                      className="h-auto w-full justify-start gap-3 rounded-md px-2 py-2 text-left"
+                    >
+                      <Checkbox
+                        checked={selected}
+                        onClick={(event) => event.stopPropagation()}
+                        onCheckedChange={() => toggleForwardTarget(item.id)}
+                        aria-label={`Selecionar ${title}`}
+                      />
+                      <Avatar size="sm">
+                        {lead?.avatar_url ? <AvatarImage src={lead.avatar_url} alt={title} /> : null}
+                        <AvatarFallback className="text-[10px]">{getInitials(title)}</AvatarFallback>
+                      </Avatar>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">{title}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {item.last_message?.content || lead?.phone || "Conversa"}
+                        </span>
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t pt-3">
+              <Button type="button" variant="outline" size="sm" onClick={cancelForward} disabled={forwarding}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleForwardMessages}
+                disabled={forwarding || forwardMessageIds.size === 0 || forwardTargetIds.size === 0}
+              >
+                {forwarding ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Send className="mr-1.5 size-3.5" />}
+                Encaminhar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Input - shrink-0 so it stays at bottom */}
       <div className="shrink-0">
