@@ -59,7 +59,55 @@ export async function getSegments() {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data;
+
+  const segments = data ?? [];
+
+  // Lazy-fix: recomputa lead_count para segmentos que têm regras mas
+  // mostram 0 — cobre segmentos criados antes do fix que persiste o count.
+  // Só atualiza se count > 0 para não iterar infinitamente em segmentos
+  // que legitimamente têm 0 leads. Limitado a 5 por chamada.
+  const stale = segments
+    .filter(
+      (s) =>
+        s.lead_count === 0 &&
+        Array.isArray((s.rules as { conditions?: unknown[] } | null)?.conditions) &&
+        ((s.rules as { conditions?: unknown[] }).conditions?.length ?? 0) > 0,
+    )
+    .slice(0, 5);
+
+  if (stale.length > 0) {
+    const recomputed = await Promise.all(
+      stale.map(async (s) => {
+        try {
+          const ids = await findMatchingLeadIds(supabase as never, orgId, s.rules as SegmentRules);
+          const count = ids === null ? 0 : ids.length;
+          if (count > 0) {
+            await supabase
+              .from("segments")
+              .update({ lead_count: count } as never)
+              .eq("id", s.id)
+              .eq("organization_id", orgId);
+            return { id: s.id, lead_count: count };
+          }
+        } catch {
+          /* best effort */
+        }
+        return null;
+      }),
+    );
+    const countMap = new Map(
+      recomputed
+        .filter((r): r is { id: string; lead_count: number } => r !== null)
+        .map((r) => [r.id, r.lead_count]),
+    );
+    if (countMap.size > 0) {
+      return segments.map((s) =>
+        countMap.has(s.id) ? { ...s, lead_count: countMap.get(s.id)! } : s,
+      );
+    }
+  }
+
+  return segments;
 }
 
 export async function getSegment(id: string) {
@@ -97,6 +145,26 @@ interface UpdateSegmentPayload {
   rules?: unknown;
 }
 
+// Calcula lead_count e persiste no segmento. Best-effort: falha silenciosa.
+async function refreshSegmentLeadCount(
+  supabase: Awaited<ReturnType<typeof requireRole>>["supabase"],
+  orgId: string,
+  segmentId: string,
+  rules: SegmentRules,
+): Promise<void> {
+  try {
+    const ids = await findMatchingLeadIds(supabase as never, orgId, rules);
+    const count = ids === null ? 0 : ids.length;
+    await supabase
+      .from("segments")
+      .update({ lead_count: count } as never)
+      .eq("id", segmentId)
+      .eq("organization_id", orgId);
+  } catch {
+    // Best-effort — não quebra o fluxo principal.
+  }
+}
+
 export async function createSegment(
   payload: CreateSegmentPayload,
 ): Promise<ActionResult<unknown>> {
@@ -125,10 +193,13 @@ export async function createSegment(
       logSegmentEvent("segment_error", { organization_id: orgId, error_message: error.message });
       return { error: error.message };
     }
-    logSegmentEvent("segment_created", {
-      organization_id: orgId,
-      segment_id: (data as { id?: string })?.id,
-    });
+
+    const segmentId = (data as { id?: string })?.id;
+    if (segmentId && payload.rules) {
+      await refreshSegmentLeadCount(supabase, orgId, segmentId, payload.rules as SegmentRules);
+    }
+
+    logSegmentEvent("segment_created", { organization_id: orgId, segment_id: segmentId });
     revalidatePath("/segments");
     return { data };
   } catch (err) {
@@ -168,6 +239,12 @@ export async function updateSegment(
       logSegmentEvent("segment_error", { organization_id: orgId, segment_id: id, error_message: error.message });
       return { error: error.message };
     }
+
+    // Recalcula lead_count sempre que as regras mudarem.
+    if (payload.rules !== undefined) {
+      await refreshSegmentLeadCount(supabase, orgId, id, payload.rules as SegmentRules);
+    }
+
     logSegmentEvent("segment_updated", { organization_id: orgId, segment_id: id });
     revalidatePath("/segments");
     return;
@@ -286,9 +363,15 @@ export async function duplicateSegment(id: string): Promise<ActionResult<unknown
       logSegmentEvent("segment_error", { organization_id: orgId, segment_id: id, error_message: error.message });
       return { error: error.message };
     }
+
+    const newSegmentId = (data as { id?: string })?.id;
+    if (newSegmentId && original.rules) {
+      await refreshSegmentLeadCount(supabase, orgId, newSegmentId, original.rules as SegmentRules);
+    }
+
     logSegmentEvent("segment_duplicated", {
       organization_id: orgId,
-      segment_id: (data as { id?: string })?.id,
+      segment_id: newSegmentId,
     });
     revalidatePath("/segments");
     return { data };
