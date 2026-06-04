@@ -63,6 +63,7 @@ function makeTemplate(overrides: Partial<Record<string, unknown>> = {}) {
     status: "active",
     created_at: "2026-05-01T00:00:00.000Z",
     updated_at: "2026-05-01T00:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -104,7 +105,7 @@ function queueHappyPathBase(supabase: ReturnType<typeof createSupabaseMock>, fol
 }
 
 function queueEligibleEvaluation(supabase: ReturnType<typeof createSupabaseMock>) {
-  supabase.queue("conversations", { data: { status: "active" }, error: null });
+  supabase.queue("conversations", { data: { status: "active", assigned_to: "ai" }, error: null });
   supabase.queue("messages", {
     data: [{ id: "m1", sender: "ai", created_at: "2026-04-30T00:00:00.000Z" }],
     error: null,
@@ -155,7 +156,7 @@ describe("runFollowupsTick", () => {
   it("cancela a fila quando a ultima mensagem e do lead", async () => {
     const supabase = createSupabaseMock();
     queueHappyPathBase(supabase);
-    supabase.queue("conversations", { data: { status: "active" }, error: null });
+    supabase.queue("conversations", { data: { status: "active", assigned_to: "ai" }, error: null });
     supabase.queue("messages", {
       data: [
         { id: "m2", sender: "lead", created_at: "2026-04-30T02:00:00.000Z" },
@@ -198,7 +199,7 @@ describe("runFollowupsTick", () => {
       makeFollowup(),
       makeFollowup({ id: FOLLOWUP_2, order_index: 1, delay_hours: 720 }),
     ]);
-    supabase.queue("conversations", { data: { status: "active" }, error: null });
+    supabase.queue("conversations", { data: { status: "active", assigned_to: "ai" }, error: null });
     supabase.queue("messages", {
       data: [{ id: "m1", sender: "ai", created_at: "2026-04-30T00:00:00.000Z" }],
       error: null,
@@ -226,6 +227,50 @@ describe("runFollowupsTick", () => {
     expect(result.skipped).toBe(1);
     expect(supabase.inserts.agent_followup_runs ?? []).toHaveLength(0);
     expect(providerSendText).not.toHaveBeenCalled();
+  });
+
+  it("envia follow-up com mensagem propria sem template", async () => {
+    const supabase = createSupabaseMock();
+    queueHappyPathBase(supabase, [
+      makeFollowup({
+        template_id: null,
+        message_text: "Oi {{lead_name}}, posso te ajudar? - {{agent_name}}",
+      }),
+    ]);
+    queueEligibleEvaluation(supabase);
+    queueEligibleEvaluation(supabase);
+    supabase.queue("leads", { data: { name: "Maria", phone: "+55 11 98888-7777" }, error: null });
+    supabase.queue("agent_followup_runs", { data: null, error: null });
+    supabase.queue("agent_followup_runs", { data: null, error: null });
+
+    const result = await runFollowupsTick(supabase as never);
+
+    expect(result.fired).toBe(1);
+    expect(providerSendText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Oi Maria, posso te ajudar? - Vendedora",
+      }),
+    );
+  });
+
+  it("pausa quando a etapa exige IA ativa e a conversa esta com humano", async () => {
+    const supabase = createSupabaseMock();
+    queueHappyPathBase(supabase);
+    supabase.queue("conversations", { data: { status: "waiting_human", assigned_to: null }, error: null });
+    supabase.queue("messages", {
+      data: [{ id: "m1", sender: "agent", created_at: "2026-04-30T00:00:00.000Z" }],
+      error: null,
+    });
+    supabase.queue("agent_followup_runs", { data: [], error: null });
+
+    const result = await runFollowupsTick(supabase as never);
+
+    expect(result.paused).toBe(1);
+    expect(providerSendText).not.toHaveBeenCalled();
+    expect(supabase.inserts.agent_followup_conversation_states?.[0]).toMatchObject({
+      status: "paused",
+      pause_reason: "ai_inactive",
+    });
   });
 
   it("zero followups enabled = idle", async () => {

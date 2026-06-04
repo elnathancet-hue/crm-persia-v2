@@ -367,8 +367,8 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
         open={editor.open}
         onOpenChange={(open) => !open && setEditor(EMPTY_EDITOR)}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100vh-2rem)] max-w-2xl flex-col overflow-hidden p-0">
+          <DialogHeader className="shrink-0 px-6 py-5">
             <DialogTitle>
               {editor.source ? "Editar etapa de follow-up" : "Nova etapa de follow-up"}
             </DialogTitle>
@@ -377,7 +377,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 pt-4">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
             {/* Seção 1: Configuração Básica */}
             <div className="space-y-4 rounded-xl border p-5 bg-card">
               <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -521,7 +521,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 px-6 py-4">
             <Button
               variant="outline"
               onClick={() => setEditor(EMPTY_EDITOR)}

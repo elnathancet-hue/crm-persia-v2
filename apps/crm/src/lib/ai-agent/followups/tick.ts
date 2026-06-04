@@ -35,6 +35,7 @@ export interface FollowupTickResult {
 }
 
 type ConfigRow = { name: string; status: string } | null;
+type ConversationControlRow = { status: string | null; assigned_to: string | null } | null;
 
 interface ConversationRow {
   id: string;
@@ -393,8 +394,8 @@ async function evaluateConversation(
     return { status: "cancelled", reason: "missing_lead_or_conversation" };
   }
 
-  const conversationStatus = await loadCrmConversationStatus(db, conversation);
-  if (conversationStatus === "closed") {
+  const conversationControl = await loadCrmConversationControl(db, conversation);
+  if (conversationControl?.status === "closed") {
     return { status: "cancelled", reason: "conversation_closed" };
   }
 
@@ -434,6 +435,21 @@ async function evaluateConversation(
     return {
       status: "finished",
       reason: "sequence_completed",
+      lastCompanyMessageAt: lastCompany.created_at,
+      lastLeadMessageAt: lastLead?.created_at ?? null,
+    };
+  }
+
+  if (
+    next.require_ai_active &&
+    (!conversationControl ||
+      conversationControl.status !== "active" ||
+      conversationControl.assigned_to !== "ai")
+  ) {
+    return {
+      status: "paused",
+      followup: next,
+      reason: "ai_inactive",
       lastCompanyMessageAt: lastCompany.created_at,
       lastLeadMessageAt: lastLead?.created_at ?? null,
     };
@@ -490,19 +506,20 @@ async function loadRecentMessages(
   return (data ?? []) as MessageRow[];
 }
 
-async function loadCrmConversationStatus(
+async function loadCrmConversationControl(
   db: AgentDb,
   conversation: ConversationRow,
-): Promise<string | null> {
+): Promise<ConversationControlRow> {
   if (!conversation.crm_conversation_id) return null;
   const { data, error } = await db
     .from("conversations")
-    .select("status")
+    .select("status, assigned_to")
     .eq("organization_id", conversation.organization_id)
     .eq("id", conversation.crm_conversation_id)
     .maybeSingle();
   if (error) return null;
-  return (data as { status?: string | null } | null)?.status ?? null;
+  const row = data as ConversationControlRow;
+  return row ?? null;
 }
 
 async function loadSentRuns(
