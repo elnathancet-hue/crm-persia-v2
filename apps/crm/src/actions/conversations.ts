@@ -4,6 +4,10 @@ import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 import { createProvider } from "@/lib/whatsapp/providers";
+import {
+  addTagToLead as addTagToLeadShared,
+  bulkMoveLeads as bulkMoveLeadsShared,
+} from "@persia/shared/crm";
 
 type RoleSupabase = Awaited<ReturnType<typeof requireRole>>["supabase"];
 
@@ -87,6 +91,10 @@ export type ConversationWithLead = {
     email: string | null;
     avatar_url: string | null;
     channel: string;
+    lead_tags?: Array<{
+      tag_id: string;
+      tags: { id: string; name: string; color: string | null } | null;
+    }>;
   };
   last_message?: {
     content: string | null;
@@ -115,7 +123,11 @@ export async function getConversations(
         phone,
         email,
         avatar_url,
-        channel
+        channel,
+        lead_tags (
+          tag_id,
+          tags ( id, name, color )
+        )
       )
     `)
     .eq("organization_id", orgId)
@@ -433,6 +445,113 @@ export async function markConversationAsRead(conversationId: string) {
       } catch { /* fire-and-forget */ }
     })();
   }
+}
+
+async function getLeadIdsForConversations(
+  supabase: RoleSupabase,
+  orgId: string,
+  conversationIds: string[],
+): Promise<string[]> {
+  const ids = [...new Set(conversationIds.filter(Boolean))].slice(0, 200);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("lead_id")
+    .eq("organization_id", orgId)
+    .in("id", ids);
+
+  if (error) throw new Error(error.message);
+  return [
+    ...new Set(
+      (data ?? [])
+        .map((row: { lead_id: string | null }) => row.lead_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+}
+
+export async function bulkMarkConversationsAsRead(
+  conversationIds: string[],
+): Promise<{ updated_count: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+  const ids = [...new Set(conversationIds.filter(Boolean))].slice(0, 200);
+  if (ids.length === 0) return { updated_count: 0 };
+
+  const [updateResult, conversationsResult] = await Promise.all([
+    supabase
+      .from("conversations")
+      .update({ unread_count: 0, updated_at: new Date().toISOString() })
+      .eq("organization_id", orgId)
+      .in("id", ids)
+      .select("id"),
+    supabase
+      .from("conversations")
+      .select("channel, leads(phone)")
+      .eq("organization_id", orgId)
+      .in("id", ids),
+  ]);
+
+  if (updateResult.error) throw new Error(updateResult.error.message);
+
+  const phones = (conversationsResult.data ?? [])
+    .filter((conversation: any) => conversation.channel === "whatsapp")
+    .map((conversation: any) => conversation.leads?.phone)
+    .filter((phone: unknown): phone is string => typeof phone === "string" && phone.trim().length > 0);
+
+  if (phones.length > 0) {
+    void (async () => {
+      try {
+        const { data: connection } = await supabase
+          .from("whatsapp_connections")
+          .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+          .eq("organization_id", orgId)
+          .eq("status", "connected")
+          .limit(1)
+          .single();
+        if (!connection) return;
+        const provider = createProvider(connection);
+        await Promise.all([...new Set(phones)].map((phone) => provider.markChatRead(phone)));
+      } catch {
+        // Best-effort: o contador local ja foi zerado.
+      }
+    })();
+  }
+
+  revalidatePath("/chat");
+  return { updated_count: updateResult.data?.length ?? 0 };
+}
+
+export async function bulkMoveConversationLeads(
+  conversationIds: string[],
+  stageId: string,
+): Promise<{ updated_count: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+  const leadIds = await getLeadIdsForConversations(supabase, orgId, conversationIds);
+  if (leadIds.length === 0) return { updated_count: 0 };
+
+  const result = await bulkMoveLeadsShared({ db: supabase, orgId }, leadIds, stageId);
+  revalidatePath("/chat");
+  revalidatePath("/crm");
+  return result;
+}
+
+export async function bulkApplyTagToConversationLeads(
+  conversationIds: string[],
+  tagId: string,
+): Promise<{ updated_count: number }> {
+  const { supabase, orgId } = await requireRole("agent");
+  const leadIds = await getLeadIdsForConversations(supabase, orgId, conversationIds);
+  if (leadIds.length === 0) return { updated_count: 0 };
+
+  for (const leadId of leadIds) {
+    await addTagToLeadShared({ db: supabase, orgId }, leadId, tagId);
+  }
+
+  revalidatePath("/chat");
+  revalidatePath("/crm");
+  revalidatePath("/leads");
+  return { updated_count: leadIds.length };
 }
 
 export async function generateConversationSummary(conversationId: string): Promise<{ summary: string; error?: string }> {

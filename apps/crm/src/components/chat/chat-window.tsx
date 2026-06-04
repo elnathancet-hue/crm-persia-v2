@@ -10,6 +10,7 @@ import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
+import { Input } from "@persia/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +61,7 @@ import {
   Play,
   Reply,
   RotateCw,
+  Search,
   Smile,
   Sparkles,
   Trash2,
@@ -136,6 +138,30 @@ function leadColorForKey(key: string | null | undefined): { bg: string; fg: stri
     hash = value.charCodeAt(i) + ((hash << 5) - hash);
   }
   return LEAD_COLORS[Math.abs(hash) % LEAD_COLORS.length];
+}
+
+function getLeadTags(lead: Record<string, unknown> | undefined) {
+  const leadTags = lead?.lead_tags;
+  if (!Array.isArray(leadTags)) return [];
+  return leadTags
+    .map((lt) => {
+      if (!lt || typeof lt !== "object") return null;
+      const tag = (lt as { tags?: unknown }).tags;
+      if (!tag || typeof tag !== "object") return null;
+      return tag as { id: string; name: string; color: string | null };
+    })
+    .filter((tag): tag is { id: string; name: string; color: string | null } =>
+      Boolean(tag?.id && tag?.name),
+    );
+}
+
+function tagPillStyle(color: string | null | undefined) {
+  if (!color) return {};
+  return {
+    backgroundColor: `${color}1A`,
+    borderColor: `${color}55`,
+    color,
+  };
 }
 
 function shouldResolveMediaUrl(mediaUrl: string | null): boolean {
@@ -510,6 +536,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [deleteDialogMsgId, setDeleteDialogMsgId] = useState<string | null>(null);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [messageSearch, setMessageSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const { play: playNotification } = useNotificationSound();
@@ -806,6 +833,20 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     (lead?.phone as string | undefined) ??
     (lead?.name as string | undefined),
   );
+  const leadTags = getLeadTags(lead);
+  const normalizedMessageSearch = messageSearch.trim().toLowerCase();
+  const visibleMessages = normalizedMessageSearch
+    ? messages.filter((message) =>
+        [
+          message.content,
+          message.type,
+          message.sender,
+          message.status,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedMessageSearch)),
+      )
+    : messages;
 
   return (
     <div className="flex h-full flex-col overflow-hidden" style={{ background: "var(--chat-bg)" }}>
@@ -878,11 +919,39 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               <Phone className="size-3" />
               <span className="truncate">{(lead?.phone as string) || "Sem telefone"}</span>
             </div>
+            {leadTags.length > 0 && (
+              <div className="flex max-w-[340px] items-center gap-1 overflow-hidden pt-0.5">
+                {leadTags.slice(0, 3).map((tag) => (
+                  <Badge
+                    key={tag.id}
+                    variant="outline"
+                    className="h-5 max-w-[96px] truncate rounded-md border px-1.5 text-[10px]"
+                    style={tagPillStyle(tag.color)}
+                  >
+                    {tag.name}
+                  </Badge>
+                ))}
+                {leadTags.length > 3 && (
+                  <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                    +{leadTags.length - 3}
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Action buttons bar */}
         <div className="flex items-center gap-2">
+          <div className="relative hidden w-[260px] lg:block xl:w-[360px]">
+            <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={messageSearch}
+              onChange={(event) => setMessageSearch(event.target.value)}
+              placeholder="Buscar na conversa..."
+              className="h-9 rounded-lg bg-[color:var(--chat-input-field-bg)] pl-8 text-sm"
+            />
+          </div>
           {isAiHandling && (
             <Button
               variant="outline"
@@ -1035,7 +1104,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               Nenhuma mensagem ainda
             </div>
           )}
-          {messages.map((msg, idx) => {
+          {messages.length > 0 && visibleMessages.length === 0 && (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              Nenhuma mensagem encontrada para esta busca
+            </div>
+          )}
+          {visibleMessages.map((msg, idx) => {
             const isLead = msg.sender === "lead";
             const isAi = msg.sender === "ai";
             const isAgent = msg.sender === "agent";
@@ -1043,13 +1117,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
             // Date separator
             const showDateSeparator =
               idx === 0 ||
-              !isSameDay(messages[idx - 1].created_at, msg.created_at);
+              !isSameDay(visibleMessages[idx - 1].created_at, msg.created_at);
 
             // Grouping: smaller gap when same sender, larger when sender changes
             const prevSameSender =
               idx > 0 &&
               !showDateSeparator &&
-              messages[idx - 1].sender === msg.sender;
+              visibleMessages[idx - 1].sender === msg.sender;
             const spacingClass = idx === 0 || showDateSeparator
               ? ""
               : prevSameSender
@@ -1170,7 +1244,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   const isFirstInBlock =
                     isLead &&
                     (idx === 0 ||
-                      messages[idx - 1].sender !== msg.sender);
+                      visibleMessages[idx - 1].sender !== msg.sender);
 
                   return (
                     <div

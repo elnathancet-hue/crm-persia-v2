@@ -1,25 +1,66 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getConversations,
+  bulkApplyTagToConversationLeads,
+  bulkMarkConversationsAsRead,
+  bulkMoveConversationLeads,
   type ConversationFilter,
   type ConversationWithLead,
 } from "@/actions/conversations";
+import { createLead } from "@/actions/leads";
+import {
+  listPipelinesForLead,
+  listStagesForPipeline,
+} from "@/actions/leads-kanban";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { Input } from "@persia/ui/input";
+import { Label } from "@persia/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
+import { Checkbox } from "@persia/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@persia/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@persia/ui/tabs";
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
 } from "@persia/ui/popover";
-import { Search, MessageSquare, SlidersHorizontal, X } from "lucide-react";
+import {
+  Archive,
+  Bell,
+  BellOff,
+  CheckCheck,
+  GitBranch,
+  Loader2,
+  MessageSquare,
+  Search,
+  SlidersHorizontal,
+  Tags,
+  UserPlus,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ---- Helpers ----
 
@@ -87,6 +128,43 @@ function truncate(text: string | null | undefined, max: number): string {
   return text.slice(0, max) + "...";
 }
 
+type LeadTag = {
+  id: string;
+  name: string;
+  color: string | null;
+};
+
+type QueueOption = {
+  id: string;
+  name: string;
+};
+
+type PipelineOption = {
+  id: string;
+  name: string;
+};
+
+type StageOption = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+function getLeadTags(lead: ConversationWithLead["leads"] | null | undefined): LeadTag[] {
+  return (lead?.lead_tags ?? [])
+    .map((lt) => lt.tags)
+    .filter((tag): tag is LeadTag => Boolean(tag?.id && tag?.name));
+}
+
+function tagPillStyle(color: string | null | undefined): CSSProperties {
+  if (!color) return {};
+  return {
+    backgroundColor: `${color}1A`,
+    borderColor: `${color}55`,
+    color,
+  };
+}
+
 // Tags and queues loaded from DB at component level
 
 // ---- Component ----
@@ -112,12 +190,30 @@ export function ConversationList({
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedQueues, setSelectedQueues] = useState<string[]>([]);
-  const [dbTags, setDbTags] = useState<string[]>([]);
-  const [dbQueues, setDbQueues] = useState<string[]>([]);
+  const [dbTags, setDbTags] = useState<LeadTag[]>([]);
+  const [dbQueues, setDbQueues] = useState<QueueOption[]>([]);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedConversationIds, setSelectedConversationIds] = useState<Set<string>>(new Set());
+  const [leadDialogOpen, setLeadDialogOpen] = useState(false);
+  const [leadSaving, setLeadSaving] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkTagId, setBulkTagId] = useState("");
+  const [bulkPipelineId, setBulkPipelineId] = useState("");
+  const [bulkStageId, setBulkStageId] = useState("");
+  const [pipelines, setPipelines] = useState<PipelineOption[]>([]);
+  const [stages, setStages] = useState<StageOption[]>([]);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedSearchRef = useRef(search);
-  const { play: playNotification } = useNotificationSound();
-  const { notify: desktopNotify } = useDesktopNotification();
+  const {
+    play: playNotification,
+    enabled: soundEnabled,
+    setEnabled: setSoundEnabled,
+  } = useNotificationSound();
+  const {
+    notify: desktopNotify,
+    enabled: desktopNotificationsEnabled,
+    setEnabled: setDesktopNotificationsEnabled,
+  } = useDesktopNotification();
 
   const loadConversations = useCallback(
     async (searchTerm?: string) => {
@@ -139,20 +235,35 @@ export function ConversationList({
     const supabase = createClient();
     supabase
       .from("tags")
-      .select("name")
+      .select("id, name, color")
       .eq("organization_id", orgId)
       .order("name")
       .then(({ data }) => {
-        if (data) setDbTags(data.map((t) => t.name));
+        if (data) setDbTags(data as LeadTag[]);
       });
     supabase
       .from("queues")
-      .select("name")
+      .select("id, name")
       .eq("organization_id", orgId)
       .then(({ data }) => {
-        if (data) setDbQueues(data.map((q) => q.name));
+        if (data) setDbQueues(data as QueueOption[]);
       });
   }, [orgId]);
+
+  useEffect(() => {
+    listPipelinesForLead()
+      .then((items) => setPipelines(items))
+      .catch(() => setPipelines([]));
+  }, []);
+
+  useEffect(() => {
+    setBulkStageId("");
+    setStages([]);
+    if (!bulkPipelineId) return;
+    listStagesForPipeline(bulkPipelineId)
+      .then((items) => setStages(items))
+      .catch(() => setStages([]));
+  }, [bulkPipelineId]);
 
   // Initial load + when filter changes
   useEffect(() => {
@@ -229,10 +340,22 @@ export function ConversationList({
     };
   }, [search, loadConversations]);
 
-  // Apply local filters (unread)
-  const filteredConversations = unreadOnly
-    ? conversations.filter((c) => c.unread_count > 0)
-    : conversations;
+  const filteredConversations = conversations.filter((conversation) => {
+    if (unreadOnly && conversation.unread_count <= 0) return false;
+    if (
+      selectedTags.length > 0 &&
+      !getLeadTags(conversation.leads).some((tag) => selectedTags.includes(tag.id))
+    ) {
+      return false;
+    }
+    if (
+      selectedQueues.length > 0 &&
+      (!conversation.queue_id || !selectedQueues.includes(conversation.queue_id))
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   const hasActiveFilters = unreadOnly || selectedTags.length > 0 || selectedQueues.length > 0;
 
@@ -242,16 +365,74 @@ export function ConversationList({
     setSelectedQueues([]);
   };
 
-  const toggleTag = (tag: string) => {
+  const toggleTag = (tagId: string) => {
     setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
     );
   };
 
-  const toggleQueue = (queue: string) => {
+  const toggleQueue = (queueId: string) => {
     setSelectedQueues((prev) =>
-      prev.includes(queue) ? prev.filter((q) => q !== queue) : [...prev, queue]
+      prev.includes(queueId) ? prev.filter((q) => q !== queueId) : [...prev, queueId]
     );
+  };
+
+  const selectableConversationIds = filteredConversations.map((conversation) => conversation.id);
+  const selectedCount = selectedConversationIds.size;
+
+  const toggleConversationSelection = (conversationId: string) => {
+    setSelectedConversationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(conversationId)) next.delete(conversationId);
+      else next.add(conversationId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedConversationIds((prev) => {
+      const allSelected =
+        selectableConversationIds.length > 0 &&
+        selectableConversationIds.every((id) => prev.has(id));
+      return allSelected ? new Set() : new Set(selectableConversationIds);
+    });
+  };
+
+  const exitBulkMode = () => {
+    setBulkMode(false);
+    setSelectedConversationIds(new Set());
+  };
+
+  const runBulkAction = async (action: () => Promise<{ updated_count: number }>, successLabel: string) => {
+    if (selectedCount === 0) {
+      toast.error("Selecione pelo menos uma conversa");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const result = await action();
+      toast.success(`${successLabel}: ${result.updated_count}`);
+      setSelectedConversationIds(new Set());
+      await loadConversations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel concluir a acao");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleCreateLead = async (formData: FormData) => {
+    setLeadSaving(true);
+    try {
+      await createLead(formData);
+      toast.success("Lead criado");
+      setLeadDialogOpen(false);
+      await loadConversations();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel criar o lead");
+    } finally {
+      setLeadSaving(false);
+    }
   };
 
   return (
@@ -266,8 +447,49 @@ export function ConversationList({
       >
         <MessageSquare className="size-5 text-[color:var(--chat-send-bg)]" />
         <h2 className="text-base font-medium text-[color:var(--chat-header-fg)]">Conversas</h2>
-        {/* Green pulsing dot = online */}
-        <span className="relative ml-auto flex size-2.5">
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant={desktopNotificationsEnabled ? "secondary" : "ghost"}
+            size="icon-sm"
+            onClick={() => setDesktopNotificationsEnabled(!desktopNotificationsEnabled)}
+            title={desktopNotificationsEnabled ? "Desativar notificacoes" : "Ativar notificacoes"}
+            aria-label={desktopNotificationsEnabled ? "Desativar notificacoes" : "Ativar notificacoes"}
+            className="size-8"
+          >
+            {desktopNotificationsEnabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}
+          </Button>
+          <Button
+            variant={soundEnabled ? "secondary" : "ghost"}
+            size="icon-sm"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? "Desativar som" : "Ativar som"}
+            aria-label={soundEnabled ? "Desativar som" : "Ativar som"}
+            className="size-8"
+          >
+            {soundEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setLeadDialogOpen(true)}
+            title="Criar lead"
+            aria-label="Criar lead"
+            className="size-8"
+          >
+            <UserPlus className="size-4" />
+          </Button>
+          <Button
+            variant={bulkMode ? "secondary" : "ghost"}
+            size="icon-sm"
+            onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
+            title="Selecao em massa"
+            aria-label="Selecao em massa"
+            className="size-8"
+          >
+            <CheckCheck className="size-4" />
+          </Button>
+        </div>
+        <span className="relative flex size-2.5">
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-success/70 opacity-75" />
           <span className="relative inline-flex size-2.5 rounded-full bg-success" />
         </span>
@@ -328,12 +550,12 @@ export function ConversationList({
                   <div className="flex flex-wrap gap-1.5">
                     {dbTags.map((tag) => (
                       <Badge
-                        key={tag}
-                        variant={selectedTags.includes(tag) ? "default" : "secondary"}
+                        key={tag.id}
+                        variant={selectedTags.includes(tag.id) ? "default" : "secondary"}
                         className="cursor-pointer select-none rounded-md px-2 py-0.5 text-[11px] transition-colors hover:opacity-80"
-                        onClick={() => toggleTag(tag)}
+                        onClick={() => toggleTag(tag.id)}
                       >
-                        {tag}
+                        {tag.name}
                       </Badge>
                     ))}
                   </div>
@@ -345,12 +567,12 @@ export function ConversationList({
                   <div className="flex flex-wrap gap-1.5">
                     {dbQueues.map((queue) => (
                       <Badge
-                        key={queue}
-                        variant={selectedQueues.includes(queue) ? "default" : "secondary"}
+                        key={queue.id}
+                        variant={selectedQueues.includes(queue.id) ? "default" : "secondary"}
                         className="cursor-pointer select-none rounded-md px-2 py-0.5 text-[11px] transition-colors hover:opacity-80"
-                        onClick={() => toggleQueue(queue)}
+                        onClick={() => toggleQueue(queue.id)}
                       >
-                        {queue}
+                        {queue.name}
                       </Badge>
                     ))}
                   </div>
@@ -392,14 +614,14 @@ export function ConversationList({
               Não lidas
             </Badge>
           )}
-          {selectedTags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="h-5 px-1.5 text-[10px]">
-              {tag}
+          {selectedTags.map((tagId) => (
+            <Badge key={tagId} variant="secondary" className="h-5 px-1.5 text-[10px]">
+              {dbTags.find((tag) => tag.id === tagId)?.name ?? "Tag"}
             </Badge>
           ))}
-          {selectedQueues.map((queue) => (
-            <Badge key={queue} variant="secondary" className="h-5 px-1.5 text-[10px]">
-              {queue}
+          {selectedQueues.map((queueId) => (
+            <Badge key={queueId} variant="secondary" className="h-5 px-1.5 text-[10px]">
+              {dbQueues.find((queue) => queue.id === queueId)?.name ?? "Fila"}
             </Badge>
           ))}
           <Button
@@ -445,14 +667,15 @@ export function ConversationList({
             {filteredConversations.map((conv) => {
               const lead = conv.leads;
               const isSelected = conv.id === selectedId;
+              const isBulkSelected = selectedConversationIds.has(conv.id);
               const isAi = conv.assigned_to === "ai";
               const isWaiting = conv.status === "waiting_human";
               const colorClass = hashColor(lead?.name);
+              const leadTags = getLeadTags(lead);
 
               return (
-                <button
+                <div
                   key={conv.id}
-                  onClick={() => onSelect(conv.id)}
                   className={cn(
                     "flex min-h-[72px] w-full cursor-pointer items-start gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2.5 text-left transition-colors"
                   )}
@@ -473,10 +696,24 @@ export function ConversationList({
                     }
                   }}
                 >
+                  {bulkMode && (
+                    <div className="flex h-10 shrink-0 items-center">
+                      <Checkbox
+                        checked={isBulkSelected}
+                        onCheckedChange={() => toggleConversationSelection(conv.id)}
+                        aria-label={`Selecionar conversa de ${lead?.name || lead?.phone || "lead"}`}
+                      />
+                    </div>
+                  )}
                   {/* Avatar — Bug A fix (mai/2026): foto WhatsApp via
                       lead.avatar_url (populado pelo pipeline UAZAPI).
                       Fallback de iniciais permanece se não houver foto. */}
-                  <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => (bulkMode ? toggleConversationSelection(conv.id) : onSelect(conv.id))}
+                    className="relative shrink-0"
+                    aria-label={`Abrir conversa de ${lead?.name || lead?.phone || "lead"}`}
+                  >
                     <Avatar size="default">
                       {lead?.avatar_url ? (
                         <AvatarImage
@@ -497,10 +734,14 @@ export function ConversationList({
                         !isAi && !isWaiting && "bg-success"
                       )}
                     />
-                  </div>
+                  </button>
 
                   {/* Content */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => (bulkMode ? toggleConversationSelection(conv.id) : onSelect(conv.id))}
+                    className="flex min-w-0 flex-1 flex-col gap-1 text-left"
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-[15px] font-medium leading-5 text-[color:var(--chat-header-fg)]">
                         {lead?.name || lead?.phone || "Sem nome"}
@@ -552,14 +793,237 @@ export function ConversationList({
                       >
                         {conv.channel}
                       </Badge>
+                      {leadTags.slice(0, 3).map((tag) => (
+                        <Badge
+                          key={tag.id}
+                          variant="outline"
+                          className="h-5 max-w-[92px] truncate rounded-md border px-1.5 text-[10px]"
+                          style={tagPillStyle(tag.color)}
+                        >
+                          {tag.name}
+                        </Badge>
+                      ))}
+                      {leadTags.length > 3 && (
+                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                          +{leadTags.length - 3}
+                        </Badge>
+                      )}
                     </div>
-                  </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {bulkMode && (
+        <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] bg-background p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Modo selecao em massa</p>
+              <p className="text-xs text-muted-foreground">
+                {selectedCount} conversa{selectedCount === 1 ? "" : "s"} selecionada{selectedCount === 1 ? "" : "s"}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={exitBulkMode}
+              aria-label="Sair da selecao em massa"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+
+          <Button
+            variant="default"
+            className="mb-2 h-9 w-full gap-2"
+            onClick={toggleSelectAll}
+            disabled={filteredConversations.length === 0 || bulkBusy}
+          >
+            <CheckCheck className="size-4" />
+            Selecionar todos
+          </Button>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              className="h-9 gap-2"
+              disabled
+              title="Arquivar entra quando houver suporte no provider"
+            >
+              <Archive className="size-4" />
+              Arquivar
+            </Button>
+            <Button
+              variant="outline"
+              className="h-9 gap-2"
+              disabled={bulkBusy || selectedCount === 0}
+              onClick={() =>
+                runBulkAction(
+                  () => bulkMarkConversationsAsRead([...selectedConversationIds]),
+                  "Conversas marcadas como lidas",
+                )
+              }
+            >
+              {bulkBusy ? <Loader2 className="size-4 animate-spin" /> : <CheckCheck className="size-4" />}
+              Marcar lido
+            </Button>
+          </div>
+
+          <div className="mt-3 space-y-2 rounded-lg border bg-muted/20 p-2">
+            <Label className="text-[11px] font-semibold uppercase text-muted-foreground">
+              Adicionar tag
+            </Label>
+            <div className="flex gap-2">
+              <Select value={bulkTagId} onValueChange={(value) => setBulkTagId(value ?? "")}>
+                <SelectTrigger className="h-9 min-w-0 flex-1">
+                  <SelectValue placeholder="Escolher tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dbTags.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                className="h-9 shrink-0 gap-2"
+                disabled={bulkBusy || selectedCount === 0 || !bulkTagId}
+                onClick={() =>
+                  runBulkAction(
+                    () => bulkApplyTagToConversationLeads([...selectedConversationIds], bulkTagId),
+                    "Tags aplicadas",
+                  )
+                }
+              >
+                <Tags className="size-4" />
+                Aplicar
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2 rounded-lg border bg-muted/20 p-2">
+            <Label className="text-[11px] font-semibold uppercase text-muted-foreground">
+              Alterar funil
+            </Label>
+            <Select value={bulkPipelineId} onValueChange={(value) => setBulkPipelineId(value ?? "")}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Escolher funil" />
+              </SelectTrigger>
+              <SelectContent>
+                {pipelines.map((pipeline) => (
+                  <SelectItem key={pipeline.id} value={pipeline.id}>
+                    {pipeline.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Select value={bulkStageId} onValueChange={(value) => setBulkStageId(value ?? "")} disabled={!bulkPipelineId}>
+                <SelectTrigger className="h-9 min-w-0 flex-1">
+                  <SelectValue placeholder="Escolher etapa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map((stage) => (
+                    <SelectItem key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                className="h-9 shrink-0 gap-2"
+                disabled={bulkBusy || selectedCount === 0 || !bulkStageId}
+                onClick={() =>
+                  runBulkAction(
+                    () => bulkMoveConversationLeads([...selectedConversationIds], bulkStageId),
+                    "Leads movidos",
+                  )
+                }
+              >
+                <GitBranch className="size-4" />
+                Mover
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={leadDialogOpen} onOpenChange={setLeadDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Criar novo lead</DialogTitle>
+            <DialogDescription>
+              Cadastre um contato manualmente para iniciar o atendimento pelo CRM.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleCreateLead(new FormData(event.currentTarget));
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="chat-lead-name">Nome</Label>
+                <Input id="chat-lead-name" name="name" placeholder="Nome do lead" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="chat-lead-phone">Telefone</Label>
+                <Input id="chat-lead-phone" name="phone" placeholder="(11) 98765-4321" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="chat-lead-email">E-mail</Label>
+                <Input id="chat-lead-email" name="email" type="email" placeholder="email@exemplo.com" />
+              </div>
+              <div className="space-y-2">
+                <Label>Origem</Label>
+                <Select name="source" defaultValue="manual">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manual">Manual</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="website">Website</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Canal</Label>
+                <Select name="channel" defaultValue="whatsapp">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="email">E-mail</SelectItem>
+                    <SelectItem value="telefone">Telefone</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <input type="hidden" name="status" value="new" />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setLeadDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={leadSaving}>
+                {leadSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <UserPlus className="mr-2 size-4" />}
+                Criar lead
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Filter panel is now a Popover inline above */}
     </div>
