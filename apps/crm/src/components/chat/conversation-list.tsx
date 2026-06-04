@@ -886,7 +886,9 @@ export function ConversationList({
             <div className="flex items-center gap-2 rounded-md border bg-muted/20 p-1.5">
               <Select value={bulkTagId} onValueChange={(value) => setBulkTagId(value ?? "")}>
                 <SelectTrigger className="h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none text-xs focus:ring-0">
-                  <SelectValue placeholder="Adicionar tag" />
+                  <span className={cn("flex-1 truncate text-left", !bulkTagId && "text-muted-foreground")}>
+                    {bulkTagId ? (selectedTagName ?? "Tag") : "Adicionar tag"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {dbTags.map((tag) => (
@@ -897,6 +899,7 @@ export function ConversationList({
                 </SelectContent>
               </Select>
               <Button
+                type="button"
                 className="h-8 shrink-0 px-3 text-xs"
                 size="sm"
                 disabled={bulkBusy || selectedCount === 0 || !bulkTagId}
@@ -916,7 +919,9 @@ export function ConversationList({
             <div className="rounded-md border bg-muted/20 p-1.5 space-y-1.5">
               <Select value={bulkPipelineId} onValueChange={(value) => setBulkPipelineId(value ?? "")}>
                 <SelectTrigger className="h-8 border-0 bg-transparent shadow-none text-xs focus:ring-0">
-                  <SelectValue placeholder="Escolher funil" />
+                  <span className={cn("flex-1 truncate text-left", !bulkPipelineId && "text-muted-foreground")}>
+                    {bulkPipelineId ? (selectedPipelineName ?? "Funil") : "Escolher funil"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {pipelines.map((pipeline) => (
@@ -929,7 +934,9 @@ export function ConversationList({
               <div className="flex items-center gap-2">
                 <Select value={bulkStageId} onValueChange={(value) => setBulkStageId(value ?? "")} disabled={!bulkPipelineId}>
                   <SelectTrigger className="h-8 min-w-0 flex-1 border-0 bg-transparent shadow-none text-xs focus:ring-0">
-                    <SelectValue placeholder="Escolher etapa" />
+                    <span className={cn("flex-1 truncate text-left", !bulkStageId && "text-muted-foreground")}>
+                      {bulkStageId ? (selectedStageName ?? "Etapa") : "Escolher etapa"}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     {stages.map((stage) => (
@@ -940,6 +947,7 @@ export function ConversationList({
                   </SelectContent>
                 </Select>
                 <Button
+                  type="button"
                   className="h-8 shrink-0 px-3 text-xs"
                   size="sm"
                   disabled={bulkBusy || selectedCount === 0 || !bulkStageId}
