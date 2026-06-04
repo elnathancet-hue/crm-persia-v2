@@ -93,6 +93,7 @@ function makeJob(overrides: Partial<Record<string, unknown>> = {}) {
     order_index: 0,
     send_at: "2026-04-30T01:00:00.000Z",
     status: "queued",
+    attempts: 0,
     ...overrides,
   };
 }
@@ -133,6 +134,10 @@ function queueEligibleEvaluation(supabase: ReturnType<typeof createSupabaseMock>
 function queueDueJob(supabase: ReturnType<typeof createSupabaseMock>, job = makeJob()) {
   supabase.queue("agent_followup_jobs", { data: null, error: null });
   supabase.queue("agent_followup_jobs", { data: [job], error: null });
+  supabase.queue("rpc:claim_agent_followup_job", {
+    data: [{ ...job, status: "sending", attempts: Number(job.attempts ?? 0) + 1 }],
+    error: null,
+  });
 }
 
 beforeEach(() => {
@@ -170,11 +175,11 @@ describe("runFollowupsTick", () => {
     expect(supabase.updates.agent_followup_runs?.[0]).toMatchObject({
       status: "sent",
     });
-    expect(
-      supabase.updates.agent_followup_jobs?.map((row) => (row as { status?: unknown }).status),
-    ).toEqual(
-      expect.arrayContaining(["sending", "sent"]),
-    );
+    expect(supabase.rpcCalls[0]).toMatchObject({
+      fn: "claim_agent_followup_job",
+      args: { p_job_id: "job-a" },
+    });
+    expect(supabase.updates.agent_followup_jobs?.[0]).toMatchObject({ status: "sent" });
     expect(providerSendText).toHaveBeenCalledWith(
       expect.objectContaining({
         phone: "5511988887777",
@@ -295,6 +300,46 @@ describe("runFollowupsTick", () => {
         message: "Oi Maria, posso te ajudar? - Vendedora",
       }),
     );
+  });
+
+  it("nao envia quando outro worker ja reivindicou o job", async () => {
+    const supabase = createSupabaseMock();
+    queueHappyPathBase(supabase);
+    queueEligibleEvaluation(supabase);
+    const job = makeJob();
+    supabase.queue("agent_followup_jobs", { data: null, error: null });
+    supabase.queue("agent_followup_jobs", { data: [job], error: null });
+    supabase.queue("rpc:claim_agent_followup_job", { data: [], error: null });
+    queueEligibleEvaluation(supabase);
+
+    const result = await runFollowupsTick(supabase as never);
+
+    expect(result.skipped).toBe(1);
+    expect(result.fired).toBe(0);
+    expect(supabase.inserts.agent_followup_runs ?? []).toHaveLength(0);
+    expect(providerSendText).not.toHaveBeenCalled();
+  });
+
+  it("reagenda job em falha temporaria do provider", async () => {
+    providerSendText.mockRejectedValueOnce(new Error("provider offline"));
+    const supabase = createSupabaseMock();
+    queueHappyPathBase(supabase);
+    queueEligibleEvaluation(supabase);
+    queueDueJob(supabase);
+    queueEligibleEvaluation(supabase);
+    queueEligibleEvaluation(supabase);
+    supabase.queue("leads", { data: { name: "Maria", phone: "+55 11 98888-7777" }, error: null });
+    supabase.queue("agent_followup_runs", { data: null, error: null });
+
+    const result = await runFollowupsTick(supabase as never);
+
+    expect(result.errors).toBe(1);
+    expect(supabase.updates.agent_followup_jobs?.at(-1)).toMatchObject({
+      status: "queued",
+      last_error: expect.stringContaining("provider offline"),
+      locked_at: null,
+      locked_by: null,
+    });
   });
 
   it("pausa quando a etapa exige IA ativa e a conversa esta com humano", async () => {

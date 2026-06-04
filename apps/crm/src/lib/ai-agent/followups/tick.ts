@@ -14,6 +14,8 @@ import { asAgentDb, type AgentDb } from "../db";
 import { buildNotificationWaLink } from "../notifications";
 
 const MAX_PROCESSED_PER_TICK = 200;
+const MAX_JOB_ATTEMPTS = 3;
+const RETRY_BACKOFF_MINUTES = [1, 5, 15];
 const DEFAULT_APP_URL = "https://crm.funilpersia.top";
 
 export interface FollowupTickResult {
@@ -59,6 +61,7 @@ interface FollowupJobRow {
   order_index: number;
   send_at: string;
   status: string;
+  attempts: number;
 }
 
 interface MessageRow {
@@ -218,6 +221,13 @@ export async function runFollowupsTick(
         ? templates.get(followup.template_id) ?? null
         : null;
       if (!template && !followup.message_text?.trim()) {
+        await markJobSkipped(db, job, "missing_message_source");
+        result.skipped++;
+        continue;
+      }
+
+      const claimedJob = await claimJob(db, job);
+      if (!claimedJob) {
         result.skipped++;
         continue;
       }
@@ -225,7 +235,7 @@ export async function runFollowupsTick(
       const outcome = await dispatchFollowup({
         db,
         followup,
-        job,
+        job: claimedJob,
         template,
         agentName: config.name,
         conversation,
@@ -444,7 +454,7 @@ async function loadDueJobs(
   if (params.limit <= 0) return [];
   const { data, error } = await db
     .from("agent_followup_jobs")
-    .select("id, organization_id, config_id, agent_conversation_id, crm_conversation_id, lead_id, followup_id, sequence_key, order_index, send_at, status")
+    .select("id, organization_id, config_id, agent_conversation_id, crm_conversation_id, lead_id, followup_id, sequence_key, order_index, send_at, status, attempts")
     .eq("organization_id", params.organizationId)
     .eq("config_id", params.configId)
     .eq("status", "queued")
@@ -460,6 +470,30 @@ async function loadDueJobs(
     return [];
   }
   return (data ?? []) as FollowupJobRow[];
+}
+
+async function claimJob(db: AgentDb, job: FollowupJobRow): Promise<FollowupJobRow | null> {
+  if (!db.rpc) {
+    logError("ai_agent_followup_job_claim_unavailable", {
+      organization_id: job.organization_id,
+      job_id: job.id,
+    });
+    return null;
+  }
+  const { data, error } = await db.rpc("claim_agent_followup_job", {
+    p_job_id: job.id,
+    p_worker_id: "followups-tick",
+  });
+  if (error) {
+    logError("ai_agent_followup_job_claim_failed", {
+      organization_id: job.organization_id,
+      job_id: job.id,
+      error: error.message,
+    });
+    return null;
+  }
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  return (rows[0] as FollowupJobRow | undefined) ?? null;
 }
 
 function conversationFromJob(job: FollowupJobRow): ConversationRow {
@@ -491,7 +525,7 @@ async function syncFollowupJobForEvaluation(
   if (evaluation.status !== "waiting" && evaluation.status !== "eligible" && evaluation.status !== "paused") {
     return;
   }
-  await db.from("agent_followup_jobs").upsert({
+  const { error } = await db.from("agent_followup_jobs").upsert({
     organization_id: conversation.organization_id,
     config_id: conversation.config_id,
     agent_conversation_id: conversation.id,
@@ -507,6 +541,14 @@ async function syncFollowupJobForEvaluation(
     last_error: null,
     updated_at: new Date().toISOString(),
   }, { onConflict: "agent_conversation_id,followup_id,sequence_key" });
+  if (error) {
+    logError("ai_agent_followup_job_sync_failed", {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      followup_id: evaluation.followup.id,
+      error: error.message,
+    });
+  }
 }
 
 async function scheduleNextFollowupJob(
@@ -528,7 +570,7 @@ async function scheduleNextFollowupJob(
 }
 
 async function rescheduleJob(db: AgentDb, job: FollowupJobRow, sendAt: Date): Promise<void> {
-  await db
+  const { error } = await db
     .from("agent_followup_jobs")
     .update({
       status: "queued",
@@ -540,10 +582,17 @@ async function rescheduleJob(db: AgentDb, job: FollowupJobRow, sendAt: Date): Pr
     .eq("organization_id", job.organization_id)
     .eq("id", job.id)
     .eq("status", "queued");
+  if (error) {
+    logError("ai_agent_followup_job_reschedule_failed", {
+      organization_id: job.organization_id,
+      job_id: job.id,
+      error: error.message,
+    });
+  }
 }
 
 async function markJobSkipped(db: AgentDb, job: FollowupJobRow, reason: string): Promise<void> {
-  await db
+  const { error } = await db
     .from("agent_followup_jobs")
     .update({
       status: "skipped",
@@ -552,6 +601,14 @@ async function markJobSkipped(db: AgentDb, job: FollowupJobRow, reason: string):
     })
     .eq("organization_id", job.organization_id)
     .eq("id", job.id);
+  if (error) {
+    logError("ai_agent_followup_job_skip_failed", {
+      organization_id: job.organization_id,
+      job_id: job.id,
+      reason,
+      error: error.message,
+    });
+  }
 }
 
 async function cancelQueuedJobsForConversation(
@@ -559,7 +616,7 @@ async function cancelQueuedJobsForConversation(
   conversation: ConversationRow,
   reason: string,
 ): Promise<void> {
-  await db
+  const { error } = await db
     .from("agent_followup_jobs")
     .update({
       status: "cancelled",
@@ -569,6 +626,14 @@ async function cancelQueuedJobsForConversation(
     .eq("organization_id", conversation.organization_id)
     .eq("agent_conversation_id", conversation.id)
     .in("status", ["queued", "sending"]);
+  if (error) {
+    logError("ai_agent_followup_jobs_cancel_failed", {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      reason,
+      error: error.message,
+    });
+  }
 }
 
 async function evaluateConversation(
@@ -804,7 +869,7 @@ async function persistConversationState(
   conversation: ConversationRow,
   evaluation: Evaluation,
 ): Promise<void> {
-  await db.from("agent_followup_conversation_states").upsert({
+  const { error } = await db.from("agent_followup_conversation_states").upsert({
     organization_id: conversation.organization_id,
     config_id: conversation.config_id,
     agent_conversation_id: conversation.id,
@@ -820,6 +885,14 @@ async function persistConversationState(
     finalized_at: evaluation.status === "finished" ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   }, { onConflict: "agent_conversation_id" });
+  if (error) {
+    logError("ai_agent_followup_state_persist_failed", {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      status: evaluation.status,
+      error: error.message,
+    });
+  }
 }
 
 interface DispatchParams {
@@ -852,6 +925,7 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
     .eq("id", conversation.lead_id)
     .maybeSingle();
   if (leadError) {
+    await markJobFailed(db, job, `lead lookup failed: ${leadError.message}`, { retryable: true });
     return { fired: false, error: `lead lookup failed: ${leadError.message}` };
   }
   const lead = (leadRow as LeadRow | null) ?? null;
@@ -859,19 +933,6 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
     await markJobSkipped(db, job, "lead_without_phone");
     return { fired: false };
   }
-
-  await db
-    .from("agent_followup_jobs")
-    .update({
-      status: "sending",
-      attempts: 1,
-      locked_at: new Date().toISOString(),
-      locked_by: "followups-tick",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("organization_id", job.organization_id)
-    .eq("id", job.id)
-    .eq("status", "queued");
 
   const { error: runInsertError } = await db.from("agent_followup_runs").insert({
     organization_id: conversation.organization_id,
@@ -886,7 +947,7 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
       await markJobSkipped(db, job, "already_sent");
       return { fired: false };
     }
-    await markJobFailed(db, job, `run insert failed: ${runInsertError.message}`);
+    await markJobFailed(db, job, `run insert failed: ${runInsertError.message}`, { retryable: true });
     return { fired: false, error: `run insert failed: ${runInsertError.message}` };
   }
 
@@ -905,7 +966,7 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
     renderedBody = renderNotificationTemplate(bodyTemplate, fixed, undefined);
   } catch (err: unknown) {
     await markRunFailed(db, conversation, followup, job.sequence_key, `render failed: ${errorMessage(err)}`);
-    await markJobFailed(db, job, `render failed: ${errorMessage(err)}`);
+    await markJobFailed(db, job, `render failed: ${errorMessage(err)}`, { retryable: false });
     return { fired: false, error: `render failed: ${errorMessage(err)}` };
   }
 
@@ -914,14 +975,18 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
       phone: fixed.lead_phone,
       message: renderedBody,
     });
-    await db
+    const runUpdate = await db
       .from("agent_followup_runs")
       .update({ status: "sent", sent_at: new Date().toISOString() })
       .eq("organization_id", conversation.organization_id)
       .eq("followup_id", followup.id)
       .eq("conversation_id", conversation.id)
       .eq("sequence_key", job.sequence_key);
-    await db
+    if (runUpdate.error) {
+      await markJobFailed(db, job, `run sent update failed: ${runUpdate.error.message}`, { retryable: true });
+      return { fired: false, error: `run sent update failed: ${runUpdate.error.message}` };
+    }
+    const jobUpdate = await db
       .from("agent_followup_jobs")
       .update({
         status: "sent",
@@ -932,11 +997,19 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
       })
       .eq("organization_id", job.organization_id)
       .eq("id", job.id);
+    if (jobUpdate.error) {
+      logError("ai_agent_followup_job_sent_update_failed", {
+        organization_id: job.organization_id,
+        job_id: job.id,
+        error: jobUpdate.error.message,
+      });
+      return { fired: false, error: `job sent update failed: ${jobUpdate.error.message}` };
+    }
     return { fired: true };
   } catch (err: unknown) {
     const message = errorMessage(err);
     await markRunFailed(db, conversation, followup, job.sequence_key, `send failed: ${message}`);
-    await markJobFailed(db, job, `send failed: ${message}`);
+    await markJobFailed(db, job, `send failed: ${message}`, { retryable: true });
     logError("ai_agent_followups_send_failed", {
       organization_id: conversation.organization_id,
       followup_id: followup.id,
@@ -948,18 +1021,45 @@ async function dispatchFollowup(params: DispatchParams): Promise<DispatchOutcome
   }
 }
 
-async function markJobFailed(db: AgentDb, job: FollowupJobRow, message: string): Promise<void> {
-  await db
+async function markJobFailed(
+  db: AgentDb,
+  job: FollowupJobRow,
+  message: string,
+  options: { retryable: boolean },
+): Promise<void> {
+  const shouldRetry = options.retryable && job.attempts < MAX_JOB_ATTEMPTS;
+  const nextAttemptIndex = Math.min(job.attempts, RETRY_BACKOFF_MINUTES.length - 1);
+  const retryAt = new Date(Date.now() + RETRY_BACKOFF_MINUTES[nextAttemptIndex] * 60 * 1000);
+  const patch = shouldRetry
+    ? {
+        status: "queued",
+        send_at: retryAt.toISOString(),
+        last_error: message,
+        locked_at: null,
+        locked_by: null,
+        updated_at: new Date().toISOString(),
+      }
+    : {
+        status: "failed",
+        last_error: message,
+        locked_at: null,
+        locked_by: null,
+        updated_at: new Date().toISOString(),
+      };
+  const { error } = await db
     .from("agent_followup_jobs")
-    .update({
-      status: "failed",
-      last_error: message,
-      locked_at: null,
-      locked_by: null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(patch)
     .eq("organization_id", job.organization_id)
     .eq("id", job.id);
+  if (error) {
+    logError("ai_agent_followup_job_failed_update_failed", {
+      organization_id: job.organization_id,
+      job_id: job.id,
+      retryable: options.retryable,
+      attempted_status: patch.status,
+      error: error.message,
+    });
+  }
 }
 
 async function markRunFailed(
@@ -969,11 +1069,19 @@ async function markRunFailed(
   sequenceKey: string,
   message: string,
 ): Promise<void> {
-  await db
+  const { error } = await db
     .from("agent_followup_runs")
     .update({ status: "failed", error_message: message })
     .eq("organization_id", conversation.organization_id)
     .eq("followup_id", followup.id)
     .eq("conversation_id", conversation.id)
     .eq("sequence_key", sequenceKey);
+  if (error) {
+    logError("ai_agent_followup_run_failed_update_failed", {
+      organization_id: conversation.organization_id,
+      conversation_id: conversation.id,
+      followup_id: followup.id,
+      error: error.message,
+    });
+  }
 }
