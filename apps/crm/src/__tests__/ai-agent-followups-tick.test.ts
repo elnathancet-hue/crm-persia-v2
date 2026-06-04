@@ -80,6 +80,23 @@ function makeConversation(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function makeJob(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "job-a",
+    organization_id: ORG,
+    config_id: CONFIG,
+    agent_conversation_id: CONV,
+    crm_conversation_id: CRM_CONV,
+    lead_id: LEAD,
+    followup_id: FOLLOWUP,
+    sequence_key: `${CONV}:m1`,
+    order_index: 0,
+    send_at: "2026-04-30T01:00:00.000Z",
+    status: "queued",
+    ...overrides,
+  };
+}
+
 function queueHappyPathBase(supabase: ReturnType<typeof createSupabaseMock>, followups = [makeFollowup()]) {
   supabase.queue("agent_followups", { data: followups, error: null });
   supabase.queue("agent_configs", {
@@ -113,6 +130,11 @@ function queueEligibleEvaluation(supabase: ReturnType<typeof createSupabaseMock>
   supabase.queue("agent_followup_runs", { data: [], error: null });
 }
 
+function queueDueJob(supabase: ReturnType<typeof createSupabaseMock>, job = makeJob()) {
+  supabase.queue("agent_followup_jobs", { data: null, error: null });
+  supabase.queue("agent_followup_jobs", { data: [job], error: null });
+}
+
 beforeEach(() => {
   providerSendText.mockReset();
   providerSendText.mockResolvedValue({ messageId: "msg-1", success: true });
@@ -123,7 +145,9 @@ describe("runFollowupsTick", () => {
     const supabase = createSupabaseMock();
     queueHappyPathBase(supabase);
     queueEligibleEvaluation(supabase);
-    // Revalidacao antes do envio.
+    queueDueJob(supabase);
+    // Revalidacao do job vencido e revalidacao final antes do envio.
+    queueEligibleEvaluation(supabase);
     queueEligibleEvaluation(supabase);
     supabase.queue("leads", {
       data: { name: "Maria", phone: "+55 11 98888-7777" },
@@ -140,11 +164,17 @@ describe("runFollowupsTick", () => {
       followup_id: FOLLOWUP,
       conversation_id: CONV,
       organization_id: ORG,
+      sequence_key: `${CONV}:m1`,
       status: "sending",
     });
     expect(supabase.updates.agent_followup_runs?.[0]).toMatchObject({
       status: "sent",
     });
+    expect(
+      supabase.updates.agent_followup_jobs?.map((row) => (row as { status?: unknown }).status),
+    ).toEqual(
+      expect.arrayContaining(["sending", "sent"]),
+    );
     expect(providerSendText).toHaveBeenCalledWith(
       expect.objectContaining({
         phone: "5511988887777",
@@ -205,19 +235,27 @@ describe("runFollowupsTick", () => {
       error: null,
     });
     supabase.queue("agent_followup_runs", {
-      data: [{ followup_id: FOLLOWUP, status: "sent", sent_at: new Date().toISOString() }],
+      data: [{
+        followup_id: FOLLOWUP,
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        sequence_key: `${CONV}:m1`,
+      }],
       error: null,
     });
 
     const result = await runFollowupsTick(supabase as never);
 
     expect(result.skipped).toBe(1);
+    expect(supabase.filters.agent_followup_runs.eq).toContainEqual(["sequence_key", `${CONV}:m1`]);
     expect(providerSendText).not.toHaveBeenCalled();
   });
 
   it("skip lead sem phone sem inserir run", async () => {
     const supabase = createSupabaseMock();
     queueHappyPathBase(supabase);
+    queueEligibleEvaluation(supabase);
+    queueDueJob(supabase);
     queueEligibleEvaluation(supabase);
     queueEligibleEvaluation(supabase);
     supabase.queue("leads", { data: { name: "Sem Phone", phone: null }, error: null });
@@ -226,6 +264,10 @@ describe("runFollowupsTick", () => {
 
     expect(result.skipped).toBe(1);
     expect(supabase.inserts.agent_followup_runs ?? []).toHaveLength(0);
+    expect(supabase.updates.agent_followup_jobs?.[0]).toMatchObject({
+      status: "skipped",
+      skip_reason: "lead_without_phone",
+    });
     expect(providerSendText).not.toHaveBeenCalled();
   });
 
@@ -237,6 +279,8 @@ describe("runFollowupsTick", () => {
         message_text: "Oi {{lead_name}}, posso te ajudar? - {{agent_name}}",
       }),
     ]);
+    queueEligibleEvaluation(supabase);
+    queueDueJob(supabase);
     queueEligibleEvaluation(supabase);
     queueEligibleEvaluation(supabase);
     supabase.queue("leads", { data: { name: "Maria", phone: "+55 11 98888-7777" }, error: null });
