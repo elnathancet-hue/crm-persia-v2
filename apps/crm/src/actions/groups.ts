@@ -630,10 +630,12 @@ export async function getGroupParticipantsView(groupId: string): Promise<GroupPa
     leads: GroupParticipantView["lead"] | null;
   }>) {
     if (m.phone) {
-      membershipByPhone.set(m.phone, {
-        id: m.id,
-        lead: m.leads ?? null,
-      });
+      for (const variant of generatePhoneVariants(m.phone)) {
+        membershipByPhone.set(variant, {
+          id: m.id,
+          lead: m.leads ?? null,
+        });
+      }
     }
   }
 
@@ -648,8 +650,12 @@ export async function getGroupParticipantsView(groupId: string): Promise<GroupPa
       identityKind = "lid";
     }
 
-    // Normaliza telefone — apenas para JIDs com número real
-    const phone = identityKind === "phone" ? (normalizePhoneBR(jid) ?? null) : null;
+    // Normaliza telefone sempre que possivel. A UAZAPI pode devolver
+    // PhoneNumber como JID/numero cru quando o participante original era @lid.
+    const phone = normalizePhoneBR(jid) ?? null;
+    if (phone && identityKind === "unknown") {
+      identityKind = "phone";
+    }
 
     // Vincula membership/lead pelo telefone normalizado
     const membership = phone ? (membershipByPhone.get(phone) ?? null) : null;
@@ -1003,6 +1009,33 @@ export async function getGroupMessages(groupId: string, limit = 50) {
 
   const resolvedLeadIds = new Set<string>();
   const patches: Array<{ messageId: string; leadId: string }> = [];
+  const membershipIds = [
+    ...new Set(
+      rows
+        .map((row) => row.sender_membership_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const membershipsById = new Map<string, { lead_id: string | null; phone: string | null }>();
+
+  if (membershipIds.length > 0) {
+    const { data: memberships } = await db
+      .from("group_memberships")
+      .select("id, lead_id, phone")
+      .eq("organization_id", orgId)
+      .in("id", membershipIds);
+
+    for (const membership of (memberships || []) as Array<{
+      id: string;
+      lead_id: string | null;
+      phone: string | null;
+    }>) {
+      membershipsById.set(membership.id, {
+        lead_id: membership.lead_id,
+        phone: membership.phone,
+      });
+    }
+  }
 
   for (const row of rows) {
     if (row.sender_lead_id) {
@@ -1011,7 +1044,16 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     }
 
     let match: { id: string } | null = null;
-    if (row.sender_phone) {
+    const membership = row.sender_membership_id
+      ? membershipsById.get(row.sender_membership_id)
+      : null;
+    if (membership?.lead_id) {
+      match = { id: membership.lead_id };
+    }
+    if (!match && !row.sender_phone && membership?.phone) {
+      row.sender_phone = membership.phone;
+    }
+    if (!match && row.sender_phone) {
       match = await matchLeadByPhone(supabase, orgId, row.sender_phone);
     }
     if (!match && row.sender_name && row.sender_name.trim().length >= 4) {
@@ -1022,6 +1064,16 @@ export async function getGroupMessages(groupId: string, limit = 50) {
       row.sender_lead_id = match.id;
       resolvedLeadIds.add(match.id);
       patches.push({ messageId: row.id, leadId: match.id });
+
+      if (row.sender_phone) {
+        await db
+          .from("group_memberships")
+          .update({ lead_id: match.id })
+          .eq("organization_id", orgId)
+          .eq("group_id", groupId)
+          .in("phone", generatePhoneVariants(row.sender_phone))
+          .is("lead_id", null);
+      }
     }
   }
 

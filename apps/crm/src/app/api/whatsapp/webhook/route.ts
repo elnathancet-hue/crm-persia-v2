@@ -22,6 +22,67 @@ function getSupabase() {
   );
 }
 
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function extractNestedString(source: Record<string, unknown>, path: string[]): string | null {
+  let current: unknown = source;
+  for (const key of path) {
+    if (!current || typeof current !== "object") return null;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return typeof current === "string" && current.trim().length > 0 ? current.trim() : null;
+}
+
+function extractGroupSenderIdentity(msgRaw: Record<string, unknown>): {
+  rawSenderJid: string | null;
+  phoneSenderJid: string | null;
+  identityKind: "phone" | "lid" | "unknown";
+} {
+  const phoneSenderJid = firstString(
+    msgRaw.sender_pn,
+    msgRaw.senderPn,
+    msgRaw.senderPN,
+    msgRaw.sender_phone,
+    msgRaw.senderPhone,
+    msgRaw.participant_pn,
+    msgRaw.participantPn,
+    msgRaw.participantPhone,
+    msgRaw.phone,
+    msgRaw.Phone,
+    extractNestedString(msgRaw, ["key", "participant_pn"]),
+    extractNestedString(msgRaw, ["key", "participantPhone"]),
+    extractNestedString(msgRaw, ["message", "sender_pn"]),
+  );
+
+  const rawSenderJid = firstString(
+    phoneSenderJid,
+    msgRaw.sender,
+    msgRaw.sender_lid,
+    msgRaw.senderLid,
+    msgRaw.participant,
+    msgRaw.participant_lid,
+    msgRaw.participantLid,
+    extractNestedString(msgRaw, ["key", "participant"]),
+    extractNestedString(msgRaw, ["message", "sender"]),
+  );
+
+  const identityKind: "phone" | "lid" | "unknown" =
+    rawSenderJid?.endsWith("@s.whatsapp.net") || Boolean(phoneSenderJid)
+      ? "phone"
+      : rawSenderJid?.endsWith("@lid")
+        ? "lid"
+        : "unknown";
+
+  return { rawSenderJid, phoneSenderJid, identityKind };
+}
+
 /**
  * UAZAPI webhook handler.
  *
@@ -233,17 +294,18 @@ export async function POST(request: NextRequest) {
         // não no root do envelope. Usar msgRaw para capturar o nível correto.
         const msgRaw = ((body as any).message || body) as Record<string, unknown>;
 
-        // Etapa 1 (Identidade Rica): capturar rawSenderJid inclui @lid para detectar kind.
-        const rawSenderJid: string | null =
-          (typeof msgRaw.sender_pn === "string" && msgRaw.sender_pn ? msgRaw.sender_pn : null) ??
-          (typeof msgRaw.sender === "string" && msgRaw.sender ? msgRaw.sender : null);
+        // Etapa 1 (Identidade Rica): UAZAPI varia bastante os campos do
+        // remetente em grupo. Preferimos o telefone real (sender_pn e aliases)
+        // e preservamos @lid quando ele for a unica identidade disponivel.
+        const {
+          rawSenderJid,
+          phoneSenderJid,
+          identityKind: senderIdentityKind,
+        } = extractGroupSenderIdentity(msgRaw);
         // senderJid sem @lid — usado para normalização de telefone + linkGroupMembership.
         const senderPhoneJid =
-          rawSenderJid && !rawSenderJid.endsWith("@lid") ? rawSenderJid : null;
-        const senderIdentityKind: "phone" | "lid" | "unknown" =
-          rawSenderJid?.endsWith("@s.whatsapp.net") ? "phone" :
-          rawSenderJid?.endsWith("@lid") ? "lid" :
-          "unknown";
+          phoneSenderJid ||
+          (rawSenderJid && !rawSenderJid.endsWith("@lid") ? rawSenderJid : null);
         const messageCreatedAt = new Date().toISOString();
 
         // Etapa 1: resolver identidade cached do remetente antes do insert (sem UAZAPI call).

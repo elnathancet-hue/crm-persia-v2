@@ -379,6 +379,9 @@ export function ConversationList({
 
   const selectableConversationIds = filteredConversations.map((conversation) => conversation.id);
   const selectedCount = selectedConversationIds.size;
+  const selectedTagName = dbTags.find((tag) => tag.id === bulkTagId)?.name;
+  const selectedPipelineName = pipelines.find((pipeline) => pipeline.id === bulkPipelineId)?.name;
+  const selectedStageName = stages.find((stage) => stage.id === bulkStageId)?.name;
 
   const toggleConversationSelection = (conversationId: string) => {
     setSelectedConversationIds((prev) => {
@@ -641,6 +644,7 @@ export function ConversationList({
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            name="chat_conversation_search"
             placeholder="Buscar por nome ou telefone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -708,10 +712,11 @@ export function ConversationList({
                   {/* Avatar — Bug A fix (mai/2026): foto WhatsApp via
                       lead.avatar_url (populado pelo pipeline UAZAPI).
                       Fallback de iniciais permanece se não houver foto. */}
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     onClick={() => (bulkMode ? toggleConversationSelection(conv.id) : onSelect(conv.id))}
-                    className="relative shrink-0"
+                    className="relative h-auto shrink-0 rounded-full p-0"
                     aria-label={`Abrir conversa de ${lead?.name || lead?.phone || "lead"}`}
                   >
                     <Avatar size="default">
@@ -734,13 +739,14 @@ export function ConversationList({
                         !isAi && !isWaiting && "bg-success"
                       )}
                     />
-                  </button>
+                  </Button>
 
                   {/* Content */}
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     onClick={() => (bulkMode ? toggleConversationSelection(conv.id) : onSelect(conv.id))}
-                    className="flex min-w-0 flex-1 flex-col gap-1 text-left"
+                    className="h-auto min-w-0 flex-1 flex-col items-stretch gap-1 rounded-none p-0 text-left hover:bg-transparent"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-[15px] font-medium leading-5 text-[color:var(--chat-header-fg)]">
@@ -809,7 +815,7 @@ export function ConversationList({
                         </Badge>
                       )}
                     </div>
-                  </button>
+                  </Button>
                 </div>
               );
             })}
@@ -818,7 +824,7 @@ export function ConversationList({
       </div>
 
       {bulkMode && (
-        <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] bg-background p-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+        <div className="fixed bottom-4 left-1/2 z-40 w-[min(680px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border bg-background p-3 shadow-2xl md:left-[calc(380px+(100vw-380px)/2)] xl:left-[calc(420px+(100vw-420px)/2)]">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Modo selecao em massa</p>
@@ -879,7 +885,9 @@ export function ConversationList({
             <div className="flex gap-2">
               <Select value={bulkTagId} onValueChange={(value) => setBulkTagId(value ?? "")}>
                 <SelectTrigger className="h-9 min-w-0 flex-1">
-                  <SelectValue placeholder="Escolher tag" />
+                  <SelectValue placeholder="Escolher tag">
+                    {selectedTagName ?? "Escolher tag"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {dbTags.map((tag) => (
@@ -911,7 +919,9 @@ export function ConversationList({
             </Label>
             <Select value={bulkPipelineId} onValueChange={(value) => setBulkPipelineId(value ?? "")}>
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="Escolher funil" />
+                <SelectValue placeholder="Escolher funil">
+                  {selectedPipelineName ?? "Escolher funil"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {pipelines.map((pipeline) => (
@@ -924,7 +934,9 @@ export function ConversationList({
             <div className="flex gap-2">
               <Select value={bulkStageId} onValueChange={(value) => setBulkStageId(value ?? "")} disabled={!bulkPipelineId}>
                 <SelectTrigger className="h-9 min-w-0 flex-1">
-                  <SelectValue placeholder="Escolher etapa" />
+                  <SelectValue placeholder="Escolher etapa">
+                    {selectedStageName ?? "Escolher etapa"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {stages.map((stage) => (

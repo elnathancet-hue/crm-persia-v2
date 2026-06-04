@@ -512,15 +512,15 @@ export async function processGroupWebhookEvent(
         const eventKeyJoined = `member_joined:${group.id}:${jid}:${new Date().toISOString().slice(0, 10)}`;
         const { runGroupAutomations } = await import("@/actions/groups");
         runGroupAutomations(orgId, group.id as string, "member_joined", eventKeyJoined, {
-          leadId: (result as any).leadId ?? undefined,
+          leadId: result.lead?.id ?? undefined,
           phone: phone ?? undefined,
           jid,
         }).catch(() => {});
-        if ((result as any).leadId && result.membershipId) {
+        if (result.lead?.id && result.membershipId) {
           // lead_identified: só dispara quando a membership recém vinculou um lead
           const eventKeyLead = `lead_identified:${result.membershipId}`;
           runGroupAutomations(orgId, group.id as string, "lead_identified", eventKeyLead, {
-            leadId: (result as any).leadId,
+            leadId: result.lead.id,
             phone: phone ?? undefined,
             jid,
           }).catch(() => {});
