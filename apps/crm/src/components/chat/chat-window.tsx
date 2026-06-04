@@ -852,7 +852,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     <div className="flex h-full flex-col overflow-hidden" style={{ background: "var(--chat-bg)" }}>
       {/* Header - WhatsApp style with action bar */}
       <div
-        className="flex h-[59px] shrink-0 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4"
+        className="flex min-h-[59px] shrink-0 items-center justify-between border-b border-[color:var(--chat-sidebar-divider)] px-4 py-2"
         style={{
           background: "var(--chat-header-bg)",
           color: "var(--chat-header-fg)",
