@@ -6,6 +6,8 @@ import { createProvider } from "@/lib/whatsapp/providers";
 
 export interface SendScheduledResult {
   sent: number;
+  failed?: number;
+  skipped?: number;
 }
 
 export async function processScheduledMessages(): Promise<SendScheduledResult> {
@@ -19,22 +21,37 @@ export async function processScheduledMessages(): Promise<SendScheduledResult> {
     .select("*, leads(phone), conversations(organization_id, channel)")
     .eq("status", "pending")
     .lte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: true })
     .limit(20);
 
   if (error || !messages || messages.length === 0) {
-    return { sent: 0 };
+    if (error) console.error("[SendScheduled] fetch error:", error.message);
+    return { sent: 0, failed: 0, skipped: 0 };
   }
 
   let sentCount = 0;
+  let failedCount = 0;
+  let skippedCount = 0;
 
   for (const msg of messages) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const phone = (msg.leads as any)?.phone;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orgId = (msg.conversations as any)?.organization_id;
+      await supabase
+        .from("scheduled_messages")
+        .update({ attempts: (msg.attempts ?? 0) + 1 })
+        .eq("id", msg.id);
 
-      if (!phone || !orgId) continue;
+      const phone = (msg.leads as any)?.phone;
+      const orgId = (msg.conversations as any)?.organization_id;
+      const channel = (msg.conversations as any)?.channel;
+
+      if (!phone || !orgId || channel !== "whatsapp") {
+        skippedCount++;
+        await supabase
+          .from("scheduled_messages")
+          .update({ status: "error", error_message: "Conversa sem destinatario WhatsApp valido" })
+          .eq("id", msg.id);
+        continue;
+      }
 
       const { data: connection } = await supabase
         .from("whatsapp_connections")
@@ -44,38 +61,68 @@ export async function processScheduledMessages(): Promise<SendScheduledResult> {
         .limit(1)
         .single();
 
-      if (!connection) continue;
+      if (!connection) {
+        failedCount++;
+        await supabase
+          .from("scheduled_messages")
+          .update({ status: "error", error_message: "Nenhuma conexao WhatsApp ativa" })
+          .eq("id", msg.id);
+        continue;
+      }
 
       const provider = createProvider(connection as never);
-      const result = await provider.sendText({ phone, message: msg.content });
+      const content = typeof msg.content === "string" ? msg.content.trim() : "";
+      const mediaType = msg.media_type ?? "none";
+      const result = mediaType !== "none" && msg.media_url
+        ? await provider.sendMedia({
+          phone,
+          type: mediaType as "image" | "video" | "audio" | "document",
+          media: msg.media_url,
+          caption: content || undefined,
+          fileName: msg.media_filename ?? undefined,
+        })
+        : await provider.sendText({ phone, message: content });
 
       await supabase.from("messages").insert({
         organization_id: orgId,
         conversation_id: msg.conversation_id,
         lead_id: msg.lead_id,
-        content: msg.content,
+        content: content || null,
         sender: "agent",
         sender_user_id: msg.created_by,
-        type: msg.type || "text",
+        type: mediaType !== "none" ? mediaType : (msg.type || "text"),
+        media_url: msg.media_url ?? null,
+        media_type: msg.media_mime_type ?? null,
         status: "sent",
         whatsapp_msg_id: result.messageId ?? null,
+        metadata: {
+          scheduled_message_id: msg.id,
+          media_filename: msg.media_filename ?? null,
+          media_size: msg.media_size ?? null,
+        },
       });
 
       await supabase
+        .from("conversations")
+        .update({ last_message_at: new Date().toISOString(), unread_count: 0, updated_at: new Date().toISOString() })
+        .eq("id", msg.conversation_id);
+
+      await supabase
         .from("scheduled_messages")
-        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .update({ status: "sent", sent_at: new Date().toISOString(), error_message: null })
         .eq("id", msg.id);
 
       sentCount++;
     } catch (err: unknown) {
       const msgErr = err instanceof Error ? err.message : String(err);
       console.error(`[SendScheduled] Error sending message ${msg.id}:`, msgErr);
+      failedCount++;
       await supabase
         .from("scheduled_messages")
-        .update({ status: "error" })
+        .update({ status: "error", error_message: msgErr })
         .eq("id", msg.id);
     }
   }
 
-  return { sent: sentCount };
+  return { sent: sentCount, failed: failedCount, skipped: skippedCount };
 }

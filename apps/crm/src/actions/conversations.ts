@@ -3,6 +3,8 @@
 import { requireRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadCampaignMedia, type MediaUploadResult } from "@/lib/campaigns/media-upload";
 import { createProvider } from "@/lib/whatsapp/providers";
 import {
   addTagToLead as addTagToLeadShared,
@@ -710,9 +712,17 @@ export async function scheduleMessage(
   conversationId: string,
   content: string,
   scheduledAt: string,
-  type: string = "text"
+  type: string = "text",
+  media?: {
+    media_type: "none" | "image" | "video" | "audio" | "document";
+    media_url: string;
+    media_filename?: string | null;
+    media_mime_type?: string | null;
+    media_size?: number | null;
+  } | null,
 ) {
   const { supabase, orgId, userId } = await requireRole("agent");
+  const trimmed = content.trim();
 
   const { data: conv } = await supabase
     .from("conversations")
@@ -722,22 +732,59 @@ export async function scheduleMessage(
     .single();
 
   if (!conv) throw new Error("Conversa nao encontrada");
+  if (!trimmed && !media?.media_url) {
+    throw new Error("Informe uma mensagem ou anexe uma midia");
+  }
+
+  const scheduledRow = {
+    organization_id: orgId,
+    conversation_id: conversationId,
+    lead_id: conv.lead_id,
+    content: trimmed || null,
+    type: media?.media_type && media.media_type !== "none" ? media.media_type : type,
+    media_type: media?.media_type ?? "none",
+    media_url: media?.media_url ?? null,
+    media_filename: media?.media_filename ?? null,
+    media_mime_type: media?.media_mime_type ?? null,
+    media_size: media?.media_size ?? null,
+    scheduled_at: scheduledAt,
+    created_by: userId,
+    status: "pending",
+  };
 
   const { data, error } = await supabase
     .from("scheduled_messages")
-    .insert({
-      organization_id: orgId,
-      conversation_id: conversationId,
-      lead_id: conv.lead_id,
-      content,
-      type,
-      scheduled_at: scheduledAt,
-      created_by: userId,
-      status: "pending",
-    })
+    .insert(scheduledRow as never)
     .select()
     .single();
 
   if (error) throw new Error(error.message);
   return data;
+}
+
+export async function uploadScheduledMessageMediaAction(
+  formData: FormData,
+): Promise<{ data?: MediaUploadResult; error?: string }> {
+  try {
+    const { orgId } = await requireRole("agent");
+    const file = formData.get("file");
+    if (!(file instanceof File)) return { error: "Arquivo nao enviado" };
+
+    const admin = createAdminClient();
+    const { data: buckets } = await admin.storage.listBuckets();
+    if (!buckets?.some((bucket) => bucket.name === "campaign-media")) {
+      await admin.storage.createBucket("campaign-media", { public: true });
+    }
+
+    const result = await uploadCampaignMedia(admin, {
+      file,
+      orgId,
+      campaignId: `scheduled-${crypto.randomUUID()}`,
+    });
+
+    if ("error" in result) return { error: result.error };
+    return { data: result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Nao foi possivel enviar a midia" };
+  }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
-import { getConversation, getConversations, type ConversationWithLead } from "@/actions/conversations";
+import { getConversation, getConversations, uploadScheduledMessageMediaAction, type ConversationWithLead } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
 import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, forwardMessagesToConversations, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
@@ -70,6 +70,7 @@ import {
   Smile,
   Sparkles,
   Trash2,
+  Upload,
   User,
   UserCheck,
   UserPlus,
@@ -306,24 +307,86 @@ function ScheduleMessageDialog({
   const [messageText, setMessageText] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
   const [saving, setSaving] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaUploadError, setMediaUploadError] = useState<string | null>(null);
+  const [media, setMedia] = useState<{
+    media_type: "none" | "image" | "video" | "audio" | "document";
+    media_url: string;
+    media_filename: string;
+    media_mime_type: string;
+    media_size: number;
+  } | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
 
   const handleSchedule = async () => {
-    if (!messageText.trim() || !scheduleDate) {
-      toast.error("Preencha a mensagem e a data de envio");
+    if (!messageText.trim() && !media) {
+      toast.error("Digite uma mensagem ou anexe uma imagem");
+      return;
+    }
+    if (!scheduleDate) {
+      toast.error("Escolha a data de envio");
       return;
     }
     setSaving(true);
     try {
-      await scheduleMessage(conversationId, messageText.trim(), new Date(scheduleDate).toISOString());
+      await scheduleMessage(
+        conversationId,
+        messageText.trim(),
+        new Date(scheduleDate).toISOString(),
+        media?.media_type && media.media_type !== "none" ? media.media_type : "text",
+        media,
+      );
       toast.success("Mensagem agendada!");
       setMessageText("");
       setScheduleDate("");
+      setMedia(null);
+      setMediaUploadError(null);
+      if (mediaInputRef.current) mediaInputRef.current.value = "";
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err.message || "Erro ao agendar");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleMediaFile = async (file: File | null) => {
+    setMediaUploadError(null);
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMediaUploadError("Por enquanto, o agendamento aceita imagens.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("file", file);
+    setMediaUploading(true);
+    try {
+      const result = await uploadScheduledMessageMediaAction(formData);
+      if (result.error || !result.data) {
+        setMediaUploadError(result.error ?? "Erro ao enviar imagem");
+        return;
+      }
+      if (result.data.media_type !== "image") {
+        setMediaUploadError("Selecione um arquivo de imagem.");
+        return;
+      }
+      setMedia({
+        media_type: result.data.media_type,
+        media_url: result.data.media_url,
+        media_filename: result.data.media_filename,
+        media_mime_type: result.data.media_mime_type,
+        media_size: result.data.media_size,
+      });
+    } finally {
+      setMediaUploading(false);
+    }
+  };
+
+  const clearMedia = () => {
+    setMedia(null);
+    setMediaUploadError(null);
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
   };
 
   const setQuickSchedule = (minutes: number) => {
@@ -359,6 +422,46 @@ function ScheduleMessageDialog({
               className="min-h-[128px] resize-none"
               maxLength={1000}
             />
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>Imagem</Label>
+                <p className="text-xs text-muted-foreground">Envie uma imagem com legenda opcional.</p>
+              </div>
+              <input
+                ref={mediaInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => void handleMediaFile(event.target.files?.[0] ?? null)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={mediaUploading}
+                onClick={() => mediaInputRef.current?.click()}
+              >
+                {mediaUploading ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Upload className="mr-1.5 size-3.5" />}
+                {mediaUploading ? "Enviando..." : "Adicionar"}
+              </Button>
+            </div>
+            {mediaUploadError && (
+              <p className="mt-2 text-xs font-medium text-destructive">{mediaUploadError}</p>
+            )}
+            {media && (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{media.media_filename}</p>
+                  <p className="text-xs text-muted-foreground">{Math.ceil(media.media_size / 1024)} KB</p>
+                </div>
+                <Button type="button" variant="ghost" size="icon-sm" onClick={clearMedia} aria-label="Remover imagem">
+                  <X className="size-4" />
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border bg-muted/20 p-3">
@@ -1792,7 +1895,6 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           {/* Edit input */}
           <div className="flex items-end gap-2 px-4 pb-4 pt-2">
             <textarea
-              // eslint-disable-next-line jsx-a11y/no-autofocus
               autoFocus
               value={editDialogText}
               onChange={(e) => setEditDialogText(e.target.value)}
