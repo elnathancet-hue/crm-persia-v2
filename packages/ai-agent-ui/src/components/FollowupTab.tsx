@@ -21,7 +21,6 @@ import {
   FOLLOWUP_DELAY_HOURS_MIN,
   FOLLOWUP_DELAY_PRESETS,
   FOLLOWUP_NAME_MAX_CHARS,
-  isValidFollowupWindow,
   validateFollowupInput,
   type AgentFollowup,
   type AgentNotificationTemplate,
@@ -378,10 +377,11 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 md:grid-cols-[1fr_15rem]">
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="followup-name">Nome</Label>
+          <div className="space-y-6 pt-4">
+            {/* Seção 1: Configuração Básica */}
+            <div className="space-y-4 rounded-xl border p-5 bg-card">
+              <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Label htmlFor="followup-name" className="text-xs font-semibold text-muted-foreground uppercase">Nome da etapa</Label>
                 <Input
                   id="followup-name"
                   value={editor.name}
@@ -391,20 +391,15 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
                   placeholder="Ex: Lembrete 24h sem resposta"
                   maxLength={FOLLOWUP_NAME_MAX_CHARS}
                   disabled={isPending}
-                  aria-invalid={!!errors.name}
-                  className={
-                    errors.name
-                      ? "border-destructive focus-visible:ring-destructive/40"
-                      : undefined
-                  }
+                  className={cn(
+                    "h-10 font-medium",
+                    errors.name && "border-destructive focus-visible:ring-destructive/40"
+                  )}
                 />
-                {errors.name ? (
-                  <p className="text-xs text-destructive">{errors.name}</p>
-                ) : null}
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="followup-message">Mensagem</Label>
+              <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Label htmlFor="followup-message" className="text-xs font-semibold text-muted-foreground uppercase">Mensagem</Label>
                 <Textarea
                   id="followup-message"
                   value={editor.message_text}
@@ -412,148 +407,115 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
                     setEditor((prev) => ({ ...prev, message_text: e.target.value }))
                   }
                   placeholder="Ex: Oi {{lead_name}}, passando para saber se posso te ajudar com mais alguma coisa."
-                  rows={6}
+                  rows={4}
                   disabled={isPending}
-                  aria-invalid={!!errors.message_text}
                   className={cn(
-                    errors.message_text &&
-                      "border-destructive focus-visible:ring-destructive/40",
+                    "resize-none text-sm p-3",
+                    errors.message_text && "border-destructive focus-visible:ring-destructive/40",
                   )}
                 />
-                {errors.message_text ? (
-                  <p className="text-xs text-destructive">{errors.message_text}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Variaveis disponiveis: {"{{lead_name}}"}, {"{{lead_phone}}"}, {"{{agent_name}}"}.
-                  </p>
-                )}
+                <p className="text-[10px] text-muted-foreground">
+                  Variaveis: <span className="font-mono bg-muted px-1 py-0.5 rounded">{"{{lead_name}}"}</span>, <span className="font-mono bg-muted px-1 py-0.5 rounded">{"{{lead_phone}}"}</span>, <span className="font-mono bg-muted px-1 py-0.5 rounded">{"{{agent_name}}"}</span>.
+                </p>
               </div>
+            </div>
 
+            {/* Seção 2: Regras de Envio */}
+            <div className="space-y-6 rounded-xl border p-5 bg-card">
               <div className="space-y-1.5">
-                <Label htmlFor="followup-delay">Entrar na fila apos</Label>
-                <Select
-                  value={editor.delay_preset}
-                  onValueChange={handlePresetChange}
-                  disabled={isPending}
-                >
-                  <SelectTrigger id="followup-delay">
-                    <SelectValue placeholder="Personalizado">
-                      {FOLLOWUP_DELAY_PRESETS.find(
-                        (preset) => String(preset.hours) === editor.delay_preset,
-                      )?.label ??
-                        (editor.delay_preset === "custom"
-                          ? `Personalizado (${formatFollowupDelay(editor.delay_hours)})`
-                          : `${editor.delay_hours} horas`)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FOLLOWUP_DELAY_PRESETS.map((preset) => (
-                      <SelectItem key={preset.hours} value={String(preset.hours)}>
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="custom">Personalizado</SelectItem>
-                  </SelectContent>
-                </Select>
-                {editor.delay_preset === "custom" ? (
-                  <Input
-                    type="number"
-                    min={FOLLOWUP_DELAY_HOURS_MIN}
-                    max={FOLLOWUP_DELAY_HOURS_MAX}
-                    value={editor.delay_hours}
-                    onChange={(e) =>
-                      setEditor((prev) => ({
-                        ...prev,
-                        delay_hours: Number(e.target.value) || prev.delay_hours,
-                      }))
-                    }
+                <Label htmlFor="followup-delay" className="text-xs font-semibold text-muted-foreground uppercase">Entrar na fila após</Label>
+                <div className="flex items-center gap-3">
+                  <Select
+                    value={editor.delay_preset}
+                    onValueChange={handlePresetChange}
                     disabled={isPending}
-                    aria-invalid={!!errors.delay_hours}
-                    className={cn(
-                      errors.delay_hours &&
-                        "border-destructive focus-visible:ring-destructive/40",
-                    )}
-                  />
-                ) : null}
-                {errors.delay_hours ? (
-                  <p className="text-xs text-destructive">{errors.delay_hours}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Entra na fila se o lead ficar{" "}
-                    <strong>{formatFollowupDelay(editor.delay_hours)}</strong> sem responder.
-                  </p>
-                )}
+                  >
+                    <SelectTrigger id="followup-delay" className="w-[180px] h-10 font-medium">
+                      <SelectValue placeholder="Personalizado">
+                        {FOLLOWUP_DELAY_PRESETS.find(
+                          (preset) => String(preset.hours) === editor.delay_preset,
+                        )?.label ??
+                          (editor.delay_preset === "custom"
+                            ? `Personalizado (${formatFollowupDelay(editor.delay_hours)})`
+                            : `${editor.delay_hours} horas`)}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FOLLOWUP_DELAY_PRESETS.map((preset) => (
+                        <SelectItem key={preset.hours} value={String(preset.hours)}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="custom">Personalizado</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {editor.delay_preset === "custom" && (
+                    <div className="relative w-24">
+                      <Input
+                        type="number"
+                        min={FOLLOWUP_DELAY_HOURS_MIN}
+                        max={FOLLOWUP_DELAY_HOURS_MAX}
+                        value={editor.delay_hours}
+                        onChange={(e) =>
+                          setEditor((prev) => ({
+                            ...prev,
+                            delay_hours: Number(e.target.value) || prev.delay_hours,
+                          }))
+                        }
+                        disabled={isPending}
+                        className={cn(
+                          "h-10 text-center font-medium",
+                          errors.delay_hours && "border-destructive focus-visible:ring-destructive/40",
+                        )}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-semibold">h</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Tempo que o lead deve ficar sem resposta para ativar a etapa.
+                </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="followup-window-start">Inicio da janela</Label>
+              <div className="space-y-1.5 pt-4 border-t">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Janela de Envio Seguro</Label>
+                <div className="flex items-center gap-2">
                   <Input
                     id="followup-window-start"
                     type="time"
                     value={editor.send_window_start}
                     onChange={(e) =>
-                      setEditor((prev) => ({
-                        ...prev,
-                        send_window_start: e.target.value,
-                      }))
+                      setEditor((prev) => ({ ...prev, send_window_start: e.target.value }))
                     }
                     disabled={isPending}
+                    className="h-10 w-28 text-center font-medium"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="followup-window-end">Fim da janela</Label>
+                  <span className="text-muted-foreground text-sm font-semibold">até</span>
                   <Input
                     id="followup-window-end"
                     type="time"
                     value={editor.send_window_end}
                     onChange={(e) =>
-                      setEditor((prev) => ({
-                        ...prev,
-                        send_window_end: e.target.value,
-                      }))
+                      setEditor((prev) => ({ ...prev, send_window_end: e.target.value }))
                     }
                     disabled={isPending}
+                    className="h-10 w-28 text-center font-medium"
                   />
                 </div>
+                {errors.send_window ? (
+                  <p className="text-[10px] text-destructive font-medium">{errors.send_window}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground">
+                    Pausa envios automaticamente fora deste horário.
+                  </p>
+                )}
               </div>
-              {errors.send_window ? (
-                <p className="text-xs text-destructive">{errors.send_window}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Fora da janela, a conversa pausa e reagenda para o proximo
-                  horario permitido.
-                </p>
-              )}
-              <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
-                Protecao fixa: antes de enviar, o sistema confirma IA ativa,
-                conversa aberta, sem handoff humano e sem resposta nova do lead.
-              </div>
-            </div>
 
-            <div className="rounded-xl border bg-muted/20 p-4">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">
-                Validacao
-              </p>
-              <div className="mt-4 space-y-3 text-xs">
-                <ValidationLine ok={!errors.name} label="Nome preenchido" />
-                <ValidationLine ok={!errors.message_text} label="Mensagem preenchida" />
-                <ValidationLine ok={!errors.delay_hours} label="Tempo valido" />
-                <ValidationLine
-                  ok={isValidFollowupWindow(
-                    editor.send_window_start,
-                    editor.send_window_end,
-                  )}
-                  label="Janela valida"
-                />
-              </div>
-              <div className="mt-5 rounded-lg bg-card p-3 shadow-sm">
-                <p className="text-[11px] font-medium text-muted-foreground">
-                  Previa da regra
-                </p>
-                <p className="mt-1 text-sm">
-                  Enviar apos {formatFollowupDelay(editor.delay_hours)}, entre{" "}
-                  {editor.send_window_start} e {editor.send_window_end}.
+              <div className="rounded-lg border bg-primary/5 border-primary/20 p-3 text-xs text-primary/80 flex items-start gap-2">
+                <ShieldCheck className="size-4 shrink-0 mt-0.5" />
+                <p>
+                  <strong>Proteção fixa:</strong> antes de enviar, confirmamos se a IA continua ativa e se o lead não respondeu nesse meio tempo.
                 </p>
               </div>
             </div>
@@ -625,17 +587,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
         {label}
       </p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function ValidationLine({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <CheckCircle2
-        className={cn("size-4", ok ? "text-success" : "text-muted-foreground/50")}
-      />
-      <span className={ok ? "text-foreground" : "text-muted-foreground"}>{label}</span>
     </div>
   );
 }
