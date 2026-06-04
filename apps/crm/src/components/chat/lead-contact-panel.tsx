@@ -60,6 +60,7 @@ export interface LeadContactData {
 interface LeadContactPanelProps {
   lead: LeadContactData;
   conversationId?: string | null;
+  onOpenLeadDrawer?: () => void;
   onClose: () => void;
 }
 
@@ -205,7 +206,7 @@ function SectionHeader({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function LeadContactPanel({ lead, conversationId, onClose }: LeadContactPanelProps) {
+export function LeadContactPanel({ lead, conversationId, onOpenLeadDrawer, onClose }: LeadContactPanelProps) {
   const [mediaOpen, setMediaOpen] = useState(false);
   const [addressOpen, setAddressOpen] = useState(false);
   const [mediaTab, setMediaTab] = useState<MediaTab>("image");
@@ -263,6 +264,11 @@ export function LeadContactPanel({ lead, conversationId, onClose }: LeadContactP
 
   const editLeadHref = lead.id ? `/leads/${lead.id}` : undefined;
 
+  function openLead() {
+    if (onOpenLeadDrawer) onOpenLeadDrawer();
+    else if (editLeadHref) window.open(editLeadHref, "_blank");
+  }
+
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-background">
 
@@ -318,7 +324,7 @@ export function LeadContactPanel({ lead, conversationId, onClose }: LeadContactP
               variant="outline"
               size="sm"
               className="flex-1 gap-1.5 text-xs"
-              onClick={() => window.open(editLeadHref, "_blank")}
+              onClick={openLead}
             >
               <ExternalLink className="size-3.5" />
               Ver lead
@@ -348,7 +354,7 @@ export function LeadContactPanel({ lead, conversationId, onClose }: LeadContactP
                 variant="ghost"
                 size="xs"
                 className="gap-1 text-xs text-muted-foreground"
-                onClick={() => window.open(editLeadHref, "_blank")}
+                onClick={openLead}
               >
                 <Pencil className="size-3" />
                 Editar
@@ -386,7 +392,7 @@ export function LeadContactPanel({ lead, conversationId, onClose }: LeadContactP
                 variant="ghost"
                 size="xs"
                 className="gap-1 text-xs text-muted-foreground"
-                onClick={() => window.open(editLeadHref, "_blank")}
+                onClick={openLead}
               >
                 <Pencil className="size-3" />
                 Editar

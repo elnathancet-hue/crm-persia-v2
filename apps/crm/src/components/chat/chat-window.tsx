@@ -78,6 +78,10 @@ import {
 } from "lucide-react";
 import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 import { TagPicker } from "@/components/tags/tag-picker";
+import { LeadInfoDrawer, LeadsProvider } from "@persia/leads-ui";
+import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
+import { getLead } from "@/actions/leads";
+import type { LeadWithTags } from "@persia/shared/crm";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 import { cn } from "@/lib/utils";
@@ -675,6 +679,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [editDialogText, setEditDialogText] = useState("");
   const [deleteDialogMsgId, setDeleteDialogMsgId] = useState<string | null>(null);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [leadDrawerOpen, setLeadDrawerOpen] = useState(false);
+  const [drawerLead, setDrawerLead] = useState<LeadWithTags | null>(null);
+  const [supabaseClient] = useState(() => createClient());
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [messageSearch, setMessageSearch] = useState("");
@@ -861,6 +868,20 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       cancelled = true;
     };
   }, [forwardMode, forwardSearch, orgId]);
+
+  const handleOpenLeadDrawer = useCallback(async () => {
+    const id = ((conversation as Record<string, unknown>)?.leads as Record<string, unknown> | undefined)?.id as string | undefined;
+    if (!id) return;
+    try {
+      const result = await getLead(id);
+      if (result?.lead) {
+        setDrawerLead(result.lead as LeadWithTags);
+        setLeadDrawerOpen(true);
+      }
+    } catch {
+      // silent
+    }
+  }, [conversation]);
 
   // Load conversation + messages when selected conversation changes
   useEffect(() => {
@@ -1805,11 +1826,27 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
             <LeadContactPanel
               lead={leadForPanel}
               conversationId={conversationId}
+              onOpenLeadDrawer={() => void handleOpenLeadDrawer()}
               onClose={() => setContactPanelOpen(false)}
             />
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Lead info drawer — opens inline without leaving chat */}
+      {drawerLead && (
+        <LeadsProvider actions={crmLeadsActions}>
+          <LeadInfoDrawer
+            open={leadDrawerOpen}
+            onOpenChange={(o) => {
+              if (!o) { setLeadDrawerOpen(false); setDrawerLead(null); }
+            }}
+            lead={drawerLead}
+            supabase={supabaseClient}
+            canEdit
+          />
+        </LeadsProvider>
+      )}
 
       {/* Dialogs */}
       <ScheduleMessageDialog
