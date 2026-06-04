@@ -287,7 +287,14 @@ export async function syncGroups() {
     offset += PAGE_SIZE;
   }
 
-  const admin = createAdminClient() as any;
+  const admin = createAdminClient();
+
+  // Coleta grupos salvos para backfill de memberships
+  const savedGroupsForBackfill: Array<{
+    id: string;
+    name: string;
+    participants: Array<{ jid: string }>;
+  }> = [];
 
   for (const group of remoteGroups) {
     if (!group.jid) continue;
@@ -326,9 +333,37 @@ export async function syncGroups() {
         currentImageUrl: savedGroup.image_url,
       }).catch(() => {});
     }
+
+    if (savedGroup?.id) {
+      savedGroupsForBackfill.push({
+        id: savedGroup.id,
+        name: group.name,
+        participants: (group.participants || []).filter(
+          (p: { jid: string }) => p.jid && !p.jid.endsWith("@lid"),
+        ),
+      });
+    }
   }
 
-  void admin; // satisfaz TS (usado apenas para tipo)
+  // Vincula participantes a leads existentes usando os dados já buscados.
+  // Idempotente: linkGroupMembership faz upsert por (org, grupo, phone).
+  // Isso garante que "Leads id." reflita os leads já cadastrados no CRM.
+  await Promise.allSettled(
+    savedGroupsForBackfill.flatMap(({ id, name, participants }) =>
+      participants.map((p) =>
+        linkGroupMembership({
+          supabase: admin,
+          orgId,
+          groupId: id,
+          groupName: name,
+          participantJid: p.jid,
+          participantName: null,
+          source: "webhook",
+        }),
+      ),
+    ),
+  );
+
   revalidatePath("/groups");
   return { synced: remoteGroups.length };
 }
