@@ -1319,7 +1319,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                             <span className="font-medium">Você</span>
                           </div>
                         )}
-                        {isLead && (
+                        {isLead && isFirstInBlock && (
                           <div
                             className="flex items-center gap-1 text-[11px] px-1"
                           >

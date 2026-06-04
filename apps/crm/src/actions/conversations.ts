@@ -144,14 +144,40 @@ export async function getConversations(
     // Sanitize to prevent PostgREST filter injection via special chars
     const sanitized = search.replace(/[%_,()\\]/g, "").trim();
     if (sanitized) {
-      const { data: matchingLeads } = await supabase
-        .from("leads")
-        .select("id")
-        .eq("organization_id", orgId)
-        .or(`name.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`);
-      const leadIds = (matchingLeads || []).map((l) => l.id);
-      if (leadIds.length === 0) return { data: [], error: null };
-      query = query.in("lead_id", leadIds);
+      const [matchingLeadsResult, matchingMessagesResult] = await Promise.all([
+        supabase
+          .from("leads")
+          .select("id")
+          .eq("organization_id", orgId)
+          .or(`name.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`),
+        supabase
+          .from("messages")
+          .select("conversation_id")
+          .eq("organization_id", orgId)
+          .ilike("content", `%${sanitized}%`)
+          .limit(200),
+      ]);
+
+      if (matchingLeadsResult.error) {
+        console.error("Error searching leads:", matchingLeadsResult.error);
+      }
+      if (matchingMessagesResult.error) {
+        console.error("Error searching messages:", matchingMessagesResult.error);
+      }
+
+      const leadIds = (matchingLeadsResult.data || []).map((l) => l.id);
+      const conversationIds = Array.from(
+        new Set((matchingMessagesResult.data || []).map((m) => m.conversation_id).filter(Boolean))
+      );
+
+      if (leadIds.length === 0 && conversationIds.length === 0) return { data: [], error: null };
+      if (leadIds.length > 0 && conversationIds.length > 0) {
+        query = query.or(`lead_id.in.(${leadIds.join(",")}),id.in.(${conversationIds.join(",")})`);
+      } else if (leadIds.length > 0) {
+        query = query.in("lead_id", leadIds);
+      } else {
+        query = query.in("id", conversationIds);
+      }
     }
   }
 
