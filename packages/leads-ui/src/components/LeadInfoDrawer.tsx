@@ -845,6 +845,49 @@ export function LeadInfoDrawer({
           ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <span className="text-muted-foreground">Posição no CRM</span>
+            {actions.moveLeadToPipeline && actions.listPipelines && (
+              <Popover onOpenChange={(o) => o && loadPipelinesList()}>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={currentStageObj ? "secondary" : "default"}
+                      size="sm"
+                      disabled={stageChangePending}
+                      className="h-8 rounded-md gap-1.5 px-2.5"
+                    />
+                  }
+                >
+                  <GitBranch className="size-3.5" />
+                  {currentStageObj ? "Mudar funil/etapa" : "Colocar em funil"}
+                  <ChevronDown className="size-3.5" />
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-1" align="start">
+                  {pipelinesLoading ? (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">
+                      Carregando funis...
+                    </p>
+                  ) : pipelinesList.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">
+                      Nenhum funil cadastrado.
+                    </p>
+                  ) : (
+                    pipelinesList.map((p) => (
+                      <PipelinePicker
+                        key={p.id}
+                        pipeline={p}
+                        currentPipelineId={currentDeal?.pipeline_id ?? null}
+                        disabled={stageChangePending}
+                        onSelect={(stageId) =>
+                          handleChangePipeline(p.id, stageId)
+                        }
+                        listStages={actions.listStagesForPipeline}
+                      />
+                    ))
+                  )}
+                </PopoverContent>
+              </Popover>
+            )}
             {currentStageObj ? (
               <Popover>
                 <PopoverTrigger
@@ -914,49 +957,6 @@ export function LeadInfoDrawer({
               <span className="inline-flex h-8 items-center rounded-md border border-dashed border-border px-2.5 font-medium text-muted-foreground">
                 Sem funil definido
               </span>
-            )}
-            {actions.moveLeadToPipeline && actions.listPipelines && (
-              <Popover onOpenChange={(o) => o && loadPipelinesList()}>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant={currentStageObj ? "secondary" : "default"}
-                      size="sm"
-                      disabled={stageChangePending}
-                      className="h-8 rounded-md gap-1.5 px-2.5"
-                    />
-                  }
-                >
-                  <GitBranch className="size-3.5" />
-                  {currentStageObj ? "Mudar funil/etapa" : "Colocar em funil"}
-                  <ChevronDown className="size-3.5" />
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-1" align="start">
-                  {pipelinesLoading ? (
-                    <p className="px-2 py-2 text-xs text-muted-foreground">
-                      Carregando funis...
-                    </p>
-                  ) : pipelinesList.length === 0 ? (
-                    <p className="px-2 py-2 text-xs text-muted-foreground">
-                      Nenhum funil cadastrado.
-                    </p>
-                  ) : (
-                    pipelinesList.map((p) => (
-                      <PipelinePicker
-                        key={p.id}
-                        pipeline={p}
-                        currentPipelineId={currentDeal?.pipeline_id ?? null}
-                        disabled={stageChangePending}
-                        onSelect={(stageId) =>
-                          handleChangePipeline(p.id, stageId)
-                        }
-                        listStages={actions.listStagesForPipeline}
-                      />
-                    ))
-                  )}
-                </PopoverContent>
-              </Popover>
             )}
           </div>
         </DialogHeader>
