@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,9 +21,9 @@ import {
   MessageSquare,
   Mic,
   MoreHorizontal,
-  Paperclip,
   Pause,
   Play,
+  Plus,
   RefreshCw,
   Reply,
   Save,
@@ -30,6 +31,7 @@ import {
   Settings,
   ShieldCheck,
   Smile,
+  Square,
   Trash2,
   UserPlus,
   Users,
@@ -72,6 +74,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@persia/ui/popover";
 import {
   updateGroup,
   getInviteLink,
@@ -161,6 +164,12 @@ interface GroupMessage {
   reply_to_whatsapp_msg_id: string | null;
   created_at: string;
 }
+
+// Lazy-load picker only when popover opens
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+  loading: () => <div className="p-4 text-xs text-muted-foreground">Carregando emojis...</div>,
+});
 
 // ---- Audio Player (WhatsApp-style) ----
 const WAVEFORM = [3, 5, 8, 6, 10, 7, 12, 9, 14, 11, 16, 13, 15, 10, 12, 8, 6, 9, 11, 14, 12, 10, 7, 9, 11, 8, 6, 5, 8, 10, 7, 5];
@@ -290,10 +299,18 @@ export function GroupDetailClient({
   >("document");
   const [sendingMedia, setSendingMedia] = React.useState(false);
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
+  const [emojiOpen, setEmojiOpen] = React.useState(false);
+  const [isRecording, setIsRecording] = React.useState(false);
+  const [recordingSeconds, setRecordingSeconds] = React.useState(0);
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
+  const audioFileInputRef = React.useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const audioChunksRef = React.useRef<Blob[]>([]);
+  const recordingTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -413,6 +430,66 @@ export function GroupDetailClient({
   function clearAttachment() {
     setAttachedFile(null);
     setAttachedPreview(null);
+  }
+
+  function formatRecordingTime(s: number) {
+    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  async function handleStartRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = reader.result as string;
+          setSendingMedia(true);
+          try {
+            await sendMediaToGroup(group.id, base64, "audio", undefined, "audio.webm");
+            toast.success("Áudio enviado");
+          } catch (err: any) {
+            toast.error(err.message || "Erro ao enviar áudio");
+          } finally {
+            setSendingMedia(false);
+          }
+        };
+        reader.readAsDataURL(blob);
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
+    } catch {
+      toast.error("Não foi possível acessar o microfone");
+    }
+  }
+
+  function handleStopRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  }
+
+  function handleCancelRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.onstop = () => {
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      };
+      mediaRecorderRef.current.stop();
+    }
   }
 
   async function handleSendMessage() {
@@ -974,63 +1051,140 @@ export function GroupDetailClient({
         className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2"
         style={{ background: "var(--chat-input-bar-bg)" }}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
+        {/* Separate hidden file inputs */}
+        <input ref={imageInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
+        <input ref={audioFileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" className="hidden" onChange={handleFileSelect} />
+
         <div className="flex items-end gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-10 shrink-0 rounded-full hover:bg-transparent"
-            style={{ color: "var(--chat-header-fg)" }}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={sendingMedia}
-            title="Anexar mídia"
-          >
-            {sendingMedia ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <Paperclip className="size-5" />
-            )}
-          </Button>
-          <Textarea
-            ref={inputRef}
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
-            className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
-            style={{
-              background: "var(--chat-input-field-bg)",
-              color: "var(--chat-header-fg)",
-              border: "none",
-              boxShadow: "none",
-            }}
-            rows={1}
-            disabled={sendingMessage || sendingMedia}
-          />
-          <Button
-            size="icon"
-            onClick={handleSendMessage}
-            disabled={
-              sendingMessage || sendingMedia || (!attachedFile && !chatInput.trim())
-            }
-            className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
-            style={{
-              backgroundColor: "var(--chat-send-bg)",
-              color: "var(--chat-send-fg)",
-            }}
-          >
-            {sendingMessage ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Send className="size-4" />
-            )}
-          </Button>
+          {/* + structured menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={(
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-10 shrink-0 rounded-full hover:bg-transparent"
+                style={{ color: "var(--chat-header-fg)" }}
+                disabled={sendingMedia || isRecording}
+              />
+            )}>
+              {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top">
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+                <ImageIcon className="size-4" />
+                Foto / Vídeo
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => audioFileInputRef.current?.click()}>
+                <Mic className="size-4" />
+                Enviar áudio
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                <FileText className="size-4" />
+                Documento
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Emoji picker */}
+          <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+            <PopoverTrigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10 shrink-0 rounded-full hover:bg-transparent"
+                style={{ color: "var(--chat-header-fg)" }}
+                disabled={isRecording}
+              >
+                <Smile className="size-5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-auto p-0 border-0">
+              <EmojiPicker
+                onEmojiClick={(d) => {
+                  setChatInput((prev) => prev + d.emoji);
+                  setEmojiOpen(false);
+                  inputRef.current?.focus();
+                }}
+                width={320}
+                height={400}
+                searchPlaceholder="Buscar emoji..."
+                previewConfig={{ showPreview: false }}
+              />
+            </PopoverContent>
+          </Popover>
+
+          {/* Textarea or recording indicator */}
+          {isRecording ? (
+            <div
+              className="flex-1 flex items-center justify-between gap-2 rounded-lg px-4 py-[11px]"
+              style={{ background: "var(--chat-input-field-bg)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="size-2 rounded-full bg-destructive animate-pulse shrink-0" />
+                <span className="text-sm" style={{ color: "var(--chat-header-fg)" }}>
+                  Gravando {formatRecordingTime(recordingSeconds)}
+                </span>
+              </div>
+              <Button variant="ghost" size="icon-sm" className="size-6 shrink-0" onClick={handleCancelRecording}>
+                <X className="size-3" />
+              </Button>
+            </div>
+          ) : (
+            <Textarea
+              ref={inputRef}
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
+              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
+              style={{
+                background: "var(--chat-input-field-bg)",
+                color: "var(--chat-header-fg)",
+                border: "none",
+                boxShadow: "none",
+              }}
+              rows={1}
+              disabled={sendingMessage || sendingMedia}
+            />
+          )}
+
+          {/* Send / Stop recording / Mic button */}
+          {isRecording ? (
+            <Button
+              size="icon"
+              onClick={handleStopRecording}
+              className="size-10 shrink-0 rounded-full hover:opacity-90"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              <Square className="size-4 fill-current" />
+            </Button>
+          ) : chatInput.trim() || attachedFile ? (
+            <Button
+              size="icon"
+              onClick={handleSendMessage}
+              disabled={sendingMessage || sendingMedia}
+              className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              {sendingMessage ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Send className="size-4" />
+              )}
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              onClick={handleStartRecording}
+              className="size-10 shrink-0 rounded-full hover:opacity-90"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              <Mic className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 
