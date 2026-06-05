@@ -92,6 +92,7 @@ import {
   reactToGroupMessage,
   createLeadFromGroupParticipant,
 } from "@/actions/groups";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound } from "@/lib/hooks/use-notification";
 import { toast } from "sonner";
@@ -854,32 +855,36 @@ export function GroupDetailClient({
                     {/* Reaction + context menu — visible on hover */}
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
                       {msg.whatsapp_msg_id && (
-                        <DropdownMenu
-                          open={reactingMsgId === msg.id}
-                          onOpenChange={(o) => setReactingMsgId(o ? msg.id : null)}
-                        >
-                          <DropdownMenuTrigger
+                        <div className="relative">
+                          <button
+                            type="button"
                             className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
                             title="Reagir"
+                            onClick={() => setReactingMsgId(reactingMsgId === msg.id ? null : msg.id)}
                           >
                             <Smile className="size-4" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align={isOutbound ? "end" : "start"}
-                            className="flex gap-1 p-1.5 min-w-0"
-                          >
-                            {QUICK_REACTIONS.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => handleReact(msg, emoji)}
-                                className="text-lg hover:scale-125 transition-transform px-0.5"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          </button>
+                          {reactingMsgId === msg.id && (
+                            <div
+                              className={cn(
+                                "absolute bottom-full mb-1 z-30",
+                                "flex items-center rounded-full border border-border bg-background px-2 py-1.5 shadow-lg gap-0.5",
+                                isOutbound ? "right-0" : "left-0",
+                              )}
+                            >
+                              {QUICK_REACTIONS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => handleReact(msg, emoji)}
+                                  className="text-[20px] leading-none hover:scale-125 transition-transform px-0.5"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                       <DropdownMenu>
                         <DropdownMenuTrigger
