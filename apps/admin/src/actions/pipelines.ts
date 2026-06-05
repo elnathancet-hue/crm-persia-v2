@@ -45,6 +45,15 @@ export async function getPipelines() {
   }
 }
 
+export async function getAllStagesForOrg() {
+  try {
+    const { admin, orgId } = await requireSuperadminForOrg();
+    return await listStagesForOrg({ db: admin, orgId });
+  } catch {
+    return [];
+  }
+}
+
 export async function createPipeline(name: string) {
   try {
     const { admin, orgId } = await requireSuperadminForOrg();

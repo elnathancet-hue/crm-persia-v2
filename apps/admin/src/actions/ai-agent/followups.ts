@@ -3,10 +3,14 @@
 import { revalidatePath } from "next/cache";
 import {
   clampFollowupDelayHours,
+  FOLLOWUP_DEFAULT_SEND_WINDOW_END,
+  FOLLOWUP_DEFAULT_SEND_WINDOW_START,
   FOLLOWUP_MESSAGE_MAX_CHARS,
   FOLLOWUPS_MAX_PER_AGENT,
   FOLLOWUP_NAME_MAX_CHARS,
   FOLLOWUP_NAME_MIN_CHARS,
+  isValidFollowupWindow,
+  normalizeFollowupWindowTime,
   validateFollowupInput,
   type AgentFollowup,
   type CreateFollowupInput,
@@ -84,6 +88,13 @@ export async function createFollowup(
         delay_hours: clampFollowupDelayHours(input.delay_hours),
         is_enabled: input.is_enabled ?? true,
         order_index: nextOrder,
+        send_window_start: normalizeFollowupWindowTime(
+          input.send_window_start ?? FOLLOWUP_DEFAULT_SEND_WINDOW_START,
+        ),
+        send_window_end: normalizeFollowupWindowTime(
+          input.send_window_end ?? FOLLOWUP_DEFAULT_SEND_WINDOW_END,
+        ),
+        require_ai_active: true,
       })
       .select("*")
       .single();
@@ -172,6 +183,27 @@ export async function updateFollowup(
     if (input.delay_hours !== undefined) {
       updates.delay_hours = clampFollowupDelayHours(input.delay_hours);
     }
+
+    if (input.send_window_start !== undefined || input.send_window_end !== undefined) {
+      const start = normalizeFollowupWindowTime(
+        input.send_window_start ??
+          (existing as { send_window_start?: string | null }).send_window_start ??
+          FOLLOWUP_DEFAULT_SEND_WINDOW_START,
+      );
+      const end = normalizeFollowupWindowTime(
+        input.send_window_end ??
+          (existing as { send_window_end?: string | null }).send_window_end ??
+          FOLLOWUP_DEFAULT_SEND_WINDOW_END,
+      );
+      if (!isValidFollowupWindow(start, end)) {
+        throw new Error("A janela de envio deve ter inicio menor que o fim");
+      }
+      updates.send_window_start = start;
+      updates.send_window_end = end;
+    }
+
+    if (input.require_ai_active !== undefined) updates.require_ai_active = true;
+
     if (input.is_enabled !== undefined) updates.is_enabled = input.is_enabled;
     if (input.order_index !== undefined) updates.order_index = input.order_index;
 

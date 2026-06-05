@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   UsersRound,
-  Users,
   Kanban,
   Calendar,
   Zap,
@@ -49,17 +48,6 @@ export const clientNavigation: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Chat", href: "/chat", icon: MessageSquare, badge: true },
   { label: "Grupos", href: "/groups", icon: UsersRound },
-  {
-    label: "Leads",
-    href: "/leads",
-    icon: Users,
-    children: [
-      { label: "Base de Leads", href: "/leads" },
-      { label: "Tags", href: "/tags" },
-      { label: "Segmentacoes", href: "/segments" },
-      { label: "Campos Custom", href: "/leads/fields" },
-    ],
-  },
   { label: "CRM", href: "/crm", icon: Kanban },
   { label: "Agenda", href: "/agenda", icon: Calendar },
   {
@@ -67,13 +55,12 @@ export const clientNavigation: NavItem[] = [
     href: "/automations",
     icon: Zap,
     children: [
-      { label: "Agente IA Nativo", href: "/automations/agents" },
-      { label: "Assistentes IA", href: "/automations/assistant" },
-      { label: "Webhook IA", href: "/automations/webhook" },
-      { label: "Tools", href: "/automations/tools" },
+      { label: "Agente IA", href: "/automations/agents" },
+      { label: "Biblioteca de mídia", href: "/automations/tools" },
+      { label: "Tipos de agendamento", href: "/automations/appointments" },
     ],
   },
-  { label: "Campanhas", href: "/campaigns", icon: Megaphone },
+  { label: "Campanha", href: "/campaigns", icon: Megaphone },
   { label: "Relatorios", href: "/reports", icon: BarChart3 },
   { label: "Config", href: "/settings", icon: Settings },
 ];
@@ -81,6 +68,6 @@ export const clientNavigation: NavItem[] = [
 export const clientMobileItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Chat", href: "/chat", icon: MessageSquare },
-  { label: "Leads", href: "/leads", icon: Users },
+  { label: "Grupos", href: "/groups", icon: UsersRound },
   { label: "CRM", href: "/crm", icon: Kanban },
 ];

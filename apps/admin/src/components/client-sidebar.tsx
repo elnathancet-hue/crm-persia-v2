@@ -17,6 +17,27 @@ interface Org {
   services: Record<string, boolean> | null;
 }
 
+type OrgRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  plan: string | null;
+  services: unknown;
+};
+
+function toOrg(row: OrgRow): Org {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    plan: row.plan ?? "free",
+    services:
+      row.services && typeof row.services === "object" && !Array.isArray(row.services)
+        ? (row.services as Record<string, boolean>)
+        : null,
+  };
+}
+
 import { hashColor, getInitials } from "@/lib/utils";
 
 export function ClientSidebar() {
@@ -28,19 +49,13 @@ export function ClientSidebar() {
 
   useEffect(() => {
     getOrganizations().then((data) => {
-      setOrgs(data.map((o: any) => ({
-        id: o.id, name: o.name, category: o.category, plan: o.plan,
-        services: o.services,
-      })));
+      setOrgs(data.map((o: OrgRow) => toOrg(o)));
     });
   }, []);
 
   function refreshOrgs() {
     getOrganizations().then((data) => {
-      setOrgs(data.map((o: any) => ({
-        id: o.id, name: o.name, category: o.category, plan: o.plan,
-        services: o.services,
-      })));
+      setOrgs(data.map((o: OrgRow) => toOrg(o)));
     });
   }
 
@@ -332,10 +347,10 @@ function EditClientModal({ org, onSaved, onClose }: { org: Org; onSaved: () => v
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const serviceLabels: Record<string, string> = {
-    chat: "Assistente Virtual",
-    campaigns: "Disparo em Massa",
-    automations: "Fluxo de Automação",
-    leads: "Landing Page",
+    chat: "Chat",
+    campaigns: "Campanha",
+    automations: "Automação",
+    leads: "Leads",
     crm: "CRM",
     groups: "Grupos WhatsApp",
     reports: "Relatórios",
