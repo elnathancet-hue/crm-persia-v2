@@ -1427,15 +1427,56 @@ export async function getLeadGroups(leadId: string) {
   const { supabase, orgId } = await requireRole("agent");
   const db = supabase as any;
 
-  // Fetch memberships + group data (left_at adicionado na migration 081)
-  const { data: memberships, error } = await db
+  const MEMBERSHIP_SELECT = "id, group_id, joined_at, left_at, source, utm_source, whatsapp_groups(name)";
+
+  // Primary: by lead_id (fast path)
+  const { data: byLeadId, error } = await db
     .from("group_memberships")
-    .select("id, group_id, joined_at, left_at, source, utm_source, whatsapp_groups(name)")
+    .select(MEMBERSHIP_SELECT)
     .eq("organization_id", orgId)
     .eq("lead_id", leadId)
     .order("joined_at", { ascending: false });
 
   if (error) throw new Error(error.message);
+
+  let memberships = byLeadId as any[] | null;
+
+  // Fallback: memberships com lead_id=NULL mas phone bate com este lead.
+  // Acontece quando o membro entrou antes de syncGroups vincular lead_ids.
+  // Vincula lazily e retorna os dados.
+  if (!memberships || memberships.length === 0) {
+    const { data: leadRow } = await supabase
+      .from("leads")
+      .select("phone")
+      .eq("id", leadId)
+      .eq("organization_id", orgId)
+      .single();
+
+    const phone = (leadRow as { phone?: string | null } | null)?.phone;
+    if (phone) {
+      const variants = generatePhoneVariants(phone);
+      const { data: byPhone } = await db
+        .from("group_memberships")
+        .select(MEMBERSHIP_SELECT)
+        .eq("organization_id", orgId)
+        .in("phone", variants)
+        .is("lead_id", null)
+        .order("joined_at", { ascending: false });
+
+      if (byPhone && (byPhone as any[]).length > 0) {
+        const ids = (byPhone as any[]).map((m) => m.id as string);
+        // Vincula lazily — ignora erro (best-effort)
+        await db
+          .from("group_memberships")
+          .update({ lead_id: leadId })
+          .eq("organization_id", orgId)
+          .in("id", ids)
+          .catch(() => {});
+        memberships = byPhone as any[];
+      }
+    }
+  }
+
   if (!memberships || memberships.length === 0) return [];
 
   const groupIds: string[] = memberships.map((m: any) => m.group_id as string);
