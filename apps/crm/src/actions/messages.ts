@@ -1007,15 +1007,19 @@ export async function pinWhatsAppMessage(
   }
 }
 
+export type AdvancedMessagePayload =
+  | { type: "location"; data: { latitude: number; longitude: number; name?: string } }
+  | { type: "contact"; data: { fullName: string; phoneNumber: string } }
+  | { type: "pix"; data: { pixKey: string; pixName?: string; pixType: "CPF" | "CNPJ" | "PHONE" | "EMAIL" | "EVP" } }
+  | { type: "payment"; data: { amount: number; pixKey: string } }
+  | { type: "location_button"; data: { text: string } };
+
 /**
  * Envia uma mensagem interativa (Location, Contact, Pix, Payment, LocationButton)
  */
 export async function sendAdvancedMessageViaWhatsApp(
   conversationId: string,
-  payload: {
-    type: "location" | "contact" | "pix" | "payment" | "location_button";
-    data: any; // specific data based on type
-  }
+  payload: AdvancedMessagePayload
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
 

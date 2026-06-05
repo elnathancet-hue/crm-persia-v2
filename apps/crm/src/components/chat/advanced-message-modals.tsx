@@ -11,13 +11,13 @@ import {
 } from "@persia/ui/dialog";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
-import { sendAdvancedMessageViaWhatsApp } from "@/actions/messages";
+import { sendAdvancedMessageViaWhatsApp, type AdvancedMessagePayload } from "@/actions/messages";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 type ModalsProps = {
   conversationId: string;
-  type: "location" | "contact" | "pix" | "payment" | "location_button" | null;
+  type: AdvancedMessagePayload["type"] | null;
   onClose: () => void;
   onSent: (msg: any) => void;
 };
@@ -38,31 +38,28 @@ export function AdvancedMessageModals({ conversationId, type, onClose, onSent }:
     if (!type) return;
 
     setSending(true);
-    let payloadData: any = {};
 
     try {
+      let fullPayload: AdvancedMessagePayload;
       switch (type) {
         case "location":
-          payloadData = { latitude: parseFloat(latitude), longitude: parseFloat(longitude), name };
+          fullPayload = { type: "location", data: { latitude: parseFloat(latitude), longitude: parseFloat(longitude), name: name || undefined } };
           break;
         case "contact":
-          payloadData = { fullName: name, phoneNumber: phone };
+          fullPayload = { type: "contact", data: { fullName: name, phoneNumber: phone } };
           break;
         case "pix":
-          payloadData = { pixKey, pixName: name, pixType: "EVP" }; // simplification
+          fullPayload = { type: "pix", data: { pixKey, pixName: name || undefined, pixType: "EVP" } };
           break;
         case "payment":
-          payloadData = { amount: parseFloat(amount), pixKey };
+          fullPayload = { type: "payment", data: { amount: parseFloat(amount), pixKey } };
           break;
         case "location_button":
-          payloadData = { text: name };
+          fullPayload = { type: "location_button", data: { text: name } };
           break;
       }
 
-      const { data, error } = await sendAdvancedMessageViaWhatsApp(conversationId, {
-        type,
-        data: payloadData,
-      });
+      const { data, error } = await sendAdvancedMessageViaWhatsApp(conversationId, fullPayload);
 
       if (data) {
         onSent(data);
@@ -100,16 +97,16 @@ export function AdvancedMessageModals({ conversationId, type, onClose, onSent }:
             <>
               <div className="grid gap-2">
                 <Label>Nome do local (Opcional)</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} />
+                <Input name="location_name" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Latitude</Label>
-                  <Input required value={latitude} onChange={(e) => setLatitude(e.target.value)} type="number" step="any" />
+                  <Input name="latitude" required value={latitude} onChange={(e) => setLatitude(e.target.value)} type="number" step="any" />
                 </div>
                 <div className="grid gap-2">
                   <Label>Longitude</Label>
-                  <Input required value={longitude} onChange={(e) => setLongitude(e.target.value)} type="number" step="any" />
+                  <Input name="longitude" required value={longitude} onChange={(e) => setLongitude(e.target.value)} type="number" step="any" />
                 </div>
               </div>
             </>
@@ -119,11 +116,11 @@ export function AdvancedMessageModals({ conversationId, type, onClose, onSent }:
             <>
               <div className="grid gap-2">
                 <Label>Nome completo</Label>
-                <Input required value={name} onChange={(e) => setName(e.target.value)} />
+                <Input name="contact_name" required value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="grid gap-2">
                 <Label>Telefone</Label>
-                <Input required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ex: 5511999999999" />
+                <Input name="contact_phone" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ex: 5511999999999" />
               </div>
             </>
           )}
@@ -133,17 +130,17 @@ export function AdvancedMessageModals({ conversationId, type, onClose, onSent }:
               {type === "payment" && (
                 <div className="grid gap-2">
                   <Label>Valor (R$)</Label>
-                  <Input required value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" />
+                  <Input name="amount" required value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" />
                 </div>
               )}
               <div className="grid gap-2">
                 <Label>Chave PIX</Label>
-                <Input required value={pixKey} onChange={(e) => setPixKey(e.target.value)} />
+                <Input name="pix_key" required value={pixKey} onChange={(e) => setPixKey(e.target.value)} />
               </div>
               {type === "pix" && (
                 <div className="grid gap-2">
                   <Label>Nome do Beneficiário (Opcional)</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} />
+                  <Input name="pix_name" value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
               )}
             </>
@@ -152,7 +149,7 @@ export function AdvancedMessageModals({ conversationId, type, onClose, onSent }:
           {type === "location_button" && (
             <div className="grid gap-2">
               <Label>Texto do botão</Label>
-              <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Enviar minha localização" />
+              <Input name="location_button_text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Enviar minha localização" />
             </div>
           )}
 

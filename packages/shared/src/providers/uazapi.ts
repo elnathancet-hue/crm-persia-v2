@@ -132,13 +132,14 @@ export class UazapiAdapter implements WhatsAppProvider {
   }
 
   async sendLocation(opts: SendLocationOptions): Promise<MessageResult> {
-    const result = await this.client.sendLocation({
-      phone: opts.phone,
+    const result = await this.client.sendLocationV2({
+      number: opts.phone,
       latitude: opts.latitude,
       longitude: opts.longitude,
       name: opts.name,
     });
-    return { messageId: result.MessageId, success: true };
+    const id = result.messageId || result.MessageId || "";
+    return { messageId: String(id), success: true };
   }
 
   async sendButtons(opts: SendButtonsOptions): Promise<MessageResult> {
@@ -236,6 +237,7 @@ export class UazapiAdapter implements WhatsAppProvider {
     await this.client.sendPresence({
       number: opts.phone,
       presence: opts.presence,
+      delay: opts.delay,
     });
   }
 

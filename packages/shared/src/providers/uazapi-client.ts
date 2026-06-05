@@ -151,6 +151,7 @@ interface MarkReadParams {
 interface PresenceParams {
   number: string;
   presence: "composing" | "recording" | "paused";
+  delay?: number; // ms, max 300000 (5 min). Controls how long presence stays active.
 }
 
 interface FindMessagesParams {
