@@ -1441,9 +1441,9 @@ export async function getLeadGroups(leadId: string) {
 
   let memberships = byLeadId as any[] | null;
 
-  // Fallback: memberships com lead_id=NULL mas phone bate com este lead.
-  // Acontece quando o membro entrou antes de syncGroups vincular lead_ids.
-  // Vincula lazily e retorna os dados.
+  // Fallback: busca por phone do lead, independente de lead_id armazenado.
+  // Cobre 3 cenários: (a) lead_id=NULL (entrou antes do sync), (b) lead_id
+  // aponta para outro lead (duplicata), (c) phone sem normalização E.164.
   if (!memberships || memberships.length === 0) {
     const { data: leadRow } = await supabase
       .from("leads")
@@ -1452,26 +1452,32 @@ export async function getLeadGroups(leadId: string) {
       .eq("organization_id", orgId)
       .single();
 
-    const phone = (leadRow as { phone?: string | null } | null)?.phone;
-    if (phone) {
-      const variants = generatePhoneVariants(phone);
+    const rawPhone = (leadRow as { phone?: string | null } | null)?.phone;
+    if (rawPhone) {
+      // Normaliza para E.164 antes de gerar variantes (ex: "5511..." → "+5511...")
+      const e164 = normalizePhoneBR(rawPhone) ?? rawPhone;
+      const variants = generatePhoneVariants(e164);
+
       const { data: byPhone } = await db
         .from("group_memberships")
         .select(MEMBERSHIP_SELECT)
         .eq("organization_id", orgId)
         .in("phone", variants)
-        .is("lead_id", null)
         .order("joined_at", { ascending: false });
 
       if (byPhone && (byPhone as any[]).length > 0) {
-        const ids = (byPhone as any[]).map((m) => m.id as string);
-        // Vincula lazily — ignora erro (best-effort)
-        await db
-          .from("group_memberships")
-          .update({ lead_id: leadId })
-          .eq("organization_id", orgId)
-          .in("id", ids)
-          .catch(() => {});
+        // Vincula lazily apenas os que ainda não têm lead_id (best-effort)
+        const unlinkedIds = (byPhone as any[])
+          .filter((m) => m.lead_id == null)
+          .map((m) => m.id as string);
+        if (unlinkedIds.length > 0) {
+          await db
+            .from("group_memberships")
+            .update({ lead_id: leadId })
+            .eq("organization_id", orgId)
+            .in("id", unlinkedIds)
+            .catch(() => {});
+        }
         memberships = byPhone as any[];
       }
     }
