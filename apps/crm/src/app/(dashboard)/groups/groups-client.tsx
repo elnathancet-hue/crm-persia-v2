@@ -583,7 +583,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
     `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
   return (
-    <div className="flex items-center gap-2.5 min-w-[200px] max-w-[240px] px-2.5 py-1.5">
+    <div className="flex items-center gap-2.5 w-full px-2.5 py-1.5">
       <button
         type="button"
         onClick={togglePlay}
@@ -1476,9 +1476,9 @@ function GroupChatPanel({
                           </a>
                         )}
                         {msg.media_url && msg.media_type === "image" && (
-                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="block">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
+                            <img src={msg.media_url} alt="" className="block w-full max-h-[280px] object-cover" />
                           </a>
                         )}
                         {!msg.media_url && msg.media_type === "image" && (
@@ -1497,7 +1497,7 @@ function GroupChatPanel({
                           </div>
                         )}
                         {msg.media_url && msg.media_type === "video" && (
-                          <video controls className="max-h-64 rounded-xl mb-1 max-w-[280px]">
+                          <video controls className="block w-full max-h-[280px]">
                             <source src={msg.media_url} />
                           </video>
                         )}

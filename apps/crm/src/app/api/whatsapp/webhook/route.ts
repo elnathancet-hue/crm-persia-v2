@@ -342,6 +342,23 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Download media for group messages — same as individual pipeline.
+        // UAZAPI does not include fileURL in the webhook payload.
+        const isGroupMedia = msg.type && msg.type !== "text" && msg.type !== "sticker";
+        if (isGroupMedia && !msg.mediaUrl && msg.messageId) {
+          try {
+            const isAudio = msg.type === "audio";
+            const dl = await provider.downloadMedia(msg.messageId, {
+              transcribe: isAudio,
+              generateMp3: isAudio,
+            });
+            if (dl.fileURL) msg.mediaUrl = dl.fileURL;
+            if (isAudio && dl.transcription) msg.text = dl.transcription;
+          } catch {
+            // best-effort: message is saved without media_url
+          }
+        }
+
         await supabase.from("group_messages").insert({
           organization_id: matchedConn.organization_id,
           group_id: grp.id,
@@ -356,7 +373,7 @@ export async function POST(request: NextRequest) {
           sender_avatar_url: senderAvatarUrl,
           whatsapp_msg_id: msg.messageId || null,
           media_type: msg.type && msg.type !== "text" ? msg.type : null,
-          media_url: (msg as any).mediaUrl || null,
+          media_url: msg.mediaUrl || null,
           created_at: messageCreatedAt,
         } as never);
 
