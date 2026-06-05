@@ -25,6 +25,7 @@ import {
   Settings,
   ShieldCheck,
   Smile,
+  Square,
   Trash2,
   Users,
   UserCircle,
@@ -98,6 +99,8 @@ import {
   type GroupLeadMember,
 } from "@/actions/groups";
 import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
+import { cn } from "@/lib/utils";
+import { useNotificationSound } from "@/lib/hooks/use-notification";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
@@ -153,7 +156,7 @@ interface GroupMessage {
   sender_lead?: GroupMessageSenderLead | null;
 }
 
-const QUICK_REACTIONS = ["ðŸ‘", "â¤ï¸", "ðŸ˜‚", "ðŸ˜®", "ðŸ˜¢", "ðŸ™", "ðŸ”¥", "ðŸ‘"];
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "💪"];
 
 const SENDER_COLORS = [
   { bg: "#ec4899", fg: "#ffffff" },
@@ -564,9 +567,17 @@ function GroupChatPanel({
   const [aiPrompt, setAiPrompt] = React.useState("");
   const [aiDraft, setAiDraft] = React.useState("");
   const [aiLoading, setAiLoading] = React.useState(false);
+  const [isRecording, setIsRecording] = React.useState(false);
+  const [recordingSeconds, setRecordingSeconds] = React.useState(0);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
+  const audioFileInputRef = React.useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const audioChunksRef = React.useRef<Blob[]>([]);
+  const recordingTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { play: playNotification } = useNotificationSound();
 
   // Settings sheet state
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -683,6 +694,7 @@ function GroupChatPanel({
               if (prev.some((m) => m.id === message.id)) return prev;
               return [...prev, message];
             });
+            if (message.direction === "inbound") playNotification();
           });
           // NÃ£o dispara toast aqui â€" o grupo estÃ¡ aberto e o usuÃ¡rio vÃª a mensagem
           // em tempo real. O toast para grupos nÃ£o selecionados Ã© gerenciado pelo
@@ -725,6 +737,64 @@ function GroupChatPanel({
       setReplyTo(replyingTo);
     } finally {
       setSendingMessage(false);
+    }
+  }
+
+  function formatRecordingTime(s: number) {
+    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  async function handleStartRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64 = reader.result as string;
+          setSendingMedia(true);
+          try {
+            await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
+            toast.success("\u00C1udio enviado");
+          } catch (err: any) {
+            toast.error(err.message || "Erro ao enviar \u00E1udio");
+          } finally {
+            setSendingMedia(false);
+          }
+        };
+        reader.readAsDataURL(blob);
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
+    } catch {
+      toast.error("N\u00E3o foi poss\u00EDvel acessar o microfone");
+    }
+  }
+
+  function handleStopRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  }
+
+  function handleCancelRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.onstop = () => {
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setIsRecording(false);
+        setRecordingSeconds(0);
+      };
+      mediaRecorderRef.current.stop();
     }
   }
 
@@ -1163,32 +1233,36 @@ function GroupChatPanel({
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
                       {/* Quick emoji reactions */}
                       {msg.whatsapp_msg_id && (
-                        <DropdownMenu
-                          open={reactingMsgId === msg.id}
-                          onOpenChange={(o) => setReactingMsgId(o ? msg.id : null)}
-                        >
-                          <DropdownMenuTrigger
+                        <div className="relative">
+                          <button
+                            type="button"
                             className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
                             title="Reagir"
+                            onClick={() => setReactingMsgId(reactingMsgId === msg.id ? null : msg.id)}
                           >
                             <Smile className="size-4" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align={isOutbound ? "end" : "start"}
-                            className="flex gap-1 p-1.5 min-w-0"
-                          >
-                            {QUICK_REACTIONS.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => handleReact(msg, emoji)}
-                                className="text-lg hover:scale-125 transition-transform px-0.5"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          </button>
+                          {reactingMsgId === msg.id && (
+                            <div
+                              className={cn(
+                                "absolute bottom-full mb-1 z-30",
+                                "flex items-center rounded-full border border-border bg-background px-2 py-1.5 shadow-lg gap-0.5",
+                                isOutbound ? "right-0" : "left-0",
+                              )}
+                            >
+                              {QUICK_REACTIONS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => handleReact(msg, emoji)}
+                                  className="text-[20px] leading-none hover:scale-125 transition-transform px-0.5"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                       {/* Context menu */}
                       <DropdownMenu>
@@ -1417,41 +1491,28 @@ function GroupChatPanel({
         )}
 
         {/* Hidden file inputs */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
+        <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" className="hidden" onChange={handleFileSelect} />
+        <input ref={imageInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
+        <input ref={audioFileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleFileSelect} />
         <div className="flex items-end gap-1">
           <DropdownMenu>
-            <DropdownMenuTrigger render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-10 shrink-0 rounded-full hover:bg-transparent"
-                style={{ color: "var(--chat-header-fg)" }}
-                disabled={sendingMedia}
-                title="Mais opcoes"
-                aria-label="Mais opcoes"
-              />
-            }>
+            <DropdownMenuTrigger
+              className="size-10 shrink-0 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors disabled:opacity-50"
+              style={{ color: "var(--chat-header-fg)" }}
+              disabled={sendingMedia || isRecording}
+            >
               {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start">
               <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
                 <Image className="size-4 text-primary" />
-                Fotos e videos
+                Foto / {"\u0056\u00ED"}deo
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => audioFileInputRef.current?.click()}>
+                <Mic className="size-4 text-muted-foreground" />
+                Enviar {"\u00E1"}udio
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                 <Paperclip className="size-4 text-muted-foreground" />
                 Documento
@@ -1473,32 +1534,71 @@ function GroupChatPanel({
             title="Emoji"
             aria-label="Emoji"
             onClick={() => setChatInput((current) => `${current}\u{1F642}`)}
-            disabled={sendingMessage || sendingMedia}
+            disabled={isRecording || sendingMessage || sendingMedia}
           >
             <Smile className="size-4" />
           </Button>
-          <Textarea
-            name="group-message"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
-            }}
-            placeholder="Digite uma mensagem..."
-            className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
-            style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none", boxShadow: "none" }}
-            rows={1}
-            disabled={sendingMessage || sendingMedia}
-          />
-          <Button
-            size="icon"
-            onClick={handleSendMessage}
-            disabled={sendingMessage || sendingMedia || !chatInput.trim()}
-            className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
-            style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
-          >
-            {sendingMessage ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          </Button>
+
+          {isRecording ? (
+            <div
+              className="flex-1 flex items-center justify-between gap-2 rounded-lg px-4 py-[11px]"
+              style={{ background: "var(--chat-input-field-bg)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="size-2 rounded-full bg-destructive animate-pulse shrink-0" />
+                <span className="text-sm" style={{ color: "var(--chat-header-fg)" }}>
+                  Gravando {formatRecordingTime(recordingSeconds)}
+                </span>
+              </div>
+              <Button variant="ghost" size="icon-sm" className="size-6 shrink-0" onClick={handleCancelRecording}>
+                <X className="size-3" />
+              </Button>
+            </div>
+          ) : (
+            <Textarea
+              name="group-message"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+              }}
+              placeholder="Digite uma mensagem..."
+              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
+              style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none", boxShadow: "none" }}
+              rows={1}
+              disabled={sendingMessage || sendingMedia}
+            />
+          )}
+
+          {isRecording ? (
+            <Button
+              size="icon"
+              onClick={handleStopRecording}
+              className="size-10 shrink-0 rounded-full hover:opacity-90"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              <Square className="size-4 fill-current" />
+            </Button>
+          ) : chatInput.trim() ? (
+            <Button
+              size="icon"
+              onClick={handleSendMessage}
+              disabled={sendingMessage || sendingMedia}
+              className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              {sendingMessage ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              onClick={handleStartRecording}
+              className="size-10 shrink-0 rounded-full hover:opacity-90"
+              style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
+            >
+              <Mic className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 
