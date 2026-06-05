@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Copy,
   ExternalLink,
+  EyeOff,
   File,
   FileText,
   FileVideo,
@@ -22,6 +23,7 @@ import {
   Mic,
   MoreHorizontal,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -83,6 +85,7 @@ import {
   sendMessageToGroup,
   sendMediaToGroup,
   deleteGroupMessage,
+  editGroupMessage,
   reactToGroupMessage,
   createLeadFromGroupParticipant,
 } from "@/actions/groups";
@@ -300,6 +303,8 @@ export function GroupDetailClient({
   const [sendingMedia, setSendingMedia] = React.useState(false);
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = React.useState(false);
+  const [editingMsgId, setEditingMsgId] = React.useState<string | null>(null);
+  const [editText, setEditText] = React.useState("");
   const [isRecording, setIsRecording] = React.useState(false);
   const [recordingSeconds, setRecordingSeconds] = React.useState(0);
 
@@ -583,6 +588,29 @@ export function GroupDetailClient({
     }
   }
 
+  function handleStartEdit(msg: GroupMessage) {
+    setEditingMsgId(msg.id);
+    setEditText(msg.text ?? "");
+  }
+
+  async function handleConfirmEdit(msg: GroupMessage) {
+    const text = editText.trim();
+    if (!text || !msg.whatsapp_msg_id) { setEditingMsgId(null); return; }
+    try {
+      await editGroupMessage(group.id, msg.id, msg.whatsapp_msg_id, text);
+      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, text } : m));
+      toast.success("Mensagem editada");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao editar");
+    } finally {
+      setEditingMsgId(null);
+    }
+  }
+
+  function handleHideMessage(msgId: string) {
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+  }
+
   function handleReply(msg: GroupMessage) {
     setReplyTo(msg);
     inputRef.current?.focus();
@@ -785,6 +813,12 @@ export function GroupDetailClient({
                               Copiar
                             </DropdownMenuItem>
                           )}
+                          {isOutbound && msg.text && msg.whatsapp_msg_id && (
+                            <DropdownMenuItem onClick={() => handleStartEdit(msg)}>
+                              <Pencil className="size-4" />
+                              Editar
+                            </DropdownMenuItem>
+                          )}
                           {!isOutbound && (msg.sender_lead_id || msg.sender_phone) && (
                             <DropdownMenuSeparator />
                           )}
@@ -822,12 +856,16 @@ export function GroupDetailClient({
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleHideMessage(msg.id)}>
+                            <EyeOff className="size-4" />
+                            Apagar para mim
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
                             onClick={() => handleDeleteMessage(msg)}
                           >
                             <Trash2 className="size-4" />
-                            Apagar
+                            Apagar para todos
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -960,10 +998,30 @@ export function GroupDetailClient({
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={msg.media_url} alt="Sticker" className="size-28 object-contain p-1" />
                         )}
-                        {/* Text / caption */}
+                        {/* Text / caption / inline edit */}
                         <div className="px-2.5 py-1.5 text-[14.2px] leading-5">
-                          {msg.text && msg.media_type !== "document" && (
-                            <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                          {editingMsgId === msg.id ? (
+                            <div className="flex flex-col gap-1">
+                              <textarea
+                                autoFocus
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleConfirmEdit(msg); }
+                                  if (e.key === "Escape") setEditingMsgId(null);
+                                }}
+                                rows={2}
+                                className="w-full resize-none rounded bg-black/10 px-2 py-1 text-[14px] leading-5 outline-none"
+                              />
+                              <div className="flex justify-end gap-1">
+                                <button type="button" onClick={() => setEditingMsgId(null)} className="text-[11px] opacity-60 hover:opacity-90 px-2">Cancelar</button>
+                                <button type="button" onClick={() => handleConfirmEdit(msg)} className="text-[11px] font-medium hover:opacity-80 px-2">Salvar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            msg.text && msg.media_type !== "document" && (
+                              <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                            )
                           )}
                           <span
                             className="text-[10px] float-right ml-2 mt-1"

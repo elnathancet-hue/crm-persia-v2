@@ -964,6 +964,35 @@ export async function reactToGroupMessage(
   await provider.reactToMessage(group.group_jid, whatsappMsgId, emoji);
 }
 
+// ---- Edit group message ----
+export async function editGroupMessage(
+  groupId: string,
+  messageId: string,
+  whatsappMsgId: string,
+  newText: string,
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  const { data: group } = await supabase
+    .from("whatsapp_groups")
+    .select("group_jid")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!group) throw new Error("Grupo não encontrado");
+
+  const provider = await getProvider(supabase, orgId);
+  await provider.editMessage(group.group_jid, whatsappMsgId, newText);
+
+  await db
+    .from("group_messages")
+    .update({ text: newText })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+}
+
 export async function getGroupMessages(groupId: string, limit = 50) {
   const { supabase, orgId } = await requireRole("agent");
 
