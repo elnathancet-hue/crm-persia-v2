@@ -35,6 +35,7 @@ export type Message = {
   whatsapp_msg_id: string | null;
   status: string;
   metadata: unknown;
+  is_pinned?: boolean;
   created_at: string;
 };
 
@@ -976,7 +977,7 @@ export async function pinWhatsAppMessage(
 
   const { data: msg } = await supabase
     .from("messages")
-    .select("whatsapp_msg_id, conversations(channel, organization_id)")
+    .select("whatsapp_msg_id, conversation_id, conversations(channel, organization_id)")
     .eq("id", messageId)
     .eq("organization_id", orgId)
     .single();
@@ -1001,10 +1002,28 @@ export async function pinWhatsAppMessage(
   try {
     const client = new UazapiClient({ baseUrl: connection.instance_url, token: connection.instance_token });
     await client.pinMessage(msg.whatsapp_msg_id, pin, duration);
-    return {};
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Erro ao fixar mensagem" };
   }
+
+  // Persist pin state locally so the banner can read it.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+  if (pin) {
+    // Unpin any previously pinned message in this conversation first
+    await db
+      .from("messages")
+      .update({ is_pinned: false })
+      .eq("conversation_id", msg.conversation_id)
+      .eq("organization_id", orgId);
+  }
+  await db
+    .from("messages")
+    .update({ is_pinned: pin })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+
+  return {};
 }
 
 export type AdvancedMessagePayload =

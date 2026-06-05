@@ -704,6 +704,16 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
 
+  const handlePinMessage = useCallback(async (msgId: string, pin: boolean) => {
+    const result = await pinWhatsAppMessage(msgId, pin);
+    if (result.error) { toast.error(result.error); return; }
+    toast.success(pin ? "Mensagem fixada" : "Mensagem desafixada");
+    setMessages((prev) => prev.map((m) => ({
+      ...m,
+      is_pinned: pin ? m.id === msgId : (m.id === msgId ? false : m.is_pinned),
+    })));
+  }, []);
+
   const handleRetry = useCallback(async (messageId: string) => {
     setRetryingIds((prev) => {
       if (prev.has(messageId)) return prev;
@@ -1084,6 +1094,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     (lead?.name as string | undefined),
   );
   const leadTags = getLeadTags(lead);
+  const pinnedMessage = messages.find((m) => m.is_pinned) ?? null;
+
   const normalizedMessageSearch = messageSearch.trim().toLowerCase();
   const visibleMessages = normalizedMessageSearch
     ? messages.filter((message) =>
@@ -1353,6 +1365,35 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         </div>
       </div>
 
+      {/* Pinned message banner */}
+      {pinnedMessage && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-1.5" style={{ background: "var(--chat-header-bg)" }}>
+          <div className="w-0.5 self-stretch rounded-full bg-primary shrink-0" />
+          <Pin className="size-3.5 shrink-0 text-primary" />
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
+            onClick={() => {
+              const el = document.querySelector(`[data-msg-id="${pinnedMessage.id}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >
+            <p className="text-[11px] font-semibold text-primary">Mensagem fixada</p>
+            <p className="truncate text-xs text-muted-foreground">{pinnedMessage.content || "Mídia"}</p>
+          </button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-6 shrink-0"
+            aria-label="Desafixar"
+            onClick={() => handlePinMessage(pinnedMessage.id, false)}
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
+
       {/* Messages - WhatsApp style with subtle pattern background */}
       <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-2 sm:px-3">
         <div className="flex flex-col py-4">
@@ -1388,7 +1429,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 : "mt-2";
 
             return (
-              <div key={msg.id} className={spacingClass}>
+              <div key={msg.id} data-msg-id={msg.id} className={spacingClass}>
                 {/* Date separator */}
                 {showDateSeparator && (
                   <div className="flex items-center justify-center py-3">
@@ -1475,14 +1516,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={async () => {
-                                  const result = await pinWhatsAppMessage(msg.id);
-                                  if (result.error) toast.error(result.error);
-                                  else toast.success("Mensagem fixada");
-                                }}
+                                onClick={() => handlePinMessage(msg.id, !msg.is_pinned)}
                               >
                                 <Pin className="size-4" />
-                                Fixar
+                                {msg.is_pinned ? "Desafixar" : "Fixar"}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => startEdit(msg.id, msg.content || "")}
@@ -1638,6 +1675,16 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                     : { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
                               }
                             >
+                              {msg.media_url && msg.type === "sticker" && (
+                                <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={msg.media_url}
+                                    alt="Sticker"
+                                    className="size-28 object-contain"
+                                  />
+                                </a>
+                              )}
                               {msg.media_url && msg.type === "image" && (
                                 <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}

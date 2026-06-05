@@ -103,6 +103,7 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const {
     isMeta,
@@ -510,6 +511,13 @@ export function MessageInput({
           accept="image/*"
           onChange={handleFileSelect}
         />
+        <input
+          ref={audioInputRef}
+          type="file"
+          className="hidden"
+          accept="audio/*"
+          onChange={handleFileSelect}
+        />
 
         {/* + menu — Fotos/Docs/IA/Template (estilo WhatsApp) */}
         <DropdownMenu>
@@ -533,6 +541,10 @@ export function MessageInput({
             <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
               <Paperclip className="size-4 text-muted-foreground" />
               Documento
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => audioInputRef.current?.click()}>
+              <Mic className="size-4 text-success" />
+              Enviar áudio
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setAiOpen(true)}>
