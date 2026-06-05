@@ -7,6 +7,16 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  transpilePackages: [
+    "@persia/shared",
+    "@persia/ui",
+    "@persia/crm-ui",
+    "@persia/leads-ui",
+    "@persia/ai-agent-ui",
+    "@persia/tags-ui",
+    "@persia/segments-ui",
+    "@persia/agenda-ui",
+  ],
   experimental: {
     // Fix mai/2026 — Biblioteca de midia (/automations/tools) usa
     // Server Action com FormData pra subir arquivos pro Supabase

@@ -23,6 +23,15 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },
+  transpilePackages: [
+    "@persia/shared",
+    "@persia/ui",
+    "@persia/ai-agent-ui",
+    "@persia/leads-ui",
+    "@persia/tags-ui",
+    "@persia/segments-ui",
+    "@persia/agenda-ui",
+  ],
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",

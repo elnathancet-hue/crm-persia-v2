@@ -111,26 +111,51 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
 
   const groupIds = (groups as { id: string }[]).map((g) => g.id);
 
-  // Get memberships linked to leads — só membros ativos (left_at IS NULL).
-  // Ex-membros não devem inflar identified_leads nem duplicates.
-  const { data: memberships } = await db
-    .from("group_memberships")
-    .select("group_id, lead_id")
-    .eq("organization_id", orgId)
-    .in("group_id", groupIds)
-    .not("lead_id", "is", null)
-    .is("left_at", null);
+  // As 4 queries abaixo são independentes (só precisam de groupIds).
+  // Rodam em paralelo para reduzir latência total de ~4× roundtrip → 1×.
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [
+    { data: memberships },
+    { data: unidentifiedMemberships },
+    { data: inboundMsgs },
+    { data: recentExits },
+  ] = await Promise.all([
+    // Memberships vinculadas a leads — só membros ativos (left_at IS NULL).
+    // Ex-membros não devem inflar identified_leads nem duplicates.
+    db
+      .from("group_memberships")
+      .select("group_id, lead_id")
+      .eq("organization_id", orgId)
+      .in("group_id", groupIds)
+      .not("lead_id", "is", null)
+      .is("left_at", null),
+    // Não identificados e LID: membros ativos sem lead
+    db
+      .from("group_memberships")
+      .select("group_id, phone")
+      .eq("organization_id", orgId)
+      .in("group_id", groupIds)
+      .is("lead_id", null)
+      .is("left_at", null),
+    // Engajados: membros com pelo menos 1 msg inbound (distinct sender_jid por grupo)
+    db
+      .from("group_messages")
+      .select("group_id, sender_jid")
+      .eq("organization_id", orgId)
+      .in("group_id", groupIds)
+      .eq("direction", "inbound")
+      .not("sender_jid", "is", null),
+    // Saídas recentes: left_at nos últimos 7 dias
+    db
+      .from("group_memberships")
+      .select("group_id")
+      .eq("organization_id", orgId)
+      .in("group_id", groupIds)
+      .gte("left_at", sevenDaysAgo),
+  ]);
 
   const allMemberships = (memberships || []) as { group_id: string; lead_id: string }[];
-
-  // Não identificados e LID: membros ativos sem lead
-  const { data: unidentifiedMemberships } = await db
-    .from("group_memberships")
-    .select("group_id, phone")
-    .eq("organization_id", orgId)
-    .in("group_id", groupIds)
-    .is("lead_id", null)
-    .is("left_at", null);
 
   const unidentifiedByGroup = new Map<string, number>();
   const lidByGroup = new Map<string, number>();
@@ -142,29 +167,11 @@ export async function getGroupsOverview(): Promise<GroupOverview[]> {
     }
   }
 
-  // Engajados: membros com pelo menos 1 msg inbound (distinct sender_jid por grupo)
-  const { data: inboundMsgs } = await db
-    .from("group_messages")
-    .select("group_id, sender_jid")
-    .eq("organization_id", orgId)
-    .in("group_id", groupIds)
-    .eq("direction", "inbound")
-    .not("sender_jid", "is", null);
-
   const engagedByGroup = new Map<string, Set<string>>();
   for (const m of (inboundMsgs || []) as { group_id: string; sender_jid: string }[]) {
     if (!engagedByGroup.has(m.group_id)) engagedByGroup.set(m.group_id, new Set());
     engagedByGroup.get(m.group_id)!.add(m.sender_jid);
   }
-
-  // Saídas recentes: left_at nos últimos 7 dias
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: recentExits } = await db
-    .from("group_memberships")
-    .select("group_id")
-    .eq("organization_id", orgId)
-    .in("group_id", groupIds)
-    .gte("left_at", sevenDaysAgo);
 
   const recentExitsByGroup = new Map<string, number>();
   for (const m of (recentExits || []) as { group_id: string }[]) {

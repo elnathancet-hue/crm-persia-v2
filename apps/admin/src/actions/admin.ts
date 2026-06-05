@@ -90,10 +90,10 @@ export async function getOrCreateAdminOrg(): Promise<{ id: string; name: string 
 export async function getAdminStats() {
   const admin = await requireSuperadmin();
   const [orgs, leads, conversations, assistants] = await Promise.all([
-    admin.from("organizations").select("*", { count: "exact", head: true }),
-    admin.from("leads").select("*", { count: "exact", head: true }),
-    admin.from("conversations").select("*", { count: "exact", head: true }),
-    admin.from("ai_assistants").select("*", { count: "exact", head: true }),
+    admin.from("organizations").select("*", { count: "estimated", head: true }),
+    admin.from("leads").select("*", { count: "estimated", head: true }),
+    admin.from("conversations").select("*", { count: "estimated", head: true }),
+    admin.from("ai_assistants").select("*", { count: "estimated", head: true }),
   ]);
   return {
     organizations: orgs.count || 0,
