@@ -22,6 +22,7 @@ import {
   Mic,
   MoreHorizontal,
   Paperclip,
+  Pin,
   Plus,
   RefreshCw,
   Search,
@@ -87,6 +88,7 @@ import {
   sendMediaToGroup,
   deleteGroupMessage,
   reactToGroupMessage,
+  pinGroupMessage,
   getInviteLink,
   leaveGroup,
   updateGroup,
@@ -158,6 +160,7 @@ interface GroupMessage {
   media_url: string | null;
   media_type: string | null;
   reply_to_whatsapp_msg_id: string | null;
+  is_pinned?: boolean | null;
   sender_lead?: GroupMessageSenderLead | null;
 }
 
@@ -664,6 +667,8 @@ function GroupChatPanel({
   const [sendingMedia, setSendingMedia] = React.useState(false);
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
   const [replyTo, setReplyTo] = React.useState<GroupMessage | null>(null);
+  const [messageSearch, setMessageSearch] = React.useState("");
+  const [deleteDialogMsg, setDeleteDialogMsg] = React.useState<GroupMessage | null>(null);
   const [aiOpen, setAiOpen] = React.useState(false);
   const [aiPrompt, setAiPrompt] = React.useState("");
   const [aiDraft, setAiDraft] = React.useState("");
@@ -744,7 +749,7 @@ function GroupChatPanel({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("group_messages")
-      .select("id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id")
+      .select("id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned")
       .eq("group_id", group.id)
       .eq("is_deleted", false)
       .order("created_at", { ascending: true })
@@ -773,6 +778,7 @@ function GroupChatPanel({
                 sender_identity_kind: "unknown",
                 sender_avatar_url: null,
                 reply_to_whatsapp_msg_id: null,
+                is_pinned: null,
                 sender_lead: null,
               })),
             );
@@ -1002,6 +1008,20 @@ function GroupChatPanel({
     }
   }
 
+  async function handlePinMessage(msgId: string, wamid: string | null, pin: boolean) {
+    if (!wamid) { toast.error("Mensagem sem ID WhatsApp"); return; }
+    try {
+      await pinGroupMessage(group.id, msgId, wamid, pin);
+      setMessages((prev) => prev.map((m) => ({
+        ...m,
+        is_pinned: pin ? m.id === msgId : (m.id === msgId ? false : m.is_pinned),
+      })));
+      toast.success(pin ? "Mensagem fixada" : "Mensagem desafixada");
+    } catch {
+      toast.error("Erro ao fixar mensagem");
+    }
+  }
+
   async function loadGroupContacts() {
     setMembersLoading(true);
     try {
@@ -1178,6 +1198,16 @@ function GroupChatPanel({
     );
   }
 
+  const pinnedMessage = messages.find((m) => m.is_pinned) ?? null;
+  const normalizedMessageSearch = messageSearch.trim().toLowerCase();
+  const visibleMessages = normalizedMessageSearch
+    ? messages.filter((msg) =>
+        [msg.text, msg.sender_name, msg.sender_phone]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(normalizedMessageSearch)),
+      )
+    : messages;
+
   const messagesByWhatsAppId = new Map(
     messages
       .filter((message) => Boolean(message.whatsapp_msg_id))
@@ -1213,6 +1243,16 @@ function GroupChatPanel({
             {group.participant_count} membros {"\u00B7"} {CATEGORY_LABELS[group.category] || group.category}
             {group.is_announce && ` \u00B7 Anuncio`}
           </p>
+        </div>
+
+        <div className="relative hidden w-[200px] lg:block xl:w-[280px] shrink-0">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={messageSearch}
+            onChange={(e) => setMessageSearch(e.target.value)}
+            placeholder="Buscar na conversa..."
+            className="h-9 rounded-lg bg-[color:var(--chat-input-field-bg)] pl-8 text-sm"
+          />
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -1254,6 +1294,35 @@ function GroupChatPanel({
         </div>
       </div>
 
+      {/* Pinned message banner */}
+      {pinnedMessage && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-1.5" style={{ background: "var(--chat-header-bg)" }}>
+          <div className="w-0.5 self-stretch rounded-full bg-primary shrink-0" />
+          <Pin className="size-3.5 shrink-0 text-primary" />
+          <button
+            type="button"
+            className="min-w-0 flex-1 text-left"
+            onClick={() => {
+              const el = document.querySelector(`[data-msg-id="${pinnedMessage.id}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >
+            <p className="text-[11px] font-semibold text-primary">Mensagem fixada</p>
+            <p className="truncate text-xs text-muted-foreground">{pinnedMessage.text || "Mídia"}</p>
+          </button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-6 shrink-0"
+            aria-label="Desafixar"
+            onClick={() => handlePinMessage(pinnedMessage.id, pinnedMessage.whatsapp_msg_id, false)}
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
+
       {/* Messages â€" WhatsApp wallpaper + bubble styling */}
       <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
         <div className="flex flex-col gap-1 py-4">
@@ -1271,10 +1340,10 @@ function GroupChatPanel({
               />
             </div>
           ) : (
-            messages.map((msg, idx) => {
+            visibleMessages.map((msg, idx) => {
               const isOutbound = msg.direction === "outbound";
-              const showDateSep = idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
-              const previousMsg = idx > 0 ? messages[idx - 1] : null;
+              const showDateSep = idx === 0 || !isSameDay(visibleMessages[idx - 1].created_at, msg.created_at);
+              const previousMsg = idx > 0 ? visibleMessages[idx - 1] : null;
               const senderKey = getMessageSenderKey(msg);
               const continuesPreviousBlock =
                 Boolean(previousMsg) &&
@@ -1299,7 +1368,7 @@ function GroupChatPanel({
                 : null;
 
               return (
-                <div key={msg.id}>
+                <div key={msg.id} data-msg-id={msg.id}>
                   {showDateSep && (
                     <div className="flex items-center justify-center py-3">
                       <span className="rounded-lg bg-[color:var(--chat-header-bg)] px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-sm">
@@ -1383,7 +1452,7 @@ function GroupChatPanel({
                         >
                           <ChevronDown className="size-4" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align={isOutbound ? "end" : "start"} className="min-w-[140px]">
+                        <DropdownMenuContent align={isOutbound ? "end" : "start"} className="min-w-[160px]">
                           <DropdownMenuItem onClick={() => setReplyTo(msg)}>
                             <CornerUpLeft className="size-4" />
                             Responder
@@ -1402,9 +1471,19 @@ function GroupChatPanel({
                               Reagir
                             </DropdownMenuItem>
                           )}
+                          {msg.whatsapp_msg_id && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handlePinMessage(msg.id, msg.whatsapp_msg_id, !msg.is_pinned)}>
+                                <Pin className="size-4" />
+                                {msg.is_pinned ? "Desafixar" : "Fixar"}
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
-                            onClick={() => handleDeleteMessage(msg)}
+                            onClick={() => setDeleteDialogMsg(msg)}
                           >
                             <Trash2 className="size-4" />
                             Apagar
@@ -2182,6 +2261,35 @@ function GroupChatPanel({
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Delete message confirmation */}
+      <Dialog open={!!deleteDialogMsg} onOpenChange={(open) => { if (!open) setDeleteDialogMsg(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Deseja apagar a mensagem?</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-destructive hover:text-destructive"
+              onClick={() => {
+                if (deleteDialogMsg) handleDeleteMessage(deleteDialogMsg);
+                setDeleteDialogMsg(null);
+              }}
+            >
+              <Trash2 className="size-4 mr-2" />
+              Apagar para todos
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => setDeleteDialogMsg(null)}
+            >
+              Cancelar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Send Invite Dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>

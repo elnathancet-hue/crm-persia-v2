@@ -1035,7 +1035,7 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     .select(
       "id, direction, text, sender_name, sender_jid, sender_phone, " +
       "sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, " +
-      "created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id"
+      "created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned"
     )
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
