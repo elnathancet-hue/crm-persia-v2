@@ -1,6 +1,11 @@
 "use server";
 
 import { requireSuperadminForOrg } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
+import {
+  addTagToLead as addTagToLeadShared,
+  bulkMoveLeads as bulkMoveLeadsShared,
+} from "@persia/shared/crm";
 
 
 export type ConversationFilter = "all" | "ai" | "waiting_human";
@@ -177,6 +182,58 @@ export async function markConversationAsRead(conversationId: string) {
     .eq("organization_id", orgId);
   if (error) return { error: error.message };
   return { error: null };
+}
+
+async function getLeadIdsForConversations(
+  admin: Awaited<ReturnType<typeof requireSuperadminForOrg>>["admin"],
+  orgId: string,
+  conversationIds: string[],
+): Promise<string[]> {
+  const ids = [...new Set(conversationIds.filter(Boolean))].slice(0, 200);
+  if (ids.length === 0) return [];
+  const { data, error } = await admin
+    .from("conversations")
+    .select("lead_id")
+    .eq("organization_id", orgId)
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+  return [...new Set((data || []).map((row) => row.lead_id).filter(Boolean))];
+}
+
+export async function bulkMarkConversationsAsRead(conversationIds: string[]) {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const ids = [...new Set(conversationIds.filter(Boolean))].slice(0, 200);
+  if (ids.length === 0) return { updated_count: 0 };
+  const { data, error } = await admin
+    .from("conversations")
+    .update({ unread_count: 0, updated_at: new Date().toISOString() })
+    .eq("organization_id", orgId)
+    .in("id", ids)
+    .select("id");
+  if (error) throw new Error(error.message);
+  revalidatePath("/chat");
+  return { updated_count: data?.length ?? 0 };
+}
+
+export async function bulkMoveConversationLeads(conversationIds: string[], stageId: string) {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const leadIds = await getLeadIdsForConversations(admin, orgId, conversationIds);
+  if (leadIds.length === 0) return { updated_count: 0 };
+  const result = await bulkMoveLeadsShared({ db: admin, orgId }, leadIds, stageId);
+  revalidatePath("/chat");
+  revalidatePath("/crm");
+  return result;
+}
+
+export async function bulkApplyTagToConversationLeads(conversationIds: string[], tagId: string) {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const leadIds = await getLeadIdsForConversations(admin, orgId, conversationIds);
+  for (const leadId of leadIds) {
+    await addTagToLeadShared({ db: admin, orgId }, leadId, tagId);
+  }
+  revalidatePath("/chat");
+  revalidatePath("/crm");
+  return { updated_count: leadIds.length };
 }
 
 export async function reopenConversation(conversationId: string) {

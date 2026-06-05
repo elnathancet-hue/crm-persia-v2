@@ -11,6 +11,7 @@ export const adminChatCapabilities = {
     "search_messages",
     "send_text",
     "send_media",
+    "bulk_actions",
   ],
 } satisfies ModuleCapabilityManifest<ChatCapability>;
 

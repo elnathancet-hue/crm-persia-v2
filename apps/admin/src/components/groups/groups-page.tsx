@@ -242,7 +242,7 @@ export function GroupsPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-border">
-                  {participants.length === 0 && <p className="text-sm text-muted-foreground">Nenhum participante persistido.</p>}
+                  {participants.length === 0 && <p className="text-sm text-muted-foreground">Nenhum participante encontrado.</p>}
                   {participants.map((participant) => (
                     <div key={participant.id} className="flex items-center gap-3 py-3">
                       <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-semibold">
@@ -257,11 +257,18 @@ export function GroupsPage() {
                         <p className="truncate text-sm font-medium">{participant.lead?.name || participant.name || participant.phone || "Participante"}</p>
                         <p className="text-xs text-muted-foreground">{participant.lead?.phone || participant.phone || "Telefone nao identificado"}</p>
                       </div>
-                      {participant.lead && (
-                        <span className="flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-xs text-success">
-                          <UserCheck className="size-3" /> Lead
-                        </span>
-                      )}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {participant.is_admin && (
+                          <span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">
+                            {participant.is_super_admin ? "Criador" : "Admin"}
+                          </span>
+                        )}
+                        {participant.lead && (
+                          <span className="flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-xs text-success">
+                            <UserCheck className="size-3" /> Lead
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

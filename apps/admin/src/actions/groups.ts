@@ -30,6 +30,9 @@ export interface AdminGroupParticipant {
   name: string | null;
   avatar_url: string | null;
   joined_at: string | null;
+  is_admin: boolean;
+  is_super_admin: boolean;
+  is_live: boolean;
   lead: {
     id: string;
     name: string | null;
@@ -62,6 +65,11 @@ function phoneVariants(values: Array<string | null | undefined>): string[] {
     }
   }
   return [...variants];
+}
+
+function phoneFromParticipantJid(jid: string | null | undefined): string | null {
+  if (!jid || (!jid.endsWith("@s.whatsapp.net") && !jid.endsWith("@c.us"))) return null;
+  return phoneKey(jid);
 }
 
 /**
@@ -245,19 +253,44 @@ export async function getGroupMessages(groupId: string, limit = 100): Promise<Ad
 
 export async function getGroupParticipants(groupId: string): Promise<AdminGroupParticipant[]> {
   const { admin, orgId } = await requireSuperadminForOrg();
-  const { data, error } = await fromAny(admin, "group_memberships")
-    .select("id, phone, name, avatar_url, joined_at, lead_id")
-    .eq("organization_id", orgId)
-    .eq("group_id", groupId)
-    .is("left_at", null)
-    .order("joined_at", { ascending: false });
+  const [{ data: group, error: groupError }, { data, error }] = await Promise.all([
+    admin
+      .from("whatsapp_groups")
+      .select("group_jid")
+      .eq("organization_id", orgId)
+      .eq("id", groupId)
+      .single(),
+    fromAny(admin, "group_memberships")
+      .select("id, phone, name, avatar_url, joined_at, lead_id")
+      .eq("organization_id", orgId)
+      .eq("group_id", groupId)
+      .is("left_at", null)
+      .order("joined_at", { ascending: false }),
+  ]);
+  if (groupError || !group) throw new Error("Grupo nao encontrado");
   if (error) throw new Error(error.message);
 
-  const rows = (data || []) as Array<Omit<AdminGroupParticipant, "lead"> & { lead_id: string | null }>;
+  const rows = (data || []) as Array<
+    Omit<AdminGroupParticipant, "lead" | "is_admin" | "is_super_admin" | "is_live"> & { lead_id: string | null }
+  >;
+  let liveParticipants: Array<{ jid: string; isAdmin: boolean; isSuperAdmin: boolean }> = [];
+  try {
+    const { provider } = await getProvider();
+    const info = await provider.getGroupInfo(group.group_jid, { force: true });
+    liveParticipants = (info.participants || []).filter((participant) => participant.jid);
+  } catch (err) {
+    console.warn("[groups] live participants unavailable", {
+      organization_id: orgId,
+      group_id: groupId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const leadsById = new Map<string, AdminGroupParticipant["lead"]>();
   const leadsByPhone = new Map<string, AdminGroupParticipant["lead"]>();
   const leadIds = [...new Set(rows.map((row) => row.lead_id).filter((id): id is string => Boolean(id)))];
-  const phones = phoneVariants(rows.map((row) => row.phone));
+  const livePhones = liveParticipants.map((participant) => phoneFromParticipantJid(participant.jid));
+  const phones = phoneVariants([...rows.map((row) => row.phone), ...livePhones]);
 
   const [leadsByIdResult, leadsByPhoneResult] = await Promise.all([
     leadIds.length
@@ -273,14 +306,44 @@ export async function getGroupParticipants(groupId: string): Promise<AdminGroupP
     if (key) leadsByPhone.set(key, lead);
   }
 
-  return rows.map(({ lead_id, ...row }) => {
+  const participantsByPhone = new Map<string, AdminGroupParticipant>();
+  const persisted = rows.map(({ lead_id, ...row }) => {
     const key = phoneKey(row.phone);
-    return {
+    const participant = {
       ...row,
+      is_admin: false,
+      is_super_admin: false,
+      is_live: false,
       lead:
         (lead_id ? leadsById.get(lead_id) : null) ??
         (key ? leadsByPhone.get(key) : null) ??
         null,
     };
+    if (key) participantsByPhone.set(key, participant);
+    return participant;
   });
+
+  for (const live of liveParticipants) {
+    const key = phoneFromParticipantJid(live.jid);
+    const existing = key ? participantsByPhone.get(key) : null;
+    if (existing) {
+      existing.is_admin = live.isAdmin || live.isSuperAdmin;
+      existing.is_super_admin = live.isSuperAdmin;
+      existing.is_live = true;
+      continue;
+    }
+    persisted.push({
+      id: live.jid,
+      phone: key ? `+${key}` : null,
+      name: null,
+      avatar_url: null,
+      joined_at: null,
+      is_admin: live.isAdmin || live.isSuperAdmin,
+      is_super_admin: live.isSuperAdmin,
+      is_live: true,
+      lead: key ? (leadsByPhone.get(key) ?? null) : null,
+    });
+  }
+
+  return persisted.sort((a, b) => Number(b.is_live) - Number(a.is_live));
 }
