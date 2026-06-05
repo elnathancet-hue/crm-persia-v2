@@ -87,7 +87,7 @@ import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { getLead } from "@/actions/leads";
 import type { LeadWithTags } from "@persia/shared/crm";
 
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const QUICK_REACTIONS = ["\u{1F44D}", "\u2764\uFE0F", "\u{1F602}", "\u{1F62E}", "\u{1F622}", "\u{1F64F}"];
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 

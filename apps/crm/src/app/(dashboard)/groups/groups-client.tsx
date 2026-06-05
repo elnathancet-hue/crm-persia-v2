@@ -1029,8 +1029,8 @@ function GroupChatPanel({
         <div className="flex-1 min-w-0">
           <p className="font-medium text-[15px] leading-5 truncate">{group.name}</p>
           <p className="text-[13px] leading-5 text-muted-foreground truncate">
-            {group.participant_count} membros Â· {CATEGORY_LABELS[group.category] || group.category}
-            {group.is_announce && " Â· Anuncio"}
+            {group.participant_count} membros {"\u00B7"} {CATEGORY_LABELS[group.category] || group.category}
+            {group.is_announce && ` \u00B7 Anuncio`}
           </p>
         </div>
 
@@ -1472,7 +1472,7 @@ function GroupChatPanel({
             style={{ color: "var(--chat-header-fg)" }}
             title="Emoji"
             aria-label="Emoji"
-            onClick={() => setChatInput((current) => `${current}🙂`)}
+            onClick={() => setChatInput((current) => `${current}\u{1F642}`)}
             disabled={sendingMessage || sendingMedia}
           >
             <Smile className="size-4" />
@@ -2130,7 +2130,7 @@ function CampaignManagerSheet({
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
                       {campaign.distribution_mode === "balanced" ? "Balanceado" : "Sequencial"}
-                      {" Â· "}{linkedGroups.length} grupos vinculados
+                      {" \u00B7 "}{linkedGroups.length} grupos vinculados
                     </p>
                   </div>
                   <DropdownMenu>
