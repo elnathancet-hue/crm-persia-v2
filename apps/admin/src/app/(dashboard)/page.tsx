@@ -1,7 +1,5 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useActiveOrg } from "@/lib/stores/client-store";
+import { readAdminContext } from "@/lib/admin-context";
+import { withAdmin } from "@/lib/supabase-admin";
 import { getAdminStats, getOrganizations } from "@/actions/admin";
 import { getReportStats } from "@/actions/reports";
 import { BarChart3, Building2, Clock, DollarSign, Kanban, MessageSquare, Target, TrendingUp, Users, Zap } from "lucide-react";
@@ -10,33 +8,37 @@ import Link from "next/link";
 type OrganizationSummary = Awaited<ReturnType<typeof getOrganizations>>[number];
 type ClientReportStats = Awaited<ReturnType<typeof getReportStats>>;
 
-export default function DashboardPage() {
-  const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
+export default async function DashboardPage() {
+  const adminContext = await readAdminContext();
 
-  // In client mode, show CRM dashboard for the selected account
-  if (isManagingClient && activeOrgId) {
-    return <ClientDashboard orgId={activeOrgId} orgName={activeOrgName} />;
+  if (adminContext) {
+    const [stats, orgRes] = await Promise.all([
+      getReportStats().catch(() => null as ClientReportStats | null),
+      withAdmin("admin_page_org_name", async (admin) =>
+        admin.from("organizations").select("name").eq("id", adminContext.orgId).single()
+      ),
+    ]);
+    const orgName = (orgRes.data as { name?: string } | null)?.name || "Cliente";
+    return <ClientDashboardView stats={stats} orgName={orgName} />;
   }
 
-  // In admin mode, show admin overview
-  return <AdminDashboard />;
+  const [stats, orgs] = await Promise.all([
+    getAdminStats().catch(() => ({ organizations: 0, leads: 0, conversations: 0, assistants: 0 })),
+    getOrganizations().catch((): OrganizationSummary[] => []),
+  ]);
+
+  return <AdminDashboardView stats={stats} orgs={orgs} />;
 }
 
 // ============ ADMIN DASHBOARD ============
 
-function AdminDashboard() {
-  const [stats, setStats] = useState({ organizations: 0, leads: 0, conversations: 0 });
-  const [orgs, setOrgs] = useState<OrganizationSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([getAdminStats(), getOrganizations()])
-      .then(([s, o]) => { setStats(s); setOrgs(o); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="size-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
-
+function AdminDashboardView({
+  stats,
+  orgs,
+}: {
+  stats: { organizations: number; leads: number; conversations: number };
+  orgs: OrganizationSummary[];
+}) {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Painel Administrativo</h1>
@@ -88,18 +90,7 @@ function AdminDashboard() {
 
 // ============ CLIENT DASHBOARD ============
 
-function ClientDashboard({ orgId, orgName }: { orgId: string; orgName: string }) {
-  const [stats, setStats] = useState<ClientReportStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getReportStats()
-      .then((s) => { setStats(s); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [orgId]);
-
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="size-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>;
-
+function ClientDashboardView({ stats, orgName }: { stats: ClientReportStats | null; orgName: string }) {
   const kpis = [
     { label: "Leads", value: stats?.totalLeads ?? 0, icon: Users, color: "text-progress bg-progress-soft" },
     { label: "Novos (30 dias)", value: stats?.newLeads30d ?? 0, icon: TrendingUp, color: "text-primary bg-primary/10" },
