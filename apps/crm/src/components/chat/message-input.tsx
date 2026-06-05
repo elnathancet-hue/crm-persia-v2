@@ -296,6 +296,13 @@ export function MessageInput({
     const trimmed = content.trim();
     if (!trimmed) return;
 
+    // Optimistic clear: limpa o input imediatamente pra usuario poder
+    // digitar a proxima mensagem sem esperar o round-trip da API.
+    // Se falhar, restaura o texto com toast de erro.
+    setContent("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    onClearReply?.();
+
     setSending(true);
     const { data, error } = await sendMessageViaWhatsApp(
       conversationId,
@@ -305,15 +312,12 @@ export function MessageInput({
 
     if (data) {
       onMessageSent(data);
-      setContent("");
-      onClearReply?.();
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
-      }
     }
 
     if (error) {
       toast.error(`Falha ao enviar: ${error}`);
+      setContent(trimmed);
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
     }
 
     setSending(false);
