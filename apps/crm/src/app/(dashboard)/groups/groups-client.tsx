@@ -578,6 +578,7 @@ function GroupChatPanel({
   const [recordingSeconds, setRecordingSeconds] = React.useState(0);
   const [emojiOpen, setEmojiOpen] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
   const audioFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -704,8 +705,8 @@ function GroupChatPanel({
             });
             if (message.direction === "inbound") playNotification();
           });
-          // NÃ£o dispara toast aqui â€" o grupo estÃ¡ aberto e o usuÃ¡rio vÃª a mensagem
-          // em tempo real. O toast para grupos nÃ£o selecionados Ã© gerenciado pelo
+          // Não dispara toast aqui â€" o grupo está aberto e o usuário vê a mensagem
+          // em tempo real. O toast para grupos não selecionados é gerenciado pelo
           // GlobalRealtimeSubscription em GroupsClient.
         },
       )
@@ -730,11 +731,19 @@ function GroupChatPanel({
     if (!loadingMsgs) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loadingMsgs]);
 
+  const adjustHeight = React.useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
+  }, []);
+
   async function handleSendMessage() {
     const text = chatInput.trim();
     if (!text) return;
     setSendingMessage(true);
     setChatInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     const replyingTo = replyTo;
     setReplyTo(null);
     try {
@@ -826,9 +835,9 @@ function GroupChatPanel({
       setReplyTo(null);
       try {
         await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name, replyingTo?.whatsapp_msg_id ?? null);
-        toast.success("MÃ­dia enviada");
+        toast.success("Mídia enviada");
       } catch (err: any) {
-        toast.error(err.message || "Erro ao enviar mÃ­dia");
+        toast.error(err.message || "Erro ao enviar mídia");
         setReplyTo(replyingTo);
       } finally {
         setSendingMedia(false);
@@ -878,7 +887,7 @@ function GroupChatPanel({
     try {
       await reactToGroupMessage(group.id, msg.whatsapp_msg_id, emoji);
     } catch {
-      toast.error("Erro ao enviar reaÃ§Ã£o");
+      toast.error("Erro ao enviar reação");
     }
   }
 
@@ -1021,7 +1030,7 @@ function GroupChatPanel({
   }
 
   async function handleLeaveGroup() {
-    if (!confirm(`Sair do grupo "${group.name}"? O grupo serÃ¡ removido do CRM.`)) return;
+    if (!confirm(`Sair do grupo "${group.name}"? O grupo será removido do CRM.`)) return;
     setLeavingGroup(true);
     try {
       await leaveGroup(group.id);
@@ -1136,7 +1145,7 @@ function GroupChatPanel({
                   navigator.clipboard.writeText(group.invite_link);
                   toast.success("Link copiado!");
                 } else {
-                  toast.error("Sem link de convite. Obtenha nas configuraÃ§Ãµes.");
+                  toast.error("Sem link de convite. Obtenha nas configurações.");
                 }
               }}>
                 <Copy className="size-4" />
@@ -1276,7 +1285,7 @@ function GroupChatPanel({
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
-                          title="Mais opÃ§Ãµes"
+                          title="Mais opções"
                         >
                           <ChevronDown className="size-4" />
                         </DropdownMenuTrigger>
@@ -1314,7 +1323,7 @@ function GroupChatPanel({
                     <div className={`flex flex-col gap-0.5 ${isOutbound ? "items-end" : "items-start"}`}>
                       {/* Sender label above bubble */}
                       {showBlockHeader && isOutbound ? (
-                        <p className="text-[11px] px-1" style={{ color: "var(--chat-timestamp)" }}>VocÃª</p>
+                        <p className="text-[11px] px-1" style={{ color: "var(--chat-timestamp)" }}>Você</p>
                       ) : showBlockHeader ? (
                         <Button
                           type="button"
@@ -1385,13 +1394,13 @@ function GroupChatPanel({
                         {msg.media_type === "video" && (
                           <div className="flex items-center gap-2 px-2.5 pt-2">
                             <FileVideo className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">VÃ­deo</span>
+                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
                           </div>
                         )}
                         {msg.media_type === "audio" && (
                           <div className="flex items-center gap-2 px-2.5 pt-2">
                             <Mic className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Ãudio</span>
+                            <span className="text-[13px] text-muted-foreground">Áudio</span>
                           </div>
                         )}
                         {msg.media_type === "document" && (
@@ -1422,7 +1431,10 @@ function GroupChatPanel({
       </div>
 
       {/* Input bar â€" matching MessageInput style */}
-      <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2">
+      <div
+        className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2"
+        style={{ background: "var(--chat-input-bar-bg)" }}
+      >
         {replyTo && (
           <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-[color:var(--chat-send-bg)] bg-muted/50 px-3 py-2">
             <CornerUpLeft className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1504,12 +1516,17 @@ function GroupChatPanel({
         <input ref={audioFileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleFileSelect} />
         <div className="flex items-end gap-1">
           <DropdownMenu>
-            <DropdownMenuTrigger
-              className="size-10 shrink-0 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors disabled:opacity-50"
-              style={{ color: "var(--chat-header-fg)" }}
-              disabled={sendingMedia || isRecording}
-            >
-              {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+            <DropdownMenuTrigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={sendingMedia || isRecording}
+                className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
+                aria-label="Mais op\u00E7\u00F5es"
+              >
+                {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start">
               <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
@@ -1578,16 +1595,19 @@ function GroupChatPanel({
               </Button>
             </div>
           ) : (
-            <Textarea
-              name="group-message"
+            <textarea
+              ref={textareaRef}
               value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
+              onChange={(e) => {
+                setChatInput(e.target.value);
+                adjustHeight();
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
               }}
               placeholder="Digite uma mensagem..."
-              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
-              style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none", boxShadow: "none" }}
+              className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none placeholder:text-[color:var(--chat-timestamp)] focus:ring-1 focus:ring-[color:var(--chat-send-bg)]"
+              style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none" }}
               rows={1}
               disabled={sendingMessage || sendingMedia}
             />
@@ -1625,7 +1645,7 @@ function GroupChatPanel({
         </div>
       </div>
 
-      {/* Members / contact panel â€" Sheet overlay, nÃ£o empurra o layout */}
+      {/* Members / contact panel â€" Sheet overlay, não empurra o layout */}
       <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); setSelectedContact(null); } }}>
         <SheetContent side="right" showCloseButton={false} className="w-full max-w-[440px] p-0 overflow-hidden">
           {selectedContact ? (
@@ -2053,7 +2073,7 @@ function GroupChatPanel({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Enviar Convite</DialogTitle>
-            <DialogDescription>O lead receberÃ¡ o link de convite do grupo via WhatsApp.</DialogDescription>
+            <DialogDescription>O lead receberá o link de convite do grupo via WhatsApp.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label>Lead</Label>
@@ -2158,7 +2178,7 @@ function CampaignManagerSheet({
   async function handleLinkGroup(groupId: string, campaignId: string | null) {
     try {
       await linkGroupToCampaign(groupId, campaignId);
-      toast.success(campaignId ? "Grupo vinculado" : "VÃ­nculo removido");
+      toast.success(campaignId ? "Grupo vinculado" : "Vínculo removido");
     } catch (err: any) {
       toast.error(err.message || "Erro");
     }
@@ -2175,7 +2195,7 @@ function CampaignManagerSheet({
         <SheetHeader>
           <SheetTitle>Campanhas / Link Inteligente</SheetTitle>
           <SheetDescription>
-            Crie uma campanha com link Ãºnico que distribui leads entre grupos automaticamente.
+            Crie uma campanha com link único que distribui leads entre grupos automaticamente.
           </SheetDescription>
         </SheetHeader>
 
@@ -2192,7 +2212,7 @@ function CampaignManagerSheet({
                 <Label className="text-xs">Nome</Label>
                 <Input
                   name="campaign-name"
-                  placeholder="Ex: LanÃ§amento ICBID"
+                  placeholder="Ex: Lançamento ICBID"
                   value={newName}
                   onChange={(e) => { setNewName(e.target.value); setNewSlug(autoSlug(e.target.value)); }}
                 />
@@ -2213,14 +2233,14 @@ function CampaignManagerSheet({
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">DistribuiÃ§Ã£o</Label>
+                <Label className="text-xs">Distribuição</Label>
                 <Select value={newMode} onValueChange={(v) => setNewMode(v as "balanced" | "sequential")}>
                   <SelectTrigger className="h-8 text-xs">
                     <SelectValue>{newMode === "balanced" ? "Balanceado" : "Sequencial"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="balanced">Balanceado â€” distribui igualmente</SelectItem>
-                    <SelectItem value="sequential">Sequencial â€” enche um por vez</SelectItem>
+                    <SelectItem value="balanced">Balanceado — distribui igualmente</SelectItem>
+                    <SelectItem value="sequential">Sequencial — enche um por vez</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -2307,7 +2327,7 @@ function CampaignManagerSheet({
                     </div>
                   ))}
                   {groups.length === 0 && (
-                    <p className="text-xs text-muted-foreground">Nenhum grupo disponÃ­vel</p>
+                    <p className="text-xs text-muted-foreground">Nenhum grupo disponível</p>
                   )}
                 </div>
               </div>
@@ -2405,8 +2425,8 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       .then(({ data }) => setLeads((data || []) as Lead[]));
   }, []);
 
-  // Global Realtime subscription â€" notifica mensagens de grupos nÃ£o selecionados
-  // e mantÃ©m contagem de nÃ£o lidas no painel lateral.
+  // Global Realtime subscription â€" notifica mensagens de grupos não selecionados
+  // e mantém contagem de não lidas no painel lateral.
   React.useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -2418,13 +2438,13 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           const { group_id, direction, text, sender_name, created_at } = payload.new;
           if (direction !== "inbound") return;
 
-          // Atualiza preview da Ãºltima mensagem no painel lateral
+          // Atualiza preview da última mensagem no painel lateral
           setLastMessages((prev) => ({
             ...prev,
             [group_id]: { text, sender: sender_name, direction, at: created_at },
           }));
 
-          // SÃ³ notifica/incrementa unread para grupos fora de foco
+          // Só notifica/incrementa unread para grupos fora de foco
           if (group_id === selectedIdRef.current) return;
 
           setUnreadCounts((prev) => ({ ...prev, [group_id]: (prev[group_id] ?? 0) + 1 }));
@@ -2433,7 +2453,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
           if (grp) {
             const sender = sender_name || "Participante";
             const preview = text
-              ? text.length > 60 ? text.slice(0, 60) + "â€¦" : text
+              ? text.length > 60 ? text.slice(0, 60) + "…" : text
               : "Nova mensagem";
             toast.message(grp.name, { description: `${sender}: ${preview}` });
           }
@@ -2445,7 +2465,7 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
 
   function handleSelectGroup(id: string) {
     setSelectedId(id);
-    // Zera nÃ£o lidas ao abrir o grupo
+    // Zera não lidas ao abrir o grupo
     setUnreadCounts((prev) => {
       if (!prev[id]) return prev;
       const next = { ...prev };
