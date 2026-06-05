@@ -101,3 +101,4 @@ export * from "./ai-agent";
 // Subpath: `@persia/shared/agenda`. Compartilhado entre apps/crm e
 // apps/admin pra que os dois apps falem do mesmo modelo de agendamento.
 export * from "./agenda";
+export * from "./product-capabilities";

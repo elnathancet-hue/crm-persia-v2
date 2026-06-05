@@ -3,6 +3,7 @@ import { withAdmin } from "@/lib/supabase-admin";
 import { redirect } from "next/navigation";
 import { readAdminContext } from "@/lib/admin-context";
 import { ShellSwitcher } from "@/components/shell-switcher";
+import type { ProductServices } from "@persia/shared";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -28,16 +29,21 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Fetch client org name when in client mode
   let clientOrgId: string | null = null;
   let clientOrgName: string | null = null;
+  let clientOrgServices: ProductServices | null = null;
   if (adminContext) {
     clientOrgId = adminContext.orgId;
     const { data: org } = await withAdmin("dashboard_layout_context_org", async (admin) =>
       await admin
         .from("organizations")
-        .select("name")
+        .select("name, services")
         .eq("id", adminContext.orgId)
         .single()
     );
     clientOrgName = org?.name || null;
+    clientOrgServices =
+      org?.services && typeof org.services === "object" && !Array.isArray(org.services)
+        ? (org.services as ProductServices)
+        : null;
   }
 
   return (
@@ -46,7 +52,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
         Pular para o conteudo
       </a>
 
-      <ShellSwitcher mode={shellMode} clientOrgId={clientOrgId} clientOrgName={clientOrgName}>
+      <ShellSwitcher
+        mode={shellMode}
+        clientOrgId={clientOrgId}
+        clientOrgName={clientOrgName}
+        clientOrgServices={clientOrgServices}
+      >
         {children}
       </ShellSwitcher>
     </div>

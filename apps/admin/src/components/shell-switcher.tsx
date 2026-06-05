@@ -5,15 +5,17 @@ import { useClientStore } from "@/lib/stores/client-store";
 import { ShellProvider } from "@/lib/shell-context";
 import { AdminShell } from "@/components/shells/admin-shell";
 import { ClientShell } from "@/components/shells/client-shell";
+import type { ProductServices } from "@persia/shared";
 
 interface ShellSwitcherProps {
   mode: "admin" | "client";
   clientOrgId: string | null;
   clientOrgName: string | null;
+  clientOrgServices: ProductServices | null;
   children: React.ReactNode;
 }
 
-export function ShellSwitcher({ mode, clientOrgId, clientOrgName, children }: ShellSwitcherProps) {
+export function ShellSwitcher({ mode, clientOrgId, clientOrgName, clientOrgServices, children }: ShellSwitcherProps) {
   const { selectedClientId, clearClient, setClient } = useClientStore();
 
   // Sync Zustand with server state on mount
@@ -44,7 +46,7 @@ export function ShellSwitcher({ mode, clientOrgId, clientOrgName, children }: Sh
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shell = mode === "client"
-    ? <ClientShell>{children}</ClientShell>
+    ? <ClientShell services={clientOrgServices}>{children}</ClientShell>
     : <AdminShell>{children}</AdminShell>;
 
   return (

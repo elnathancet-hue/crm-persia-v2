@@ -19,8 +19,17 @@ import {
 } from "@persia/leads-ui";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
+import { useEffect, useMemo } from "react";
+import { isProductServiceEnabled, type ProductServices } from "@persia/shared";
+import { usePathname, useRouter } from "next/navigation";
 
-export function ClientShell({ children }: { children: React.ReactNode }) {
+export function ClientShell({
+  children,
+  services,
+}: {
+  children: React.ReactNode;
+  services: ProductServices | null;
+}) {
   // PR-V1b: realtime toasts globais — vivem enquanto o admin esta no
   // shell de cliente (qualquer rota interna). Mute global respeitado
   // pelos 2 (toggle no HeaderUserMenu).
@@ -30,6 +39,8 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
   // 2o hook quase nunca dispara — mas e barato deixar montado (1 canal
   // postgres_changes filtrado por org).
   const supabase = getSupabaseBrowserClient();
+  const pathname = usePathname();
+  const router = useRouter();
   const { activeOrgId } = useActiveOrg();
   const currentUser = useCurrentUser(supabase);
 
@@ -44,10 +55,28 @@ export function ClientShell({ children }: { children: React.ReactNode }) {
     currentUserId: currentUser?.user_id ?? null,
   });
 
+  const visibleNavigation = useMemo(
+    () => clientNavigation.filter((item) => isProductServiceEnabled(services, item.serviceKey)),
+    [services],
+  );
+  const visibleMobileItems = useMemo(
+    () => clientMobileItems.filter((item) => isProductServiceEnabled(services, item.serviceKey)),
+    [services],
+  );
+
+  useEffect(() => {
+    const currentModule = clientNavigation.find(
+      (item) => item.href !== "/" && (pathname === item.href || pathname.startsWith(`${item.href}/`)),
+    );
+    if (currentModule && !isProductServiceEnabled(services, currentModule.serviceKey)) {
+      router.replace("/");
+    }
+  }, [pathname, router, services]);
+
   return (
     <>
       {/* Left sidebar - full CRM navigation */}
-      <AppSidebar items={clientNavigation} mobileItems={clientMobileItems} brandAction="home" />
+      <AppSidebar items={visibleNavigation} mobileItems={visibleMobileItems} brandAction="home" />
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
