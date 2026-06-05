@@ -169,8 +169,14 @@ export interface IncomingMessage {
   mediaUrl?: string;
   mediaMimeType?: string;
   caption?: string;
+  // Location
   latitude?: number;
   longitude?: number;
+  locationName?: string;
+  locationAddress?: string;
+  // Contact (vCard)
+  contactName?: string;
+  contactPhone?: string;
 }
 
 export interface LeadSyncData {

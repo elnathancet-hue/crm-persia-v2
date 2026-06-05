@@ -315,6 +315,22 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   // o SELECT dedup vazio e tentam INSERT. UNIQUE(org, whatsapp_msg_id)
   // da migration 064 catcha o segundo. Sem este try-catch, o throw
   // do segundo INSERT mata o request e o usuário não recebe resposta.
+  // Build structured metadata for rich message types (location, contact)
+  let incomingMetadata: Record<string, unknown> | null = null;
+  if (msg.type === "location" && (msg.latitude != null || msg.longitude != null)) {
+    incomingMetadata = {
+      latitude: msg.latitude,
+      longitude: msg.longitude,
+      name: msg.locationName ?? null,
+      address: msg.locationAddress ?? null,
+    };
+  } else if (msg.type === "contact" && msg.contactName) {
+    incomingMetadata = {
+      fullName: msg.contactName,
+      phoneNumber: msg.contactPhone ?? null,
+    };
+  }
+
   const { error: msgInsertErr } = await supabase.from("messages").insert({
     organization_id: orgId,
     conversation_id: conversation.id,
@@ -325,6 +341,7 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     whatsapp_msg_id: msg.messageId,
     media_url: msg.mediaUrl || null,
     media_type: msg.mediaMimeType || null,
+    metadata: incomingMetadata,
     status: "delivered",
   });
   if (msgInsertErr && msgInsertErr.code !== "23505") {

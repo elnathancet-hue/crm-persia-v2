@@ -415,6 +415,37 @@ export class UazapiAdapter implements WhatsAppProvider {
     else if (messageType.toLowerCase().includes("contact")) type = "contact";
     else if (messageType.toLowerCase().includes("sticker")) type = "sticker";
 
+    // --- Location fields ---
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+    let locationName: string | undefined;
+    let locationAddress: string | undefined;
+    if (type === "location") {
+      const lat = raw.latitude ?? (raw.location as Record<string, unknown> | undefined)?.latitude;
+      const lng = raw.longitude ?? (raw.location as Record<string, unknown> | undefined)?.longitude;
+      if (typeof lat === "number") latitude = lat;
+      if (typeof lng === "number") longitude = lng;
+      const nameRaw = raw.name ?? (raw.location as Record<string, unknown> | undefined)?.name;
+      if (typeof nameRaw === "string" && nameRaw) locationName = nameRaw;
+      const addrRaw = raw.address ?? (raw.location as Record<string, unknown> | undefined)?.address;
+      if (typeof addrRaw === "string" && addrRaw) locationAddress = addrRaw;
+    }
+
+    // --- Contact fields ---
+    let contactName: string | undefined;
+    let contactPhone: string | undefined;
+    if (type === "contact") {
+      const contactObj = (raw.contact ?? raw.contacts) as Record<string, unknown> | Array<Record<string, unknown>> | undefined;
+      const first = Array.isArray(contactObj) ? contactObj[0] : contactObj;
+      const displayName = first?.displayName ?? first?.DisplayName ?? first?.fullName ?? text;
+      if (typeof displayName === "string" && displayName) contactName = displayName;
+      const vcard = String(first?.vcard ?? first?.Vcard ?? raw.vcard ?? "");
+      if (vcard) {
+        const telMatch = vcard.match(/^TEL[^:]*:(.+)$/m);
+        if (telMatch) contactPhone = telMatch[1].trim().replace(/\D/g, "") || undefined;
+      }
+    }
+
     return {
       messageId: String(raw.messageid || raw.id || ""),
       phone,
@@ -428,6 +459,12 @@ export class UazapiAdapter implements WhatsAppProvider {
       mediaUrl: String(raw.fileURL || "") || undefined,
       mediaMimeType: undefined,
       caption: undefined,
+      latitude,
+      longitude,
+      locationName,
+      locationAddress,
+      contactName,
+      contactPhone,
     };
   }
 
