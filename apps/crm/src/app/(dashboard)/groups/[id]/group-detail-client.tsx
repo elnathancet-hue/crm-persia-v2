@@ -24,6 +24,7 @@ import {
   MoreHorizontal,
   Pause,
   Pencil,
+  Pin,
   Play,
   Plus,
   RefreshCw,
@@ -86,6 +87,7 @@ import {
   sendMediaToGroup,
   deleteGroupMessage,
   editGroupMessage,
+  pinGroupMessage,
   reactToGroupMessage,
   createLeadFromGroupParticipant,
 } from "@/actions/groups";
@@ -165,6 +167,7 @@ interface GroupMessage {
   media_url: string | null;
   whatsapp_msg_id: string | null;
   reply_to_whatsapp_msg_id: string | null;
+  is_pinned?: boolean;
   created_at: string;
 }
 
@@ -588,6 +591,20 @@ export function GroupDetailClient({
     }
   }
 
+  async function handlePinMessage(msg: GroupMessage, pin: boolean) {
+    if (!msg.whatsapp_msg_id) return;
+    try {
+      await pinGroupMessage(group.id, msg.id, msg.whatsapp_msg_id, pin);
+      setMessages((prev) => prev.map((m) => ({
+        ...m,
+        is_pinned: pin ? m.id === msg.id : (m.id === msg.id ? false : m.is_pinned),
+      })));
+      toast.success(pin ? "Mensagem fixada" : "Mensagem desafixada");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao fixar mensagem");
+    }
+  }
+
   function handleStartEdit(msg: GroupMessage) {
     setEditingMsgId(msg.id);
     setEditText(msg.text ?? "");
@@ -681,6 +698,42 @@ export function GroupDetailClient({
         </div>
       </div>
 
+      {/* Pinned message banner */}
+      {(() => {
+        const pinned = messages.find((m) => m.is_pinned);
+        if (!pinned) return null;
+        return (
+          <div
+            className="flex shrink-0 items-center gap-2 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-1.5"
+            style={{ background: "var(--chat-header-bg)" }}
+          >
+            <div className="w-0.5 self-stretch rounded-full bg-primary shrink-0" />
+            <Pin className="size-3.5 shrink-0 text-primary" />
+            <button
+              type="button"
+              className="min-w-0 flex-1 text-left"
+              onClick={() => {
+                const el = document.querySelector(`[data-msg-id="${pinned.id}"]`);
+                el?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            >
+              <p className="text-[11px] font-semibold text-primary">Mensagem fixada</p>
+              <p className="truncate text-xs text-muted-foreground">{pinned.text || "Mídia"}</p>
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-6 shrink-0"
+              aria-label="Desafixar"
+              onClick={() => handlePinMessage(pinned, false)}
+            >
+              <X className="size-3" />
+            </Button>
+          </div>
+        );
+      })()}
+
       {/* Messages — WhatsApp wallpaper */}
       <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
         <div className="flex flex-col gap-1 py-4">
@@ -715,7 +768,7 @@ export function GroupDetailClient({
                 (msg.sender_identity_kind === "lid" ? "Telefone não disponível" : null);
 
               return (
-                <div key={msg.id} className={prevSameSender ? "mt-0.5" : showDateSep ? "" : "mt-2"}>
+                <div key={msg.id} data-msg-id={msg.id} className={prevSameSender ? "mt-0.5" : showDateSep ? "" : "mt-2"}>
                   {showDateSep && (
                     <div className="flex items-center justify-center py-3">
                       <span className="rounded-lg bg-[color:var(--chat-header-bg)] px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-sm">
@@ -817,6 +870,12 @@ export function GroupDetailClient({
                             <DropdownMenuItem onClick={() => handleStartEdit(msg)}>
                               <Pencil className="size-4" />
                               Editar
+                            </DropdownMenuItem>
+                          )}
+                          {msg.whatsapp_msg_id && (
+                            <DropdownMenuItem onClick={() => handlePinMessage(msg, !msg.is_pinned)}>
+                              <Pin className="size-4" />
+                              {msg.is_pinned ? "Desafixar" : "Fixar"}
                             </DropdownMenuItem>
                           )}
                           {!isOutbound && (msg.sender_lead_id || msg.sender_phone) && (

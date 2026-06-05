@@ -964,6 +964,39 @@ export async function reactToGroupMessage(
   await provider.reactToMessage(group.group_jid, whatsappMsgId, emoji);
 }
 
+// ---- Pin / unpin group message ----
+export async function pinGroupMessage(
+  groupId: string,
+  messageId: string,
+  whatsappMsgId: string,
+  pin: boolean,
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  try {
+    const provider = await getProvider(supabase, orgId);
+    await provider.pinMessage(whatsappMsgId, pin);
+  } catch {
+    // UAZAPI best-effort — still update DB
+  }
+
+  if (pin) {
+    // Unpin any previously pinned message in this group
+    await db
+      .from("group_messages")
+      .update({ is_pinned: false })
+      .eq("group_id", groupId)
+      .eq("organization_id", orgId);
+  }
+
+  await db
+    .from("group_messages")
+    .update({ is_pinned: pin })
+    .eq("id", messageId)
+    .eq("organization_id", orgId);
+}
+
 // ---- Edit group message ----
 export async function editGroupMessage(
   groupId: string,

@@ -253,6 +253,10 @@ export class UazapiAdapter implements WhatsAppProvider {
     await this.client.reactToMessage({ number: phone, messageId, reaction: emoji });
   }
 
+  async pinMessage(messageId: string, pin: boolean): Promise<void> {
+    await this.client.pinMessage(messageId, pin);
+  }
+
   async createCampaign(opts: CreateCampaignOptions): Promise<{ folderId: string; count: number }> {
     const result = await this.client.senderSimple({
       numbers: opts.numbers,

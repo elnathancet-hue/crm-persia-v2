@@ -261,6 +261,10 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
     throw new MetaCloudUnsupportedError("editMessage — Meta does not support editing");
   }
 
+  async pinMessage(_messageId: string, _pin: boolean): Promise<void> {
+    throw new MetaCloudUnsupportedError("pinMessage — Meta Cloud does not support message pinning");
+  }
+
   async reactToMessage(phone: string, messageId: string, emoji: string): Promise<void> {
     await this.graph<MetaSendResponse>("POST", "/messages", {
       messaging_product: "whatsapp",

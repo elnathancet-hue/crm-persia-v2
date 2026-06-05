@@ -282,6 +282,7 @@ export interface WhatsAppProvider {
   deleteMessage(phone: string, messageId: string): Promise<void>;
   editMessage(phone: string, messageId: string, newText: string): Promise<void>;
   reactToMessage(phone: string, messageId: string, emoji: string): Promise<void>;
+  pinMessage(messageId: string, pin: boolean): Promise<void>;
 
   // Mass sending (native queue)
   createCampaign(opts: CreateCampaignOptions): Promise<{ folderId: string; count: number }>;
