@@ -7,8 +7,14 @@ import { updateOrganization, connectWhatsAppInstance } from "@/actions/admin";
 import { toast } from "sonner";
 
 const SERVICES_LIST = [
-  { key: "chat", label: "Chat Live" }, { key: "crm", label: "CRM" }, { key: "leads", label: "Leads" },
-  { key: "groups", label: "Grupos" }, { key: "automations", label: "Automações" }, { key: "campaigns", label: "Campanhas" }, { key: "reports", label: "Relatórios" },
+  { key: "chat", label: "Chat Live" },
+  { key: "crm", label: "CRM" },
+  { key: "leads", label: "Leads" },
+  { key: "groups", label: "Grupos" },
+  { key: "agenda", label: "Agenda" },
+  { key: "automations", label: "Automações" },
+  { key: "campaigns", label: "Campanhas" },
+  { key: "reports", label: "Relatórios" },
 ];
 const ROLE_LABELS: Record<string, string> = { owner: "Dono", admin: "Admin", gestor: "Gestor", usuario: "Usuário", viewer: "Viewer" };
 

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef } from "react";
 
 // Notification sound (base64 short beep)
 const NOTIFICATION_SOUND_URL = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdWeCcXByd3d0cnBvb3BxcXJycnJycnJycnJxcXFxcXBwcG9vb29ubm5ubm1tbWxsbGtrawA=";
+export const CHAT_SOUND_MUTED_KEY = "admin:chat:sound-muted";
+const TOAST_MUTED_KEY = "crm:toast:muted";
 
 export function useNotificationSound() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -15,6 +17,7 @@ export function useNotificationSound() {
 
   const play = useCallback(() => {
     try {
+      if (localStorage.getItem(CHAT_SOUND_MUTED_KEY) === "true") return;
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(() => {});
@@ -42,6 +45,7 @@ export function useDesktopNotification() {
   const notify = useCallback((title: string, body?: string) => {
     try {
       if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (localStorage.getItem(TOAST_MUTED_KEY) === "1") return;
       if (document.hasFocus()) return; // Don't notify if tab is focused
       if (permissionRef.current === "granted") {
         new Notification(title, {

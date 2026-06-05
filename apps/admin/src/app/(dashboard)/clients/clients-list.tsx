@@ -10,10 +10,16 @@ import { toast } from "sonner";
 
 interface Org { id: string; name: string; niche: string | null; plan: string; category: string | null; created_at: string; organization_members: { count: number }[] }
 
-const SERVICES_DEFAULTS = { chat: true, crm: true, leads: true, groups: true, automations: true, campaigns: false, reports: true };
+const SERVICES_DEFAULTS = { chat: true, crm: true, leads: true, groups: true, agenda: true, automations: true, campaigns: false, reports: true };
 const SERVICES_LIST = [
-  { key: "chat", label: "Chat Live" }, { key: "crm", label: "CRM" }, { key: "leads", label: "Leads" },
-  { key: "groups", label: "Grupos" }, { key: "automations", label: "Automações" }, { key: "campaigns", label: "Campanhas" }, { key: "reports", label: "Relatórios" },
+  { key: "chat", label: "Chat Live" },
+  { key: "crm", label: "CRM" },
+  { key: "leads", label: "Leads" },
+  { key: "groups", label: "Grupos" },
+  { key: "agenda", label: "Agenda" },
+  { key: "automations", label: "Automações" },
+  { key: "campaigns", label: "Campanhas" },
+  { key: "reports", label: "Relatórios" },
 ];
 
 export function ClientsList({ initialOrgs }: { initialOrgs: Org[] }) {

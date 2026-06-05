@@ -38,7 +38,6 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   useEffect(() => {
     const reqId = Symbol("req");
     currentReqRef.current = reqId;
-    setLoading(true);
     getConversations({ filter, search: search || undefined })
       .then(({ data, error }) => {
         if (currentReqRef.current !== reqId) return;
@@ -108,7 +107,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/60" aria-hidden />
           <input
             type="text"
-            placeholder="Buscar por nome ou telefone..."
+            placeholder="Buscar nome, telefone ou mensagem..."
             aria-label="Buscar conversas"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}

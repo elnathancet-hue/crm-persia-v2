@@ -53,7 +53,7 @@ export default function OrgSettingsPage() {
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="size-6 animate-spin text-muted-foreground/60" /></div>;
 
   const serviceLabels: Record<string, string> = {
-    chat: "Chat", crm: "CRM", leads: "Leads", groups: "Grupos",
+    chat: "Chat", crm: "CRM", leads: "Leads", groups: "Grupos", agenda: "Agenda",
     automations: "Automações", campaigns: "Campanhas", reports: "Relatórios",
   };
 

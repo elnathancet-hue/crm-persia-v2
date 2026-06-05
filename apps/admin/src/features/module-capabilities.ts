@@ -7,6 +7,8 @@ import type {
 export const adminChatCapabilities = {
   supported: [
     "list_conversations",
+    "search_conversations",
+    "search_messages",
     "send_text",
     "send_media",
   ],
@@ -17,5 +19,7 @@ export const adminGroupCapabilities = {
     "list_groups",
     "sync_groups",
     "send_text",
+    "list_messages",
+    "list_participants",
   ],
 } satisfies ModuleCapabilityManifest<GroupCapability>;

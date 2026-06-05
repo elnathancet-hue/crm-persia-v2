@@ -30,7 +30,7 @@ export type ConversationWithLead = {
   last_message?: {
     content: string | null;
     sender: string;
-    created_at: string;
+    created_at: string | null;
   } | null;
 };
 
@@ -39,6 +39,48 @@ export async function getConversations(
 ) {
   const { admin, orgId } = await requireSuperadminForOrg();
   const { filter = "all", search } = options;
+  let matchedConversationIds: string[] | null = null;
+
+  if (search) {
+    const sanitized = search.replace(/[%_,()]/g, "").trim();
+    if (sanitized) {
+      const [{ data: matchedLeads }, { data: matchedMessages }] = await Promise.all([
+        admin
+          .from("leads")
+          .select("id")
+          .eq("organization_id", orgId)
+          .or(`name.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`)
+          .limit(100),
+        admin
+          .from("messages")
+          .select("conversation_id")
+          .eq("organization_id", orgId)
+          .ilike("content", `%${sanitized}%`)
+          .order("created_at", { ascending: false })
+          .limit(250),
+      ]);
+
+      const leadIds = (matchedLeads || []).map((lead) => lead.id);
+      const messageConversationIds = (matchedMessages || []).map((message) => message.conversation_id);
+
+      if (leadIds.length > 0) {
+        const { data: leadConversations } = await admin
+          .from("conversations")
+          .select("id")
+          .eq("organization_id", orgId)
+          .in("lead_id", leadIds)
+          .limit(100);
+        matchedConversationIds = [
+          ...new Set([
+            ...messageConversationIds,
+            ...(leadConversations || []).map((conversation) => conversation.id),
+          ]),
+        ];
+      } else {
+        matchedConversationIds = [...new Set(messageConversationIds)];
+      }
+    }
+  }
 
   let query = admin
     .from("conversations")
@@ -51,12 +93,9 @@ export async function getConversations(
   if (filter === "ai") query = query.eq("assigned_to", "ai");
   else if (filter === "waiting_human") query = query.eq("status", "waiting_human");
 
-  if (search) {
-    const sanitized = search.replace(/[%_,()]/g, "");
-    query = query.or(
-      `leads.name.ilike.%${sanitized}%,leads.phone.ilike.%${sanitized}%`,
-      { referencedTable: "leads" }
-    );
+  if (matchedConversationIds) {
+    if (matchedConversationIds.length === 0) return { data: [] as ConversationWithLead[], error: null };
+    query = query.in("id", matchedConversationIds);
   }
 
   const { data, error } = await query;
@@ -82,7 +121,7 @@ export async function getConversations(
     }
 
     for (const conv of data!) {
-      (conv as any).last_message = lastMessages.get(conv.id) || null;
+      (conv as ConversationWithLead).last_message = lastMessages.get(conv.id) || null;
     }
   }
 

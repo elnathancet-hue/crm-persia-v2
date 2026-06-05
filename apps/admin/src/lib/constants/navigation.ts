@@ -70,7 +70,7 @@ export const clientNavigation: NavItem[] = [
 
 export const clientMobileItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Chat", href: "/chat", icon: MessageSquare },
-  { label: "Grupos", href: "/groups", icon: UsersRound },
-  { label: "CRM", href: "/crm", icon: Kanban },
+  { label: "Chat", href: "/chat", icon: MessageSquare, serviceKey: "chat" },
+  { label: "Grupos", href: "/groups", icon: UsersRound, serviceKey: "groups" },
+  { label: "CRM", href: "/crm", icon: Kanban, serviceKey: "crm" },
 ];

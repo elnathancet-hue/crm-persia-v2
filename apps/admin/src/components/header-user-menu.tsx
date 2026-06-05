@@ -7,6 +7,8 @@ import {
   LogOut,
   Moon,
   Settings,
+  Volume2,
+  VolumeX,
   Sun,
   User,
 } from "lucide-react";
@@ -17,23 +19,35 @@ import Link from "next/link";
 // pra consistencia mental — mas como sao origins distintas, cada app
 // tem sua propria preferencia (intencional).
 import { useToastMuted } from "@persia/leads-ui";
+import { CHAT_SOUND_MUTED_KEY } from "@/lib/hooks/use-notification";
 
 export function HeaderUserMenu() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [isDark, setIsDark] = useState(false);
   const [toastMuted, setToastMuted] = useToastMuted();
+  const [soundMuted, setSoundMuted] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("admin-theme");
     if (saved === "dark") {
       document.documentElement.classList.add("dark");
-      setIsDark(true);
+      queueMicrotask(() => setIsDark(true));
     } else {
       document.documentElement.classList.remove("dark");
-      setIsDark(false);
+      queueMicrotask(() => setIsDark(false));
     }
   }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => setSoundMuted(localStorage.getItem(CHAT_SOUND_MUTED_KEY) === "true"));
+  }, []);
+
+  function toggleSound() {
+    const next = !soundMuted;
+    localStorage.setItem(CHAT_SOUND_MUTED_KEY, String(next));
+    setSoundMuted(next);
+  }
 
   function toggleTheme() {
     if (isDark) {
@@ -79,6 +93,15 @@ export function HeaderUserMenu() {
         ) : (
           <Bell className="size-4" />
         )}
+      </button>
+
+      <button
+        onClick={toggleSound}
+        className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary hover:ring-2 hover:ring-primary/20 transition-all"
+        aria-label={soundMuted ? "Reativar som do chat" : "Silenciar som do chat"}
+        title={soundMuted ? "Som do chat silenciado" : "Som do chat ativo"}
+      >
+        {soundMuted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
       </button>
 
       <button

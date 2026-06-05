@@ -338,7 +338,7 @@ function EditClientModal({ org, onSaved, onClose }: { org: Org; onSaved: () => v
   useEscapeKey(true, onClose);
   const [services, setServices] = useState<Record<string, boolean>>(
     org.services || {
-      chat: true, crm: true, leads: true, groups: true,
+      chat: true, crm: true, leads: true, groups: true, agenda: true,
       automations: true, campaigns: false, reports: true,
     }
   );
@@ -353,6 +353,7 @@ function EditClientModal({ org, onSaved, onClose }: { org: Org; onSaved: () => v
     leads: "Leads",
     crm: "CRM",
     groups: "Grupos WhatsApp",
+    agenda: "Agenda",
     reports: "Relatórios",
   };
 

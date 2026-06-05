@@ -79,7 +79,7 @@ export async function getOrCreateAdminOrg(): Promise<{ id: string; name: string 
       slug: "admin-persia",
       plan: "enterprise",
       category: "admin",
-      services: { chat: true, crm: true, leads: true, groups: true, automations: true, campaigns: true, reports: true },
+      services: { chat: true, crm: true, leads: true, groups: true, agenda: true, automations: true, campaigns: true, reports: true },
     })
     .select("id, name")
     .single();
@@ -168,7 +168,7 @@ export async function createOrganization(data: {
   const slug = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const { data: org, error: orgErr } = await admin.from("organizations").insert({
     name: data.name, slug, niche: data.niche || null, category: data.category || "empresa", cpf_cnpj: data.cpfCnpj || null,
-    plan: "trial", services: data.services || { chat: true, crm: true, leads: true, groups: true, automations: true, campaigns: false, reports: true },
+    plan: "trial", services: data.services || { chat: true, crm: true, leads: true, groups: true, agenda: true, automations: true, campaigns: false, reports: true },
   }).select().single();
   if (orgErr) throw new Error(orgErr.message);
 
