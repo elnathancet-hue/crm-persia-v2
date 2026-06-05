@@ -38,7 +38,7 @@ interface SendTextParams extends SendCommonOptions {
 interface SendMediaParams extends SendCommonOptions {
   number: string;
   file: string;             // URL or base64
-  type: "image" | "video" | "audio" | "document";
+  type: "image" | "video" | "audio" | "ptt" | "document";
   caption?: string;
   docName?: string;         // file name for documents
 }

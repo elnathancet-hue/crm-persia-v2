@@ -797,7 +797,7 @@ export async function sendMessageToGroup(
 export async function sendMediaToGroup(
   groupId: string,
   fileBase64: string,
-  mediaType: "image" | "video" | "audio" | "document",
+  mediaType: "image" | "video" | "audio" | "ptt" | "document",
   caption?: string,
   fileName?: string,
   replyToWamid?: string | null,

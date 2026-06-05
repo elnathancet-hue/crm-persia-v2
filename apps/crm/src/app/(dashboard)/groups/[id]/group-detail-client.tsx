@@ -93,6 +93,7 @@ import {
   createLeadFromGroupParticipant,
 } from "@/actions/groups";
 import { createClient } from "@/lib/supabase/client";
+import { useNotificationSound } from "@/lib/hooks/use-notification";
 import { toast } from "sonner";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "💪"];
@@ -323,6 +324,8 @@ export function GroupDetailClient({
   const audioChunksRef = React.useRef<Blob[]>([]);
   const recordingTimerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const { play: playNotification } = useNotificationSound();
+
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -340,6 +343,7 @@ export function GroupDetailClient({
             if (prev.some((m) => m.id === row.id)) return prev;
             return [...prev, row];
           });
+          if (row.direction === "inbound") playNotification();
         },
       )
       .on(
@@ -360,7 +364,7 @@ export function GroupDetailClient({
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [group.id]);
+  }, [group.id, playNotification]);
 
   async function handleSaveSettings() {
     setSaving(true);
@@ -463,7 +467,7 @@ export function GroupDetailClient({
           const base64 = reader.result as string;
           setSendingMedia(true);
           try {
-            await sendMediaToGroup(group.id, base64, "audio", undefined, "audio.webm");
+            await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
             toast.success("Áudio enviado");
           } catch (err: any) {
             toast.error(err.message || "Erro ao enviar áudio");
@@ -555,7 +559,7 @@ export function GroupDetailClient({
     setReactingMsgId(null);
     if (!msg.whatsapp_msg_id) return;
     try {
-      await reactToGroupMessage(group.id, msg.id, emoji);
+      await reactToGroupMessage(group.id, msg.whatsapp_msg_id, emoji);
     } catch (err: any) {
       toast.error(err.message || "Erro ao reagir");
     }
@@ -1080,7 +1084,7 @@ export function GroupDetailClient({
                           >
                             <File className="size-5 text-muted-foreground shrink-0" />
                             <span className="text-[13px] truncate max-w-[180px]">
-                              {msg.text || "Abrir documento"}
+                              Abrir documento
                             </span>
                           </a>
                         )}
@@ -1115,7 +1119,7 @@ export function GroupDetailClient({
                               </div>
                             </div>
                           ) : (
-                            msg.text && msg.media_type !== "document" && (
+                            msg.text && (
                               <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                             )
                           )}
