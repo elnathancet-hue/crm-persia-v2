@@ -8,11 +8,14 @@ import {
   Copy,
   ExternalLink,
   File,
+  FileText,
   FileVideo,
   Image,
   Bell,
   Heart,
   Loader2,
+  Pause,
+  Play,
   Lock,
   LogOut,
   MessageSquare,
@@ -549,6 +552,97 @@ function GroupEmptyState() {
 }
 
 // â"€â"€â"€ Right panel: group chat â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
+
+// ─── Audio player (same as chat-window.tsx) ──────────────────────────────────
+
+const WAVEFORM = [3, 5, 8, 6, 10, 7, 12, 9, 14, 11, 16, 13, 15, 10, 12, 8, 6, 9, 11, 14, 12, 10, 7, 9, 11, 8, 6, 5, 8, 10, 7, 5];
+
+function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) {
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const [duration, setDuration] = React.useState(0);
+  const [currentTime, setCurrentTime] = React.useState(0);
+  const [rate, setRate] = React.useState(1);
+  const RATES = [1, 1.5, 2];
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); setPlaying(false); }
+    else { audio.play().catch(() => {}); setPlaying(true); }
+  };
+
+  const cycleRate = () => {
+    const next = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
+    setRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const fmt = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[200px] max-w-[240px] px-2.5 py-1.5">
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="size-10 shrink-0 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
+        style={{
+          background: isOutgoing ? "rgba(0,0,0,0.18)" : "var(--chat-send-bg)",
+          color: isOutgoing ? "inherit" : "var(--chat-send-fg)",
+        }}
+      >
+        {playing ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current ml-0.5" />}
+      </button>
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-px h-5">
+          {WAVEFORM.map((h, i) => {
+            const pct = (i / WAVEFORM.length) * 100;
+            const filled = pct <= progress;
+            return (
+              <div
+                key={i}
+                className="flex-1 rounded-full"
+                style={{
+                  height: `${(h / 16) * 100}%`,
+                  backgroundColor: filled
+                    ? (isOutgoing ? "rgba(255,255,255,0.9)" : "var(--chat-send-bg)")
+                    : "currentColor",
+                  opacity: filled ? 1 : 0.35,
+                }}
+              />
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] tabular-nums opacity-70">{fmt(playing ? currentTime : duration)}</span>
+          <button
+            type="button"
+            onClick={cycleRate}
+            className="text-[10px] tabular-nums font-medium rounded-full px-1.5 py-0.5 hover:opacity-80"
+            style={{ background: isOutgoing ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.08)" }}
+          >
+            {rate.toFixed(1).replace(".", ",") + "x"}
+          </button>
+        </div>
+      </div>
+      <Mic className="size-4 shrink-0 opacity-50" />
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={() => {
+          const a = audioRef.current;
+          if (a && a.duration) { setCurrentTime(a.currentTime); setProgress((a.currentTime / a.duration) * 100); }
+        }}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function GroupChatPanel({
   group,
@@ -1374,37 +1468,58 @@ function GroupChatPanel({
                             </p>
                           </div>
                         )}
-                        {/* Media content */}
-                        {msg.media_type === "image" && msg.media_url && (
+                        {/* Media content — matches chat-window.tsx */}
+                        {msg.media_url && msg.media_type === "sticker" && (
                           <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={msg.media_url}
-                              alt="Imagem"
-                              className="max-w-[240px] max-h-[200px] object-cover"
-                            />
+                            <img src={msg.media_url} alt="Sticker" className="size-28 object-contain" />
                           </a>
                         )}
-                        {msg.media_type === "image" && !msg.media_url && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                        {msg.media_url && msg.media_type === "image" && (
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
+                          </a>
+                        )}
+                        {!msg.media_url && msg.media_type === "image" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
                             <Image className="size-5 text-muted-foreground" />
                             <span className="text-[13px] text-muted-foreground">Imagem</span>
                           </div>
                         )}
-                        {msg.media_type === "video" && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
-                            <FileVideo className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
-                          </div>
+                        {msg.media_url && (msg.media_type === "audio" || msg.media_type === "ptt") && (
+                          <AudioPlayer src={msg.media_url} isOutgoing={isOutbound} />
                         )}
-                        {msg.media_type === "audio" && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                        {!msg.media_url && (msg.media_type === "audio" || msg.media_type === "ptt") && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
                             <Mic className="size-5 text-muted-foreground" />
                             <span className="text-[13px] text-muted-foreground">Áudio</span>
                           </div>
                         )}
-                        {msg.media_type === "document" && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
+                        {msg.media_url && msg.media_type === "video" && (
+                          <video controls className="max-h-64 rounded-xl mb-1 max-w-[280px]">
+                            <source src={msg.media_url} />
+                          </video>
+                        )}
+                        {!msg.media_url && msg.media_type === "video" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                            <FileVideo className="size-5 text-muted-foreground" />
+                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
+                          </div>
+                        )}
+                        {msg.media_url && msg.media_type === "document" && (
+                          <a
+                            href={msg.media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-xs text-primary hover:underline mb-1 px-2.5 pt-2"
+                          >
+                            <FileText className="size-4 shrink-0" />
+                            <span>Abrir documento</span>
+                          </a>
+                        )}
+                        {!msg.media_url && msg.media_type === "document" && (
+                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
                             <File className="size-5 text-muted-foreground" />
                             <span className="text-[13px] text-muted-foreground">Documento</span>
                           </div>
