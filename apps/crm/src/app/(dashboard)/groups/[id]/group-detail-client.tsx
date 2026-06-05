@@ -96,7 +96,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useNotificationSound } from "@/lib/hooks/use-notification";
 import { toast } from "sonner";
 
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "💪"];
+const QUICK_REACTIONS = ["\u{1F44D}", "\u2764\uFE0F", "\u{1F602}", "\u{1F62E}", "\u{1F622}", "\u{1F64F}", "\u{1F525}", "\u{1F4AA}"];
 
 const CATEGORY_LABELS: Record<string, string> = {
   geral: "Geral",
@@ -670,8 +670,8 @@ export function GroupDetailClient({
         <div className="flex-1 min-w-0">
           <p className="font-medium text-[15px] leading-5 truncate">{group.name}</p>
           <p className="text-[13px] leading-5 text-muted-foreground truncate">
-            {group.participant_count} membros · {CATEGORY_LABELS[group.category] || group.category}
-            {group.is_announce && " · Anúncio"}
+            {group.participant_count} membros {"\u00B7"} {CATEGORY_LABELS[group.category] || group.category}
+            {group.is_announce && ` \u00B7 Anúncio`}
           </p>
         </div>
 
@@ -1190,7 +1190,7 @@ export function GroupDetailClient({
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium truncate">{attachedFile.name}</p>
             <p className="text-[10px] text-muted-foreground">
-              {attachedMediaType} · {(attachedFile.size / 1024).toFixed(0)} KB
+              {attachedMediaType} {"\u00B7"} {(attachedFile.size / 1024).toFixed(0)} KB
             </p>
           </div>
           <Button
@@ -1217,15 +1217,11 @@ export function GroupDetailClient({
         <div className="flex items-end gap-1">
           {/* + structured menu */}
           <DropdownMenu>
-            <DropdownMenuTrigger render={(
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-10 shrink-0 rounded-full hover:bg-transparent"
-                style={{ color: "var(--chat-header-fg)" }}
-                disabled={sendingMedia || isRecording}
-              />
-            )}>
+            <DropdownMenuTrigger
+              className="size-10 shrink-0 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors disabled:opacity-50"
+              style={{ color: "var(--chat-header-fg)" }}
+              disabled={sendingMedia || isRecording}
+            >
               {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
