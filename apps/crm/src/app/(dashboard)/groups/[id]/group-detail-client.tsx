@@ -21,6 +21,8 @@ import {
   Mic,
   MoreHorizontal,
   Paperclip,
+  Pause,
+  Play,
   RefreshCw,
   Reply,
   Save,
@@ -158,6 +160,94 @@ interface GroupMessage {
   whatsapp_msg_id: string | null;
   reply_to_whatsapp_msg_id: string | null;
   created_at: string;
+}
+
+// ---- Audio Player (WhatsApp-style) ----
+const WAVEFORM = [3, 5, 8, 6, 10, 7, 12, 9, 14, 11, 16, 13, 15, 10, 12, 8, 6, 9, 11, 14, 12, 10, 7, 9, 11, 8, 6, 5, 8, 10, 7, 5];
+
+function GroupAudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) {
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
+  const [duration, setDuration] = React.useState(0);
+  const [currentTime, setCurrentTime] = React.useState(0);
+  const [rate, setRate] = React.useState(1);
+  const RATES = [1, 1.5, 2];
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); setPlaying(false); }
+    else { audio.play().catch(() => {}); setPlaying(true); }
+  };
+
+  const cycleRate = () => {
+    const next = RATES[(RATES.indexOf(rate) + 1) % RATES.length];
+    setRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const fmt = (s: number) =>
+    `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+  const rateLabel = rate.toFixed(1).replace(".", ",") + "x";
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[200px] max-w-[240px] py-0.5">
+      <button
+        onClick={togglePlay}
+        className="size-10 shrink-0 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
+        style={{
+          background: isOutgoing ? "rgba(0,0,0,0.18)" : "var(--chat-send-bg)",
+          color: isOutgoing ? "inherit" : "var(--chat-send-fg)",
+        }}
+      >
+        {playing ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current ml-0.5" />}
+      </button>
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-px h-5">
+          {WAVEFORM.map((h, i) => {
+            const pct = (i / WAVEFORM.length) * 100;
+            const filled = pct <= progress;
+            return (
+              <div
+                key={i}
+                className="flex-1 rounded-full"
+                style={{
+                  height: `${(h / 16) * 100}%`,
+                  backgroundColor: filled
+                    ? (isOutgoing ? "rgba(255,255,255,0.9)" : "var(--chat-send-bg)")
+                    : "currentColor",
+                  opacity: filled ? 1 : 0.35,
+                }}
+              />
+            );
+          })}
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] tabular-nums opacity-70">{fmt(playing ? currentTime : duration)}</span>
+          <button
+            onClick={cycleRate}
+            className="text-[10px] tabular-nums font-medium rounded-full px-1.5 py-0.5 transition-opacity hover:opacity-80"
+            style={{ background: isOutgoing ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.08)" }}
+          >
+            {rateLabel}
+          </button>
+        </div>
+      </div>
+      <Mic className="size-4 shrink-0 opacity-50" />
+      <audio
+        ref={audioRef}
+        src={src}
+        onTimeUpdate={() => {
+          const a = audioRef.current;
+          if (a && a.duration) { setCurrentTime(a.currentTime); setProgress((a.currentTime / a.duration) * 100); }
+        }}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+        onEnded={() => { setPlaying(false); setProgress(0); setCurrentTime(0); }}
+      />
+    </div>
+  );
 }
 
 export function GroupDetailClient({
@@ -746,27 +836,56 @@ export function GroupDetailClient({
                             <span className="text-[13px] text-muted-foreground">Imagem</span>
                           </div>
                         )}
-                        {msg.media_type === "video" && (
+                        {msg.media_type === "video" && msg.media_url && (
+                          <video
+                            controls
+                            src={msg.media_url}
+                            className="max-w-[240px] max-h-[200px] rounded-xl mb-1"
+                          />
+                        )}
+                        {msg.media_type === "video" && !msg.media_url && (
                           <div className="flex items-center gap-2 px-2.5 pt-2">
                             <FileVideo className="size-5 text-muted-foreground" />
                             <span className="text-[13px] text-muted-foreground">Vídeo</span>
                           </div>
                         )}
-                        {msg.media_type === "audio" && (
+                        {(msg.media_type === "audio" || msg.media_type === "ptt") && msg.media_url && (
+                          <div className="px-2.5 pt-2 mb-1">
+                            <GroupAudioPlayer src={msg.media_url} isOutgoing={isOutbound} />
+                          </div>
+                        )}
+                        {(msg.media_type === "audio" || msg.media_type === "ptt") && !msg.media_url && (
                           <div className="flex items-center gap-2 px-2.5 pt-2">
                             <Mic className="size-5 text-muted-foreground" />
                             <span className="text-[13px] text-muted-foreground">Áudio</span>
                           </div>
                         )}
-                        {msg.media_type === "document" && (
+                        {msg.media_type === "document" && msg.media_url && (
+                          <a
+                            href={msg.media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-2.5 pt-2 hover:underline"
+                          >
+                            <File className="size-5 text-muted-foreground shrink-0" />
+                            <span className="text-[13px] truncate max-w-[180px]">
+                              {msg.text || "Abrir documento"}
+                            </span>
+                          </a>
+                        )}
+                        {msg.media_type === "document" && !msg.media_url && (
                           <div className="flex items-center gap-2 px-2.5 pt-2">
                             <File className="size-5 text-muted-foreground" />
                             <span className="text-[13px] text-muted-foreground">Documento</span>
                           </div>
                         )}
+                        {msg.media_type === "sticker" && msg.media_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={msg.media_url} alt="Sticker" className="size-28 object-contain p-1" />
+                        )}
                         {/* Text / caption */}
                         <div className="px-2.5 py-1.5 text-[14.2px] leading-5">
-                          {msg.text && (
+                          {msg.text && msg.media_type !== "document" && (
                             <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                           )}
                           <span
