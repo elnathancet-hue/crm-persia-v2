@@ -44,6 +44,9 @@ import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { useConversationWindow } from "@/lib/hooks/use-conversation-window";
 import { TemplateSelector } from "@/components/chat/template-selector";
+import { AdvancedMessageModals } from "./advanced-message-modals";
+import { sendPresenceViaWhatsApp } from "@/actions/messages";
+import { MapPin, Contact, CreditCard, LocateFixed } from "lucide-react";
 
 // Lazy-load ~150KB picker only when the popover opens
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
@@ -103,6 +106,9 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const [advancedModalType, setAdvancedModalType] = useState<"location" | "contact" | "pix" | "payment" | "location_button" | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     isMeta,
@@ -545,6 +551,27 @@ export function MessageInput({
                 Template oficial
               </DropdownMenuItem>
             )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setAdvancedModalType("location")}>
+              <MapPin className="size-4 text-destructive" />
+              Localização
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAdvancedModalType("contact")}>
+              <Contact className="size-4 text-primary" />
+              Contato
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAdvancedModalType("pix")}>
+              <CreditCard className="size-4 text-success" />
+              Chave PIX
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAdvancedModalType("payment")}>
+              <CreditCard className="size-4 text-success" />
+              Cobrança
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAdvancedModalType("location_button")}>
+              <LocateFixed className="size-4 text-progress" />
+              Botão de Localização
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -591,6 +618,15 @@ export function MessageInput({
           onChange={(e) => {
             setContent(e.target.value);
             adjustTextareaHeight();
+            // Typing presence debounce
+            if (!typingTimeoutRef.current) {
+              sendPresenceViaWhatsApp(conversationId, "composing").catch(() => {});
+            } else {
+              clearTimeout(typingTimeoutRef.current);
+            }
+            typingTimeoutRef.current = setTimeout(() => {
+              typingTimeoutRef.current = null;
+            }, 3000);
           }}
           onKeyDown={handleKeyDown}
           placeholder={
@@ -686,6 +722,16 @@ export function MessageInput({
             content: "[Template enviado]",
             created_at: new Date().toISOString(),
           } as unknown as Message);
+        }}
+      />
+
+      <AdvancedMessageModals
+        conversationId={conversationId}
+        type={advancedModalType}
+        onClose={() => setAdvancedModalType(null)}
+        onSent={(msg) => {
+          onMessageSent(msg);
+          refreshWindow();
         }}
       />
     </div>

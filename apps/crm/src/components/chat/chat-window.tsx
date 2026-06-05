@@ -62,6 +62,10 @@ import {
   Pencil,
   Phone,
   Pin,
+  MapPin,
+  Contact,
+  CreditCard,
+  LocateFixed,
   Play,
   Reply,
   RotateCw,
@@ -1660,6 +1664,53 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   <FileText className="size-4" />
                                   <span>Abrir documento</span>
                                 </a>
+                              )}
+                              {msg.type === "location" && Boolean(msg.metadata) && (
+                                <div className="flex flex-col gap-1 mb-1">
+                                  <a
+                                    href={`https://maps.google.com/?q=${(msg.metadata as any).latitude},${(msg.metadata as any).longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-[13px] font-medium text-destructive hover:underline"
+                                  >
+                                    <MapPin className="size-4" />
+                                    {(msg.metadata as any).name || "Localização"}
+                                  </a>
+                                  {(msg.metadata as any).address && <p className="text-[11px] opacity-80">{(msg.metadata as any).address as string}</p>}
+                                </div>
+                              )}
+                              {msg.type === "contact" && Boolean(msg.metadata) && (
+                                <div className="flex items-center gap-2 mb-1 p-2 bg-black/5 rounded-md">
+                                  <Contact className="size-6 text-primary" />
+                                  <div className="flex flex-col">
+                                    <span className="font-semibold text-sm">{(msg.metadata as any).fullName || "Contato"}</span>
+                                    <span className="text-xs opacity-80">{(msg.metadata as any).phoneNumber as string}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {msg.type === "pix" && Boolean(msg.metadata) && (
+                                <div className="flex items-center gap-2 mb-1 p-2 border border-success/30 bg-success/10 rounded-md text-success">
+                                  <CreditCard className="size-5 shrink-0" />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-semibold text-sm">Chave PIX ({(msg.metadata as any).pixType || "EVP"})</span>
+                                    <span className="text-xs font-mono truncate">{(msg.metadata as any).pixKey as string}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {msg.type === "payment" && Boolean(msg.metadata) && (
+                                <div className="flex items-center gap-2 mb-1 p-2 border border-success/30 bg-success/10 rounded-md text-success">
+                                  <CreditCard className="size-5 shrink-0" />
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-semibold text-sm">Cobrança R$ {Number((msg.metadata as any).amount).toFixed(2)}</span>
+                                    <span className="text-xs font-mono truncate">PIX: {(msg.metadata as any).pixKey as string}</span>
+                                  </div>
+                                </div>
+                              )}
+                              {msg.type === "location_button" && Boolean(msg.metadata) && (
+                                <div className="flex items-center justify-center gap-2 mb-1 p-2 bg-progress/10 border border-progress/30 text-progress rounded-md">
+                                  <LocateFixed className="size-4" />
+                                  <span className="font-medium text-sm">{(msg.metadata as any).text || "Enviar Localização"}</span>
+                                </div>
                               )}
                               {msg.content && (
                                 <p className="whitespace-pre-wrap break-words">{msg.content}</p>

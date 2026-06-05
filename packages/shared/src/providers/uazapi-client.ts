@@ -84,8 +84,23 @@ interface SendPixButtonParams extends SendCommonOptions {
 interface SendRequestPaymentParams extends SendCommonOptions {
   number: string;
   amount: number;
-  currency?: string;
-  description?: string;
+  pixKey: string;
+  pixType?: string;
+  title?: string;
+  text?: string;
+  footer?: string;
+  itemName?: string;
+  invoiceNumber?: string;
+  pixName?: string;
+  paymentLink?: string;
+  fileUrl?: string;
+  fileName?: string;
+  boletoCode?: string;
+}
+
+interface SendLocationButtonParams extends SendCommonOptions {
+  number: string;
+  text: string;
 }
 
 interface SendStatusParams {
@@ -469,6 +484,14 @@ export class UazapiClient {
 
   async sendStatusPost(params: SendStatusParams): Promise<MessageIdResponse> {
     return this.request("POST", "/send/status", params as unknown as Record<string, unknown>);
+  }
+
+  async sendLocationButton(params: SendLocationButtonParams): Promise<MessageIdResponse> {
+    return this.request("POST", "/send/location-button", params as unknown as Record<string, unknown>);
+  }
+
+  async sendPresence(params: PresenceParams): Promise<void> {
+    await this.request("POST", "/message/presence", params as unknown as Record<string, unknown>);
   }
 
   // ============ MESSAGE ACTIONS ============

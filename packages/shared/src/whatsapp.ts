@@ -99,6 +99,34 @@ export interface SendContactOptions {
   email?: string;
 }
 
+export interface SendPresenceOptions {
+  phone: string;
+  presence: "composing" | "recording" | "paused";
+  delay?: number;
+}
+
+export interface SendLocationButtonOptions {
+  phone: string;
+  text: string;
+}
+
+export interface SendPaymentRequestOptions {
+  phone: string;
+  amount: number;
+  pixKey: string;
+  pixType?: "CPF" | "CNPJ" | "PHONE" | "EMAIL" | "EVP";
+  title?: string;
+  text?: string;
+  footer?: string;
+  itemName?: string;
+  invoiceNumber?: string;
+  pixName?: string;
+  paymentLink?: string;
+  fileUrl?: string;
+  fileName?: string;
+  boletoCode?: string;
+}
+
 export interface CreateCampaignOptions {
   numbers: string[];
   type: string;
@@ -240,6 +268,9 @@ export interface WhatsAppProvider {
   sendCarousel(opts: SendCarouselOptions): Promise<MessageResult>;
   sendPix(opts: SendPixOptions): Promise<MessageResult>;
   sendContact(opts: SendContactOptions): Promise<MessageResult>;
+  sendLocationButton(opts: SendLocationButtonOptions): Promise<MessageResult>;
+  sendPaymentRequest(opts: SendPaymentRequestOptions): Promise<MessageResult>;
+  sendPresence(opts: SendPresenceOptions): Promise<void>;
 
   // Message actions
   deleteMessage(phone: string, messageId: string): Promise<void>;

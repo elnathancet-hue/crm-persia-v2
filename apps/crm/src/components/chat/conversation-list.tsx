@@ -43,6 +43,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@persia/ui/popover";
+import { BulkActionBar } from "@persia/ui/bulk-action-bar";
 import {
   Archive,
   Bell,
@@ -874,139 +875,103 @@ export function ConversationList({
       </div>
 
       {bulkMode && (
-        <div className="fixed left-1/2 top-1/2 z-40 w-[min(420px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card p-4 shadow-xl animate-in fade-in-0 zoom-in-95">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Seleção em massa</p>
-              <p className="text-[11px] text-muted-foreground">
-                {selectedCount} conversa{selectedCount === 1 ? "" : "s"} selecionada{selectedCount === 1 ? "" : "s"}
-              </p>
-            </div>
-            <div className="flex gap-1.5">
+        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 w-full max-w-xl px-4 animate-in slide-in-from-bottom-10 fade-in-0 duration-300">
+          <BulkActionBar
+            selectedCount={selectedCount}
+            label={selectedCount === 1 ? "1 conversa selecionada" : `${selectedCount} conversas selecionadas`}
+            onClear={exitBulkMode}
+            className="shadow-2xl border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+          >
+            <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 px-2 text-[11px] font-medium"
+                className="h-8"
                 onClick={toggleSelectAll}
                 disabled={filteredConversations.length === 0 || bulkBusy}
               >
-                {selectedCount === selectableConversationIds.length && selectableConversationIds.length > 0 ? "Desmarcar" : "Todos"}
+                {selectedCount === selectableConversationIds.length && selectableConversationIds.length > 0 ? "Desmarcar todos" : "Selecionar todos"}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="h-7 w-7"
-                onClick={exitBulkMode}
-                aria-label="Sair da selecao em massa"
-              >
-                <X className="size-3.5" />
-              </Button>
-            </div>
-          </div>
+              <div className="h-4 w-px bg-border mx-1" />
+              
+              <Popover>
+                <PopoverTrigger render={(props: React.HTMLAttributes<HTMLButtonElement>) => (
+                  <Button {...(props as any)} variant="secondary" size="sm" className="h-8" disabled={selectedCount === 0 || bulkBusy}>
+                    <GitBranch className="mr-1.5 size-3.5" />
+                    Ações em lote
+                  </Button>
+                )} />
+                <PopoverContent side="top" align="end" className="w-80 p-3 space-y-4 shadow-xl">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" disabled title="Em breve">
+                      <Archive className="mr-1.5 size-3.5" />
+                      Arquivar
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      disabled={bulkBusy || selectedCount === 0}
+                      onClick={() => runBulkAction(() => bulkMarkConversationsAsRead([...selectedConversationIds]), "Marcadas como lidas")}
+                    >
+                      {bulkBusy ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <CheckCheck className="mr-1.5 size-3.5" />}
+                      Lido
+                    </Button>
+                  </div>
 
-          <div className="space-y-3">
-            {/* Ações rápidas */}
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="secondary"
-                className="h-8 text-xs"
-                disabled
-                title="Em breve"
-              >
-                <Archive className="mr-1.5 size-3.5" />
-                Arquivar
-              </Button>
-              <Button
-                variant="secondary"
-                className="h-8 text-xs bg-primary/10 text-primary hover:bg-primary/20"
-                disabled={bulkBusy || selectedCount === 0}
-                onClick={() =>
-                  runBulkAction(
-                    () => bulkMarkConversationsAsRead([...selectedConversationIds]),
-                    "Marcadas como lidas",
-                  )
-                }
-              >
-                {bulkBusy ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <CheckCheck className="mr-1.5 size-3.5" />}
-                Marcar lido
-              </Button>
-            </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Adicionar tag</Label>
+                    <Select value={bulkTagId} onValueChange={(value) => setBulkTagId(value ?? "")}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <span className={cn("flex-1 truncate text-left", !bulkTagId && "text-muted-foreground")}>
+                          {bulkTagId ? (selectedTagName ?? "Tag") : "Escolha uma tag..."}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dbTags.map((tag) => (
+                          <SelectItem key={tag.id} value={tag.id} className="text-xs">{tag.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Adicionar Tag */}
-            <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
-              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Tag</Label>
-              <Select value={bulkTagId} onValueChange={(value) => setBulkTagId(value ?? "")}>
-                <SelectTrigger className="h-9 min-w-0 text-xs">
-                  <span className={cn("flex-1 truncate text-left", !bulkTagId && "text-muted-foreground")}>
-                    {bulkTagId ? (selectedTagName ?? "Tag") : "Adicionar tag"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {dbTags.map((tag) => (
-                    <SelectItem key={tag.id} value={tag.id} className="text-xs">
-                      {tag.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Mover para funil</Label>
+                    <div className="flex gap-2">
+                      <Select value={bulkPipelineId} onValueChange={(value) => setBulkPipelineId(value ?? "")}>
+                        <SelectTrigger className="h-8 text-xs flex-1">
+                          <span className={cn("truncate text-left", !bulkPipelineId && "text-muted-foreground")}>
+                            {bulkPipelineId ? (selectedPipelineName ?? "Funil") : "Funil"}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pipelines.map((pipeline) => (
+                            <SelectItem key={pipeline.id} value={pipeline.id} className="text-xs">{pipeline.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={bulkStageId} onValueChange={(value) => setBulkStageId(value ?? "")} disabled={!bulkPipelineId}>
+                        <SelectTrigger className="h-8 text-xs flex-1">
+                          <span className={cn("truncate text-left", !bulkStageId && "text-muted-foreground")}>
+                            {bulkStageId ? (selectedStageName ?? "Etapa") : "Etapa"}
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {stages.map((stage) => (
+                            <SelectItem key={stage.id} value={stage.id} className="text-xs">{stage.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-            {/* Mover Funil */}
-            <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
-              <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Funil</Label>
-              <Select value={bulkPipelineId} onValueChange={(value) => setBulkPipelineId(value ?? "")}>
-                <SelectTrigger className="h-9 text-xs">
-                  <span className={cn("flex-1 truncate text-left", !bulkPipelineId && "text-muted-foreground")}>
-                    {bulkPipelineId ? (selectedPipelineName ?? "Funil") : "Escolher funil"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {pipelines.map((pipeline) => (
-                    <SelectItem key={pipeline.id} value={pipeline.id} className="text-xs">
-                      {pipeline.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="flex items-center gap-2">
-                <Select value={bulkStageId} onValueChange={(value) => setBulkStageId(value ?? "")} disabled={!bulkPipelineId}>
-                  <SelectTrigger className="h-9 min-w-0 flex-1 text-xs">
-                    <span className={cn("flex-1 truncate text-left", !bulkStageId && "text-muted-foreground")}>
-                      {bulkStageId ? (selectedStageName ?? "Etapa") : "Escolher etapa"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages.map((stage) => (
-                      <SelectItem key={stage.id} value={stage.id} className="text-xs">
-                        {stage.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <Button size="sm" className="w-full" disabled={bulkBusy || selectedCount === 0 || !hasBulkChanges} onClick={runBulkChanges}>
+                    {bulkBusy && <Loader2 className="mr-2 size-3.5 animate-spin" />}
+                    Aplicar alterações
+                  </Button>
+                </PopoverContent>
+              </Popover>
             </div>
-
-            <div className="flex items-center justify-end gap-2 border-t pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={exitBulkMode}
-                disabled={bulkBusy}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={bulkBusy || selectedCount === 0 || !hasBulkChanges}
-                onClick={runBulkChanges}
-              >
-                {bulkBusy ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <GitBranch className="mr-1.5 size-3.5" />}
-                Aplicar alterações
-              </Button>
-            </div>
-          </div>
+          </BulkActionBar>
         </div>
       )}
 

@@ -19,6 +19,9 @@ import type {
   SendTextOptions,
   SessionStatus,
   WhatsAppProvider,
+  SendLocationButtonOptions,
+  SendPaymentRequestOptions,
+  SendPresenceOptions,
 } from "../whatsapp";
 
 export class UazapiAdapter implements WhatsAppProvider {
@@ -197,6 +200,43 @@ export class UazapiAdapter implements WhatsAppProvider {
     });
     const id = result.messageId || result.MessageId || "";
     return { messageId: String(id), success: true };
+  }
+
+  async sendLocationButton(opts: SendLocationButtonOptions): Promise<MessageResult> {
+    const result = await this.client.sendLocationButton({
+      number: opts.phone,
+      text: opts.text,
+    });
+    const id = result.messageId || result.MessageId || "";
+    return { messageId: String(id), success: true };
+  }
+
+  async sendPaymentRequest(opts: SendPaymentRequestOptions): Promise<MessageResult> {
+    const result = await this.client.sendRequestPayment({
+      number: opts.phone,
+      amount: opts.amount,
+      pixKey: opts.pixKey,
+      pixType: opts.pixType,
+      title: opts.title,
+      text: opts.text,
+      footer: opts.footer,
+      itemName: opts.itemName,
+      invoiceNumber: opts.invoiceNumber,
+      pixName: opts.pixName,
+      paymentLink: opts.paymentLink,
+      fileUrl: opts.fileUrl,
+      fileName: opts.fileName,
+      boletoCode: opts.boletoCode,
+    });
+    const id = result.messageId || result.MessageId || "";
+    return { messageId: String(id), success: true };
+  }
+
+  async sendPresence(opts: SendPresenceOptions): Promise<void> {
+    await this.client.sendPresence({
+      number: opts.phone,
+      presence: opts.presence,
+    });
   }
 
   async deleteMessage(phone: string, messageId: string): Promise<void> {

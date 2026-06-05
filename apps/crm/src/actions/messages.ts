@@ -1006,3 +1006,156 @@ export async function pinWhatsAppMessage(
     return { error: e instanceof Error ? e.message : "Erro ao fixar mensagem" };
   }
 }
+
+/**
+ * Envia uma mensagem interativa (Location, Contact, Pix, Payment, LocationButton)
+ */
+export async function sendAdvancedMessageViaWhatsApp(
+  conversationId: string,
+  payload: {
+    type: "location" | "contact" | "pix" | "payment" | "location_button";
+    data: any; // specific data based on type
+  }
+): Promise<{ data?: Message; error?: string }> {
+  const { supabase, orgId, userId } = await requireRole("agent");
+
+  const { data: conversation, error: convError } = await supabase
+    .from("conversations")
+    .select(`
+      id, lead_id, organization_id, channel, leads ( id, phone )
+    `)
+    .eq("id", conversationId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (convError || !conversation) return { error: "Conversa não encontrada" };
+
+  const lead = (conversation as Record<string, unknown>).leads as Record<string, unknown> | null;
+  const phone = lead?.phone as string | null;
+
+  const now = new Date().toISOString();
+
+  // Save to DB first with 'sending' status
+  const { data: message, error: msgError } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      organization_id: conversation.organization_id,
+      lead_id: conversation.lead_id,
+      sender: "agent",
+      sender_user_id: userId,
+      type: payload.type,
+      metadata: payload.data,
+      status: "sending",
+    })
+    .select()
+    .single();
+
+  if (msgError) {
+    return { error: msgError.message };
+  }
+
+  await supabase
+    .from("conversations")
+    .update({ last_message_at: now, unread_count: 0, updated_at: now })
+    .eq("id", conversationId);
+
+  await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
+
+  if (phone && conversation.channel === "whatsapp") {
+    const { data: connection } = await supabase
+      .from("whatsapp_connections")
+      .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+      .eq("organization_id", conversation.organization_id)
+      .eq("status", "connected")
+      .limit(1)
+      .single();
+
+    if (!connection) {
+      await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
+      return { data: { ...(message as Message), status: "failed" }, error: "Nenhuma conexão WhatsApp ativa" };
+    }
+
+    try {
+      const provider = createProvider(connection);
+      let result;
+
+      switch (payload.type) {
+        case "location":
+          result = await provider.sendLocation({ phone, ...payload.data });
+          break;
+        case "contact":
+          result = await provider.sendContact({ phone, ...payload.data });
+          break;
+        case "pix":
+          result = await provider.sendPix({ phone, ...payload.data });
+          break;
+        case "payment":
+          result = await provider.sendPaymentRequest({ phone, ...payload.data });
+          break;
+        case "location_button":
+          result = await provider.sendLocationButton({ phone, ...payload.data });
+          break;
+      }
+
+      await supabase
+        .from("messages")
+        .update({
+          status: result?.success ? "sent" : "failed",
+          whatsapp_msg_id: result?.messageId || null,
+        })
+        .eq("id", message.id);
+
+      return { data: { ...(message as Message), status: result?.success ? "sent" : "failed", whatsapp_msg_id: result?.messageId || null } };
+    } catch (err: any) {
+      await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
+      return { data: { ...(message as Message), status: "failed" }, error: err.message };
+    }
+  }
+
+  return { data: message as Message };
+}
+
+/**
+ * Envia Presença (Composing / Recording)
+ */
+export async function sendPresenceViaWhatsApp(
+  conversationId: string,
+  presence: "composing" | "recording" | "paused"
+): Promise<{ error?: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select(`organization_id, channel, leads ( phone )`)
+    .eq("id", conversationId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!conversation) return { error: "Conversa não encontrada" };
+  const lead = (conversation as Record<string, unknown>).leads as Record<string, unknown> | null;
+  const phone = lead?.phone as string | null;
+
+  if (phone && conversation.channel === "whatsapp") {
+    const { data: connection } = await supabase
+      .from("whatsapp_connections")
+      .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+      .eq("organization_id", conversation.organization_id)
+      .eq("status", "connected")
+      .limit(1)
+      .single();
+
+    if (!connection) return { error: "Sem conexão" };
+
+    try {
+      const provider = createProvider(connection);
+      if (typeof provider.sendPresence === 'function') {
+        await provider.sendPresence({ phone, presence });
+      }
+    } catch {
+      // Best effort, ignore errors
+    }
+  }
+
+  return {};
+}

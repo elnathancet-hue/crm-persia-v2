@@ -18,6 +18,9 @@ import type {
   SessionStatus,
   TemplateCapable,
   WhatsAppProvider,
+  SendLocationButtonOptions,
+  SendPaymentRequestOptions,
+  SendPresenceOptions,
 } from "../whatsapp";
 
 const GRAPH_VERSION = "v21.0";
@@ -236,6 +239,18 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
 
   async sendContact(_opts: SendContactOptions): Promise<MessageResult> {
     throw new MetaCloudUnsupportedError("sendContact — not yet implemented");
+  }
+
+  async sendLocationButton(_opts: SendLocationButtonOptions): Promise<MessageResult> {
+    throw new MetaCloudUnsupportedError("sendLocationButton — UAZAPI-specific");
+  }
+
+  async sendPaymentRequest(_opts: SendPaymentRequestOptions): Promise<MessageResult> {
+    throw new MetaCloudUnsupportedError("sendPaymentRequest — UAZAPI-specific");
+  }
+
+  async sendPresence(_opts: SendPresenceOptions): Promise<void> {
+    // Not natively supported in Graph API for manual presences. No-op.
   }
 
   async deleteMessage(_phone: string, _messageId: string): Promise<void> {

@@ -46,6 +46,14 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import { Switch } from "@persia/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@persia/ui/table";
 import { Textarea } from "@persia/ui/textarea";
 import { cn } from "@persia/ui/utils";
 import { useAgentActions } from "../context";
@@ -275,90 +283,77 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
       {sorted.length === 0 ? (
         <EmptyFollowups onCreate={openNew} />
       ) : (
-        <div className="space-y-3">
-          {sorted.map((followup) => {
-            const template = templates.find((t) => t.id === followup.template_id);
-            return (
-              <Card key={followup.id} className="transition-shadow hover:shadow-sm">
-                <CardContent className="p-4 flex items-start gap-4">
-                  <div className="flex flex-col items-center gap-2 shrink-0">
-                    <div className="size-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center font-semibold">
-                      {followup.order_index + 1}
-                    </div>
-                    {followup.is_enabled ? (
-                      <CheckCircle2 className="size-4 text-success" />
-                    ) : (
-                      <Clock className="size-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-sm tracking-tight">
-                        {followup.name}
-                      </p>
-                      <Badge
-                        variant={followup.is_enabled ? "secondary" : "outline"}
-                        className="text-[11px]"
-                      >
-                        {followup.is_enabled ? "Ativa" : "Pausada"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Apos <strong>{formatFollowupDelay(followup.delay_hours)}</strong>{" "}
-                      sem resposta · {followup.send_window_start ?? "08:00"}-
-                      {followup.send_window_end ?? "18:00"} · template{" "}
-                      <span className="font-mono text-foreground/80">
-                        {followup.message_text?.trim() ? "mensagem propria" : template?.name ?? "(removido)"}
-                      </span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Revalida IA ativa, conversa aberta e ultima mensagem da
-                      empresa antes de enviar.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Switch
-                      checked={followup.is_enabled}
-                      onCheckedChange={(v) => handleToggle(followup, v)}
-                      disabled={pendingId === followup.id || isPending}
-                      aria-label={
-                        followup.is_enabled ? "Desativar etapa" : "Ativar etapa"
-                      }
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-9"
-                      onClick={() => openEdit(followup)}
-                      disabled={isPending}
-                      aria-label={`Editar ${followup.name}`}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-9"
-                      onClick={() => setDeleteTarget(followup)}
-                      disabled={isPending}
-                      aria-label={`Remover ${followup.name}`}
-                    >
-                      {pendingId === followup.id ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-4" />
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="rounded-xl border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[80px]">Status</TableHead>
+                <TableHead>Etapa</TableHead>
+                <TableHead>Gatilho</TableHead>
+                <TableHead>Horário</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((followup) => {
+                const template = templates.find((t) => t.id === followup.template_id);
+                return (
+                  <TableRow key={followup.id} className={pendingId === followup.id ? "opacity-50 pointer-events-none" : ""}>
+                    <TableCell>
+                      <Switch
+                        checked={followup.is_enabled}
+                        onCheckedChange={(v) => handleToggle(followup, v)}
+                        disabled={pendingId === followup.id || isPending}
+                        aria-label={followup.is_enabled ? "Desativar etapa" : "Ativar etapa"}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-sm">{followup.name}</span>
+                        <span className="text-[11px] text-muted-foreground mt-0.5">
+                          {followup.message_text?.trim() ? "Mensagem própria" : template?.name ?? "Template não encontrado"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      Após {formatFollowupDelay(followup.delay_hours)} s/ resposta
+                    </TableCell>
+                    <TableCell className="text-sm font-mono text-muted-foreground">
+                      {followup.send_window_start ?? "08:00"} - {followup.send_window_end ?? "18:00"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8"
+                          onClick={() => openEdit(followup)}
+                          disabled={isPending}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-destructive focus:text-destructive"
+                          onClick={() => setDeleteTarget(followup)}
+                          disabled={isPending}
+                        >
+                          {pendingId === followup.id ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
           {reachedCap ? (
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              Limite de {FOLLOWUPS_MAX_PER_AGENT} etapas atingido. Remova uma
-              antes de criar outra.
-            </p>
+            <div className="border-t p-4 text-center">
+              <p className="text-xs text-muted-foreground">
+                Limite de {FOLLOWUPS_MAX_PER_AGENT} etapas atingido. Remova uma antes de criar outra.
+              </p>
+            </div>
           ) : null}
         </div>
       )}
