@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import {
   ArrowLeft,
   ChevronDown,
@@ -75,6 +76,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@persia/ui/popover";
 import {
   syncGroups,
   deleteGroup,
@@ -155,6 +157,11 @@ interface GroupMessage {
   reply_to_whatsapp_msg_id: string | null;
   sender_lead?: GroupMessageSenderLead | null;
 }
+
+const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+  loading: () => <div className="p-4 text-xs text-muted-foreground">Carregando emojis...</div>,
+});
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "💪"];
 
@@ -569,6 +576,7 @@ function GroupChatPanel({
   const [aiLoading, setAiLoading] = React.useState(false);
   const [isRecording, setIsRecording] = React.useState(false);
   const [recordingSeconds, setRecordingSeconds] = React.useState(0);
+  const [emojiOpen, setEmojiOpen] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
@@ -1525,19 +1533,34 @@ function GroupChatPanel({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-10 shrink-0 rounded-full hover:bg-transparent"
-            style={{ color: "var(--chat-header-fg)" }}
-            title="Emoji"
-            aria-label="Emoji"
-            onClick={() => setChatInput((current) => `${current}\u{1F642}`)}
-            disabled={isRecording || sendingMessage || sendingMedia}
-          >
-            <Smile className="size-4" />
-          </Button>
+          <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
+            <PopoverTrigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10 shrink-0 rounded-full hover:bg-transparent"
+                style={{ color: "var(--chat-header-fg)" }}
+                title="Emoji"
+                aria-label="Emoji"
+                disabled={isRecording || sendingMessage || sendingMedia}
+              >
+                <Smile className="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-auto p-0 border-0">
+              <EmojiPicker
+                onEmojiClick={(d) => {
+                  setChatInput((prev) => prev + d.emoji);
+                  setEmojiOpen(false);
+                }}
+                width={320}
+                height={400}
+                searchPlaceholder="Buscar emoji..."
+                previewConfig={{ showPreview: false }}
+              />
+            </PopoverContent>
+          </Popover>
 
           {isRecording ? (
             <div
