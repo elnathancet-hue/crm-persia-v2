@@ -1572,8 +1572,14 @@ function LeadGruposTab({
             {/* Header */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="size-8 rounded-full bg-progress-soft flex items-center justify-center shrink-0">
-                  <Users className="size-4 text-progress" />
+                <div className="shrink-0 flex items-center justify-center">
+                  {g.group_image_url ? (
+                    <LeadAvatar name={g.group_name} avatarUrl={g.group_image_url} size="sm" />
+                  ) : (
+                    <div className="size-8 rounded-full bg-progress-soft flex items-center justify-center shrink-0">
+                      <Users className="size-4 text-progress" />
+                    </div>
+                  )}
                 </div>
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{g.group_name}</p>

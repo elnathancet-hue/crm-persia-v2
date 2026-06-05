@@ -175,6 +175,7 @@ export interface LeadGroupMembership {
   id: string;
   group_id: string;
   group_name: string;
+  group_image_url: string | null;
   campaign_name: string | null;
   joined_at: string;
   /** null = ainda no grupo, string ISO = saiu nessa data (migration 081). */

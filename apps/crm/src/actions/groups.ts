@@ -1427,7 +1427,7 @@ export async function getLeadGroups(leadId: string) {
   const { supabase, orgId } = await requireRole("agent");
   const db = supabase as any;
 
-  const MEMBERSHIP_SELECT = "id, group_id, joined_at, left_at, source, utm_source, whatsapp_groups(name)";
+  const MEMBERSHIP_SELECT = "id, group_id, joined_at, left_at, source, utm_source, whatsapp_groups(name, image_url)";
 
   // Primary: by lead_id (fast path)
   const { data: byLeadId, error } = await db
@@ -1522,6 +1522,7 @@ export async function getLeadGroups(leadId: string) {
       id: m.id as string,
       group_id: m.group_id as string,
       group_name: (m.whatsapp_groups as { name?: string } | null)?.name ?? "Grupo",
+      group_image_url: (m.whatsapp_groups as { image_url?: string | null } | null)?.image_url ?? null,
       campaign_name: campaignByGroup.get(m.group_id as string) ?? null,
       joined_at: m.joined_at as string,
       left_at: (m.left_at as string | null) ?? null,

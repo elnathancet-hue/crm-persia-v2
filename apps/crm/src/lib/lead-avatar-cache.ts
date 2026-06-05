@@ -204,7 +204,17 @@ export async function cacheGroupAvatarFromUrl(input: {
     // Persistir no DB (colunas adicionadas em migration 086, ainda fora dos tipos gerados)
     await (admin.from("whatsapp_groups") as any)
       .update({ image_url: publicUrl, image_fetched_at: new Date().toISOString() })
-      .eq("id", input.groupId);
+      .eq("id", input.groupId)
+      .select("group_jid")
+      .single()
+      .then(async ({ data: g }: any) => {
+        if (g?.group_jid) {
+          await admin.from("leads")
+            .update({ avatar_url: publicUrl })
+            .eq("phone", g.group_jid)
+            .eq("organization_id", input.organizationId);
+        }
+      });
 
     return publicUrl;
   } catch {

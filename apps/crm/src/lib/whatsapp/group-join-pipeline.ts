@@ -316,15 +316,33 @@ export async function linkGroupMembership(
       .maybeSingle();
     wasActiveMember = Boolean(existingActive);
 
-    // Upsert por (org, group, phone) — índice único na migration 079
-    const { data: upserted } = await db
+    // Upsert fallback to avoid partial index ON CONFLICT errors
+    const { data: existingRecord } = await db
       .from("group_memberships")
-      .upsert(membershipPayload, {
-        onConflict: "organization_id,group_id,phone",
-        ignoreDuplicates: false,
-      })
       .select("id, lead_id")
-      .single();
+      .eq("organization_id", orgId)
+      .eq("group_id", groupId)
+      .eq("phone", e164)
+      .maybeSingle();
+
+    let upserted: any;
+
+    if (existingRecord) {
+      const { data } = await db
+        .from("group_memberships")
+        .update(membershipPayload)
+        .eq("id", existingRecord.id)
+        .select("id, lead_id")
+        .single();
+      upserted = data;
+    } else {
+      const { data } = await db
+        .from("group_memberships")
+        .insert(membershipPayload)
+        .select("id, lead_id")
+        .single();
+      upserted = data;
+    }
 
     if (upserted) {
       membershipId = upserted.id as string;
