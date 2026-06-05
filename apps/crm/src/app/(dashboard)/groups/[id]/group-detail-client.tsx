@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Reply,
   Save,
+  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -305,6 +306,8 @@ export function GroupDetailClient({
   >("document");
   const [sendingMedia, setSendingMedia] = React.useState(false);
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [emojiOpen, setEmojiOpen] = React.useState(false);
   const [editingMsgId, setEditingMsgId] = React.useState<string | null>(null);
   const [editText, setEditText] = React.useState("");
@@ -669,6 +672,9 @@ export function GroupDetailClient({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="icon-sm" onClick={() => { setSearchOpen((o) => !o); setSearchQuery(""); }} title="Buscar mensagens">
+            <Search className="size-4" />
+          </Button>
           <Button variant="ghost" size="icon-sm" onClick={() => setInviteOpen(true)} title="Convidar lead">
             <Link2 className="size-4" />
           </Button>
@@ -697,6 +703,34 @@ export function GroupDetailClient({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Search bar */}
+      {searchOpen && (
+        <div
+          className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-[color:var(--chat-sidebar-divider)]"
+          style={{ background: "var(--chat-header-bg)" }}
+        >
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            autoFocus
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar mensagens..."
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            style={{ color: "var(--chat-header-fg)" }}
+            onKeyDown={(e) => { if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); } }}
+          />
+          {searchQuery && (
+            <span className="text-[11px] text-muted-foreground shrink-0">
+              {messages.filter((m) => m.text?.toLowerCase().includes(searchQuery.toLowerCase())).length} resultado(s)
+            </span>
+          )}
+          <Button variant="ghost" size="icon-sm" className="size-6 shrink-0" onClick={() => { setSearchOpen(false); setSearchQuery(""); }}>
+            <X className="size-3" />
+          </Button>
+        </div>
+      )}
 
       {/* Pinned message banner */}
       {(() => {
@@ -737,20 +771,23 @@ export function GroupDetailClient({
       {/* Messages — WhatsApp wallpaper */}
       <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
         <div className="flex flex-col gap-1 py-4">
-          {messages.length === 0 ? (
-            <div className="flex items-center justify-center py-16">
-              <EmptyState
-                variant="subtle"
-                icon={<MessageSquare />}
-                title="Nenhuma mensagem ainda"
-                description="Envie a primeira mensagem para o grupo"
-              />
-            </div>
-          ) : (
-            messages.map((msg, idx) => {
+          {(() => {
+            const q = searchQuery.trim().toLowerCase();
+            const displayed = q ? messages.filter((m) => m.text?.toLowerCase().includes(q)) : messages;
+            if (displayed.length === 0) return (
+              <div className="flex items-center justify-center py-16">
+                <EmptyState
+                  variant="subtle"
+                  icon={<MessageSquare />}
+                  title={q ? "Nenhum resultado" : "Nenhuma mensagem ainda"}
+                  description={q ? `Sem mensagens contendo "${searchQuery}"` : "Envie a primeira mensagem para o grupo"}
+                />
+              </div>
+            );
+            return displayed.map((msg, idx) => {
               const isOutbound = msg.direction === "outbound";
-              const showDateSep = idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
-              const prevMsg = idx > 0 ? messages[idx - 1] : null;
+              const showDateSep = idx === 0 || !isSameDay(displayed[idx - 1].created_at, msg.created_at);
+              const prevMsg = idx > 0 ? displayed[idx - 1] : null;
               const prevSameSender =
                 !showDateSep &&
                 prevMsg &&
@@ -1094,8 +1131,8 @@ export function GroupDetailClient({
                   </div>
                 </div>
               );
-            })
-          )}
+            });
+          })()}
           <div ref={messagesEndRef} />
         </div>
       </div>
