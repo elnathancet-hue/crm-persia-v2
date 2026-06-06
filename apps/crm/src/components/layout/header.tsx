@@ -70,7 +70,7 @@ export function Header() {
           <span className="text-lg font-bold tracking-tight font-heading text-foreground">Pérsia</span>
           <span className="text-lg font-bold tracking-tight font-heading text-primary">CRM</span>
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className="hidden sm:block text-xs text-muted-foreground">
           Bem-vindo, {organization?.name || ""}
         </span>
       </div>

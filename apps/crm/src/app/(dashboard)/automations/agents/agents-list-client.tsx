@@ -25,7 +25,7 @@ export function AgentsListClient(props: Props) {
       <div className="space-y-6">
         {/* Header sticky com icone grande + titulo. Paridade com /crm +
             /agenda (PR #217). */}
-        <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60">
+        <div className="sticky -top-3 md:-top-6 z-30 -mx-3 md:-mx-6 -mt-3 md:-mt-6 px-3 md:px-6 pt-3 md:pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-start gap-3.5">
               <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20 ring-1 ring-primary/20">

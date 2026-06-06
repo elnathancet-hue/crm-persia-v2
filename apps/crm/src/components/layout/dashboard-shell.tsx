@@ -116,7 +116,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main id="main-content" className={`flex-1 ${isChatPage ? "overflow-hidden p-0" : "overflow-y-auto p-6 pb-[calc(1.5rem+4rem)] md:pb-6"}`}>
+        <main id="main-content" className={`flex-1 ${isChatPage ? "overflow-hidden p-0" : "overflow-y-auto p-3 md:p-6 pb-[calc(0.75rem+4rem)] md:pb-6"}`}>
           {children}
         </main>
       </div>

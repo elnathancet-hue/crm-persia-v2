@@ -177,7 +177,7 @@ export function AgendaPageClient({
             Agenda tinha <header> simples sem icone e tabs em pill (drift do
             resto do produto). Agora segue o mesmo pattern do CrmShell:
             sticky top, icone azul size-12, tabs underline. */}
-        <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
+        <div className="sticky -top-3 md:-top-6 z-30 -mx-3 md:-mx-6 -mt-3 md:-mt-6 px-3 md:px-6 pt-3 md:pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
           <AgendaPageHeader onNovoSelect={handleNovoMenuSelect} />
           <AgendaTabs
             active={activeTab}

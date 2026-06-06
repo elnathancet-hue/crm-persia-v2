@@ -215,7 +215,7 @@ export function CrmShell(props: CrmShellProps) {
             o conteudo rola. Compensam o p-6 do <main> com margem negativa
             pra grudar na borda. bg-background + backdrop-blur garantem
             que conteudo nao "vaze" por tras. */}
-        <div className="sticky -top-6 z-30 -mx-6 -mt-6 px-6 pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
+        <div className="sticky -top-3 md:-top-6 z-30 -mx-3 md:-mx-6 -mt-3 md:-mt-6 px-3 md:px-6 pt-3 md:pt-6 pb-3 bg-background/95 backdrop-blur-sm border-b border-border/60 space-y-4">
           <CrmPageHeader
             canCreateFunil={canCreateFunil}
             onCreateFunilClick={() => setCreateFunilOpen(true)}
