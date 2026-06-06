@@ -48,6 +48,7 @@ import {
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
+import { Checkbox } from "@persia/ui/checkbox";
 import { EmptyState } from "@persia/ui/empty-state";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -711,6 +712,9 @@ function GroupChatPanel({
   const [isRecording, setIsRecording] = React.useState(false);
   const [recordingSeconds, setRecordingSeconds] = React.useState(0);
   const [emojiOpen, setEmojiOpen] = React.useState(false);
+  const [bulkSelectMode, setBulkSelectMode] = React.useState(false);
+  const [selectedMsgIds, setSelectedMsgIds] = React.useState<Set<string>>(new Set());
+  const [deletingBulk, setDeletingBulk] = React.useState(false);
   const [hasMoreMessages, setHasMoreMessages] = React.useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -1102,6 +1106,37 @@ function GroupChatPanel({
     }
   }
 
+  function toggleBulkSelect(msgId: string) {
+    setSelectedMsgIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(msgId)) next.delete(msgId); else next.add(msgId);
+      return next;
+    });
+  }
+
+  function exitBulkSelect() {
+    setBulkSelectMode(false);
+    setSelectedMsgIds(new Set());
+  }
+
+  async function handleBulkDelete() {
+    if (selectedMsgIds.size === 0) return;
+    setDeletingBulk(true);
+    const msgsToDelete = messages.filter((m) => selectedMsgIds.has(m.id));
+    // Optimistic removal
+    setMessages((prev) => prev.filter((m) => !selectedMsgIds.has(m.id)));
+    exitBulkSelect();
+    try {
+      await Promise.allSettled(
+        msgsToDelete.map((m) => deleteGroupMessage(group.id, m.id, m.whatsapp_msg_id))
+      );
+    } catch {
+      // Best-effort — Realtime UPDATE will correct state if needed
+    } finally {
+      setDeletingBulk(false);
+    }
+  }
+
   async function loadGroupContacts() {
     setMembersLoading(true);
     try {
@@ -1354,6 +1389,11 @@ function GroupChatPanel({
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => { setBulkSelectMode(true); setSelectedMsgIds(new Set()); }}>
+                <Square className="size-4" />
+                Selecionar mensagens
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => {
                 if (group.invite_link) {
                   navigator.clipboard.writeText(group.invite_link);
@@ -1472,7 +1512,22 @@ function GroupChatPanel({
                 : null;
 
               return (
-                <div key={msg.id} data-msg-id={msg.id}>
+                <div
+                  key={msg.id}
+                  data-msg-id={msg.id}
+                  className={bulkSelectMode ? "flex items-start gap-2 px-1" : undefined}
+                  onClick={bulkSelectMode ? () => toggleBulkSelect(msg.id) : undefined}
+                >
+                  {bulkSelectMode && (
+                    <div className="flex shrink-0 items-center pt-2">
+                      <Checkbox
+                        checked={selectedMsgIds.has(msg.id)}
+                        onCheckedChange={() => toggleBulkSelect(msg.id)}
+                        aria-label="Selecionar mensagem"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
                   {showDateSep && (
                     <div className="flex items-center justify-center py-3">
                       <span className="rounded-lg bg-[color:var(--chat-header-bg)] px-3 py-1 text-[12px] font-medium text-muted-foreground shadow-sm">
@@ -1513,8 +1568,8 @@ function GroupChatPanel({
                       </div>
                     )}
 
-                    {/* Reaction + context menu â€" visible on hover */}
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity self-end mb-1 shrink-0">
+                    {/* Reaction + context menu â€" visible on hover, hidden in bulk select */}
+                    <div className={cn("flex items-center gap-0.5 transition-opacity self-end mb-1 shrink-0", bulkSelectMode ? "opacity-0 pointer-events-none" : "opacity-0 group-hover/msg:opacity-100")}>
                       {/* Quick emoji reactions */}
                       {msg.whatsapp_msg_id && (
                         <div className="relative">
@@ -1569,6 +1624,11 @@ function GroupChatPanel({
                               <DropdownMenuSeparator />
                             </>
                           )}
+                          <DropdownMenuItem onClick={() => { setBulkSelectMode(true); setSelectedMsgIds(new Set([msg.id])); }}>
+                            <Square className="size-4" />
+                            Selecionar
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => setReplyTo(msg)}>
                             <CornerUpLeft className="size-4" />
                             Responder
@@ -1746,6 +1806,7 @@ function GroupChatPanel({
                       </div>
                     </div>
                   </div>
+                  </div>{/* flex-1 min-w-0 */}
                 </div>
               );
             })
@@ -1754,7 +1815,33 @@ function GroupChatPanel({
         </div>
       </div>
 
+      {/* Bulk selection action bar */}
+      {bulkSelectMode && (
+        <div className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-4 py-3 flex items-center justify-between gap-3" style={{ background: "var(--chat-input-bar-bg)" }}>
+          <span className="text-sm text-muted-foreground">
+            {selectedMsgIds.size === 0
+              ? "Nenhuma selecionada"
+              : `${selectedMsgIds.size} mensagem${selectedMsgIds.size > 1 ? "s" : ""} selecionada${selectedMsgIds.size > 1 ? "s" : ""}`}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={exitBulkSelect}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={selectedMsgIds.size === 0 || deletingBulk}
+              onClick={handleBulkDelete}
+            >
+              {deletingBulk ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+              Apagar ({selectedMsgIds.size})
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input bar â€" matching MessageInput style */}
+      {!bulkSelectMode && (
       <div
         className="shrink-0 border-t border-[color:var(--chat-sidebar-divider)] px-3 py-2"
         style={{ background: "var(--chat-input-bar-bg)" }}
@@ -1981,6 +2068,7 @@ function GroupChatPanel({
           )}
         </div>
       </div>
+      )}{/* end !bulkSelectMode */}
 
       {/* Members / contact panel â€" Sheet overlay, não empurra o layout */}
       <Sheet open={membersOpen} onOpenChange={(o) => { if (!o) { setMembersOpen(false); setSelectedMember(null); setSelectedContact(null); } }}>
