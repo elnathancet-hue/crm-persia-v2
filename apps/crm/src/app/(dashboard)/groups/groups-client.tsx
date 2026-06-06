@@ -208,6 +208,11 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
+function safeAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return url.includes("pps.whatsapp.net") ? null : url;
+}
+
 interface GroupMessageSenderLead {
   id: string;
   name: string | null;
@@ -530,8 +535,8 @@ function GroupListPanel({
                   {/* Avatar */}
                   <div className="relative shrink-0 mt-0.5">
                     <Avatar size="default">
-                      {group.image_url ? (
-                        <AvatarImage src={group.image_url} alt={group.name} />
+                      {safeAvatarUrl(group.image_url) ? (
+                        <AvatarImage src={safeAvatarUrl(group.image_url)!} alt={group.name} />
                       ) : null}
                       <AvatarFallback className={`${colorClass} text-white`}>
                         {initialsFromName(group.name)}
@@ -1441,9 +1446,9 @@ function GroupChatPanel({
         </Button>
 
         <div className="size-9 overflow-hidden rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          {group.image_url ? (
+          {safeAvatarUrl(group.image_url) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={group.image_url} alt="" className="size-full object-cover" />
+            <img src={safeAvatarUrl(group.image_url)!} alt="" className="size-full object-cover" />
           ) : (
             <Users className="size-5 text-primary" />
           )}
@@ -1593,7 +1598,7 @@ function GroupChatPanel({
                 getMessageSenderKey(previousMsg!) === senderKey;
               const showBlockHeader = !continuesPreviousBlock;
               const senderLead = msg.sender_lead ?? null;
-              const senderAvatarUrl = senderLead?.avatar_url ?? msg.sender_avatar_url;
+              const senderAvatarUrl = safeAvatarUrl(senderLead?.avatar_url ?? msg.sender_avatar_url);
               const senderDisplayName =
                 senderLead?.name ??
                 msg.sender_name ??
@@ -2336,8 +2341,8 @@ function GroupChatPanel({
                         title="Abrir dados do contato"
                       >
                         <Avatar size="sm" className="shrink-0">
-                          {contact.avatar_url ? (
-                            <AvatarImage src={contact.avatar_url} alt={displayName} />
+                          {safeAvatarUrl(contact.avatar_url) ? (
+                            <AvatarImage src={safeAvatarUrl(contact.avatar_url)!} alt={displayName} />
                           ) : null}
                           <AvatarFallback style={{ backgroundColor: color.bg, color: color.fg }}>
                             {displayName.slice(0, 2).toUpperCase()}
@@ -2378,7 +2383,7 @@ function GroupChatPanel({
 
             <div className="flex flex-col items-center px-6 py-7 text-center">
               <Avatar className="size-28">
-                {group.image_url ? <AvatarImage src={group.image_url} alt={group.name} /> : null}
+                {safeAvatarUrl(group.image_url) ? <AvatarImage src={safeAvatarUrl(group.image_url)!} alt={group.name} /> : null}
                 <AvatarFallback className={hashGroupColor(group.name)}>
                   <Users className="size-12 text-white" />
                 </AvatarFallback>
@@ -2601,7 +2606,7 @@ function GroupChatPanel({
                         }}
                       >
                         <Avatar size="default" className="shrink-0">
-                          {contact.avatar_url ? <AvatarImage src={contact.avatar_url} alt={displayName} /> : null}
+                          {safeAvatarUrl(contact.avatar_url) ? <AvatarImage src={safeAvatarUrl(contact.avatar_url)!} alt={displayName} /> : null}
                           <AvatarFallback style={{ backgroundColor: color.bg, color: color.fg }}>
                             {displayName.slice(0, 2).toUpperCase()}
                           </AvatarFallback>

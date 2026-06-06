@@ -124,6 +124,11 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
+function safeAvatarUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  return url.includes("pps.whatsapp.net") ? null : url;
+}
+
 function initialsFromName(name: string | null | undefined): string {
   const parts = (name ?? "")
     .trim()
@@ -697,9 +702,9 @@ export function GroupDetailClient({
         </Link>
 
         <div className="size-9 overflow-hidden rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          {group.image_url ? (
+          {safeAvatarUrl(group.image_url) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={group.image_url} alt="" className="size-full object-cover" />
+            <img src={safeAvatarUrl(group.image_url)!} alt="" className="size-full object-cover" />
           ) : (
             <Users className="size-5 text-primary" />
           )}
@@ -880,9 +885,9 @@ export function GroupDetailClient({
                             : (senderSecondary ?? senderDisplayName)
                         }
                       >
-                        {msg.sender_avatar_url ? (
+                        {safeAvatarUrl(msg.sender_avatar_url) ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={msg.sender_avatar_url} alt="" className="size-full object-cover" />
+                          <img src={safeAvatarUrl(msg.sender_avatar_url)!} alt="" className="size-full object-cover" />
                         ) : (
                           initialsFromName(senderDisplayName)
                         )}
