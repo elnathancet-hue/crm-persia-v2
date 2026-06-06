@@ -53,11 +53,22 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
     .order("created_at", { ascending: true })
     .limit(50);
 
+  // Resolve chat-media: refs to signed URLs before passing as props.
+  const resolvedMessages = await Promise.all(
+    (messages || []).map(async (msg: Record<string, unknown>) => {
+      const mediaUrl = msg.media_url as string | null;
+      if (!mediaUrl?.startsWith("chat-media:")) return msg;
+      const path = mediaUrl.slice("chat-media:".length).replace(/^\/+/, "");
+      const { data } = await supabase.storage.from("chat-media").createSignedUrl(path, 3600);
+      return data?.signedUrl ? { ...msg, media_url: data.signedUrl } : msg;
+    }),
+  );
+
   return (
     <GroupDetailClient
       group={group as never}
       leads={(leads || []) as never}
-      initialMessages={(messages || []) as never}
+      initialMessages={(resolvedMessages || []) as never}
     />
   );
 }

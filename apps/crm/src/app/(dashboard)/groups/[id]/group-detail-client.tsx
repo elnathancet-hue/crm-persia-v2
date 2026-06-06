@@ -198,6 +198,18 @@ interface GroupMessage {
   created_at: string;
 }
 
+async function resolveGroupMessageMediaUrl(
+  supabase: ReturnType<typeof createClient>,
+  row: GroupMessage,
+): Promise<GroupMessage> {
+  if (!row.media_url?.startsWith("chat-media:")) return row;
+  const path = row.media_url.slice("chat-media:".length).replace(/^\/+/, "");
+  const { data } = await (supabase as any).storage
+    .from("chat-media")
+    .createSignedUrl(path, 3600);
+  return data?.signedUrl ? { ...row, media_url: data.signedUrl as string } : row;
+}
+
 // Lazy-load picker only when popover opens
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
   ssr: false,
@@ -364,11 +376,13 @@ export function GroupDetailClient({
         { event: "INSERT", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
         (payload) => {
           const row = payload.new as GroupMessage;
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) return prev;
-            return [...prev, row];
+          resolveGroupMessageMediaUrl(supabase, row).then((resolved) => {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === resolved.id)) return prev;
+              return [...prev, resolved];
+            });
+            if (resolved.direction === "inbound") playNotification();
           });
-          if (row.direction === "inbound") playNotification();
         },
       )
       .on(
@@ -376,7 +390,9 @@ export function GroupDetailClient({
         { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
         (payload) => {
           const row = payload.new as GroupMessage;
-          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, ...row } : m)));
+          resolveGroupMessageMediaUrl(supabase, row).then((resolved) => {
+            setMessages((prev) => prev.map((m) => (m.id === resolved.id ? { ...m, ...resolved } : m)));
+          });
         },
       )
       .on(

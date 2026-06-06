@@ -243,7 +243,9 @@ async function enrichGroupMessagesWithLeads(
     ),
   );
 
-  if (leadIds.length === 0 && phones.length === 0) return rows;
+  if (leadIds.length === 0 && phones.length === 0) {
+    return resolveSignedMediaUrls(supabase, rows);
+  }
 
   const leadsById = new Map<string, GroupMessageSenderLead>();
   if (leadIds.length > 0) {
@@ -286,7 +288,7 @@ async function enrichGroupMessagesWithLeads(
     }
   }
 
-  return rows.map((row) => ({
+  const enriched = rows.map((row) => ({
     ...row,
     sender_membership_id:
       row.sender_membership_id ??
@@ -301,6 +303,23 @@ async function enrichGroupMessagesWithLeads(
       (row.sender_lead_id ? leadsById.get(row.sender_lead_id) : null) ??
       (row.sender_phone ? membershipByPhone.get(row.sender_phone)?.leads ?? null : null),
   }));
+  return resolveSignedMediaUrls(supabase, enriched);
+}
+
+async function resolveSignedMediaUrls(
+  supabase: ReturnType<typeof createClient>,
+  rows: GroupMessage[],
+): Promise<GroupMessage[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      if (!row.media_url?.startsWith("chat-media:")) return row;
+      const path = row.media_url.slice("chat-media:".length).replace(/^\/+/, "");
+      const { data } = await (supabase as any).storage
+        .from("chat-media")
+        .createSignedUrl(path, 3600);
+      return data?.signedUrl ? { ...row, media_url: data.signedUrl as string } : row;
+    }),
+  );
 }
 
 function formatMsgTime(iso: string): string {
