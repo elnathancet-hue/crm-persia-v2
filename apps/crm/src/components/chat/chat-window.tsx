@@ -88,6 +88,73 @@ function getMessageFileName(message: Message): string {
     ? metadata.file_name
     : message.content || "Documento";
 }
+
+type ReplyPreview = {
+  id?: string;
+  whatsapp_msg_id?: string | null;
+  sender?: string | null;
+  content?: string | null;
+  type?: string | null;
+  media_type?: string | null;
+};
+
+function getMessageMetadata(message: Message): Record<string, unknown> | null {
+  return message.metadata && typeof message.metadata === "object"
+    ? message.metadata as Record<string, unknown>
+    : null;
+}
+
+function getReplyPreview(message: Message, messagesById: Map<string, Message>): ReplyPreview | null {
+  const metadata = getMessageMetadata(message);
+  const embedded = metadata?.reply_to;
+  if (embedded && typeof embedded === "object") return embedded as ReplyPreview;
+
+  const replyToId = metadata?.reply_to_message_id;
+  if (typeof replyToId === "string") {
+    const resolved = messagesById.get(replyToId);
+    if (resolved) {
+      return {
+        id: resolved.id,
+        whatsapp_msg_id: resolved.whatsapp_msg_id,
+        sender: resolved.sender,
+        content: resolved.content,
+        type: resolved.type,
+        media_type: resolved.media_type,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getReplySenderLabel(reply: ReplyPreview, leadName?: string | null): string {
+  if (reply.sender === "lead") return leadName || "Lead";
+  if (reply.sender === "ai") return "IA";
+  return "Voce";
+}
+
+function getReplyContentPreview(reply: ReplyPreview): string {
+  if (reply.content?.trim()) return reply.content.trim();
+  const mediaKind = reply.media_type || reply.type;
+  if (mediaKind === "image") return "Imagem";
+  if (mediaKind === "audio" || mediaKind === "ptt") return "Audio";
+  if (mediaKind === "video") return "Video";
+  if (mediaKind === "document") return "Documento";
+  if (mediaKind === "sticker") return "Figurinha";
+  return "Mensagem";
+}
+
+function normalizeMessagesPage(data: Message[] | null | undefined): {
+  messages: Message[];
+  hasMore: boolean;
+} {
+  const rows = data ?? [];
+  const hasMore = rows.length > MESSAGE_PAGE_SIZE;
+  return {
+    messages: hasMore ? rows.slice(1) : rows,
+    hasMore,
+  };
+}
 import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 import { TagPicker } from "@/components/tags/tag-picker";
 import { LeadInfoDrawer, LeadsProvider } from "@persia/leads-ui";
@@ -98,6 +165,8 @@ import type { LeadWithTags } from "@persia/shared/crm";
 const QUICK_REACTIONS = ["\u{1F44D}", "\u2764\uFE0F", "\u{1F602}", "\u{1F62E}", "\u{1F622}", "\u{1F64F}"];
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const MESSAGE_PAGE_SIZE = 50;
 
 const LEAD_COLORS = [
   { bg: "#ec4899", fg: "#ffffff" },
@@ -697,12 +766,15 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [tagManagerOpen, setTagManagerOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [messageSearch, setMessageSearch] = useState("");
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [forwardMode, setForwardMode] = useState(false);
   const [forwarding, setForwarding] = useState(false);
   const [forwardMessageIds, setForwardMessageIds] = useState<Set<string>>(new Set());
   const [forwardTargetIds, setForwardTargetIds] = useState<Set<string>>(new Set());
   const [forwardConversations, setForwardConversations] = useState<ConversationWithLead[]>([]);
   const [forwardSearch, setForwardSearch] = useState("");
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
@@ -907,6 +979,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     if (!conversationId) {
       setConversation(null);
       setMessages([]);
+      setHasMoreMessages(false);
       return;
     }
 
@@ -916,14 +989,16 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       setLoading(true);
       const [convResult, msgResult] = await Promise.all([
         getConversation(conversationId!),
-        getMessages(conversationId!, { limit: 50 }),
+        getMessages(conversationId!, { limit: MESSAGE_PAGE_SIZE + 1 }),
       ]);
 
       if (cancelled) return;
 
       if (convResult.data) setConversation(convResult.data);
       if (msgResult.data) {
-        setMessages(msgResult.data);
+        const page = normalizeMessagesPage(msgResult.data);
+        setMessages(page.messages);
+        setHasMoreMessages(page.hasMore);
       }
       setLoading(false);
 
@@ -940,6 +1015,45 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       cancelled = true;
     };
   }, [conversationId]);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!conversationId || loadingOlderMessages || messages.length === 0) return;
+
+    const scrollEl = messagesScrollRef.current;
+    const previousScrollHeight = scrollEl?.scrollHeight ?? 0;
+    const before = messages[0]?.created_at;
+    if (!before) return;
+
+    setLoadingOlderMessages(true);
+    try {
+      const result = await getMessages(conversationId, {
+        limit: MESSAGE_PAGE_SIZE + 1,
+        before,
+      });
+
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      const page = normalizeMessagesPage(result.data);
+      setHasMoreMessages(page.hasMore);
+      if (page.messages.length > 0) {
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((message) => message.id));
+          const older = page.messages.filter((message) => !existingIds.has(message.id));
+          return [...older, ...prev];
+        });
+        shouldAutoScroll.current = false;
+        window.requestAnimationFrame(() => {
+          if (!scrollEl) return;
+          scrollEl.scrollTop += scrollEl.scrollHeight - previousScrollHeight;
+        });
+      }
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [conversationId, loadingOlderMessages, messages]);
 
   // Supabase Realtime: INSERT (new messages) + UPDATE (status transitions)
   useEffect(() => {
@@ -1094,6 +1208,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   );
   const leadTags = getLeadTags(lead);
   const pinnedMessage = messages.find((m) => m.is_pinned) ?? null;
+  const messagesById = new Map(messages.map((message) => [message.id, message]));
+  const leadDisplayName = (lead?.name as string | undefined) || (lead?.phone as string | undefined) || null;
 
   const normalizedMessageSearch = messageSearch.trim().toLowerCase();
   const visibleMessages = normalizedMessageSearch
@@ -1394,8 +1510,32 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       )}
 
       {/* Messages - WhatsApp style with subtle pattern background */}
-      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-2 sm:px-3">
+      <div ref={messagesScrollRef} className="wa-chat-wallpaper flex-1 overflow-y-auto px-2 sm:px-3">
         <div className="flex flex-col py-4">
+          {messages.length > 0 && hasMoreMessages && !normalizedMessageSearch && (
+            <div className="flex justify-center pb-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleLoadOlderMessages}
+                disabled={loadingOlderMessages}
+                className="h-8 rounded-full px-3 text-xs shadow-sm"
+              >
+                {loadingOlderMessages ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Carregando...
+                  </>
+                ) : (
+                  <>
+                    <RotateCw className="size-3.5" />
+                    Carregar mensagens anteriores
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
           {messages.length === 0 && (
             <div className="py-8 text-center text-sm text-muted-foreground">
               Nenhuma mensagem ainda
@@ -1441,6 +1581,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                 {/* Message bubble - Lead LEFT, IA+Agent RIGHT */}
                 {(() => {
                   const meta = msg.metadata as { reactions?: Array<{ emoji: string; by: string }>; edited_at?: string } | null;
+                  const replyPreview = getReplyPreview(msg, messagesById);
                   const msgReactions = meta?.reactions?.filter((r) => r.emoji) ?? [];
                   const isEdited = !!meta?.edited_at;
                   const hasReactions = msgReactions.length > 0;
@@ -1674,6 +1815,28 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                     : { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
                               }
                             >
+                              {replyPreview && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!replyPreview.id) return;
+                                    const el = document.querySelector(`[data-msg-id="${replyPreview.id}"]`);
+                                    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                  }}
+                                  className="mb-1.5 block w-full max-w-[260px] rounded-md border-l-4 px-2 py-1.5 text-left text-xs transition-colors hover:bg-black/10"
+                                  style={{
+                                    borderColor: "var(--chat-send-bg)",
+                                    background: "rgba(0,0,0,0.06)",
+                                  }}
+                                >
+                                  <span className="block truncate font-semibold text-[color:var(--chat-send-bg)]">
+                                    {getReplySenderLabel(replyPreview, leadDisplayName)}
+                                  </span>
+                                  <span className="line-clamp-2 text-muted-foreground">
+                                    {getReplyContentPreview(replyPreview)}
+                                  </span>
+                                </button>
+                              )}
                               {msg.media_url && msg.type === "sticker" && (
                                 <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}

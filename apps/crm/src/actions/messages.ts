@@ -39,10 +39,47 @@ export type Message = {
   created_at: string;
 };
 
+type ReplySnapshot = {
+  id: string;
+  whatsapp_msg_id: string | null;
+  sender: string;
+  content: string | null;
+  type: string | null;
+  media_type: string | null;
+};
+
 function getMessageFileName(metadata: unknown): string | undefined {
   if (!metadata || typeof metadata !== "object") return undefined;
   const fileName = (metadata as Record<string, unknown>).file_name;
   return typeof fileName === "string" && fileName ? fileName : undefined;
+}
+
+async function getReplySnapshot(
+  supabase: Awaited<ReturnType<typeof requireRole>>["supabase"],
+  orgId: string,
+  conversationId: string,
+  replyToMessageId?: string,
+): Promise<ReplySnapshot | null> {
+  if (!replyToMessageId) return null;
+
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id, whatsapp_msg_id, sender, content, type, media_type")
+    .eq("id", replyToMessageId)
+    .eq("conversation_id", conversationId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    whatsapp_msg_id: data.whatsapp_msg_id ?? null,
+    sender: data.sender ?? "lead",
+    content: data.content ?? null,
+    type: data.type ?? null,
+    media_type: data.media_type ?? null,
+  };
 }
 
 // PR-AI-AGENT-HUMAN-A: auto-pause native AI quando humano (operator)
@@ -273,7 +310,7 @@ export async function sendMessage(
 export async function sendMessageViaWhatsApp(
   conversationId: string,
   content: string,
-  options?: { replyToWhatsAppMsgId?: string }
+  options?: { replyToWhatsAppMsgId?: string; replyToMessageId?: string }
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
 
@@ -305,6 +342,12 @@ export async function sendMessageViaWhatsApp(
 
   // 3. Save message to DB with status='sending'
   const now = new Date().toISOString();
+  const replySnapshot = await getReplySnapshot(
+    supabase,
+    orgId,
+    conversationId,
+    options?.replyToMessageId,
+  );
 
   const { data: message, error: msgError } = await supabase
     .from("messages")
@@ -316,6 +359,7 @@ export async function sendMessageViaWhatsApp(
       sender_user_id: userId,
       content,
       type: "text",
+      metadata: replySnapshot ? { reply_to: replySnapshot } : {},
       status: "sending",
     })
     .select()
@@ -372,7 +416,12 @@ export async function sendMessageViaWhatsApp(
 
     try {
       const provider = createProvider(connection);
-      const result = await provider.sendText({ phone, message: content, replyTo: options?.replyToWhatsAppMsgId });
+      const replyTo = options?.replyToWhatsAppMsgId ?? replySnapshot?.whatsapp_msg_id ?? undefined;
+      const result = await provider.sendText({
+        phone,
+        message: content,
+        ...(replyTo ? { replyTo } : {}),
+      });
       const update: Record<string, unknown> = { status: "sent" };
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
       await supabase.from("messages").update(update as never).eq("id", message.id);
@@ -515,6 +564,7 @@ export async function sendMediaViaWhatsApp(
     fileName: string;
     caption?: string;
     replyToWhatsAppMsgId?: string;
+    replyToMessageId?: string;
   }
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
@@ -582,6 +632,12 @@ export async function sendMediaViaWhatsApp(
 
   // 3. Save message to DB with status='sending'
   const now = new Date().toISOString();
+  const replySnapshot = await getReplySnapshot(
+    supabase,
+    orgId,
+    conversationId,
+    file.replyToMessageId,
+  );
 
   const { data: message, error: msgError } = await supabase
     .from("messages")
@@ -598,6 +654,7 @@ export async function sendMediaViaWhatsApp(
       metadata: {
         file_name: file.fileName,
         mime_type: mimeType,
+        ...(replySnapshot ? { reply_to: replySnapshot } : {}),
       },
       status: "sending",
     })
@@ -662,13 +719,14 @@ export async function sendMediaViaWhatsApp(
     try {
       const provider = createProvider(connection);
       const providerMediaUrl = await resolveProviderChatMediaUrl(admin, mediaRef);
+      const replyTo = file.replyToWhatsAppMsgId ?? replySnapshot?.whatsapp_msg_id ?? undefined;
       const result = await provider.sendMedia({
         phone,
         type: file.type,
         media: providerMediaUrl,
         caption: file.caption,
         fileName: file.type === "document" ? file.fileName : undefined,
-        replyTo: file.replyToWhatsAppMsgId,
+        ...(replyTo ? { replyTo } : {}),
       });
       const update: Record<string, unknown> = { status: "sent" };
       if (result.messageId) update.whatsapp_msg_id = result.messageId;
