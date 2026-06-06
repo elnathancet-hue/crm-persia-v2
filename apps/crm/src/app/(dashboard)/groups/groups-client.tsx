@@ -41,6 +41,7 @@ import {
   X,
   Check,
   CheckCheck,
+  Clock,
   CornerUpLeft,
   Sparkles,
   Zap,
@@ -106,6 +107,9 @@ import {
   getGroupLeadMembers,
   backfillGroupMembers,
   generateGroupMessageDraft,
+  scheduleGroupMessage,
+  getScheduledGroupMessages,
+  cancelScheduledGroupMessage,
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
@@ -715,6 +719,11 @@ function GroupChatPanel({
   const [bulkSelectMode, setBulkSelectMode] = React.useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = React.useState<Set<string>>(new Set());
   const [deletingBulk, setDeletingBulk] = React.useState(false);
+  const [schedulePopoverOpen, setSchedulePopoverOpen] = React.useState(false);
+  const [scheduleAt, setScheduleAt] = React.useState("");
+  const [schedulingMessage, setSchedulingMessage] = React.useState(false);
+  const [scheduledList, setScheduledList] = React.useState<Array<{ id: string; content: string; scheduled_at: string; status: string; error_message: string | null; created_at: string }>>([]);
+  const [loadingScheduled, setLoadingScheduled] = React.useState(false);
   const [hasMoreMessages, setHasMoreMessages] = React.useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -1134,6 +1143,44 @@ function GroupChatPanel({
       // Best-effort — Realtime UPDATE will correct state if needed
     } finally {
       setDeletingBulk(false);
+    }
+  }
+
+  async function handleScheduleMessage() {
+    if (!chatInput.trim() || !scheduleAt) return;
+    setSchedulingMessage(true);
+    try {
+      await scheduleGroupMessage(group.id, chatInput.trim(), new Date(scheduleAt).toISOString());
+      toast.success("Mensagem agendada");
+      setChatInput("");
+      setScheduleAt("");
+      setSchedulePopoverOpen(false);
+    } catch {
+      toast.error("Erro ao agendar mensagem");
+    } finally {
+      setSchedulingMessage(false);
+    }
+  }
+
+  async function handleLoadScheduled() {
+    setLoadingScheduled(true);
+    try {
+      const list = await getScheduledGroupMessages(group.id);
+      setScheduledList(list);
+    } catch {
+      setScheduledList([]);
+    } finally {
+      setLoadingScheduled(false);
+    }
+  }
+
+  async function handleCancelScheduled(msgId: string) {
+    try {
+      await cancelScheduledGroupMessage(msgId);
+      setScheduledList((prev) => prev.filter((m) => m.id !== msgId));
+      toast.success("Agendamento cancelado");
+    } catch {
+      toast.error("Erro ao cancelar agendamento");
     }
   }
 
@@ -2000,6 +2047,67 @@ function GroupChatPanel({
                 searchPlaceholder="Buscar emoji..."
                 previewConfig={{ showPreview: false }}
               />
+            </PopoverContent>
+          </Popover>
+
+          {/* Schedule message */}
+          <Popover open={schedulePopoverOpen} onOpenChange={(o) => { setSchedulePopoverOpen(o); if (o) handleLoadScheduled(); }}>
+            <PopoverTrigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-10 shrink-0 rounded-full hover:bg-transparent"
+                style={{ color: "var(--chat-header-fg)" }}
+                title="Agendar mensagem"
+                aria-label="Agendar mensagem"
+                disabled={isRecording || sendingMessage || sendingMedia}
+              >
+                <Clock className="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-80 p-4 flex flex-col gap-3">
+              <div className="font-medium text-sm">Agendar mensagem</div>
+              <Textarea
+                name="schedule-group-message"
+                placeholder="Texto da mensagem..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                className="min-h-[80px] text-sm resize-none"
+              />
+              <Input
+                type="datetime-local"
+                name="schedule-group-at"
+                value={scheduleAt}
+                onChange={(e) => setScheduleAt(e.target.value)}
+              />
+              <Button
+                size="sm"
+                onClick={handleScheduleMessage}
+                disabled={!chatInput.trim() || !scheduleAt || schedulingMessage}
+                className="self-end"
+              >
+                {schedulingMessage ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Clock className="size-3.5 mr-1" />}
+                Agendar
+              </Button>
+              {scheduledList.length > 0 && (
+                <div className="border-t pt-3 flex flex-col gap-2 max-h-48 overflow-y-auto">
+                  <div className="text-xs font-medium text-muted-foreground">Pendentes</div>
+                  {scheduledList.map((s) => (
+                    <div key={s.id} className="flex items-start justify-between gap-2 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate">{s.content}</div>
+                        <div className="text-muted-foreground">{new Date(s.scheduled_at).toLocaleString("pt-BR")}</div>
+                        {s.status === "error" && <div className="text-destructive">{s.error_message}</div>}
+                      </div>
+                      <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => handleCancelScheduled(s.id)}>
+                        <X className="size-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {loadingScheduled && <div className="text-xs text-muted-foreground text-center">Carregando...</div>}
             </PopoverContent>
           </Popover>
 

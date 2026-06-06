@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runFollowupsTick } from "@/lib/ai-agent/followups/tick";
 import { processFollowUps } from "@/lib/flows/followup";
-import { processScheduledMessages } from "@/lib/whatsapp/send-scheduled-worker";
+import { processScheduledMessages, processScheduledGroupMessages } from "@/lib/whatsapp/send-scheduled-worker";
 import { processDueCampaignJobs } from "@/lib/campaigns/worker";
 
 export async function GET(request: NextRequest) {
@@ -21,10 +21,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [followups, agentFollowups, scheduled, campaigns] = await Promise.allSettled([
+  const [followups, agentFollowups, scheduled, scheduledGroups, campaigns] = await Promise.allSettled([
     processFollowUps(),
     runFollowupsTick(),
     processScheduledMessages(),
+    processScheduledGroupMessages(),
     processDueCampaignJobs({ limit: 100, workerId: `cron-all-${Date.now()}` }),
   ]);
 
@@ -39,6 +40,9 @@ export async function GET(request: NextRequest) {
     scheduled: scheduled.status === "fulfilled"
       ? scheduled.value
       : { error: (scheduled.reason instanceof Error ? scheduled.reason.message : String(scheduled.reason)) },
+    scheduled_groups: scheduledGroups.status === "fulfilled"
+      ? scheduledGroups.value
+      : { error: (scheduledGroups.reason instanceof Error ? scheduledGroups.reason.message : String(scheduledGroups.reason)) },
     campaigns: campaigns.status === "fulfilled"
       ? campaigns.value
       : { error: (campaigns.reason instanceof Error ? campaigns.reason.message : String(campaigns.reason)) },

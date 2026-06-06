@@ -2280,3 +2280,72 @@ export async function syncGroupImages(): Promise<BackfillAvatarsResult> {
   revalidatePath("/crm");
   return { processed: groups.length, updated, skipped, failed };
 }
+
+// ── Scheduled group messages ──────────────────────────────────────────────────
+
+export async function scheduleGroupMessage(
+  groupId: string,
+  content: string,
+  scheduledAt: string, // ISO string
+) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  const { data: group } = await supabase
+    .from("whatsapp_groups")
+    .select("group_jid")
+    .eq("id", groupId)
+    .eq("organization_id", orgId)
+    .single();
+
+  if (!group) throw new Error("Grupo não encontrado");
+
+  const { error } = await db.from("scheduled_group_messages").insert({
+    organization_id: orgId,
+    group_id: groupId,
+    group_jid: (group as any).group_jid,
+    content: content.trim(),
+    type: "text",
+    status: "pending",
+    scheduled_at: scheduledAt,
+  });
+
+  if (error) throw new Error(error.message);
+}
+
+export async function getScheduledGroupMessages(groupId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  const { data, error } = await db
+    .from("scheduled_group_messages")
+    .select("id, content, scheduled_at, status, error_message, created_at")
+    .eq("organization_id", orgId)
+    .eq("group_id", groupId)
+    .in("status", ["pending", "error"])
+    .order("scheduled_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Array<{
+    id: string;
+    content: string;
+    scheduled_at: string;
+    status: string;
+    error_message: string | null;
+    created_at: string;
+  }>;
+}
+
+export async function cancelScheduledGroupMessage(messageId: string) {
+  const { supabase, orgId } = await requireRole("agent");
+  const db = supabase as any;
+
+  const { error } = await db
+    .from("scheduled_group_messages")
+    .update({ status: "cancelled" })
+    .eq("id", messageId)
+    .eq("organization_id", orgId)
+    .eq("status", "pending");
+
+  if (error) throw new Error(error.message);
+}

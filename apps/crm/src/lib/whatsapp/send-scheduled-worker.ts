@@ -126,3 +126,83 @@ export async function processScheduledMessages(): Promise<SendScheduledResult> {
 
   return { sent: sentCount, failed: failedCount, skipped: skippedCount };
 }
+
+export async function processScheduledGroupMessages(): Promise<SendScheduledResult> {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  const { data: messages, error } = await supabase
+    .from("scheduled_group_messages")
+    .select("*")
+    .eq("status", "pending")
+    .lte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(20);
+
+  if (error || !messages || messages.length === 0) {
+    if (error) console.error("[SendScheduledGroup] fetch error:", error.message);
+    return { sent: 0, failed: 0, skipped: 0 };
+  }
+
+  let sentCount = 0;
+  let failedCount = 0;
+
+  for (const msg of messages) {
+    try {
+      await supabase
+        .from("scheduled_group_messages")
+        .update({ attempts: (msg.attempts ?? 0) + 1 })
+        .eq("id", msg.id);
+
+      const { data: connection } = await supabase
+        .from("whatsapp_connections")
+        .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+        .eq("organization_id", msg.organization_id)
+        .eq("status", "connected")
+        .limit(1)
+        .single();
+
+      if (!connection) {
+        failedCount++;
+        await supabase
+          .from("scheduled_group_messages")
+          .update({ status: "error", error_message: "Nenhuma conexao WhatsApp ativa" })
+          .eq("id", msg.id);
+        continue;
+      }
+
+      const provider = createProvider(connection as never);
+      const content = typeof msg.content === "string" ? msg.content.trim() : "";
+      const result = await provider.sendText({ phone: msg.group_jid, message: content });
+
+      await supabase.from("group_messages").insert({
+        organization_id: msg.organization_id,
+        group_id: msg.group_id,
+        direction: "outbound",
+        text: content,
+        status: "sent",
+        whatsapp_msg_id: result.messageId ?? null,
+        created_at: new Date().toISOString(),
+      });
+
+      await supabase
+        .from("scheduled_group_messages")
+        .update({ status: "sent", sent_at: new Date().toISOString(), error_message: null })
+        .eq("id", msg.id);
+
+      sentCount++;
+    } catch (err: unknown) {
+      const msgErr = err instanceof Error ? err.message : String(err);
+      console.error(`[SendScheduledGroup] Error sending group message ${msg.id}:`, msgErr);
+      failedCount++;
+      await supabase
+        .from("scheduled_group_messages")
+        .update({ status: "error", error_message: msgErr })
+        .eq("id", msg.id);
+    }
+  }
+
+  return { sent: sentCount, failed: failedCount };
+}
