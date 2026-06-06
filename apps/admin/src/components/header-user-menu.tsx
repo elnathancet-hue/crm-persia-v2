@@ -79,13 +79,13 @@ export function HeaderUserMenu() {
         className="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary hover:ring-2 hover:ring-primary/20 transition-all"
         aria-label={
           toastMuted
-            ? "Reativar notificações em tempo real"
-            : "Silenciar notificações em tempo real"
+            ? "Reativar avisos laterais"
+            : "Silenciar avisos laterais"
         }
         title={
           toastMuted
-            ? "Notificações silenciadas — clique pra reativar"
-            : "Notificações ativas — clique pra silenciar"
+            ? "Avisos laterais silenciados — clique pra reativar"
+            : "Avisos laterais ativos — clique pra silenciar"
         }
       >
         {toastMuted ? (

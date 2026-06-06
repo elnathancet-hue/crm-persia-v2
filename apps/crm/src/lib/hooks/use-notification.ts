@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 // ---- Sound Notification ----
 
@@ -51,22 +52,13 @@ export function useNotificationSound() {
   return { play, enabled, setEnabled: setSoundEnabled };
 }
 
-// ---- Desktop Notification ----
+// ---- In-app notification card ----
 
 export function useDesktopNotification() {
-  const permissionRef = useRef<NotificationPermission>("default");
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
     setEnabled(readBooleanPreference(DESKTOP_PREF_KEY, true));
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    permissionRef.current = Notification.permission;
-
-    if (Notification.permission === "default") {
-      Notification.requestPermission().then((perm) => {
-        permissionRef.current = perm;
-      });
-    }
   }, []);
 
   const setDesktopEnabled = useCallback((next: boolean) => {
@@ -79,28 +71,11 @@ export function useDesktopNotification() {
   const notify = useCallback(
     (title: string, body: string, onClick?: () => void) => {
       if (!enabled) return;
-      if (typeof window === "undefined" || !("Notification" in window)) return;
-      if (permissionRef.current !== "granted") return;
-
-      // Only show if tab is NOT focused
-      if (document.hasFocus()) return;
-
-      const notification = new Notification(title, {
-        body,
-        icon: "/favicon.ico",
-        tag: "crm-persia-msg", // Replaces previous notification
+      toast.info(title, {
+        description: body,
+        duration: 5000,
+        ...(onClick ? { action: { label: "Abrir", onClick } } : {}),
       });
-
-      if (onClick) {
-        notification.onclick = () => {
-          window.focus();
-          onClick();
-          notification.close();
-        };
-      }
-
-      // Auto close after 5s
-      setTimeout(() => notification.close(), 5000);
     },
     [enabled]
   );

@@ -329,6 +329,11 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       fullName: msg.contactName,
       phoneNumber: msg.contactPhone ?? null,
     };
+  } else if (msg.type === "document") {
+    incomingMetadata = {
+      file_name: msg.mediaFileName ?? null,
+      mime_type: msg.mediaMimeType ?? null,
+    };
   }
 
   const { error: msgInsertErr } = await supabase.from("messages").insert({

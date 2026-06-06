@@ -468,6 +468,7 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
       timestamp: Number(msg.timestamp || 0) * 1000 || Date.now(),
       mediaUrl: undefined, // Meta requires a follow-up GET /{media_id} — filled by caller
       mediaMimeType: mediaPart?.mime_type,
+      mediaFileName: msg.document?.filename,
       caption: text ?? undefined,
       latitude: msg.location?.latitude,
       longitude: msg.location?.longitude,

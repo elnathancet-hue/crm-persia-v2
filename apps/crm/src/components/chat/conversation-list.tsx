@@ -212,6 +212,8 @@ export function ConversationList({
   const [stages, setStages] = useState<StageOption[]>([]);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedSearchRef = useRef(search);
+  const conversationsRef = useRef(conversations);
+  const onSelectRef = useRef(onSelect);
   const {
     play: playNotification,
     enabled: soundEnabled,
@@ -222,6 +224,14 @@ export function ConversationList({
     enabled: desktopNotificationsEnabled,
     setEnabled: setDesktopNotificationsEnabled,
   } = useDesktopNotification();
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
 
   const loadConversations = useCallback(
     async (searchTerm?: string) => {
@@ -301,7 +311,13 @@ export function ConversationList({
 
           if (msg.sender === "lead" && msg.conversation_id !== selectedId) {
             playNotification();
-            desktopNotify("Nova mensagem", msg.content?.slice(0, 80) || "Nova mensagem recebida");
+            const item = conversationsRef.current.find((conversation) => conversation.id === msg.conversation_id);
+            const leadName = item?.leads?.name || item?.leads?.phone || "Novo contato";
+            desktopNotify(
+              `${leadName} lhe enviou uma mensagem`,
+              msg.content?.slice(0, 80) || "Midia recebida",
+              () => msg.conversation_id && onSelectRef.current(msg.conversation_id),
+            );
           }
         }
       )
@@ -503,8 +519,8 @@ export function ConversationList({
             variant={desktopNotificationsEnabled ? "secondary" : "ghost"}
             size="icon-sm"
             onClick={() => setDesktopNotificationsEnabled(!desktopNotificationsEnabled)}
-            title={desktopNotificationsEnabled ? "Desativar notificacoes" : "Ativar notificacoes"}
-            aria-label={desktopNotificationsEnabled ? "Desativar notificacoes" : "Ativar notificacoes"}
+            title={desktopNotificationsEnabled ? "Desativar avisos laterais" : "Ativar avisos laterais"}
+            aria-label={desktopNotificationsEnabled ? "Desativar avisos laterais" : "Ativar avisos laterais"}
             className="size-8"
           >
             {desktopNotificationsEnabled ? <Bell className="size-4" /> : <BellOff className="size-4" />}

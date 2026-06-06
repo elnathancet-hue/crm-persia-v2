@@ -39,6 +39,12 @@ export type Message = {
   created_at: string;
 };
 
+function getMessageFileName(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const fileName = (metadata as Record<string, unknown>).file_name;
+  return typeof fileName === "string" && fileName ? fileName : undefined;
+}
+
 // PR-AI-AGENT-HUMAN-A: auto-pause native AI quando humano (operator)
 // responde manualmente pelo CRM. Seta human_handoff_at na agent_conversation
 // quando a humanization_config DAQUELE agent_config tem auto_pause_minutes > 0.
@@ -588,6 +594,11 @@ export async function sendMediaViaWhatsApp(
       content: file.caption || null,
       type: file.type,
       media_url: mediaRef,
+      media_type: mimeType,
+      metadata: {
+        file_name: file.fileName,
+        mime_type: mimeType,
+      },
       status: "sending",
     })
     .select()
@@ -769,6 +780,7 @@ export async function resendMessage(
         type: message.type as "image" | "audio" | "video" | "document",
         media: mediaUrl,
         caption: message.content || undefined,
+        fileName: message.type === "document" ? getMessageFileName(message.metadata) : undefined,
       });
     } else {
       throw new Error(`Tipo de mensagem nao suportado para reenvio: ${message.type}`);

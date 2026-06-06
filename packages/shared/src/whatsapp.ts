@@ -168,6 +168,7 @@ export interface IncomingMessage {
   timestamp: number;
   mediaUrl?: string;
   mediaMimeType?: string;
+  mediaFileName?: string;
   caption?: string;
   // Location
   latitude?: number;

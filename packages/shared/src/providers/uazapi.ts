@@ -461,7 +461,10 @@ export class UazapiAdapter implements WhatsAppProvider {
       isFromMe: raw.fromMe === true,
       timestamp: Number(raw.messageTimestamp) || Date.now(),
       mediaUrl: String(raw.fileURL || "") || undefined,
-      mediaMimeType: undefined,
+      mediaMimeType: String(raw.mimetype || raw.mimeType || "") || undefined,
+      mediaFileName:
+        String(raw.fileName || raw.filename || raw.docName || raw.documentName || "") ||
+        undefined,
       caption: undefined,
       latitude,
       longitude,

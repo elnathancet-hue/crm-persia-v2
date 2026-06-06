@@ -27,6 +27,7 @@ interface Props {
 type RealtimeMessagePayload = {
   sender?: string;
   content?: string | null;
+  conversation_id?: string;
 };
 
 export function ConversationList({ selectedId, onSelect }: Props) {
@@ -50,6 +51,11 @@ export function ConversationList({ selectedId, onSelect }: Props) {
 
   // Ref captures "latest request" id for stale-response filtering
   const currentReqRef = useRef<symbol>(Symbol("init"));
+  const conversationsRef = useRef(conversations);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   // Race-safe fetch: discard stale responses
   useEffect(() => {
@@ -89,7 +95,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
         const msg = payload.new as RealtimeMessagePayload;
         if (msg.sender === "lead") {
           playSound();
-          desktopNotify("Nova mensagem", msg.content || "Midia recebida");
+          const item = conversationsRef.current.find((conversation) => conversation.id === msg.conversation_id);
+          const leadName = item?.leads?.name || item?.leads?.phone || "Novo contato";
+          desktopNotify(`${leadName} lhe enviou uma mensagem`, msg.content || "Midia recebida");
         }
         setRefetchSignal((s) => s + 1);
       })

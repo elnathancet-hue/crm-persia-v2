@@ -80,6 +80,15 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+
+function getMessageFileName(message: Message): string {
+  const metadata = message.metadata && typeof message.metadata === "object"
+    ? message.metadata as Record<string, unknown>
+    : null;
+  return typeof metadata?.file_name === "string" && metadata.file_name
+    ? metadata.file_name
+    : message.content || "Documento";
+}
 import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 import { TagPicker } from "@/components/tags/tag-picker";
 import { LeadInfoDrawer, LeadsProvider } from "@persia/leads-ui";
@@ -964,7 +973,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           if (newMsg.sender === "lead") {
             playNotification();
             const leadName = (conversation as any)?.leads?.name || "Lead";
-            desktopNotify("Nova mensagem", `${leadName}: ${newMsg.content?.slice(0, 80) || "Mídia"}`);
+            desktopNotify(
+              `${leadName} lhe enviou uma mensagem`,
+              newMsg.content?.slice(0, 80) || "Midia recebida",
+            );
           }
         }
       )
@@ -1706,10 +1718,19 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   href={msg.media_url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center gap-2 text-xs text-primary hover:underline mb-1"
+                                  className="mb-1 flex min-w-56 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80"
                                 >
-                                  <FileText className="size-4" />
-                                  <span>Abrir documento</span>
+                                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                    <FileText className="size-5" />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block max-w-52 truncate text-xs font-medium">
+                                      {getMessageFileName(msg)}
+                                    </span>
+                                    <span className="block text-[10px] text-muted-foreground">
+                                      Abrir documento
+                                    </span>
+                                  </span>
                                 </a>
                               )}
                               {msg.type === "location" && Boolean(msg.metadata) && (

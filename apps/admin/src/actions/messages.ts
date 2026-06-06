@@ -34,6 +34,12 @@ export type Message = {
   created_at: string;
 };
 
+function getMessageFileName(metadata: unknown): string | undefined {
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const fileName = (metadata as Record<string, unknown>).file_name;
+  return typeof fileName === "string" && fileName ? fileName : undefined;
+}
+
 /**
  * Lightweight WhatsApp connection status check (DB-only, does not poll UAZAPI).
  * Used by the chat UI to show a banner when disconnected.
@@ -114,6 +120,7 @@ export async function resendMessage(
         type: message.type as "image" | "audio" | "video" | "document",
         media: mediaUrl,
         caption: message.content || undefined,
+        fileName: message.type === "document" ? getMessageFileName(message.metadata) : undefined,
       });
     } else {
       throw new Error(`Tipo de mensagem nao suportado para reenvio: ${message.type}`);
@@ -366,6 +373,9 @@ export async function sendMediaViaWhatsApp(
       content: file.caption || null,
       type: file.type,
       media_url: file.mediaUrl,
+      metadata: {
+        file_name: file.fileName,
+      },
       status: "sending",
     })
     .select()

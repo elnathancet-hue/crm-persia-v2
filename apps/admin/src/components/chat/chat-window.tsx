@@ -442,12 +442,19 @@ function MessageContent({ msg }: { msg: Message }) {
 
   // Document
   if (type === "document") {
+    const metadata = msg.metadata && typeof msg.metadata === "object"
+      ? msg.metadata as Record<string, unknown>
+      : null;
+    const fileName = typeof metadata?.file_name === "string" && metadata.file_name
+      ? metadata.file_name
+      : msg.content || "Documento";
     return (
       <div className="space-y-1">
         <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
           <FileText className="size-5 shrink-0" />
           <div className="flex-1 min-w-0">
-            <span className="text-xs font-medium truncate block">{msg.content || "Documento"}</span>
+            <span className="text-xs font-medium truncate block">{fileName}</span>
+            <span className="text-[10px] text-muted-foreground">Abrir documento</span>
           </div>
           {(mediaUrl.startsWith("http")) && (
             <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
