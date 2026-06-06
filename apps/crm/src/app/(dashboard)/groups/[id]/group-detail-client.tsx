@@ -107,6 +107,23 @@ const CATEGORY_LABELS: Record<string, string> = {
   alunos: "Alunos",
 };
 
+const CHAT_TIME_ZONE = "America/Sao_Paulo";
+
+function dateKeyInChatTimeZone(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHAT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 function initialsFromName(name: string | null | undefined): string {
   const parts = (name ?? "")
     .trim()
@@ -118,22 +135,24 @@ function initialsFromName(name: string | null | undefined): string {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: CHAT_TIME_ZONE,
+  });
 }
 
 function formatDateLabel(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const msgStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((todayStart - msgStart) / 86400000);
-  if (diffDays === 0) return "Hoje";
-  if (diffDays === 1) return "Ontem";
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const messageKey = dateKeyInChatTimeZone(d);
+  if (messageKey === dateKeyInChatTimeZone(now)) return "Hoje";
+  if (messageKey === dateKeyInChatTimeZone(addDays(now, -1))) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: CHAT_TIME_ZONE });
 }
 
 function isSameDay(a: string, b: string) {
-  return new Date(a).toDateString() === new Date(b).toDateString();
+  return dateKeyInChatTimeZone(new Date(a)) === dateKeyInChatTimeZone(new Date(b));
 }
 
 interface Group {
@@ -468,7 +487,16 @@ export function GroupDetailClient({
           const base64 = reader.result as string;
           setSendingMedia(true);
           try {
-            await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
+            const result = await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
+            if (result.error) throw new Error(result.error);
+            if (result.message) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === result.message.id)) {
+                  return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+                }
+                return [...prev, result.message as GroupMessage];
+              });
+            }
             toast.success("Áudio enviado");
           } catch (err: any) {
             toast.error(err.message || "Erro ao enviar áudio");
@@ -523,7 +551,16 @@ export function GroupDetailClient({
             const base64 = ev.target?.result as string;
             if (!base64) { reject(new Error("Falha ao ler arquivo")); return; }
             try {
-              await sendMediaToGroup(group.id, base64, mt, caption, file.name);
+              const result = await sendMediaToGroup(group.id, base64, mt, caption, file.name);
+              if (result.error) throw new Error(result.error);
+              if (result.message) {
+                setMessages((prev) => {
+                  if (prev.some((m) => m.id === result.message.id)) {
+                    return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+                  }
+                  return [...prev, result.message as GroupMessage];
+                });
+              }
               resolve();
             } catch (err) { reject(err); }
           };

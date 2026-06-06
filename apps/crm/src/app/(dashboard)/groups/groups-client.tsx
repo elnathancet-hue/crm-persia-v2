@@ -191,6 +191,23 @@ const SENDER_COLORS = [
   { bg: "#0ea5e9", fg: "#ffffff" },
 ];
 
+const CHAT_TIME_ZONE = "America/Sao_Paulo";
+
+function dateKeyInChatTimeZone(date: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHAT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 interface GroupMessageSenderLead {
   id: string;
   name: string | null;
@@ -284,11 +301,12 @@ async function enrichGroupMessagesWithLeads(
 function formatMsgTime(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffDays === 0) return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  if (diffDays === 1) return "Ontem";
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const messageKey = dateKeyInChatTimeZone(d);
+  if (messageKey === dateKeyInChatTimeZone(now)) {
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: CHAT_TIME_ZONE });
+  }
+  if (messageKey === dateKeyInChatTimeZone(addDays(now, -1))) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: CHAT_TIME_ZONE });
 }
 
 function initialsFromName(name: string | null | undefined): string {
@@ -978,7 +996,16 @@ function GroupChatPanel({
           const base64 = reader.result as string;
           setSendingMedia(true);
           try {
-            await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
+            const result = await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
+            if (result.error) throw new Error(result.error);
+            if (result.message) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === result.message.id)) {
+                  return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+                }
+                return [...prev, result.message as GroupMessage];
+              });
+            }
             toast.success("\u00C1udio enviado");
           } catch (err: any) {
             toast.error(err.message || "Erro ao enviar \u00E1udio");
@@ -1037,7 +1064,16 @@ function GroupChatPanel({
       const replyingTo = replyTo;
       setReplyTo(null);
       try {
-        await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name, replyingTo?.whatsapp_msg_id ?? null);
+        const result = await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name, replyingTo?.whatsapp_msg_id ?? null);
+        if (result.error) throw new Error(result.error);
+        if (result.message) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === result.message.id)) {
+              return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+            }
+            return [...prev, result.message as GroupMessage];
+          });
+        }
         toast.success("Mídia enviada");
       } catch (err: any) {
         toast.error(err.message || "Erro ao enviar mídia");
@@ -1330,21 +1366,24 @@ function GroupChatPanel({
   }
 
   function formatTime(iso: string) {
-    return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: CHAT_TIME_ZONE,
+    });
   }
 
   function formatDateLabel(iso: string) {
     const d = new Date(iso);
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    if (d.toDateString() === today.toDateString()) return "Hoje";
-    if (d.toDateString() === yesterday.toDateString()) return "Ontem";
-    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    const messageKey = dateKeyInChatTimeZone(d);
+    if (messageKey === dateKeyInChatTimeZone(today)) return "Hoje";
+    if (messageKey === dateKeyInChatTimeZone(addDays(today, -1))) return "Ontem";
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", timeZone: CHAT_TIME_ZONE });
   }
 
   function isSameDay(a: string, b: string) {
-    return new Date(a).toDateString() === new Date(b).toDateString();
+    return dateKeyInChatTimeZone(new Date(a)) === dateKeyInChatTimeZone(new Date(b));
   }
 
   function formatFullDateTime(iso: string | null | undefined) {
@@ -1355,6 +1394,7 @@ function GroupChatPanel({
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: CHAT_TIME_ZONE,
     });
   }
 
@@ -2107,7 +2147,7 @@ function GroupChatPanel({
                     <div key={s.id} className="flex items-start justify-between gap-2 text-xs">
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{s.content}</div>
-                        <div className="text-muted-foreground">{new Date(s.scheduled_at).toLocaleString("pt-BR")}</div>
+                        <div className="text-muted-foreground">{formatFullDateTime(s.scheduled_at)}</div>
                         {s.status === "error" && <div className="text-destructive">{s.error_message}</div>}
                       </div>
                       <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => handleCancelScheduled(s.id)}>
