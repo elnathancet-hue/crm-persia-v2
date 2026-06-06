@@ -13,7 +13,14 @@ import {
   matchLeadByName,
   matchLeadByPhone,
 } from "@/lib/whatsapp/group-join-pipeline";
-import { withSignedChatMediaUrls } from "@/lib/chat-media";
+import {
+  CHAT_MEDIA_BUCKET,
+  createChatMediaPath,
+  ensureChatMediaBucket,
+  resolveProviderChatMediaUrl,
+  toChatMediaRef,
+  withSignedChatMediaUrls,
+} from "@/lib/chat-media";
 
 async function getProvider(supabase: any, orgId: string) {
   const { data: connection } = await supabase
@@ -811,39 +818,88 @@ export async function sendMediaToGroup(
   replyToWamid?: string | null,
 ) {
   const { supabase, orgId } = await requireRole("admin");
-  const provider = await getProvider(supabase, orgId);
+  const admin = createAdminClient();
+  let uploadedPath: string | null = null;
 
-  const { data: group } = await supabase
-    .from("whatsapp_groups")
-    .select("group_jid")
-    .eq("id", groupId)
-    .eq("organization_id", orgId)
-    .single();
+  try {
+    const provider = await getProvider(supabase, orgId);
 
-  if (!group) throw new Error("Grupo nao encontrado");
+    const { data: group } = await supabase
+      .from("whatsapp_groups")
+      .select("group_jid")
+      .eq("id", groupId)
+      .eq("organization_id", orgId)
+      .single();
 
-  const result = await provider.sendMedia({
-    phone: group.group_jid,
-    media: fileBase64,
-    type: mediaType,
-    caption,
-    fileName,
-    replyTo: replyToWamid || undefined,
-  });
+    if (!group) return { sent: false, error: "Grupo nao encontrado" };
 
-  await (supabase as any).from("group_messages").insert({
-    organization_id: orgId,
-    group_id: groupId,
-    direction: "outbound",
-    text: caption || null,
-    sender_name: null,
-    whatsapp_msg_id: result.messageId || null,
-    media_type: mediaType,
-    media_url: null, // base64 not stored; UAZAPI returns no URL
-    reply_to_whatsapp_msg_id: replyToWamid || null,
-  });
+    const base64Marker = ";base64,";
+    const markerIdx = fileBase64.indexOf(base64Marker);
+    if (!fileBase64.startsWith("data:") || markerIdx === -1) {
+      return { sent: false, error: "Formato de midia invalido" };
+    }
 
-  return { sent: true };
+    const mimeType = fileBase64.slice(5, markerIdx).split(";")[0];
+    const content = fileBase64.slice(markerIdx + base64Marker.length);
+    const buffer = Buffer.from(content, "base64");
+    if (buffer.byteLength > 16 * 1024 * 1024) {
+      return { sent: false, error: "Arquivo maior que 16MB" };
+    }
+
+    await ensureChatMediaBucket(admin);
+    const safeFileName = fileName || `${mediaType}-${Date.now()}`;
+    const mediaPath = createChatMediaPath({ orgId, conversationId: `group-${groupId}`, fileName: safeFileName });
+    uploadedPath = mediaPath;
+    const { error: uploadError } = await admin.storage
+      .from(CHAT_MEDIA_BUCKET)
+      .upload(mediaPath, buffer, { contentType: mimeType, upsert: false });
+
+    if (uploadError) return { sent: false, error: uploadError.message };
+
+    const mediaRef = toChatMediaRef(mediaPath);
+    const providerMediaUrl = await resolveProviderChatMediaUrl(admin, mediaRef);
+
+    const result = await provider.sendMedia({
+      phone: group.group_jid,
+      media: providerMediaUrl,
+      type: mediaType,
+      caption,
+      fileName,
+      replyTo: replyToWamid || undefined,
+    });
+
+    const { data: inserted, error: insertError } = await (supabase as any).from("group_messages").insert({
+      organization_id: orgId,
+      group_id: groupId,
+      direction: "outbound",
+      text: caption || null,
+      sender_name: null,
+      whatsapp_msg_id: result.messageId || null,
+      media_type: mediaType,
+      media_url: mediaRef,
+      reply_to_whatsapp_msg_id: replyToWamid || null,
+    }).select(
+      "id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, " +
+      "sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, " +
+      "whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned, status"
+    ).single();
+
+    if (insertError) return { sent: false, error: insertError.message };
+
+    const signed = inserted
+      ? await withSignedChatMediaUrls(admin, [inserted])
+      : [];
+
+    return { sent: true, message: signed[0] ?? inserted };
+  } catch (err) {
+    if (uploadedPath) {
+      await admin.storage.from(CHAT_MEDIA_BUCKET).remove([uploadedPath]).catch(() => {});
+    }
+    return {
+      sent: false,
+      error: err instanceof Error ? err.message : "Erro ao enviar midia",
+    };
+  }
 }
 
 export async function generateGroupMessageDraft(
