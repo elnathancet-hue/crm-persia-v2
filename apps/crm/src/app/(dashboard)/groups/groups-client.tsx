@@ -747,6 +747,9 @@ function GroupChatPanel({
   const [chatInput, setChatInput] = React.useState("");
   const [sendingMessage, setSendingMessage] = React.useState(false);
   const [sendingMedia, setSendingMedia] = React.useState(false);
+  const [attachedFile, setAttachedFile] = React.useState<File | null>(null);
+  const [attachedPreview, setAttachedPreview] = React.useState<string | null>(null);
+  const [attachedMediaType, setAttachedMediaType] = React.useState<"image" | "video" | "audio" | "document">("document");
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
   const [replyTo, setReplyTo] = React.useState<GroupMessage | null>(null);
   const [messageSearch, setMessageSearch] = React.useState("");
@@ -982,7 +985,49 @@ function GroupChatPanel({
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, []);
 
+  function clearAttachment() {
+    setAttachedFile(null);
+    setAttachedPreview(null);
+  }
+
   async function handleSendMessage() {
+    if (attachedFile) {
+      const caption = chatInput.trim() || undefined;
+      const file = attachedFile;
+      const mt = attachedMediaType;
+      const replyingTo = replyTo;
+      clearAttachment();
+      setChatInput("");
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      setReplyTo(null);
+      shouldAutoScroll.current = true;
+      setSendingMedia(true);
+      try {
+        const formData = new FormData();
+        formData.append("groupId", group.id);
+        formData.append("file", file);
+        formData.append("mediaType", mt);
+        if (caption) formData.append("caption", caption);
+        if (replyingTo?.whatsapp_msg_id) formData.append("replyToWamid", replyingTo.whatsapp_msg_id);
+        const result = await sendMediaToGroup(formData);
+        if (result.error) throw new Error(result.error);
+        if (result.message) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === result.message.id)) {
+              return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+            }
+            return [...prev, result.message as GroupMessage];
+          });
+        }
+        toast.success("Mídia enviada");
+      } catch (err: any) {
+        toast.error(err.message || "Erro ao enviar mídia");
+      } finally {
+        setSendingMedia(false);
+      }
+      return;
+    }
+
     const text = chatInput.trim();
     if (!text) return;
     shouldAutoScroll.current = true;
@@ -1073,7 +1118,7 @@ function GroupChatPanel({
     }
   }
 
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
@@ -1083,30 +1128,14 @@ function GroupChatPanel({
     else if (file.type.startsWith("video/")) mediaType = "video";
     else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-    setSendingMedia(true);
-    const replyingTo = replyTo;
-    setReplyTo(null);
-    try {
-      const formData = new FormData();
-      formData.append("groupId", group.id);
-      formData.append("file", file);
-      formData.append("mediaType", mediaType);
-      if (replyingTo?.whatsapp_msg_id) formData.append("replyToWamid", replyingTo.whatsapp_msg_id);
-      const result = await sendMediaToGroup(formData);
-      if (result.error) throw new Error(result.error);
-      if (result.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === result.message.id)) {
-            return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-          }
-          return [...prev, result.message as GroupMessage];
-        });
-      }
-      toast.success("Mídia enviada");
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao enviar mídia");
-    } finally {
-      setSendingMedia(false);
+    setAttachedMediaType(mediaType);
+    setAttachedFile(file);
+    if (mediaType === "image") {
+      const reader = new FileReader();
+      reader.onload = (ev) => setAttachedPreview((ev.target?.result as string) ?? null);
+      reader.readAsDataURL(file);
+    } else {
+      setAttachedPreview(null);
     }
   }
 
@@ -2060,6 +2089,38 @@ function GroupChatPanel({
         <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" className="hidden" onChange={handleFileSelect} />
         <input ref={imageInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
         <input ref={audioFileInputRef} type="file" accept="audio/*" className="hidden" onChange={handleFileSelect} />
+
+        {/* Attachment preview bar */}
+        {attachedFile && (
+          <div
+            className="shrink-0 flex items-center gap-3 px-4 py-2 border-t border-[color:var(--chat-sidebar-divider)]"
+            style={{ background: "var(--chat-input-bg)" }}
+          >
+            {attachedPreview ? (
+              <img src={attachedPreview} alt="preview" className="h-14 w-14 rounded object-cover border shrink-0" />
+            ) : (
+              <div className="h-14 w-14 rounded border bg-background flex items-center justify-center shrink-0">
+                {attachedMediaType === "video" ? (
+                  <FileVideo className="size-5 text-muted-foreground" />
+                ) : attachedMediaType === "audio" ? (
+                  <Mic className="size-5 text-muted-foreground" />
+                ) : (
+                  <FileText className="size-5 text-muted-foreground" />
+                )}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">{attachedFile.name}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {attachedMediaType} {"\u00B7"} {(attachedFile.size / 1024).toFixed(0)} KB
+              </p>
+            </div>
+            <Button variant="ghost" size="icon-sm" className="size-6 shrink-0" onClick={clearAttachment}>
+              <X className="size-3" />
+            </Button>
+          </div>
+        )}
+
         <div className="flex items-end gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger>
@@ -2212,7 +2273,7 @@ function GroupChatPanel({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
               }}
-              placeholder="Digite uma mensagem..."
+              placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
               className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none placeholder:text-[color:var(--chat-timestamp)] focus:ring-1 focus:ring-[color:var(--chat-send-bg)]"
               style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none" }}
               rows={1}
@@ -2229,7 +2290,7 @@ function GroupChatPanel({
             >
               <Square className="size-4 fill-current" />
             </Button>
-          ) : chatInput.trim() ? (
+          ) : (chatInput.trim() || attachedFile) ? (
             <Button
               size="icon"
               onClick={handleSendMessage}
@@ -2237,7 +2298,7 @@ function GroupChatPanel({
               className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
-              {sendingMessage ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              {(sendingMessage || sendingMedia) ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
             </Button>
           ) : (
             <Button
