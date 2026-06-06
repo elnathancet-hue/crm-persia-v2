@@ -201,6 +201,7 @@ export function MessageInput({
               type: "ptt",
               fileName: "audio.webm",
               replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
+              replyToMessageId: replyTo?.id ?? undefined,
             });
             if (data) {
               onMessageSent(data);
@@ -273,6 +274,7 @@ export function MessageInput({
           fileName: selectedFile.name,
           caption: content.trim() || undefined,
           replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
+          replyToMessageId: replyTo?.id ?? undefined,
         });
 
         if (data) {
@@ -307,7 +309,10 @@ export function MessageInput({
     const { data, error } = await sendMessageViaWhatsApp(
       conversationId,
       trimmed,
-      { replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined }
+      {
+        replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
+        replyToMessageId: replyTo?.id ?? undefined,
+      }
     );
 
     if (data) {
