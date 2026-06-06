@@ -973,7 +973,12 @@ function GroupChatPanel({
     const replyingTo = replyTo;
     setReplyTo(null);
     try {
-      await sendMessageToGroup(group.id, text, replyingTo?.whatsapp_msg_id ?? null);
+      const result = await sendMessageToGroup(group.id, text, replyingTo?.whatsapp_msg_id ?? null);
+      if (result.error) {
+        toast.error(result.error);
+        setChatInput(text);
+        setReplyTo(replyingTo);
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao enviar mensagem");
       setChatInput(text);

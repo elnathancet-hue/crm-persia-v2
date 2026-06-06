@@ -777,35 +777,40 @@ export async function sendMessageToGroup(
   message: string,
   replyToWamid?: string | null,
 ) {
-  const { supabase, orgId } = await requireRole("admin");
-  const provider = await getProvider(supabase, orgId);
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    const provider = await getProvider(supabase, orgId);
 
-  const { data: group } = await supabase
-    .from("whatsapp_groups")
-    .select("group_jid")
-    .eq("id", groupId)
-    .eq("organization_id", orgId)
-    .single();
+    const { data: group } = await supabase
+      .from("whatsapp_groups")
+      .select("group_jid")
+      .eq("id", groupId)
+      .eq("organization_id", orgId)
+      .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+    if (!group) return { sent: false, error: "Grupo nao encontrado" };
 
-  const result = await provider.sendText({
-    phone: group.group_jid,
-    message,
-    replyTo: replyToWamid || undefined,
-  });
+    const result = await provider.sendText({
+      phone: group.group_jid,
+      message,
+      replyTo: replyToWamid || undefined,
+    });
 
-  await (supabase as any).from("group_messages").insert({
-    organization_id: orgId,
-    group_id: groupId,
-    direction: "outbound",
-    text: message,
-    sender_name: null,
-    whatsapp_msg_id: result.messageId || null,
-    reply_to_whatsapp_msg_id: replyToWamid || null,
-  });
+    await (supabase as any).from("group_messages").insert({
+      organization_id: orgId,
+      group_id: groupId,
+      direction: "outbound",
+      text: message,
+      sender_name: null,
+      whatsapp_msg_id: result.messageId || null,
+      reply_to_whatsapp_msg_id: replyToWamid || null,
+    });
 
-  return { sent: true };
+    return { sent: true };
+  } catch (err) {
+    console.error("[sendMessageToGroup] error:", err instanceof Error ? err.message : String(err));
+    return { sent: false, error: err instanceof Error ? err.message : "Erro ao enviar mensagem" };
+  }
 }
 
 // ---- Send media to group ----
@@ -817,11 +822,12 @@ export async function sendMediaToGroup(
   fileName?: string,
   replyToWamid?: string | null,
 ) {
-  const { supabase, orgId } = await requireRole("admin");
-  const admin = createAdminClient();
   let uploadedPath: string | null = null;
+  let admin: ReturnType<typeof createAdminClient> | undefined;
 
   try {
+    const { supabase, orgId } = await requireRole("admin");
+    admin = createAdminClient();
     const provider = await getProvider(supabase, orgId);
 
     const { data: group } = await supabase
@@ -892,9 +898,10 @@ export async function sendMediaToGroup(
 
     return { sent: true, message: signed[0] ?? inserted };
   } catch (err) {
-    if (uploadedPath) {
+    if (uploadedPath && admin) {
       await admin.storage.from(CHAT_MEDIA_BUCKET).remove([uploadedPath]).catch(() => {});
     }
+    console.error("[sendMediaToGroup] error:", err instanceof Error ? err.message : String(err));
     return {
       sent: false,
       error: err instanceof Error ? err.message : "Erro ao enviar midia",
