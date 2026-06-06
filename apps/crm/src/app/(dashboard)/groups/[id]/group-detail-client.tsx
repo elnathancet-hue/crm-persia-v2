@@ -487,32 +487,31 @@ export function GroupDetailClient({
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result as string;
-          setSendingMedia(true);
-          try {
-            const result = await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
-            if (result.error) throw new Error(result.error);
-            if (result.message) {
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === result.message.id)) {
-                  return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-                }
-                return [...prev, result.message as GroupMessage];
-              });
-            }
-            toast.success("Áudio enviado");
-          } catch (err: any) {
-            toast.error(err.message || "Erro ao enviar áudio");
-          } finally {
-            setSendingMedia(false);
-          }
-        };
-        reader.readAsDataURL(blob);
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         setIsRecording(false);
         setRecordingSeconds(0);
+        setSendingMedia(true);
+        try {
+          const formData = new FormData();
+          formData.append("groupId", group.id);
+          formData.append("file", blob, "audio.webm");
+          formData.append("mediaType", "ptt");
+          const result = await sendMediaToGroup(formData);
+          if (result.error) throw new Error(result.error);
+          if (result.message) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === result.message.id)) {
+                return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+              }
+              return [...prev, result.message as GroupMessage];
+            });
+          }
+          toast.success("Áudio enviado");
+        } catch (err: any) {
+          toast.error(err.message || "Erro ao enviar áudio");
+        } finally {
+          setSendingMedia(false);
+        }
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
@@ -550,28 +549,21 @@ export function GroupDetailClient({
       setChatInput("");
       setSendingMedia(true);
       try {
-        const reader = new FileReader();
-        await new Promise<void>((resolve, reject) => {
-          reader.onload = async (ev) => {
-            const base64 = ev.target?.result as string;
-            if (!base64) { reject(new Error("Falha ao ler arquivo")); return; }
-            try {
-              const result = await sendMediaToGroup(group.id, base64, mt, caption, file.name);
-              if (result.error) throw new Error(result.error);
-              if (result.message) {
-                setMessages((prev) => {
-                  if (prev.some((m) => m.id === result.message.id)) {
-                    return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-                  }
-                  return [...prev, result.message as GroupMessage];
-                });
-              }
-              resolve();
-            } catch (err) { reject(err); }
-          };
-          reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
-          reader.readAsDataURL(file);
-        });
+        const formData = new FormData();
+        formData.append("groupId", group.id);
+        formData.append("file", file);
+        formData.append("mediaType", mt);
+        if (caption) formData.append("caption", caption);
+        const result = await sendMediaToGroup(formData);
+        if (result.error) throw new Error(result.error);
+        if (result.message) {
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === result.message.id)) {
+              return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+            }
+            return [...prev, result.message as GroupMessage];
+          });
+        }
         toast.success("Mídia enviada");
       } catch (err: any) {
         toast.error(err.message || "Erro ao enviar mídia");

@@ -814,14 +814,9 @@ export async function sendMessageToGroup(
 }
 
 // ---- Send media to group ----
-export async function sendMediaToGroup(
-  groupId: string,
-  fileBase64: string,
-  mediaType: "image" | "video" | "audio" | "ptt" | "document",
-  caption?: string,
-  fileName?: string,
-  replyToWamid?: string | null,
-) {
+// Accepts FormData to avoid React wire-format "Maximum array nesting exceeded"
+// when passing large base64 strings as server action arguments.
+export async function sendMediaToGroup(formData: FormData) {
   let uploadedPath: string | null = null;
   let admin: ReturnType<typeof createAdminClient> | undefined;
 
@@ -829,6 +824,16 @@ export async function sendMediaToGroup(
     const { supabase, orgId } = await requireRole("admin");
     admin = createAdminClient();
     const provider = await getProvider(supabase, orgId);
+
+    const groupId = formData.get("groupId") as string;
+    const file = formData.get("file") as File | null;
+    const mediaType = formData.get("mediaType") as "image" | "video" | "audio" | "ptt" | "document";
+    const caption = (formData.get("caption") as string | null) || undefined;
+    const replyToWamid = (formData.get("replyToWamid") as string | null) || null;
+
+    if (!groupId || !file || !mediaType) {
+      return { sent: false, error: "Dados incompletos" };
+    }
 
     const { data: group } = await supabase
       .from("whatsapp_groups")
@@ -839,22 +844,15 @@ export async function sendMediaToGroup(
 
     if (!group) return { sent: false, error: "Grupo nao encontrado" };
 
-    const base64Marker = ";base64,";
-    const markerIdx = fileBase64.indexOf(base64Marker);
-    if (!fileBase64.startsWith("data:") || markerIdx === -1) {
-      return { sent: false, error: "Formato de midia invalido" };
-    }
-
-    const mimeType = fileBase64.slice(5, markerIdx).split(";")[0];
-    const content = fileBase64.slice(markerIdx + base64Marker.length);
-    const buffer = Buffer.from(content, "base64");
+    const mimeType = file.type || "application/octet-stream";
+    const fileName = file.name || `${mediaType}-${Date.now()}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.byteLength > 16 * 1024 * 1024) {
       return { sent: false, error: "Arquivo maior que 16MB" };
     }
 
     await ensureChatMediaBucket(admin);
-    const safeFileName = fileName || `${mediaType}-${Date.now()}`;
-    const mediaPath = createChatMediaPath({ orgId, conversationId: `group-${groupId}`, fileName: safeFileName });
+    const mediaPath = createChatMediaPath({ orgId, conversationId: `group-${groupId}`, fileName });
     uploadedPath = mediaPath;
     const { error: uploadError } = await admin.storage
       .from(CHAT_MEDIA_BUCKET)

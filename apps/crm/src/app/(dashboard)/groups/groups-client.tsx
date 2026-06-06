@@ -1001,32 +1001,31 @@ function GroupChatPanel({
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result as string;
-          setSendingMedia(true);
-          try {
-            const result = await sendMediaToGroup(group.id, base64, "ptt", undefined, "audio.webm");
-            if (result.error) throw new Error(result.error);
-            if (result.message) {
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === result.message.id)) {
-                  return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-                }
-                return [...prev, result.message as GroupMessage];
-              });
-            }
-            toast.success("\u00C1udio enviado");
-          } catch (err: any) {
-            toast.error(err.message || "Erro ao enviar \u00E1udio");
-          } finally {
-            setSendingMedia(false);
-          }
-        };
-        reader.readAsDataURL(blob);
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         setIsRecording(false);
         setRecordingSeconds(0);
+        setSendingMedia(true);
+        try {
+          const formData = new FormData();
+          formData.append("groupId", group.id);
+          formData.append("file", blob, "audio.webm");
+          formData.append("mediaType", "ptt");
+          const result = await sendMediaToGroup(formData);
+          if (result.error) throw new Error(result.error);
+          if (result.message) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === result.message.id)) {
+                return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+              }
+              return [...prev, result.message as GroupMessage];
+            });
+          }
+          toast.success("\u00C1udio enviado");
+        } catch (err: any) {
+          toast.error(err.message || "Erro ao enviar \u00E1udio");
+        } finally {
+          setSendingMedia(false);
+        }
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
@@ -1060,39 +1059,36 @@ function GroupChatPanel({
     if (!file) return;
     e.target.value = "";
 
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     let mediaType: "image" | "video" | "audio" | "document" = "document";
     if (file.type.startsWith("image/")) mediaType = "image";
     else if (file.type.startsWith("video/")) mediaType = "video";
     else if (file.type.startsWith("audio/")) mediaType = "audio";
 
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target?.result as string;
-      if (!base64) return;
-      setSendingMedia(true);
-      const replyingTo = replyTo;
-      setReplyTo(null);
-      try {
-        const result = await sendMediaToGroup(group.id, base64, mediaType, undefined, file.name, replyingTo?.whatsapp_msg_id ?? null);
-        if (result.error) throw new Error(result.error);
-        if (result.message) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === result.message.id)) {
-              return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-            }
-            return [...prev, result.message as GroupMessage];
-          });
-        }
-        toast.success("Mídia enviada");
-      } catch (err: any) {
-        toast.error(err.message || "Erro ao enviar mídia");
-        setReplyTo(replyingTo);
-      } finally {
-        setSendingMedia(false);
+    setSendingMedia(true);
+    const replyingTo = replyTo;
+    setReplyTo(null);
+    try {
+      const formData = new FormData();
+      formData.append("groupId", group.id);
+      formData.append("file", file);
+      formData.append("mediaType", mediaType);
+      if (replyingTo?.whatsapp_msg_id) formData.append("replyToWamid", replyingTo.whatsapp_msg_id);
+      const result = await sendMediaToGroup(formData);
+      if (result.error) throw new Error(result.error);
+      if (result.message) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === result.message.id)) {
+            return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
+          }
+          return [...prev, result.message as GroupMessage];
+        });
       }
-    };
-    reader.readAsDataURL(file);
+      toast.success("Mídia enviada");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao enviar mídia");
+    } finally {
+      setSendingMedia(false);
+    }
   }
 
   async function handleGenerateAiDraft() {
