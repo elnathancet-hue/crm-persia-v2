@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
 import {
   useAssignmentToast,
@@ -115,10 +116,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        <main id="main-content" className={`flex-1 ${isChatPage ? "overflow-hidden p-0" : "overflow-y-auto p-6"}`}>
+        <main id="main-content" className={`flex-1 ${isChatPage ? "overflow-hidden p-0" : "overflow-y-auto p-6 pb-[calc(1.5rem+4rem)] md:pb-6"}`}>
           {children}
         </main>
       </div>
+      <MobileBottomNav />
     </div>
   );
 }

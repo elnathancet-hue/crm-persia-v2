@@ -33,7 +33,7 @@ export function ChatPageClient({ initialConversationId = null }: ChatPageClientP
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden bg-[color:var(--chat-bg)]">
+    <div className="flex h-[calc(100vh-3.5rem-4rem)] md:h-[calc(100vh-3.5rem)] overflow-hidden bg-[color:var(--chat-bg)]">
       {/* Left panel: Conversation List */}
       <div
         className={
