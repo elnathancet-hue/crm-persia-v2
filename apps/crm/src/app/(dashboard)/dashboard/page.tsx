@@ -12,6 +12,7 @@ import {
   Clock,
   Target,
 } from "lucide-react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { PageTitle } from "@persia/ui/typography";
 
@@ -182,6 +183,9 @@ export default async function DashboardPage() {
     .sort((a, b) => b.count - a.count);
   const maxStageCount = stageRows[0]?.count ?? 1;
 
+  const rawDate = now.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateLabel = rawDate.charAt(0).toUpperCase() + rawDate.slice(1);
+
   const sourceLabels: Record<string, string> = {
     whatsapp: "WhatsApp",
     manual: "Manual",
@@ -194,11 +198,25 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <PageTitle size="compact">Dashboard</PageTitle>
-        <p className="text-sm text-muted-foreground mt-1">
-          {now.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <PageTitle size="compact">Dashboard</PageTitle>
+          <p className="text-sm text-muted-foreground mt-1">{dateLabel}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/crm" className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-medium hover:bg-accent transition-colors">
+            <Users className="size-3.5" />
+            Leads
+          </Link>
+          <Link href="/chat" className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-medium hover:bg-accent transition-colors">
+            <MessageSquare className="size-3.5" />
+            Chat
+          </Link>
+          <Link href="/agenda" className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-3 py-1.5 text-sm font-medium hover:bg-accent transition-colors">
+            <Clock className="size-3.5" />
+            Agenda
+          </Link>
+        </div>
       </div>
 
       {/* KPIs — linha 1 */}
@@ -243,11 +261,15 @@ export default async function DashboardPage() {
           value={(openConvsRes.count ?? 0).toLocaleString("pt-BR")}
           icon={MessageSquare}
         />
-        <KpiCard
-          title="Aguardando Humano"
-          value={(waitingRes.count ?? 0).toLocaleString("pt-BR")}
-          icon={Clock}
-        />
+        {/* Ocupa linha inteira no mobile para dar destaque ao alerta */}
+        <div className="col-span-2 lg:col-span-1">
+          <KpiCard
+            title="Aguardando Humano"
+            value={(waitingRes.count ?? 0).toLocaleString("pt-BR")}
+            icon={Clock}
+            variant={(waitingRes.count ?? 0) > 0 ? "warning" : "default"}
+          />
+        </div>
       </div>
 
       {/* Gráficos e análises */}
@@ -273,7 +295,7 @@ export default async function DashboardPage() {
             {topSources.length === 0 ? (
               <p className="text-sm text-muted-foreground py-8 text-center">Nenhum lead nos últimos 30 dias</p>
             ) : (
-              topSources.map(([source, count]) => (
+              topSources.map(([source, count], idx) => (
                 <div key={source} className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
                     <span className="font-medium">{sourceLabels[source] ?? source}</span>
@@ -281,8 +303,11 @@ export default async function DashboardPage() {
                   </div>
                   <div className="h-2 rounded-full bg-muted overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${Math.round((count / maxSourceCount) * 100)}%` }}
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.round((count / maxSourceCount) * 100)}%`,
+                        background: `hsl(var(--primary) / ${Math.max(0.35, 1 - idx * 0.13)})`,
+                      }}
                     />
                   </div>
                 </div>
@@ -293,19 +318,23 @@ export default async function DashboardPage() {
       </div>
 
       {/* Funil — leads por etapa */}
-      {stageRows.length > 0 && (
-        <Card className="border rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">
-              Leads por Etapa
-              {mainPipeline && (
-                <span className="text-muted-foreground font-normal text-xs ml-2">
-                  {mainPipeline.name}
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 pb-4">
+      <Card className="border rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-semibold">
+            Leads por Etapa
+            {mainPipeline && (
+              <span className="text-muted-foreground font-normal text-xs ml-2">
+                {mainPipeline.name}
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 pb-4">
+          {stageRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              {mainPipeline ? "Nenhum lead nas etapas ainda." : "Nenhum funil configurado."}
+            </p>
+          ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {stageRows.map((stage) => (
                 <div key={stage.id} className="rounded-lg border bg-muted/40 p-3 space-y-1">
@@ -324,9 +353,9 @@ export default async function DashboardPage() {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

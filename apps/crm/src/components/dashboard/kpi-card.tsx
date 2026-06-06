@@ -9,14 +9,15 @@ interface KpiCardProps {
   description?: string;
   icon: LucideIcon;
   trend?: { value: number; positive: boolean };
+  variant?: "default" | "warning";
 }
 
 // PR-DSBASE: usa KpiValue/SectionLabel/MutedHint pra padronizar tipografia
 // + tokens semanticos `text-success/failure` no trend (era green-500/red-500).
-export function KpiCard({ title, value, description, icon: Icon, trend }: KpiCardProps) {
+export function KpiCard({ title, value, description, icon: Icon, trend, variant = "default" }: KpiCardProps) {
   return (
     <Card className="border rounded-xl hover:shadow-sm transition-shadow duration-200">
-      <CardContent className="p-6">
+      <CardContent className="p-4 md:p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <SectionLabel as="p">{title}</SectionLabel>
@@ -33,8 +34,11 @@ export function KpiCard({ title, value, description, icon: Icon, trend }: KpiCar
               </p>
             )}
           </div>
-          <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-            <Icon className="size-5 text-primary" />
+          <div className={cn(
+            "size-10 rounded-xl flex items-center justify-center shrink-0",
+            variant === "warning" ? "bg-warning-soft" : "bg-primary/10"
+          )}>
+            <Icon className={cn("size-5", variant === "warning" ? "text-warning" : "text-primary")} />
           </div>
         </div>
       </CardContent>
