@@ -707,7 +707,11 @@ function GroupChatPanel({
   const [isRecording, setIsRecording] = React.useState(false);
   const [recordingSeconds, setRecordingSeconds] = React.useState(0);
   const [emojiOpen, setEmojiOpen] = React.useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = React.useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const messagesScrollRef = React.useRef<HTMLDivElement>(null);
+  const shouldAutoScroll = React.useRef(true);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
@@ -770,10 +774,12 @@ function GroupChatPanel({
   React.useEffect(() => {
     setLoadingMsgs(true);
     setMessages([]);
+    setHasMoreMessages(false);
     const supabase = createClient();
     getGroupMessages(group.id)
-      .then((data) => {
+      .then(({ messages: data, hasMore }) => {
         setMessages(data as GroupMessage[]);
+        setHasMoreMessages(hasMore);
         setLoadingMsgs(false);
       })
       .catch(() => {
@@ -857,10 +863,40 @@ function GroupChatPanel({
     return () => { supabase.removeChannel(channel); };
   }, [group.id]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on initial load / new outbound messages
   React.useEffect(() => {
-    if (!loadingMsgs) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!loadingMsgs && shouldAutoScroll.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, loadingMsgs]);
+
+  const handleLoadOlderMessages = React.useCallback(async () => {
+    if (loadingOlderMessages || messages.length === 0) return;
+    const scrollEl = messagesScrollRef.current;
+    const previousScrollHeight = scrollEl?.scrollHeight ?? 0;
+    const before = messages[0]?.created_at;
+    if (!before) return;
+
+    setLoadingOlderMessages(true);
+    try {
+      const { messages: older, hasMore } = await getGroupMessages(group.id, { before });
+      setHasMoreMessages(hasMore);
+      if (older.length > 0) {
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = (older as GroupMessage[]).filter((m) => !existingIds.has(m.id));
+          return [...newMsgs, ...prev];
+        });
+        shouldAutoScroll.current = false;
+        window.requestAnimationFrame(() => {
+          if (!scrollEl) return;
+          scrollEl.scrollTop += scrollEl.scrollHeight - previousScrollHeight;
+        });
+      }
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [group.id, loadingOlderMessages, messages]);
 
   const adjustHeight = React.useCallback(() => {
     const el = textareaRef.current;
@@ -872,6 +908,7 @@ function GroupChatPanel({
   async function handleSendMessage() {
     const text = chatInput.trim();
     if (!text) return;
+    shouldAutoScroll.current = true;
     setSendingMessage(true);
     setChatInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -1355,8 +1392,32 @@ function GroupChatPanel({
       )}
 
       {/* Messages â€" WhatsApp wallpaper + bubble styling */}
-      <div className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
+      <div ref={messagesScrollRef} className="wa-chat-wallpaper flex-1 overflow-y-auto px-4">
         <div className="flex flex-col gap-1 py-4">
+          {messages.length > 0 && hasMoreMessages && (
+            <div className="flex justify-center pb-3">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleLoadOlderMessages}
+                disabled={loadingOlderMessages}
+                className="h-8 rounded-full px-3 text-xs shadow-sm"
+              >
+                {loadingOlderMessages ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Carregando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="size-3.5" />
+                    Carregar mensagens anteriores
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
           {loadingMsgs ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -1585,10 +1646,16 @@ function GroupChatPanel({
                             <img src={msg.media_url} alt="Sticker" className="size-28 object-contain" />
                           </a>
                         )}
+                        {msg.media_url && msg.media_type === "sticker" && (
+                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={msg.media_url} alt="Sticker" className="size-28 object-contain" />
+                          </a>
+                        )}
                         {msg.media_url && msg.media_type === "image" && (
                           <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="block">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.media_url} alt="" className="block w-full max-h-[280px] object-cover" />
+                            <img src={msg.media_url} alt="" className="max-h-64 w-full rounded-t-[7.5px] object-cover mb-1" />
                           </a>
                         )}
                         {!msg.media_url && msg.media_type === "image" && (
@@ -1607,7 +1674,7 @@ function GroupChatPanel({
                           </div>
                         )}
                         {msg.media_url && msg.media_type === "video" && (
-                          <video controls className="block w-full max-h-[280px]">
+                          <video controls className="max-h-64 w-full rounded-t-[7.5px] mb-1">
                             <source src={msg.media_url} />
                           </video>
                         )}
@@ -1622,10 +1689,13 @@ function GroupChatPanel({
                             href={msg.media_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-xs text-primary hover:underline mb-1 px-2.5 pt-2"
+                            className="mb-1 flex min-w-52 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80"
                           >
-                            <FileText className="size-4 shrink-0" />
-                            <span>Abrir documento</span>
+                            <FileText className="size-8 shrink-0 text-primary" />
+                            <span className="flex flex-col min-w-0">
+                              <span className="truncate text-[13px] font-medium">Documento</span>
+                              <span className="block text-[10px] text-muted-foreground">Abrir documento</span>
+                            </span>
                           </a>
                         )}
                         {!msg.media_url && msg.media_type === "document" && (
@@ -1634,8 +1704,8 @@ function GroupChatPanel({
                             <span className="text-[13px] text-muted-foreground">Documento</span>
                           </div>
                         )}
-                        {/* Text / caption */}
-                        <div className="px-2.5 py-1.5 text-[14.2px] leading-5">
+                        {/* Text / caption + timestamp */}
+                        <div className={msg.text ? "px-2.5 py-1.5 text-[14.2px] leading-5" : "px-2.5 pb-1.5 pt-0 text-[14.2px] leading-5"}>
                           {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
                           <span
                             className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-0.5"

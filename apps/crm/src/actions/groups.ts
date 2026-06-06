@@ -1034,11 +1034,17 @@ export async function editGroupMessage(
     .eq("organization_id", orgId);
 }
 
-export async function getGroupMessages(groupId: string, limit = 50) {
+const GROUP_MSG_PAGE_SIZE = 50;
+
+export async function getGroupMessages(
+  groupId: string,
+  opts?: { before?: string }
+) {
   const { supabase, orgId } = await requireRole("agent");
+  const pageLimit = GROUP_MSG_PAGE_SIZE + 1; // +1 to detect hasMore
 
   const db = supabase as any;
-  const { data } = await db
+  let query = db
     .from("group_messages")
     .select(
       "id, direction, text, sender_name, sender_jid, sender_phone, " +
@@ -1048,10 +1054,22 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
     .eq("is_deleted", false)
-    .order("created_at", { ascending: true })
-    .limit(limit);
+    .order("created_at", { ascending: false }) // descending → slice newest N, then reverse
+    .limit(pageLimit);
 
-  const rows = ((data || []) as Array<{
+  if (opts?.before) {
+    query = query.lt("created_at", opts.before);
+  }
+
+  const { data } = await query;
+
+  const rawRows = (data || []) as Array<Record<string, unknown>>;
+  const hasMore = rawRows.length > GROUP_MSG_PAGE_SIZE;
+  // Remove the extra sentinel row and restore chronological order
+  const rowsSliced = hasMore ? rawRows.slice(0, GROUP_MSG_PAGE_SIZE) : rawRows;
+  rowsSliced.reverse();
+
+  const rows = (rowsSliced as Array<{
     id: string;
     direction: string;
     text: string | null;
@@ -1246,7 +1264,8 @@ export async function getGroupMessages(groupId: string, limit = 50) {
   }));
 
   const admin = createAdminClient();
-  return withSignedChatMediaUrls(admin, enriched);
+  const messages = await withSignedChatMediaUrls(admin, enriched);
+  return { messages, hasMore };
 }
 
 // ─── createLeadFromGroupParticipant (Etapa 2) ─────────────────────────────────
