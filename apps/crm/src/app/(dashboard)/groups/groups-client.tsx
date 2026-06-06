@@ -852,15 +852,21 @@ function GroupChatPanel({
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
         (payload: { new: GroupMessage }) => {
-          void enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
+          enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
             if (!message) return;
             setMessages((prev) => {
               if (prev.some((m) => m.id === message.id)) return prev;
               return [...prev, message];
             });
             if (message.direction === "inbound") playNotification();
+          }).catch(() => {
+            // Best-effort — just append raw message without enrichment
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
           });
-          // Não dispara toast aqui â€" o grupo está aberto e o usuário vê a mensagem
+          // Não dispara toast aqui — o grupo está aberto e o usuário vê a mensagem
           // em tempo real. O toast para grupos não selecionados é gerenciado pelo
           // GlobalRealtimeSubscription em GroupsClient.
         },
@@ -869,10 +875,14 @@ function GroupChatPanel({
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
         (payload: { new: GroupMessage }) => {
-          void enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
+          enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
             if (!message) return;
             setMessages((prev) =>
               prev.map((existing) => existing.id === message.id ? message : existing),
+            );
+          }).catch(() => {
+            setMessages((prev) =>
+              prev.map((existing) => existing.id === payload.new.id ? payload.new : existing),
             );
           });
         },
