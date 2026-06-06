@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useNotificationSound, useDesktopNotification } from "@/lib/hooks/use-notification";
 import { getConversation, getConversations, uploadScheduledMessageMediaAction, type ConversationWithLead } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
 import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, forwardMessagesToConversations, type Message } from "@/actions/messages";
@@ -706,9 +705,6 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [forwardSearch, setForwardSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
-  const { play: playNotification } = useNotificationSound();
-  const { notify: desktopNotify } = useDesktopNotification();
-
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   }, []);
@@ -969,15 +965,6 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
             });
           });
           shouldAutoScroll.current = true;
-
-          if (newMsg.sender === "lead") {
-            playNotification();
-            const leadName = (conversation as any)?.leads?.name || "Lead";
-            desktopNotify(
-              `${leadName} lhe enviou uma mensagem`,
-              newMsg.content?.slice(0, 80) || "Midia recebida",
-            );
-          }
         }
       )
       .on(
@@ -1004,7 +991,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, conversation, playNotification, desktopNotify, withResolvedMediaUrl]);
+  }, [conversationId, withResolvedMediaUrl]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {

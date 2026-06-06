@@ -745,7 +745,7 @@ export function LeadInfoDrawer({
                   <span>{currentStageObj?.name}</span>
                   <ChevronDown className="size-3" />
                 </PopoverTrigger>
-                <PopoverContent className="w-56 p-1" align="start">
+                <PopoverContent className="w-56 p-1 max-h-72 overflow-y-auto" align="start">
                   {(["em_andamento", "falha", "bem_sucedido"] as StageOutcome[]).map(
                     (outcome) => {
                       const list = stagesByOutcome[outcome];
@@ -804,7 +804,7 @@ export function LeadInfoDrawer({
                       Mudar funil
                       <ChevronDown className="size-3" />
                     </PopoverTrigger>
-                    <PopoverContent className="w-64 p-1" align="start">
+                    <PopoverContent className="w-64 p-1 max-h-80 overflow-y-auto" align="start">
                       {pipelinesLoading ? (
                         <p className="px-2 py-2 text-xs text-muted-foreground">
                           Carregando funis...
@@ -862,7 +862,7 @@ export function LeadInfoDrawer({
                   {currentStageObj ? "Mudar funil/etapa" : "Colocar em funil"}
                   <ChevronDown className="size-3.5" />
                 </PopoverTrigger>
-                <PopoverContent className="w-72 p-1" align="start">
+                <PopoverContent className="w-72 p-1 max-h-80 overflow-y-auto" align="start">
                   {pipelinesLoading ? (
                     <p className="px-2 py-2 text-xs text-muted-foreground">
                       Carregando funis...
@@ -2280,7 +2280,7 @@ function PipelinePicker({
         )}
       </Button>
       {expanded && !isCurrent && (
-        <div className="pl-2 py-1">
+        <div className="pl-2 py-1 max-h-60 overflow-y-auto">
           {loading ? (
             <p className="px-2 py-1 text-[11px] text-muted-foreground">
               Carregando etapas...

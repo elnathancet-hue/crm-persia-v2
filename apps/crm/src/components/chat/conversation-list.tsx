@@ -306,19 +306,7 @@ export function ConversationList({
         },
         (payload) => {
           realtimeWorking = true;
-          const msg = payload.new as { sender?: string; content?: string; conversation_id?: string };
           loadConversations();
-
-          if (msg.sender === "lead" && msg.conversation_id !== selectedId) {
-            playNotification();
-            const item = conversationsRef.current.find((conversation) => conversation.id === msg.conversation_id);
-            const leadName = item?.leads?.name || item?.leads?.phone || "Novo contato";
-            desktopNotify(
-              `${leadName} lhe enviou uma mensagem`,
-              msg.content?.slice(0, 80) || "Midia recebida",
-              () => msg.conversation_id && onSelectRef.current(msg.conversation_id),
-            );
-          }
         }
       )
       .on(
@@ -346,7 +334,7 @@ export function ConversationList({
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [orgId, selectedId, loadConversations, playNotification, desktopNotify]);
+  }, [orgId, selectedId, loadConversations]);
 
   // Debounced search (300ms)
   useEffect(() => {
