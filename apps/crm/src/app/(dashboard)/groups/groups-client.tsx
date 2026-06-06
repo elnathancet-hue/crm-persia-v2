@@ -3,6 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
+  AlertCircle,
   ArrowLeft,
   ChevronDown,
   Copy,
@@ -343,6 +344,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function GroupMsgStatusIcon({ status }: { status: string }) {
+  if (status === "failed") {
+    return <AlertCircle className="inline size-3.5 shrink-0 text-destructive" aria-label="Falha no envio" />;
+  }
   if (status === "read") {
     return (
       <CheckCheck
@@ -713,6 +717,7 @@ function GroupChatPanel({
   const messagesScrollRef = React.useRef<HTMLDivElement>(null);
   const shouldAutoScroll = React.useRef(true);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const aiTextareaRef = React.useRef<HTMLTextAreaElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
   const audioFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -898,6 +903,13 @@ function GroupChatPanel({
     }
   }, [group.id, loadingOlderMessages, messages]);
 
+  // Auto-focus AI prompt textarea when panel opens
+  React.useEffect(() => {
+    if (aiOpen) {
+      setTimeout(() => aiTextareaRef.current?.focus(), 50);
+    }
+  }, [aiOpen]);
+
   const adjustHeight = React.useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -1027,7 +1039,7 @@ function GroupChatPanel({
         setAiDraft(result.suggestion);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao gerar sugestao");
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar sugestão");
     } finally {
       setAiLoading(false);
     }
@@ -1545,6 +1557,18 @@ function GroupChatPanel({
                           <ChevronDown className="size-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align={isOutbound ? "end" : "start"} className="min-w-[160px]">
+                          {isOutbound && msg.status === "failed" && msg.text && (
+                            <>
+                              <DropdownMenuItem onClick={() => {
+                                setChatInput(msg.text!);
+                                toast.info("Texto restaurado para reenvio");
+                              }}>
+                                <RefreshCw className="size-4" />
+                                Reenviar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           <DropdownMenuItem onClick={() => setReplyTo(msg)}>
                             <CornerUpLeft className="size-4" />
                             Responder
@@ -1614,11 +1638,15 @@ function GroupChatPanel({
 
                       {/* Bubble */}
                       <div
-                        className={`rounded-[7.5px] shadow-sm overflow-hidden ${
-                          isOutbound ? "rounded-br-sm" : "rounded-bl-sm"
-                        }`}
+                        className={cn(
+                          "rounded-[7.5px] shadow-sm overflow-hidden",
+                          isOutbound ? "rounded-br-sm" : "rounded-bl-sm",
+                          isOutbound && msg.status === "failed" && "border border-destructive",
+                        )}
                         style={
-                          isOutbound
+                          isOutbound && msg.status === "failed"
+                            ? { background: "hsl(var(--destructive) / 0.12)", color: "var(--chat-bubble-out-text)" }
+                            : isOutbound
                             ? { background: "var(--chat-bubble-out)", color: "var(--chat-bubble-out-text)" }
                             : { background: "var(--chat-bubble-in)", color: "var(--chat-bubble-in-text)" }
                         }
@@ -1765,6 +1793,7 @@ function GroupChatPanel({
                 </Button>
               </div>
               <Textarea
+                ref={aiTextareaRef}
                 name="group-ai-prompt"
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
@@ -1780,26 +1809,38 @@ function GroupChatPanel({
               />
               <Button size="sm" onClick={handleGenerateAiDraft} disabled={aiLoading || !aiPrompt.trim()} className="w-full">
                 {aiLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                {aiLoading ? "Gerando..." : "Gerar sugestao"}
+                {aiLoading ? "Gerando..." : "Gerar sugestão"}
               </Button>
               {aiDraft && (
                 <div className="space-y-2">
                   <div className="max-h-36 overflow-y-auto rounded-lg bg-muted p-3 text-sm whitespace-pre-wrap">
                     {aiDraft}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      setChatInput(aiDraft);
-                      setAiOpen(false);
-                      toast.success("Sugestao adicionada");
-                    }}
-                  >
-                    <Copy className="size-3.5" />
-                    Usar no campo
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={handleGenerateAiDraft}
+                      disabled={aiLoading}
+                    >
+                      <RefreshCw className="size-3.5" />
+                      Regenerar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => {
+                        setChatInput(aiDraft);
+                        setAiOpen(false);
+                        setAiDraft("");
+                        toast.success("Sugestão adicionada");
+                      }}
+                    >
+                      <Copy className="size-3.5" />
+                      Usar no campo
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
