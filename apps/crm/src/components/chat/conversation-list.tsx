@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, type CSSProperties } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, type CSSProperties } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   getConversations,
@@ -43,7 +43,6 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@persia/ui/popover";
-import { BulkActionBar } from "@persia/ui/bulk-action-bar";
 import {
   Archive,
   Bell,
@@ -352,22 +351,26 @@ export function ConversationList({
     };
   }, [search, loadConversations]);
 
-  const filteredConversations = conversations.filter((conversation) => {
-    if (unreadOnly && conversation.unread_count <= 0) return false;
-    if (
-      selectedTags.length > 0 &&
-      !getLeadTags(conversation.leads).some((tag) => selectedTags.includes(tag.id))
-    ) {
-      return false;
-    }
-    if (
-      selectedQueues.length > 0 &&
-      (!conversation.queue_id || !selectedQueues.includes(conversation.queue_id))
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filteredConversations = useMemo(
+    () =>
+      conversations.filter((conversation) => {
+        if (unreadOnly && conversation.unread_count <= 0) return false;
+        if (
+          selectedTags.length > 0 &&
+          !getLeadTags(conversation.leads).some((tag) => selectedTags.includes(tag.id))
+        ) {
+          return false;
+        }
+        if (
+          selectedQueues.length > 0 &&
+          (!conversation.queue_id || !selectedQueues.includes(conversation.queue_id))
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [conversations, selectedQueues, selectedTags, unreadOnly],
+  );
 
   const hasActiveFilters = unreadOnly || selectedTags.length > 0 || selectedQueues.length > 0;
 
@@ -389,12 +392,27 @@ export function ConversationList({
     );
   };
 
-  const selectableConversationIds = filteredConversations.map((conversation) => conversation.id);
+  const selectableConversationIds = useMemo(
+    () => filteredConversations.map((conversation) => conversation.id),
+    [filteredConversations],
+  );
   const selectedCount = selectedConversationIds.size;
   const selectedTagName = dbTags.find((tag) => tag.id === bulkTagId)?.name;
   const selectedPipelineName = pipelines.find((pipeline) => pipeline.id === bulkPipelineId)?.name;
   const selectedStageName = stages.find((stage) => stage.id === bulkStageId)?.name;
   const hasBulkChanges = Boolean(bulkTagId || bulkStageId);
+
+  useEffect(() => {
+    setSelectedConversationIds(new Set());
+  }, [filter, search, unreadOnly, selectedTags, selectedQueues]);
+
+  useEffect(() => {
+    const visibleIds = new Set(selectableConversationIds);
+    setSelectedConversationIds((prev) => {
+      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [selectableConversationIds]);
 
   const toggleConversationSelection = (conversationId: string) => {
     setSelectedConversationIds((prev) => {
@@ -417,6 +435,9 @@ export function ConversationList({
   const exitBulkMode = () => {
     setBulkMode(false);
     setSelectedConversationIds(new Set());
+    setBulkTagId("");
+    setBulkPipelineId("");
+    setBulkStageId("");
   };
 
   const runBulkAction = async (action: () => Promise<{ updated_count: number }>, successLabel: string) => {
@@ -492,7 +513,7 @@ export function ConversationList({
 
   return (
     <div
-      className="flex h-full flex-col overflow-hidden"
+      className="relative flex h-full flex-col overflow-hidden"
       style={{ background: "var(--chat-sidebar-bg)" }}
     >
       {/* Header */}
@@ -535,13 +556,16 @@ export function ConversationList({
           </Button>
           <Button
             variant={bulkMode ? "secondary" : "ghost"}
-            size="icon-sm"
+            size="sm"
             onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
-            title="Selecao em massa"
-            aria-label="Selecao em massa"
-            className="size-8"
+            title={bulkMode ? "Sair da seleção em massa" : "Seleção em massa"}
+            aria-label={bulkMode ? "Sair da seleção em massa" : "Seleção em massa"}
+            className="h-8 gap-1.5 rounded-lg px-2"
           >
             <CheckCheck className="size-4" />
+            <span className="hidden text-xs sm:inline">
+              {bulkMode ? "Cancelar" : "Selecionar"}
+            </span>
           </Button>
         </div>
         <span className="relative flex size-2.5">
@@ -706,7 +730,7 @@ export function ConversationList({
       </div>
 
       {/* Conversation List - ONLY scrollable area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className={cn("flex-1 overflow-y-auto", bulkMode && "pb-40")}>
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="size-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -733,21 +757,24 @@ export function ConversationList({
                 <div
                   key={conv.id}
                   className={cn(
-                    "flex min-h-[72px] w-full cursor-pointer items-start gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2.5 text-left transition-colors"
+                    "flex min-h-[72px] w-full cursor-pointer items-start gap-3 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2.5 text-left transition-colors",
+                    isBulkSelected && "border-l-4 border-l-primary bg-primary/5 pl-2"
                   )}
                   style={{
-                    background: isSelected
+                    background: isBulkSelected
+                      ? undefined
+                      : isSelected
                       ? "var(--chat-sidebar-active)"
                       : "transparent",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected) {
+                    if (!isSelected && !isBulkSelected) {
                       e.currentTarget.style.background =
                         "var(--chat-sidebar-hover)";
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!isSelected) {
+                    if (!isSelected && !isBulkSelected) {
                       e.currentTarget.style.background = "transparent";
                     }
                   }}
@@ -879,13 +906,33 @@ export function ConversationList({
       </div>
 
       {bulkMode && (
-        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 w-full max-w-xl px-4 animate-in slide-in-from-bottom-10 fade-in-0 duration-300">
-          <BulkActionBar
-            selectedCount={selectedCount}
-            label={selectedCount === 1 ? "1 conversa selecionada" : `${selectedCount} conversas selecionadas`}
-            onClear={exitBulkMode}
-            className="shadow-2xl border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-          >
+        <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur supports-[backdrop-filter]:bg-background/85 animate-in slide-in-from-bottom-4 fade-in-0 duration-200">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                {selectedCount === 0
+                  ? "Modo seleção ativo"
+                  : selectedCount === 1
+                    ? "1 conversa selecionada"
+                    : `${selectedCount} conversas selecionadas`}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {selectedCount === 0
+                  ? "Toque nas conversas da lista para selecionar."
+                  : "As ações serão aplicadas somente às conversas selecionadas."}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 shrink-0"
+              onClick={exitBulkMode}
+              disabled={bulkBusy}
+            >
+              Cancelar
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
@@ -894,7 +941,7 @@ export function ConversationList({
                 onClick={toggleSelectAll}
                 disabled={filteredConversations.length === 0 || bulkBusy}
               >
-                {selectedCount === selectableConversationIds.length && selectableConversationIds.length > 0 ? "Desmarcar todos" : "Selecionar todos"}
+                {selectedCount === selectableConversationIds.length && selectableConversationIds.length > 0 ? "Desmarcar visíveis" : "Selecionar visíveis"}
               </Button>
               <div className="h-4 w-px bg-border mx-1" />
               
@@ -906,7 +953,9 @@ export function ConversationList({
                   </Button>
                 )} />
                 <PopoverContent side="top" align="end" className="w-80 p-3 space-y-4 shadow-xl">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Ações rápidas</Label>
+                    <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" disabled title="Em breve">
                       <Archive className="mr-1.5 size-3.5" />
                       Arquivar
@@ -918,8 +967,9 @@ export function ConversationList({
                       onClick={() => runBulkAction(() => bulkMarkConversationsAsRead([...selectedConversationIds]), "Marcadas como lidas")}
                     >
                       {bulkBusy ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <CheckCheck className="mr-1.5 size-3.5" />}
-                      Lido
+                      Marcar lido
                     </Button>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
@@ -975,7 +1025,7 @@ export function ConversationList({
                 </PopoverContent>
               </Popover>
             </div>
-          </BulkActionBar>
+          </div>
         </div>
       )}
 
