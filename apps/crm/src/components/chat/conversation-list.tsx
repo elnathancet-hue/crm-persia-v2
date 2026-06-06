@@ -906,8 +906,8 @@ export function ConversationList({
       </div>
 
       {bulkMode && (
-        <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/95 px-3 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.12)] backdrop-blur supports-[backdrop-filter]:bg-background/85 animate-in slide-in-from-bottom-4 fade-in-0 duration-200">
-          <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-2xl border-t-2 border-primary/40 bg-background/98 px-4 py-4 shadow-[0_-12px_36px_rgba(15,23,42,0.16)] backdrop-blur supports-[backdrop-filter]:bg-background/90 animate-in slide-in-from-bottom-4 fade-in-0 duration-200">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">
                 {selectedCount === 0
