@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { navigation } from "@/lib/constants/navigation";
 import { useRole } from "@/lib/hooks/use-role";
 import { useUser } from "@/lib/hooks/use-user";
-import { useGroupsUnreadCount } from "@/lib/hooks/use-groups-unread-count";
 import { signOut } from "@/actions/auth";
 import { Sheet, SheetContent } from "@persia/ui/sheet";
 import { LogOut, ChevronRight } from "lucide-react";
@@ -18,13 +17,13 @@ const PRIMARY_HREFS = ["/dashboard", "/chat", "/crm", "/agenda"];
 interface MobileNavDrawerProps {
   open: boolean;
   onClose: () => void;
+  groupsUnreadCount: number;
 }
 
-export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
+export function MobileNavDrawer({ open, onClose, groupsUnreadCount }: MobileNavDrawerProps) {
   const pathname = usePathname();
   const { canAccess } = useRole();
   const { profile } = useUser();
-  const groupsUnreadCount = useGroupsUnreadCount();
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
   const secondaryItems = useMemo(

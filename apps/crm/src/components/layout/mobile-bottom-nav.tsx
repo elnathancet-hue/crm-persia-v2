@@ -80,7 +80,7 @@ export function MobileBottomNav({ unreadCount, groupsUnreadCount }: { unreadCoun
         </button>
       </nav>
 
-      {mounted && <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
+      {mounted && <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} groupsUnreadCount={groupsUnreadCount} />}
     </>
   );
 }
