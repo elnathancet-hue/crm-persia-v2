@@ -240,7 +240,7 @@ export function LeadContactPanel({ lead, conversationId, onOpenLeadDrawer, onClo
   }, [mediaOpen, mediaLoaded, conversationId]);
 
   const mediaByTab: Record<MediaTab, MediaItem[]> = {
-    image: mediaItems.filter((m) => m.type === "image" || m.type === "video"),
+    image: mediaItems.filter((m) => m.type === "image" || m.type === "video" || m.type === "sticker"),
     document: mediaItems.filter((m) => m.type === "document"),
     audio: mediaItems.filter((m) => m.type === "audio" || m.type === "ptt"),
   };

@@ -109,7 +109,9 @@ export function ChatWindow({ conversationId, onBack }: Props) {
   }, []);
 
   useEffect(() => {
-    setLoading(true);
+    queueMicrotask(() => {
+      if (isMountedRef.current) setLoading(true);
+    });
     Promise.all([
       getConversation(conversationId),
       getMessages(conversationId),
@@ -388,13 +390,13 @@ function MessageContent({ msg }: { msg: Message }) {
   }
 
   // Image
-  if (type === "image") {
+  if (type === "image" || type === "sticker") {
     return (
       <div className="space-y-1">
         <img
           src={mediaUrl}
-          alt="Imagem"
-          className="max-w-[240px] rounded-lg cursor-pointer hover:opacity-90"
+          alt={type === "sticker" ? "Figurinha" : "Imagem"}
+          className={type === "sticker" ? "size-28 cursor-pointer object-contain hover:opacity-90" : "max-w-[240px] rounded-lg cursor-pointer hover:opacity-90"}
           onClick={() => window.open(mediaUrl, "_blank")}
         />
         {msg.content && <p className="whitespace-pre-wrap break-words text-xs">{msg.content}</p>}

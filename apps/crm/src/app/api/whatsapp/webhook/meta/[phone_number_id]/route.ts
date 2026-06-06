@@ -143,7 +143,7 @@ export async function POST(
         if (!msg) continue;
 
         // Meta returns a temporary signed URL via GET /{media_id}.
-        if (msg.type !== "text" && msg.type !== "sticker" && msg.messageId && !msg.mediaUrl) {
+        if (msg.type !== "text" && msg.messageId && !msg.mediaUrl) {
           try {
             const media = await provider.downloadMedia(msg.messageId);
             if (media.fileURL) msg.mediaUrl = media.fileURL;

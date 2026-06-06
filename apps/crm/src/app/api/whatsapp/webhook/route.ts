@@ -344,7 +344,7 @@ export async function POST(request: NextRequest) {
 
         // Download media for group messages — same as individual pipeline.
         // UAZAPI does not include fileURL in the webhook payload.
-        const isGroupMedia = msg.type && msg.type !== "text" && msg.type !== "sticker";
+        const isGroupMedia = msg.type && msg.type !== "text";
         if (isGroupMedia && !msg.mediaUrl && msg.messageId) {
           try {
             const isAudio = msg.type === "audio";
@@ -447,7 +447,7 @@ export async function POST(request: NextRequest) {
 
     // 4. UAZAPI-specific: fetch media URL via POST /message/download.
     //    (UAZAPI does not include fileURL in the webhook for media messages.)
-    const isMediaType = msg.type !== "text" && msg.type !== "sticker";
+    const isMediaType = msg.type !== "text";
     if (isMediaType && !msg.mediaUrl && msg.messageId) {
       try {
         const isAudio = msg.type === "audio";
