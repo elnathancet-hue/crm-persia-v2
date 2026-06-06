@@ -852,6 +852,37 @@ export function KanbanBoard({
     });
   }
 
+  // Mobile: mesmo flow do handleDrop mas sem drag — chamado pelo select
+  // nativo de etapa que aparece so em telas pequenas (md:hidden no card).
+  function handleMobileMove(dealId: string, stageId: string) {
+    const deal = localDeals.find((d) => d.id === dealId);
+    if (!deal || deal.stage_id === stageId) return;
+    if (pendingMovesRef.current.has(dealId)) {
+      toast.info("Aguarde a movimentacao anterior terminar.");
+      return;
+    }
+    const previousStageId = deal.stage_id;
+    pendingMovesRef.current.add(dealId);
+    setLocalDeals((prev) =>
+      prev.map((d) => (d.id === dealId ? { ...d, stage_id: stageId } : d)),
+    );
+    startTransition(async () => {
+      try {
+        await actions.moveLeadStage(dealId, stageId, deal.sort_order ?? 0);
+        onChange?.();
+      } catch {
+        setLocalDeals((prev) =>
+          prev.map((d) =>
+            d.id === dealId ? { ...d, stage_id: previousStageId } : d,
+          ),
+        );
+        toast.error("Falha ao mover card");
+      } finally {
+        pendingMovesRef.current.delete(dealId);
+      }
+    });
+  }
+
   function handleMoveToTerminal(
     dealId: string,
     outcome: "falha" | "bem_sucedido",
@@ -1761,6 +1792,9 @@ export function KanbanBoard({
                           ? kanbanAgentSummaries?.get(deal.lead_id)
                           : undefined
                       }
+                      // Mobile: etapas do funil ativo pra seletor nativo.
+                      stages={sortedStages}
+                      onMoveToStage={handleMobileMove}
                     />
                   ))}
                   {/* Empty state — discreto + clicavel pra adicionar deal */}
@@ -1970,6 +2004,8 @@ const DealCard = React.memo(function DealCardImpl({
   onOpenLead,
   upcomingAppointment,
   agentSummary,
+  stages,
+  onMoveToStage,
 }: {
   deal: Deal;
   /** PR-KANBAN-UI: cor da etapa (vem do stage pai), usada como
@@ -2019,6 +2055,9 @@ const DealCard = React.memo(function DealCardImpl({
   upcomingAppointment?: LeadUpcomingAppointment;
   /** PR-AGENT-INTEGRATION-6 (mai/2026): agente IA respondendo este lead. */
   agentSummary?: import("@persia/shared/ai-agent").KanbanAgentSummary;
+  /** Mobile: etapas disponiveis pro seletor nativo (substitui drag no touch). */
+  stages: Array<{ id: string; name: string; color: string | null }>;
+  onMoveToStage: (dealId: string, stageId: string) => void;
 }) {
   const [detailOpen, setDetailOpen] = React.useState(false);
 
@@ -2670,6 +2709,25 @@ const DealCard = React.memo(function DealCardImpl({
             Mantem disabled state quando bucket nao configurado.
             Cores mais saturadas (background ao inves de border-only)
             pra ficar igual ao screenshot. */}
+        {/* Mobile: seletor nativo de etapa — substitui drag-drop em touch.
+            Visivel so em telas <md onde nao ha suporte a drag confortavel. */}
+        {canEdit && stages.length > 1 && (
+          <div className="mt-2.5 md:hidden" onClick={(e) => e.stopPropagation()}>
+            <select
+              value={deal.stage_id}
+              onChange={(e) => {
+                if (e.target.value !== deal.stage_id)
+                  onMoveToStage(deal.id, e.target.value);
+              }}
+              className="w-full rounded-lg border border-border bg-muted/30 px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {stages.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="mt-2.5 flex items-center gap-1.5">
           <button
             type="button"

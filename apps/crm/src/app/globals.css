@@ -449,6 +449,13 @@
     scrollbar-color: var(--muted-foreground) transparent;
   }
 
+  /* Mobile: empurra toasts acima do bottom nav (h-16 = 4rem) */
+  @media (max-width: 767px) {
+    [data-sonner-toaster] {
+      bottom: 4.75rem !important;
+    }
+  }
+
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *, ::before, ::after {

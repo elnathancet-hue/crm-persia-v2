@@ -1013,7 +1013,7 @@ export function LeadInfoDrawer({
           <form
             id="lead-info-form"
             onSubmit={handleSave}
-            className="flex-1 overflow-y-auto px-6 py-4 space-y-6"
+            className="flex-1 overflow-y-auto px-6 py-4 pb-20 md:pb-4 space-y-6"
           >
             <TabsContent value="dados" className="space-y-6 mt-0">
               {/* ============ CONTATO ============ */}
