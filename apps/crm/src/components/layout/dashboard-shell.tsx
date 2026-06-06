@@ -13,6 +13,9 @@ import {
   useCurrentUser,
 } from "@persia/leads-ui";
 import { createClient } from "@/lib/supabase/client";
+import { useUnreadCount } from "@/lib/hooks/use-unread-count";
+import { useGroupsUnreadCount } from "@/lib/hooks/use-groups-unread-count";
+import { useTabTitleBadge } from "@/lib/hooks/use-notification";
 
 const SOUND_KEY = "persia:chat:sound-enabled";
 const DESKTOP_KEY = "persia:chat:desktop-notifications-enabled";
@@ -29,6 +32,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const orgId = useCurrentOrgId();
   // PR-U2: useCurrentUser agora vem do @persia/leads-ui (DI supabase).
   const supabase = createClient();
+
+  // Centralizado aqui para evitar dupla subscricao ao mesmo canal Supabase
+  // (Sidebar + MobileBottomNav chamavam os hooks independentemente, causando
+  // "cannot add callbacks after subscribe()" — PR-HYDRATION-2).
+  const unreadCount = useUnreadCount();
+  const groupsUnreadCount = useGroupsUnreadCount();
+  const { setUnreadCount } = useTabTitleBadge();
+  useEffect(() => {
+    setUnreadCount(unreadCount);
+  }, [unreadCount, setUnreadCount]);
   const currentUser = useCurrentUser(supabase);
   // PR-V1a: hooks agora vivem em @persia/leads-ui e recebem supabase
   // via DI. Mesmo client usado pelo useCurrentUser acima.
@@ -113,14 +126,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       >
         Pular para o conteúdo
       </a>
-      <Sidebar />
+      <Sidebar unreadCount={unreadCount} groupsUnreadCount={groupsUnreadCount} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <main id="main-content" className={`flex-1 ${isChatPage ? "overflow-hidden p-0" : "overflow-y-auto p-3 md:p-6 pb-[calc(0.75rem+4rem)] md:pb-6"}`}>
           {children}
         </main>
       </div>
-      <MobileBottomNav />
+      <MobileBottomNav unreadCount={unreadCount} groupsUnreadCount={groupsUnreadCount} />
     </div>
   );
 }

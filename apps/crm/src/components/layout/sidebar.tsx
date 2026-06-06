@@ -4,31 +4,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { navigation } from "@/lib/constants/navigation";
-import { useUnreadCount } from "@/lib/hooks/use-unread-count";
-import { useGroupsUnreadCount } from "@/lib/hooks/use-groups-unread-count";
-import { useTabTitleBadge } from "@/lib/hooks/use-notification";
 import { useRole } from "@/lib/hooks/use-role";
 import { useState, useRef, useEffect, useMemo } from "react";
 
-export function Sidebar() {
+export function Sidebar({ unreadCount, groupsUnreadCount }: { unreadCount: number; groupsUnreadCount: number }) {
   const pathname = usePathname();
   const { canAccess, loading: roleLoading } = useRole();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const unreadCount = useUnreadCount();
-  const groupsUnreadCount = useGroupsUnreadCount();
-  const { setUnreadCount } = useTabTitleBadge();
 
   // Filter navigation items by role — items without minRole are visible to all
   const visibleNav = useMemo(
     () => navigation.filter((item) => canAccess(item.minRole ?? "viewer")),
     [canAccess]
   );
-
-  // Sync unread count to tab title
-  useEffect(() => {
-    setUnreadCount(unreadCount);
-  }, [unreadCount, setUnreadCount]);
 
   // Close popover on click outside
   useEffect(() => {

@@ -4,8 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { navigation } from "@/lib/constants/navigation";
-import { useUnreadCount } from "@/lib/hooks/use-unread-count";
-import { useGroupsUnreadCount } from "@/lib/hooks/use-groups-unread-count";
 import { MoreHorizontal } from "lucide-react";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
 import { useEffect, useState } from "react";
@@ -13,10 +11,8 @@ import { useEffect, useState } from "react";
 // Primary tabs always visible in bottom bar
 const PRIMARY_HREFS = ["/dashboard", "/chat", "/crm", "/agenda"];
 
-export function MobileBottomNav() {
+export function MobileBottomNav({ unreadCount, groupsUnreadCount }: { unreadCount: number; groupsUnreadCount: number }) {
   const pathname = usePathname();
-  const unreadCount = useUnreadCount();
-  const groupsUnreadCount = useGroupsUnreadCount();
   const [drawerOpen, setDrawerOpen] = useState(false);
   // PR-HYDRATION: @base-ui/react (Sheet/Dialog) gera IDs diferentes no SSR
   // vs client — mesmo bug do DropdownMenu no Header. Nao renderiza o
