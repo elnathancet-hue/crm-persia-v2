@@ -8,7 +8,7 @@ import { useUnreadCount } from "@/lib/hooks/use-unread-count";
 import { useGroupsUnreadCount } from "@/lib/hooks/use-groups-unread-count";
 import { MoreHorizontal } from "lucide-react";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // Primary tabs always visible in bottom bar
 const PRIMARY_HREFS = ["/dashboard", "/chat", "/crm", "/agenda"];
@@ -18,6 +18,11 @@ export function MobileBottomNav() {
   const unreadCount = useUnreadCount();
   const groupsUnreadCount = useGroupsUnreadCount();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // PR-HYDRATION: @base-ui/react (Sheet/Dialog) gera IDs diferentes no SSR
+  // vs client — mesmo bug do DropdownMenu no Header. Nao renderiza o
+  // MobileNavDrawer (que usa Sheet) ate hidratar, evitando crash.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const primaryItems = navigation.filter((item) =>
     PRIMARY_HREFS.includes(item.href)
@@ -79,7 +84,7 @@ export function MobileBottomNav() {
         </button>
       </nav>
 
-      <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      {mounted && <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />}
     </>
   );
 }
