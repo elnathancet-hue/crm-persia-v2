@@ -225,12 +225,20 @@ export async function POST(request: NextRequest) {
         });
         return NextResponse.json({ ok: true, skipped: "messages_update_no_op" });
       }
-      const { error: updateErr } = await supabase
-        .from("messages")
-        .update({ status: dbStatus })
-        .eq("organization_id", matchedConn.organization_id)
-        .eq("whatsapp_msg_id", messageId)
-        .neq("status", "deleted"); // nunca sobrescrever mensagem ja apagada
+      const [{ error: updateErr }] = await Promise.all([
+        supabase
+          .from("messages")
+          .update({ status: dbStatus })
+          .eq("organization_id", matchedConn.organization_id)
+          .eq("whatsapp_msg_id", messageId)
+          .neq("status", "deleted"), // nunca sobrescrever mensagem ja apagada
+        // Best-effort: também atualiza group_messages (grupos de WhatsApp)
+        supabase
+          .from("group_messages")
+          .update({ status: dbStatus })
+          .eq("organization_id", matchedConn.organization_id)
+          .eq("whatsapp_msg_id", messageId),
+      ]);
       if (updateErr) {
         logError("uazapi_webhook_messages_update_failed", {
           organization_id: matchedConn.organization_id,

@@ -13,6 +13,7 @@ import {
   matchLeadByName,
   matchLeadByPhone,
 } from "@/lib/whatsapp/group-join-pipeline";
+import { withSignedChatMediaUrls } from "@/lib/chat-media";
 
 async function getProvider(supabase: any, orgId: string) {
   const { data: connection } = await supabase
@@ -1042,7 +1043,7 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     .select(
       "id, direction, text, sender_name, sender_jid, sender_phone, " +
       "sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, " +
-      "created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned"
+      "created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned, status"
     )
     .eq("organization_id", orgId)
     .eq("group_id", groupId)
@@ -1066,6 +1067,7 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     media_url: string | null;
     media_type: string | null;
     reply_to_whatsapp_msg_id: string | null;
+    status: string;
     sender_lead?: {
       id: string;
       name: string | null;
@@ -1236,12 +1238,15 @@ export async function getGroupMessages(groupId: string, limit = 50) {
     }
   }
 
-  return rows.map((row) => ({
+  const enriched = rows.map((row) => ({
     ...row,
     sender_lead: row.sender_lead_id
       ? (leadsById.get(row.sender_lead_id) ?? null)
       : null,
   }));
+
+  const admin = createAdminClient();
+  return withSignedChatMediaUrls(admin, enriched);
 }
 
 // ─── createLeadFromGroupParticipant (Etapa 2) ─────────────────────────────────

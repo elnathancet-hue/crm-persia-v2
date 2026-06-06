@@ -38,6 +38,8 @@ import {
   Link2,
   Save,
   X,
+  Check,
+  CheckCheck,
   CornerUpLeft,
   Sparkles,
   Zap,
@@ -161,6 +163,7 @@ interface GroupMessage {
   media_type: string | null;
   reply_to_whatsapp_msg_id: string | null;
   is_pinned?: boolean | null;
+  status?: string | null;
   sender_lead?: GroupMessageSenderLead | null;
 }
 
@@ -338,6 +341,34 @@ const CATEGORY_COLORS: Record<string, string> = {
   oferta: "bg-success-soft text-success-soft-foreground",
   alunos: "bg-progress-soft text-progress-soft-foreground",
 };
+
+function GroupMsgStatusIcon({ status }: { status: string }) {
+  if (status === "read") {
+    return (
+      <CheckCheck
+        className="inline size-3.5 shrink-0"
+        style={{ color: "var(--chat-checkmark-read)" }}
+        aria-label="Lido"
+      />
+    );
+  }
+  if (status === "delivered") {
+    return (
+      <CheckCheck
+        className="inline size-3.5 shrink-0"
+        style={{ color: "var(--chat-checkmark-default)" }}
+        aria-label="Entregue"
+      />
+    );
+  }
+  return (
+    <Check
+      className="inline size-3 shrink-0"
+      style={{ color: "var(--chat-checkmark-default)" }}
+      aria-label="Enviado"
+    />
+  );
+}
 
 // â"€â"€â"€ Left panel: group list â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
@@ -749,7 +780,7 @@ function GroupChatPanel({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase as any)
       .from("group_messages")
-      .select("id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned")
+      .select("id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned, status")
       .eq("group_id", group.id)
       .eq("is_deleted", false)
       .order("created_at", { ascending: true })
@@ -1607,10 +1638,11 @@ function GroupChatPanel({
                         <div className="px-2.5 py-1.5 text-[14.2px] leading-5">
                           {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
                           <span
-                            className="text-[10px] float-right ml-2 mt-1"
+                            className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-0.5"
                             style={{ color: "var(--chat-timestamp)" }}
                           >
                             {formatTime(msg.created_at)}
+                            {isOutbound && <GroupMsgStatusIcon status={msg.status ?? "sent"} />}
                           </span>
                         </div>
                       </div>
