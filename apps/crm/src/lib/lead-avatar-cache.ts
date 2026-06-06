@@ -13,12 +13,20 @@ function isStorageUrl(url: string): boolean {
   return url.includes(`/storage/v1/object/public/${LEAD_AVATARS_BUCKET}/`);
 }
 
+function isGroupStorageUrl(url: string): boolean {
+  return url.includes(`/storage/v1/object/public/${GROUP_AVATARS_BUCKET}/`);
+}
+
 function extensionForMime(mimeType: string): string {
   return MIME_TO_EXT[mimeType.toLowerCase()] ?? "jpg";
 }
 
 export function isCachedLeadAvatarUrl(url: string | null | undefined): boolean {
   return typeof url === "string" && isStorageUrl(url);
+}
+
+export function isCachedGroupAvatarUrl(url: string | null | undefined): boolean {
+  return typeof url === "string" && isGroupStorageUrl(url);
 }
 
 export async function cacheLeadAvatarFromUrl(input: {
@@ -80,6 +88,74 @@ export async function cacheLeadAvatarFromUrl(input: {
   return data.publicUrl;
 }
 
+async function cacheRemoteAvatarToPublicBucket(input: {
+  bucket: string;
+  storagePath: string;
+  remoteUrl: string;
+}): Promise<string | null> {
+  const response = await fetch(input.remoteUrl, {
+    headers: {
+      accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "user-agent":
+        "Mozilla/5.0 (compatible; PersiaCRM/1.0; +https://persiacrm.com)",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) return null;
+
+  const mimeType = response.headers.get("content-type")?.split(";")[0]?.trim() ||
+    "image/jpeg";
+  if (!mimeType.startsWith("image/")) return null;
+
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_AVATAR_BYTES) return null;
+
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const { error } = await admin.storage
+    .from(input.bucket)
+    .upload(input.storagePath, bytes, {
+      contentType: mimeType,
+      upsert: true,
+      cacheControl: "86400",
+    });
+
+  if (error) return null;
+
+  const { data } = admin.storage.from(input.bucket).getPublicUrl(input.storagePath);
+  return data.publicUrl;
+}
+
+export async function cacheGroupMemberAvatarFromUrl(input: {
+  organizationId: string;
+  membershipId: string;
+  remoteUrl: string | null | undefined;
+  currentAvatarUrl?: string | null;
+}): Promise<string | null> {
+  const remoteUrl = input.remoteUrl?.trim();
+  if (!remoteUrl) return isGroupStorageUrl(input.currentAvatarUrl ?? "") ? input.currentAvatarUrl! : null;
+  if (isGroupStorageUrl(remoteUrl)) return remoteUrl;
+  if (input.currentAvatarUrl && isGroupStorageUrl(input.currentAvatarUrl)) {
+    return input.currentAvatarUrl;
+  }
+
+  const ext = (() => {
+    try {
+      const fromPath = new URL(remoteUrl).pathname.split(".").pop()?.toLowerCase();
+      return fromPath && /^[a-z0-9]{2,5}$/.test(fromPath) ? fromPath : "jpg";
+    } catch {
+      return "jpg";
+    }
+  })();
+
+  return await cacheRemoteAvatarToPublicBucket({
+    bucket: GROUP_AVATARS_BUCKET,
+    storagePath: `${input.organizationId}/members/${input.membershipId}.${ext}`,
+    remoteUrl,
+  });
+}
+
 // ── getAndCacheContactAvatar ───────────────────────────────────────────────────
 // Serviço único (Etapa 1 do roadmap). Centraliza a lógica de:
 // 1. skip se já há URL cacheada (a menos que force: true)
@@ -90,6 +166,7 @@ export async function cacheLeadAvatarFromUrl(input: {
 export async function getAndCacheContactAvatar(input: {
   organizationId: string;
   leadId?: string | null;
+  groupMembershipId?: string | null;
   phone: string;
   currentAvatarUrl?: string | null;
   /** Provider WhatsApp para chamada getContactProfilePic */
@@ -99,10 +176,10 @@ export async function getAndCacheContactAvatar(input: {
   };
   force?: boolean;
 }): Promise<{ avatarUrl: string | null; updated: boolean }> {
-  const { organizationId, leadId, phone, currentAvatarUrl, provider, force } = input;
+  const { organizationId, leadId, groupMembershipId, phone, currentAvatarUrl, provider, force } = input;
 
   // Skip se já temos URL cacheada e não está forçando refresh
-  if (!force && currentAvatarUrl && isCachedLeadAvatarUrl(currentAvatarUrl)) {
+  if (!force && currentAvatarUrl && (isCachedLeadAvatarUrl(currentAvatarUrl) || isCachedGroupAvatarUrl(currentAvatarUrl))) {
     return { avatarUrl: currentAvatarUrl, updated: false };
   }
 
@@ -121,9 +198,21 @@ export async function getAndCacheContactAvatar(input: {
       return { avatarUrl: currentAvatarUrl, updated: false };
     }
 
+    if (!leadId && groupMembershipId) {
+      const cachedMemberUrl = await cacheGroupMemberAvatarFromUrl({
+        organizationId,
+        membershipId: groupMembershipId,
+        remoteUrl,
+        currentAvatarUrl,
+      });
+      return {
+        avatarUrl: cachedMemberUrl ?? currentAvatarUrl ?? null,
+        updated: Boolean(cachedMemberUrl && cachedMemberUrl !== currentAvatarUrl),
+      };
+    }
+
     if (!leadId) {
-      // Sem leadId, apenas retorna a URL remota sem cachear no Storage
-      return { avatarUrl: remoteUrl, updated: false };
+      return { avatarUrl: currentAvatarUrl ?? null, updated: false };
     }
 
     const cachedUrl = await cacheLeadAvatarFromUrl({
@@ -162,9 +251,6 @@ export async function cacheGroupAvatarFromUrl(input: {
   const remoteUrl = input.remoteUrl?.trim();
   if (!remoteUrl) return input.currentImageUrl ?? null;
 
-  function isGroupStorageUrl(url: string) {
-    return url.includes(`/storage/v1/object/public/${GROUP_AVATARS_BUCKET}/`);
-  }
   if (isGroupStorageUrl(remoteUrl)) return remoteUrl;
   // Se já temos URL cacheada e não mudou, skip
   if (input.currentImageUrl && isGroupStorageUrl(input.currentImageUrl)) {

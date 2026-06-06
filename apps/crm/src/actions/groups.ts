@@ -1235,9 +1235,20 @@ export async function getGroupMessages(
     );
   }
 
+  const { cacheGroupMemberAvatarFromUrl, isCachedGroupAvatarUrl, isCachedLeadAvatarUrl } = await import("@/lib/lead-avatar-cache");
   const avatarLookups = new Map<string, Array<(typeof rows)[number]>>();
   for (const row of rows) {
-    if (row.direction !== "inbound" || row.sender_avatar_url) continue;
+    const hasCachedAvatar = Boolean(
+      row.sender_avatar_url &&
+      (isCachedGroupAvatarUrl(row.sender_avatar_url) || isCachedLeadAvatarUrl(row.sender_avatar_url)),
+    );
+    if (
+      row.direction !== "inbound" ||
+      hasCachedAvatar
+    ) {
+      continue;
+    }
+    if (row.sender_avatar_url && !hasCachedAvatar) row.sender_avatar_url = null;
     const lookup = (row.sender_phone ?? row.sender_jid)?.replace(/^\+/, "");
     if (!lookup) continue;
     const bucket = avatarLookups.get(lookup) ?? [];
@@ -1250,9 +1261,21 @@ export async function getGroupMessages(
     if (provider) {
       await Promise.allSettled(
         Array.from(avatarLookups.entries()).slice(0, 8).map(async ([lookup, lookupRows]) => {
-          const avatarUrl = await provider.getChatImageUrl(lookup, { preview: true }).catch(() => null);
-          if (!avatarUrl) return;
+          const remoteAvatarUrl = await provider.getChatImageUrl(lookup, { preview: true }).catch(() => null);
+          if (!remoteAvatarUrl) return;
 
+          const first = lookupRows[0];
+          const memberAvatarKey = first?.sender_membership_id
+            ?? (first?.sender_phone ? `phone-${first.sender_phone.replace(/\D/g, "")}` : null);
+          const avatarUrl = memberAvatarKey
+            ? await cacheGroupMemberAvatarFromUrl({
+              organizationId: orgId,
+              membershipId: memberAvatarKey,
+              remoteUrl: remoteAvatarUrl,
+              currentAvatarUrl: first.sender_avatar_url,
+            })
+            : remoteAvatarUrl;
+          if (!avatarUrl) return;
           for (const row of lookupRows) {
             row.sender_avatar_url = avatarUrl;
           }
@@ -1264,7 +1287,6 @@ export async function getGroupMessages(
             .eq("group_id", groupId)
             .in("id", lookupRows.map((row) => row.id));
 
-          const first = lookupRows[0];
           if (first?.sender_membership_id) {
             await db
               .from("group_memberships")
@@ -2261,6 +2283,7 @@ export async function backfillGroupParticipantAvatars(
         const { avatarUrl, updated: wasUpdated } = await getAndCacheContactAvatar({
           organizationId: orgId,
           leadId: m.lead_id ?? null,
+          groupMembershipId: m.id,
           phone: m.phone,
           currentAvatarUrl: m.avatar_url,
           provider,

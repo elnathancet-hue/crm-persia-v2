@@ -336,7 +336,8 @@ export async function POST(request: NextRequest) {
             if (mem) {
               senderMembershipId = (mem.id as string) || null;
               senderLeadId = (mem.lead_id as string) || null;
-              if (mem.avatar_url) {
+              const { isCachedGroupAvatarUrl, isCachedLeadAvatarUrl } = await import("@/lib/lead-avatar-cache");
+              if (mem.avatar_url && (isCachedGroupAvatarUrl(mem.avatar_url) || isCachedLeadAvatarUrl(mem.avatar_url))) {
                 senderAvatarUrl = mem.avatar_url;
               } else if (mem.lead_id) {
                 const { data: leadRow } = await supabase
@@ -418,15 +419,25 @@ export async function POST(request: NextRequest) {
 
               // Buscar avatar em background se ainda sem cache.
               if (!senderAvatarUrl && (senderPhone || rawSenderJid)) {
-                const { getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
+                const { cacheGroupMemberAvatarFromUrl, getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
                 const { avatarUrl, updated } = senderPhone
                   ? await getAndCacheContactAvatar({
                     organizationId: matchedConn.organization_id,
                     leadId: resolvedLeadId,
+                    groupMembershipId: result.membershipId,
                     phone: senderPhone,
                     provider,
                   })
-                  : { avatarUrl: await provider.getChatImageUrl(rawSenderJid!, { preview: true }), updated: false };
+                  : {
+                    avatarUrl: result.membershipId
+                      ? await cacheGroupMemberAvatarFromUrl({
+                        organizationId: matchedConn.organization_id,
+                        membershipId: result.membershipId,
+                        remoteUrl: await provider.getChatImageUrl(rawSenderJid!, { preview: true }),
+                      })
+                      : null,
+                    updated: false,
+                  };
                 if (avatarUrl) {
                   patchFields.sender_avatar_url = avatarUrl;
                   if (result.membershipId) {
