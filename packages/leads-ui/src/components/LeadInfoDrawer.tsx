@@ -179,6 +179,12 @@ interface Props {
   /** Callback chamado apos deletar com sucesso (parent fecha drawer
    *  + refetch lista). Recebe o leadId deletado. */
   onDeleted?: (leadId: string) => void;
+  /**
+   * Callback chamado apos findOrCreateConversationByLead retornar com
+   * sucesso. Recebe o conversationId — caller navega pra /chat?c=ID.
+   * Opcional: se ausente, exibe apenas o toast informativo.
+   */
+  onOpenConversation?: (conversationId: string) => void;
 }
 
 interface FormState {
@@ -234,6 +240,7 @@ export function LeadInfoDrawer({
   canEdit = true,
   canDelete = false,
   onDeleted,
+  onOpenConversation,
 }: Props) {
   // PR-U2: actions vem do provider via DI. Cada app injeta sua versao
   // (CRM: requireRole; admin: requireSuperadminForOrg).
@@ -1310,7 +1317,7 @@ export function LeadInfoDrawer({
             </TabsContent>
 
             <TabsContent value="grupos" className="mt-0">
-              <LeadGruposTab leadId={lead.id} lead={lead} open={open} />
+              <LeadGruposTab leadId={lead.id} lead={lead} open={open} onOpenConversation={onOpenConversation} />
             </TabsContent>
 
             {/* PR-AGENT-INTEGRATION-5: tab Agente IA — status atual,
@@ -1463,10 +1470,12 @@ function LeadGruposTab({
   leadId,
   lead,
   open,
+  onOpenConversation,
 }: {
   leadId: string;
   lead: LeadWithTags;
   open: boolean;
+  onOpenConversation?: (conversationId: string) => void;
 }) {
   const { getLeadGroups, removeLeadFromGroup, findOrCreateConversationByLead } = useLeadsActions();
   const [groups, setGroups] = React.useState<LeadGroupMembership[]>([]);
@@ -1521,8 +1530,12 @@ function LeadGruposTab({
     if (!findOrCreateConversationByLead) return;
     setOpeningChat(true);
     try {
-      await findOrCreateConversationByLead(leadId);
-      toast.info("Conversa aberta no privado");
+      const { conversationId } = await findOrCreateConversationByLead(leadId);
+      if (onOpenConversation) {
+        onOpenConversation(conversationId);
+      } else {
+        toast.info("Conversa aberta no privado");
+      }
     } catch {
       toast.error("Erro ao abrir conversa");
     } finally {

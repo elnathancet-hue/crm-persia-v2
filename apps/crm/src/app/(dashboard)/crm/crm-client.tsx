@@ -207,6 +207,11 @@ export function CrmClient({
             setLeadForDrawer(null);
             router.refresh();
           }}
+          onOpenConversation={(conversationId) => {
+            setOpenLeadId(null);
+            setLeadForDrawer(null);
+            router.push(`/chat?c=${conversationId}`);
+          }}
         />
       )}
     </>
