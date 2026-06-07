@@ -10,6 +10,7 @@ import {
   createLead,
   deleteLead,
   findLeadByPhoneOrEmail,
+  generateLeadConversationSummary,
   getLead,
   getLeadDealsList,
   getLeads,
@@ -157,4 +158,6 @@ export const crmLeadsActions: LeadsActions = {
   addLeadProduct,
   updateLeadProduct,
   removeLeadProduct,
+  // Resumo da conversa — migration 107
+  generateLeadSummary: generateLeadConversationSummary,
 };

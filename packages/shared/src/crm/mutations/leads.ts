@@ -32,6 +32,8 @@ export interface UpdateLeadInput extends Partial<CreateLeadInput> {
   address_neighborhood?: string | null;
   address_complement?: string | null;
   notes?: string | null;
+  /** Resumo da conversa (gerado por IA ou editado manualmente). */
+  conversation_summary?: string | null;
 }
 
 export interface CreatedLead {
@@ -160,6 +162,8 @@ export async function updateLead(
   if (input.address_complement !== undefined)
     updateData.address_complement = input.address_complement || null;
   if (input.notes !== undefined) updateData.notes = input.notes || null;
+  if (input.conversation_summary !== undefined)
+    updateData.conversation_summary = input.conversation_summary || null;
 
   const { data, error } = await db
     .from("leads")

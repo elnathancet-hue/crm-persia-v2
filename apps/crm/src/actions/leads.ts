@@ -745,3 +745,66 @@ export async function bulkDeleteLeads(
   await revalidateLeadCaches();
   return { deleted_count: data?.length ?? 0 };
 }
+
+// ============================================================================
+// Resumo da conversa — migration 107
+// ============================================================================
+
+/**
+ * Gera um resumo da conversa do lead usando IA (gpt-4.1-mini) a partir
+ * das últimas 60 mensagens da conversa principal. Salva em leads.conversation_summary
+ * e retorna o texto gerado.
+ */
+export async function generateLeadConversationSummary(
+  leadId: string,
+): Promise<{ summary: string }> {
+  const { supabase, orgId } = await requireRole("agent");
+
+  // Busca até 60 mensagens recentes da conversa principal do lead
+  const { data: messages } = await supabase
+    .from("messages")
+    .select("sender, content, created_at")
+    .eq("lead_id", leadId)
+    .eq("organization_id", orgId)
+    .not("content", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(60);
+
+  if (!messages || messages.length === 0) {
+    throw new Error("Nenhuma mensagem encontrada para este lead");
+  }
+
+  // Monta o histórico em ordem cronológica
+  const history = [...messages]
+    .reverse()
+    .map((m) => {
+      const role =
+        m.sender === "lead"
+          ? "Cliente"
+          : m.sender === "ai"
+            ? "IA"
+            : "Agente";
+      return `${role}: ${m.content}`;
+    })
+    .join("\n");
+
+  const { chatCompletion } = await import("@/lib/ai/openai");
+
+  const summaryText = await chatCompletion(
+    `Você é um assistente de CRM. Gere um resumo objetivo e conciso (máx 3 parágrafos)
+da conversa abaixo em português. Destaque: interesse do lead, objeções levantadas,
+próximos passos acordados e qualquer informação relevante para a equipe de vendas.
+Não use bullet points — escreva em prosa fluida.`,
+    [{ role: "user", content: `Histórico de conversa:\n\n${history}` }],
+    { model: "gpt-4.1-mini" },
+  );
+
+  // Salva no lead (cast pra ignorar tipo gerado até migration ser aplicada)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from("leads") as any)
+    .update({ conversation_summary: summaryText })
+    .eq("id", leadId)
+    .eq("organization_id", orgId);
+
+  return { summary: summaryText };
+}

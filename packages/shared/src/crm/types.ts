@@ -106,6 +106,8 @@ export interface LeadWithTags {
   address_neighborhood?: string | null;
   address_complement?: string | null;
   notes?: string | null;
+  /** Resumo da conversa gerado pela IA (migration 107). Exibido no drawer. */
+  conversation_summary?: string | null;
   lead_tags: {
     tag_id: string;
     tags: {

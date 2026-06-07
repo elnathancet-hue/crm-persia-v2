@@ -205,6 +205,7 @@ interface FormState {
   address_neighborhood: string;
   address_complement: string;
   notes: string;
+  conversation_summary: string;
 }
 
 function leadToFormState(lead: LeadWithTags): FormState {
@@ -226,6 +227,7 @@ function leadToFormState(lead: LeadWithTags): FormState {
     address_neighborhood: lead.address_neighborhood ?? "",
     address_complement: lead.address_complement ?? "",
     notes: lead.notes ?? "",
+    conversation_summary: lead.conversation_summary ?? "",
   };
 }
 
@@ -252,6 +254,7 @@ export function LeadInfoDrawer({
     lead.avatar_url ?? null,
   );
   const [avatarRefreshing, setAvatarRefreshing] = React.useState(false);
+  const [summaryGenerating, setSummaryGenerating] = React.useState(false);
 
   React.useEffect(() => {
     setAvatarUrl(lead.avatar_url ?? null);
@@ -619,6 +622,7 @@ export function LeadInfoDrawer({
     address_neighborhood: string | null;
     address_complement: string | null;
     notes: string | null;
+    conversation_summary: string | null;
   };
 
   const updateMutation = useDialogMutation<UpdateLeadPayload, { id: string }>({
@@ -648,6 +652,7 @@ export function LeadInfoDrawer({
         address_neighborhood: form.address_neighborhood || null,
         address_complement: form.address_complement || null,
         notes: form.notes || null,
+        conversation_summary: form.conversation_summary || null,
       });
     },
   });
@@ -669,6 +674,7 @@ export function LeadInfoDrawer({
       address_neighborhood: form.address_neighborhood || null,
       address_complement: form.address_complement || null,
       notes: form.notes || null,
+      conversation_summary: form.conversation_summary || null,
     });
   }
   const isPending = updateMutation.pending;
@@ -691,6 +697,22 @@ export function LeadInfoDrawer({
       );
     } finally {
       setAvatarRefreshing(false);
+    }
+  }
+
+  async function handleGenerateSummary() {
+    if (!actions.generateLeadSummary || summaryGenerating) return;
+    setSummaryGenerating(true);
+    try {
+      const { summary } = await actions.generateLeadSummary(lead.id);
+      set("conversation_summary", summary);
+      toast.success("Resumo gerado com sucesso");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao gerar resumo",
+      );
+    } finally {
+      setSummaryGenerating(false);
     }
   }
 
@@ -1291,6 +1313,38 @@ export function LeadInfoDrawer({
                     />
                   </Field>
                 </div>
+              </section>
+
+              {/* ============ RESUMO DA CONVERSA ============ */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Sparkles className="size-4 text-muted-foreground" />
+                    RESUMO DA CONVERSA
+                  </h3>
+                  {actions.generateLeadSummary && (
+                    <button
+                      type="button"
+                      onClick={handleGenerateSummary}
+                      disabled={summaryGenerating}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {summaryGenerating ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="size-3.5" />
+                      )}
+                      {summaryGenerating ? "Gerando..." : "Gerar com IA"}
+                    </button>
+                  )}
+                </div>
+                <Textarea
+                  name="conversation_summary"
+                  value={form.conversation_summary}
+                  onChange={(e) => set("conversation_summary", e.target.value)}
+                  placeholder="O resumo da conversa gerado pela IA aparecerá aqui. Você também pode escrever manualmente."
+                  rows={4}
+                />
               </section>
 
               {/* ============ ANOTAÇÕES ============ */}

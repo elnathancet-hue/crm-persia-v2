@@ -472,4 +472,15 @@ export interface LeadsActions {
 
   /** Remove um vínculo lead↔produto. */
   removeLeadProduct?: (leadProductId: string) => Promise<void>;
+
+  // ---------------------------------------------------------------
+  // Resumo da conversa — migration 107
+  // ---------------------------------------------------------------
+
+  /**
+   * Gera um resumo da conversa do lead via IA e salva em
+   * leads.conversation_summary. Retorna o texto gerado.
+   * Opcional — se ausente, botão "Gerar com IA" não aparece.
+   */
+  generateLeadSummary?: (leadId: string) => Promise<{ summary: string }>;
 }
