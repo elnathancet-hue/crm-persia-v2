@@ -81,12 +81,15 @@ export async function getLeads(filters: LeadFilters = {}) {
  * todo (ate o cap do DB de 1M+).
  */
 export async function countLeadsForExport(filters: LeadFilters = {}): Promise<number> {
-  const { supabase, orgId } = await requireRole("agent");
+  const { supabase, orgId, userId, permissions } = await requireRole("agent");
+  const scopedFilters: LeadFilters = permissions?.leads?.own_only
+    ? { ...filters, assigneeIds: [userId] }
+    : filters;
   // Reutiliza listLeads forçando limit=1 page=1 — usamos so o `total`
   // (count exato vem do { count: "exact" } da query)
   const { total } = await listLeads(
     { db: supabase, orgId },
-    { ...filters, page: 1, limit: 1 },
+    { ...scopedFilters, page: 1, limit: 1 },
   );
   return total;
 }
@@ -103,7 +106,10 @@ export async function countLeadsForExport(filters: LeadFilters = {}): Promise<nu
 export async function fetchLeadsForExport(
   filters: LeadFilters = {},
 ): Promise<LeadWithTags[]> {
-  const { supabase, orgId } = await requireRole("agent");
+  const { supabase, orgId, userId, permissions } = await requireRole("agent");
+  const scopedFilters: LeadFilters = permissions?.leads?.own_only
+    ? { ...filters, assigneeIds: [userId] }
+    : filters;
   const ctx = { db: supabase, orgId };
   const PAGE_SIZE = 1000;
   const all: LeadWithTags[] = [];
@@ -113,7 +119,7 @@ export async function fetchLeadsForExport(
   const MAX_PAGES = 100;
   while (page <= MAX_PAGES) {
     const result = await listLeads(ctx, {
-      ...filters,
+      ...scopedFilters,
       page,
       limit: PAGE_SIZE,
     });
