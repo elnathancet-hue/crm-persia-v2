@@ -984,6 +984,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       return;
     }
 
+    shouldAutoScroll.current = true;
     let cancelled = false;
 
     async function load() {
@@ -1006,9 +1007,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       // Mark as read when opening
       markConversationAsRead(conversationId!).catch(() => {});
 
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
-      }, 50);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = messagesScrollRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      });
     }
 
     load();

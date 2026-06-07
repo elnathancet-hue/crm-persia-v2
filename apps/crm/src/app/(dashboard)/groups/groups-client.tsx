@@ -953,7 +953,12 @@ function GroupChatPanel({
   // Scroll to bottom on initial load / new outbound messages
   React.useEffect(() => {
     if (!loadingMsgs && shouldAutoScroll.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const el = messagesScrollRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      });
     }
   }, [messages, loadingMsgs]);
 

@@ -27,5 +27,5 @@ export default async function RootPage() {
     redirect("/setup");
   }
 
-  redirect("/dashboard");
+  redirect("/chat");
 }
