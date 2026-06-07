@@ -144,7 +144,7 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b border-border bg-card p-5">
+        <DialogHeader className="border-b border-border bg-card p-5 pr-14">
           <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
           <DialogHero
             icon={<Bell className="size-5" />}
@@ -178,7 +178,13 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
               }
             >
               <SelectTrigger id="rem-when" className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(v: string | null) => {
+                    if (v === "on_create") return "Confirmação imediata (logo após o agendamento)";
+                    if (v === "before_start") return "Antes do horário do compromisso";
+                    return v ?? "Selecione...";
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="on_create">
@@ -202,7 +208,13 @@ export const ReminderConfigDrawer: React.FC<ReminderConfigDrawerProps> = ({
                 }}
               >
                 <SelectTrigger id="rem-offset" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(v: string | null) => {
+                      if (!v || v === CUSTOM_OFFSET) return "Personalizado…";
+                      const preset = PRESETS_MIN.find((p) => String(p.value) === v);
+                      return preset ? preset.label : v;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PRESETS_MIN.map((p) => (

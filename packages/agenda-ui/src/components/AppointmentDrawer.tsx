@@ -147,7 +147,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
       <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         {appointment && (
           <>
-            <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogHeader className="border-b border-border bg-card p-5 pr-14">
               <DialogTitle className="sr-only">
                 {appointment.title}
               </DialogTitle>

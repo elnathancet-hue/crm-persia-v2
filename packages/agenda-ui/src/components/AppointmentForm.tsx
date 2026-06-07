@@ -187,7 +187,11 @@ export const AppointmentForm = React.forwardRef<
             onValueChange={(v) => update("kind", v as AppointmentKind)}
           >
             <SelectTrigger id="appt-kind" className="w-full">
-              <SelectValue />
+              <SelectValue>
+                {(v: string | null) =>
+                  v ? (APPOINTMENT_KIND_LABELS[v as AppointmentKind] ?? v) : "Selecione..."
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="appointment">
@@ -251,7 +255,13 @@ export const AppointmentForm = React.forwardRef<
             onValueChange={(v) => handleServiceChange(v ?? NO_SELECTION)}
           >
             <SelectTrigger id="appt-service" className="w-full">
-              <SelectValue placeholder="— Sem serviço —" />
+              <SelectValue>
+                {(v: string | null) => {
+                  if (!v || v === NO_SELECTION) return "— Sem serviço —";
+                  const svc = services.find((s) => s.id === v);
+                  return svc ? `${svc.name} (${svc.duration_minutes} min)` : "— Sem serviço —";
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_SELECTION}>— Sem serviço —</SelectItem>
@@ -311,7 +321,15 @@ export const AppointmentForm = React.forwardRef<
               }
             >
               <SelectTrigger id="appt-user" className="w-full">
-                <SelectValue placeholder="— Selecione —" />
+                <SelectValue>
+                  {(v: string | null) => {
+                    if (!v || v === NO_SELECTION) return "— Selecione —";
+                    const user = users.find((u) => u.id === v);
+                    return user
+                      ? `${user.name}${user.email ? ` · ${user.email}` : ""}`
+                      : "— Selecione —";
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_SELECTION}>— Selecione —</SelectItem>
@@ -349,7 +367,12 @@ export const AppointmentForm = React.forwardRef<
               }
             >
               <SelectTrigger id="appt-channel" className="w-full">
-                <SelectValue placeholder="— Selecione —" />
+                <SelectValue>
+                  {(v: string | null) => {
+                    if (!v || v === NO_SELECTION) return "— Selecione —";
+                    return APPOINTMENT_CHANNEL_LABELS[v as AppointmentChannel] ?? v;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_SELECTION}>— Selecione —</SelectItem>

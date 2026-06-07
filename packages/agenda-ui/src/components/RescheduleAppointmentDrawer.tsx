@@ -123,7 +123,7 @@ export const RescheduleAppointmentDrawer: React.FC<
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b border-border bg-card p-5">
+        <DialogHeader className="border-b border-border bg-card p-5 pr-14">
           <DialogTitle className="sr-only">Reagendar</DialogTitle>
           <DialogHero
             icon={<CalendarClock className="size-5" />}
@@ -173,7 +173,13 @@ export const RescheduleAppointmentDrawer: React.FC<
                 onValueChange={(v) => setUserId(v ?? "")}
               >
                 <SelectTrigger id="reschedule-user" className="w-full">
-                  <SelectValue placeholder="Selecione" />
+                  <SelectValue>
+                    {(v: string | null) => {
+                      if (!v) return "Selecione";
+                      const user = agendaUsers.find((u) => u.id === v);
+                      return user ? user.name : "Selecione";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {agendaUsers.map((u) => (

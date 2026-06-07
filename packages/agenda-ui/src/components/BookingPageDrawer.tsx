@@ -162,7 +162,7 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <DialogHeader className="border-b border-border bg-card p-5">
+        <DialogHeader className="border-b border-border bg-card p-5 pr-14">
           <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
           <DialogHero
             icon={<CalendarPlus className="size-5" />}
@@ -217,7 +217,11 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
               }
             >
               <SelectTrigger id="bp-status" className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(v: string | null) =>
+                    v ? (BOOKING_PAGE_STATUS_LABELS[v as BookingPageStatus] ?? v) : "Selecione..."
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {BOOKING_PAGE_STATUSES.map((s) => (
@@ -303,7 +307,13 @@ export const BookingPageDrawer: React.FC<BookingPageDrawerProps> = ({
                 }}
               >
                 <SelectTrigger id="bp-service" className="w-full">
-                  <SelectValue placeholder="— Sem serviço —" />
+                  <SelectValue>
+                    {(v: string | null) => {
+                      if (!v || v === NO_SERVICE) return "— Sem serviço —";
+                      const svc = services.find((s) => s.id === v);
+                      return svc ? `${svc.name} (${svc.duration_minutes} min)` : "— Sem serviço —";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_SERVICE}>— Sem serviço —</SelectItem>
