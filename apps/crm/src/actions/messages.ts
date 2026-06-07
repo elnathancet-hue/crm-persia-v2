@@ -559,6 +559,9 @@ export async function forwardMessagesToConversations(
 export async function sendMediaViaWhatsApp(
   formData: FormData
 ): Promise<{ data?: Message; error?: string }> {
+  let mediaPath: string | null = null;
+  let admin: ReturnType<typeof createAdminClient> | undefined;
+  try {
   const { supabase, orgId, userId } = await requireRole("agent");
 
   const conversationId = formData.get("conversationId") as string;
@@ -602,10 +605,10 @@ export async function sendMediaViaWhatsApp(
 
   const lead = (conversation as Record<string, unknown>).leads as Record<string, unknown> | null;
   const phone = lead?.phone as string | null;
-  const admin = createAdminClient();
 
+  admin = createAdminClient();
   await ensureChatMediaBucket(admin);
-  const mediaPath = createChatMediaPath({ orgId, conversationId, fileName });
+  mediaPath = createChatMediaPath({ orgId, conversationId, fileName });
   const { error: uploadError } = await admin.storage
     .from(CHAT_MEDIA_BUCKET)
     .upload(mediaPath, buffer, { contentType: mimeType, upsert: false });
@@ -764,6 +767,13 @@ export async function sendMediaViaWhatsApp(
     metadata: { conversation_id: conversationId, media_type: mediaType, channel: conversation.channel },
   });
   return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent" } };
+  } catch (err) {
+    if (mediaPath && admin) {
+      await admin.storage.from(CHAT_MEDIA_BUCKET).remove([mediaPath]).catch(() => {});
+    }
+    console.error("[sendMediaViaWhatsApp] error:", err instanceof Error ? err.message : String(err));
+    return { error: err instanceof Error ? err.message : "Erro ao enviar midia" };
+  }
 }
 
 /**
