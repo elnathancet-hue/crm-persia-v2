@@ -46,6 +46,7 @@ import {
   Clock,
   CornerUpLeft,
   Sparkles,
+  Upload,
   Zap,
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
@@ -116,6 +117,7 @@ import {
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
+import { uploadScheduledMessageMediaAction } from "@/actions/conversations";
 import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 import { cn } from "@/lib/utils";
 import { useNotificationSound } from "@/lib/hooks/use-notification";
@@ -775,6 +777,10 @@ function GroupChatPanel({
   const [scheduleText, setScheduleText] = React.useState("");
   const [scheduleAt, setScheduleAt] = React.useState("");
   const [schedulingMessage, setSchedulingMessage] = React.useState(false);
+  const [scheduleMedia, setScheduleMedia] = React.useState<{ media_url: string; media_type: string; media_filename: string; media_mime_type: string; media_size: number } | null>(null);
+  const [scheduleMediaUploading, setScheduleMediaUploading] = React.useState(false);
+  const [scheduleMediaError, setScheduleMediaError] = React.useState<string | null>(null);
+  const scheduleMediaInputRef = React.useRef<HTMLInputElement>(null);
   const [scheduledList, setScheduledList] = React.useState<Array<{ id: string; content: string; scheduled_at: string; status: string; error_message: string | null; created_at: string }>>([]);
   const [loadingScheduled, setLoadingScheduled] = React.useState(false);
   const [hasMoreMessages, setHasMoreMessages] = React.useState(false);
@@ -1266,14 +1272,38 @@ function GroupChatPanel({
     }
   }
 
+  async function handleScheduleMediaFile(file: File | null) {
+    setScheduleMediaError(null);
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setScheduleMediaError("Por enquanto, o agendamento aceita imagens.");
+      return;
+    }
+    const formData = new FormData();
+    formData.set("file", file);
+    setScheduleMediaUploading(true);
+    try {
+      const result = await uploadScheduledMessageMediaAction(formData);
+      if (result.error || !result.data) { setScheduleMediaError(result.error ?? "Erro ao enviar imagem"); return; }
+      if (result.data.media_type !== "image") { setScheduleMediaError("Selecione um arquivo de imagem."); return; }
+      setScheduleMedia({ media_url: result.data.media_url, media_type: result.data.media_type, media_filename: result.data.media_filename, media_mime_type: result.data.media_mime_type, media_size: result.data.media_size });
+    } finally {
+      setScheduleMediaUploading(false);
+    }
+  }
+
   async function handleScheduleMessage() {
-    if (!scheduleText.trim() || !scheduleAt) return;
+    if (!scheduleText.trim() && !scheduleMedia) return;
+    if (!scheduleAt) return;
     setSchedulingMessage(true);
     try {
-      await scheduleGroupMessage(group.id, scheduleText.trim(), new Date(scheduleAt).toISOString());
+      await scheduleGroupMessage(group.id, scheduleText.trim(), new Date(scheduleAt).toISOString(), scheduleMedia);
       toast.success("Mensagem agendada");
       setScheduleText("");
       setScheduleAt("");
+      setScheduleMedia(null);
+      setScheduleMediaError(null);
+      if (scheduleMediaInputRef.current) scheduleMediaInputRef.current.value = "";
       setScheduleDialogOpen(false);
       handleLoadScheduled();
     } catch {
@@ -2661,7 +2691,7 @@ function GroupChatPanel({
       </Dialog>
 
       {/* Schedule message dialog */}
-      <Dialog open={scheduleDialogOpen} onOpenChange={(o) => { setScheduleDialogOpen(o); if (!o) { setScheduleText(""); setScheduleAt(""); } }}>
+      <Dialog open={scheduleDialogOpen} onOpenChange={(o) => { setScheduleDialogOpen(o); if (!o) { setScheduleText(""); setScheduleAt(""); setScheduleMedia(null); setScheduleMediaError(null); if (scheduleMediaInputRef.current) scheduleMediaInputRef.current.value = ""; } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader className="space-y-2">
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -2686,6 +2716,44 @@ function GroupChatPanel({
                 maxLength={1000}
               />
             </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label>Imagem</Label>
+                  <p className="text-xs text-muted-foreground">Envie uma imagem com legenda opcional.</p>
+                </div>
+                <input
+                  ref={scheduleMediaInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void handleScheduleMediaFile(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={scheduleMediaUploading}
+                  onClick={() => scheduleMediaInputRef.current?.click()}
+                >
+                  {scheduleMediaUploading ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <Upload className="mr-1.5 size-3.5" />}
+                  {scheduleMediaUploading ? "Enviando..." : "Adicionar"}
+                </Button>
+              </div>
+              {scheduleMediaError && <p className="mt-2 text-xs font-medium text-destructive">{scheduleMediaError}</p>}
+              {scheduleMedia && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{scheduleMedia.media_filename}</p>
+                    <p className="text-xs text-muted-foreground">{Math.ceil(scheduleMedia.media_size / 1024)} KB</p>
+                  </div>
+                  <Button type="button" variant="ghost" size="icon-sm" onClick={() => { setScheduleMedia(null); setScheduleMediaError(null); if (scheduleMediaInputRef.current) scheduleMediaInputRef.current.value = ""; }} aria-label="Remover imagem">
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
             <div className="rounded-lg border bg-muted/20 p-3">
               <Label>Data e hora de envio</Label>
               <Input
@@ -2724,7 +2792,7 @@ function GroupChatPanel({
           </div>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-            <Button onClick={handleScheduleMessage} disabled={!scheduleText.trim() || !scheduleAt || schedulingMessage}>
+            <Button onClick={handleScheduleMessage} disabled={(!scheduleText.trim() && !scheduleMedia) || !scheduleAt || schedulingMessage}>
               {schedulingMessage ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <Calendar className="size-3.5 mr-1" />}
               Agendar mensagem
             </Button>

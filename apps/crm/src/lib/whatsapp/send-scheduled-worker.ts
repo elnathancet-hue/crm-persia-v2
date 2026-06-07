@@ -175,13 +175,24 @@ export async function processScheduledGroupMessages(): Promise<SendScheduledResu
 
       const provider = createProvider(connection as never);
       const content = typeof msg.content === "string" ? msg.content.trim() : "";
-      const result = await provider.sendText({ phone: msg.group_jid, message: content });
+      const mediaType = msg.media_type ?? null;
+      const result = mediaType && msg.media_url
+        ? await provider.sendMedia({
+          phone: msg.group_jid,
+          type: mediaType as "image" | "video" | "audio" | "document",
+          media: msg.media_url,
+          caption: content || undefined,
+          fileName: msg.media_filename ?? undefined,
+        })
+        : await provider.sendText({ phone: msg.group_jid, message: content });
 
       await supabase.from("group_messages").insert({
         organization_id: msg.organization_id,
         group_id: msg.group_id,
         direction: "outbound",
-        text: content,
+        text: content || null,
+        media_url: msg.media_url ?? null,
+        media_type: msg.media_mime_type ?? null,
         status: "sent",
         whatsapp_msg_id: result.messageId ?? null,
         created_at: new Date().toISOString(),

@@ -2371,6 +2371,13 @@ export async function scheduleGroupMessage(
   groupId: string,
   content: string,
   scheduledAt: string, // ISO string
+  media?: {
+    media_url: string;
+    media_type: string;
+    media_filename: string;
+    media_mime_type: string;
+    media_size: number;
+  } | null,
 ) {
   const { supabase, orgId } = await requireRole("agent");
   const db = supabase as any;
@@ -2389,9 +2396,16 @@ export async function scheduleGroupMessage(
     group_id: groupId,
     group_jid: (group as any).group_jid,
     content: content.trim(),
-    type: "text",
+    type: media ? media.media_type : "text",
     status: "pending",
     scheduled_at: scheduledAt,
+    ...(media ? {
+      media_url: media.media_url,
+      media_type: media.media_type,
+      media_filename: media.media_filename,
+      media_mime_type: media.media_mime_type,
+      media_size: media.media_size,
+    } : {}),
   });
 
   if (error) throw new Error(error.message);
