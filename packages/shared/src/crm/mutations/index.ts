@@ -84,3 +84,19 @@ export {
   bulkMarkLeadsAsLost,
   bulkMarkLeadsAsWon,
 } from "./leads-kanban";
+
+// Produtos/Serviços (migration 106)
+export type {
+  CreateOrgProductInput,
+  UpdateOrgProductInput,
+  AddLeadProductInput,
+  UpdateLeadProductInput,
+} from "../types";
+export {
+  createOrgProduct,
+  updateOrgProduct,
+  deleteOrgProduct,
+  addLeadProduct,
+  updateLeadProduct,
+  removeLeadProduct,
+} from "./products";

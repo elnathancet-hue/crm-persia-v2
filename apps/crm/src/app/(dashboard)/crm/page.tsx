@@ -18,6 +18,7 @@ import {
   type LeadUpcomingAppointment,
 } from "@persia/shared/agenda";
 import { getKanbanAgentSummariesByLeads } from "@/actions/ai-agent/lead-status";
+import { getOrgProducts } from "@/actions/products";
 import { PageTitle } from "@persia/ui/typography";
 import { CrmShell } from "./crm-shell";
 
@@ -268,6 +269,14 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
     }
   }
 
+  // Catálogo de produtos (migration 106) — defensivo
+  let orgProducts: import("@persia/shared/crm").OrgProduct[] = [];
+  try {
+    orgProducts = await getOrgProducts();
+  } catch (err) {
+    console.error("[/crm page] getOrgProducts falhou:", err);
+  }
+
   // PR-CRMOPS3: nome do segmento ativo pra mostrar no hint da tab Leads
   // ("Filtrado por: <nome> · Limpar"). Resolve do array ja carregado em
   // segmentsResult, sem query extra.
@@ -315,6 +324,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       tagCount={(tagsWithCountResult as unknown[]).length}
       upcomingAppointments={upcomingAppointments}
       kanbanAgentSummaries={kanbanAgentSummaries}
+      orgProducts={orgProducts}
     />
   );
 }

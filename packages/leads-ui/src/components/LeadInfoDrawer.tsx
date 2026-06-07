@@ -46,8 +46,10 @@ import {
   Link2,
   UserMinus,
   ArrowRight,
+  // Tab Produtos
+  Package,
 } from "lucide-react";
-import type { LeadWithTags, StageOutcome } from "@persia/shared/crm";
+import type { LeadWithTags, StageOutcome, OrgProduct, LeadProduct } from "@persia/shared/crm";
 import { TagBadge } from "@persia/tags-ui";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
@@ -973,10 +975,10 @@ export function LeadInfoDrawer({
               <Contact className="size-4" />
               Dados
             </TabsTrigger>
-            {/* PR-L2: tab "Negócios" — modelo "1 lead -> N negocios" */}
-            <TabsTrigger value="negocios">
-              <Briefcase className="size-4" />
-              Negócios
+            {/* Produtos/Serviços vinculados ao lead (migration 106) */}
+            <TabsTrigger value="produtos">
+              <Package className="size-4" />
+              Produtos
             </TabsTrigger>
             {/* PR-AGENDA-DRAWER (mai/2026): tab Agenda */}
             <TabsTrigger value="agenda">
@@ -1299,8 +1301,8 @@ export function LeadInfoDrawer({
               </section>
             </TabsContent>
 
-            <TabsContent value="negocios" className="mt-0">
-              <LeadNegociosTab leadId={lead.id} open={open} />
+            <TabsContent value="produtos" className="mt-0">
+              <LeadProdutosTab leadId={lead.id} open={open} />
             </TabsContent>
 
             <TabsContent value="agenda" className="mt-0">
@@ -2608,6 +2610,315 @@ function DealCard({ deal }: { deal: LeadDealItem }) {
   );
 }
 
+
+// ============================================================================
+// LeadProdutosTab — produtos/serviços vinculados ao lead (migration 106)
+// ============================================================================
+
+function LeadProdutosTab({ leadId, open }: { leadId: string; open: boolean }) {
+  const actions = useLeadsActions();
+  const [items, setItems] = React.useState<LeadProduct[]>([]);
+  const [catalog, setCatalog] = React.useState<OrgProduct[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<LeadProduct | null>(null);
+
+  const reload = React.useCallback(async () => {
+    if (!actions.getLeadProducts) return;
+    setLoading(true);
+    try {
+      const [prods, cat] = await Promise.all([
+        actions.getLeadProducts(leadId),
+        actions.listOrgProducts?.({ activeOnly: true }) ?? [],
+      ]);
+      setItems(prods);
+      setCatalog(cat);
+    } catch (err) {
+      console.error("[LeadProdutosTab] failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [leadId, actions]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    void reload();
+  }, [open, reload]);
+
+  const openAdd = () => { setEditing(null); setDialogOpen(true); };
+  const openEdit = (item: LeadProduct) => { setEditing(item); setDialogOpen(true); };
+
+  const handleRemove = async (itemId: string) => {
+    if (!actions.removeLeadProduct) return;
+    try {
+      await actions.removeLeadProduct(itemId);
+      setItems((prev) => prev.filter((i) => i.id !== itemId));
+    } catch {
+      toast.error("Não foi possível remover o produto");
+    }
+  };
+
+  const handleSave = async (
+    productId: string,
+    quantity: number,
+    unitPrice: number,
+    discount: number,
+  ) => {
+    try {
+      if (editing) {
+        await actions.updateLeadProduct?.(editing.id, { product_id: productId, quantity, unit_price: unitPrice, discount });
+      } else {
+        await actions.addLeadProduct?.(leadId, { product_id: productId, quantity, unit_price: unitPrice, discount });
+      }
+      setDialogOpen(false);
+      await reload();
+      toast.success(editing ? "Produto atualizado" : "Produto adicionado");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível salvar");
+    }
+  };
+
+  const total = items.reduce(
+    (sum, i) => sum + (i.unit_price - i.discount) * i.quantity,
+    0,
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-2 py-2">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-14 w-full bg-muted rounded-lg animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-3">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/40">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            <Package className="size-4 text-primary" />
+            Produtos vinculados
+          </span>
+          {actions.addLeadProduct && (
+            <Button type="button" size="sm" onClick={openAdd}>
+              + Adicionar
+            </Button>
+          )}
+        </div>
+
+        {/* Lista */}
+        {items.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
+            <Package className="size-6 mx-auto mb-2 text-muted-foreground/60" />
+            <p className="font-medium text-foreground">Nenhum produto cadastrado</p>
+            <p className="mt-1 text-xs">Adicione produtos ou serviços de interesse deste lead.</p>
+            {actions.addLeadProduct && (
+              <Button type="button" size="sm" className="mt-4" onClick={openAdd}>
+                + Adicionar
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              {items.map((item) => {
+                const itemTotal = (item.unit_price - item.discount) * item.quantity;
+                const productName = item.org_products?.name ?? "Produto";
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5"
+                  >
+                    <Package className="size-4 shrink-0 text-primary/60" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{productName}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.quantity}x R$ {formatBRL(item.unit_price)}
+                        {item.discount > 0 && ` − R$ ${formatBRL(item.discount)} desc.`}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">
+                      R$ {formatBRL(itemTotal)}
+                    </span>
+                    {actions.updateLeadProduct && (
+                      <button
+                        type="button"
+                        onClick={() => openEdit(item)}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    )}
+                    {actions.removeLeadProduct && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemove(item.id)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        title="Remover"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Total */}
+            <div className="flex items-center justify-between border-t border-border/40 pt-2">
+              <span className="text-sm text-muted-foreground">Total</span>
+              <span className="text-sm font-bold text-foreground tabular-nums">
+                R$ {formatBRL(total)}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <LeadProductDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        catalog={catalog}
+        editing={editing}
+        onSave={handleSave}
+      />
+    </>
+  );
+}
+
+function LeadProductDialog({
+  open,
+  onOpenChange,
+  catalog,
+  editing,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  catalog: OrgProduct[];
+  editing: LeadProduct | null;
+  onSave: (productId: string, quantity: number, unitPrice: number, discount: number) => Promise<void>;
+}) {
+  const [productId, setProductId] = React.useState("");
+  const [quantity, setQuantity] = React.useState("1");
+  const [unitPrice, setUnitPrice] = React.useState("0");
+  const [discount, setDiscount] = React.useState("0");
+  const [pending, setPending] = React.useState(false);
+
+  // Preenche form quando abre em modo edição
+  React.useEffect(() => {
+    if (!open) return;
+    if (editing) {
+      setProductId(editing.product_id);
+      setQuantity(String(editing.quantity));
+      setUnitPrice(String(editing.unit_price));
+      setDiscount(String(editing.discount));
+    } else {
+      setProductId(catalog[0]?.id ?? "");
+      setQuantity("1");
+      setUnitPrice(catalog[0] ? String(catalog[0].price) : "0");
+      setDiscount("0");
+    }
+  }, [open, editing, catalog]);
+
+  // Quando muda produto no select, preenche unit_price do catálogo
+  const handleProductChange = (id: string | null) => {
+    if (!id) return;
+    setProductId(id);
+    const prod = catalog.find((p) => p.id === id);
+    if (prod) setUnitPrice(String(prod.price));
+  };
+
+  const handleSubmit = async () => {
+    if (!productId) return;
+    const qty = parseFloat(quantity.replace(",", "."));
+    const price = parseFloat(unitPrice.replace(",", "."));
+    const disc = parseFloat(discount.replace(",", "."));
+    if (isNaN(qty) || qty <= 0 || isNaN(price) || price < 0 || isNaN(disc) || disc < 0) {
+      toast.error("Valores inválidos");
+      return;
+    }
+    setPending(true);
+    try {
+      await onSave(productId, qty, price, disc);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-2xl w-[92vw] sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Editar produto" : "Adicionar produto"}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Selecione um produto e informe quantidade, valor e desconto.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <Label>Produto *</Label>
+            <Select value={productId} onValueChange={handleProductChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um produto" />
+              </SelectTrigger>
+              <SelectContent>
+                {catalog.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} — R$ {formatBRL(p.price)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label>Qtd</Label>
+              <Input
+                type="number"
+                min="0.001"
+                step="1"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Valor unit.</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Desconto</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={pending || !productId}>
+            {pending ? <Loader2 className="size-4 animate-spin" /> : "Salvar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ============================================================================
 // PR-P: PresenceAvatars — pill mostrando quem mais esta vendo o lead.

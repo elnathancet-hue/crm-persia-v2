@@ -12,6 +12,12 @@ import type {
   LeadFilters,
   LeadWithTags,
   UpdateLeadInput,
+  OrgProduct,
+  LeadProduct,
+  AddLeadProductInput,
+  UpdateLeadProductInput,
+  CreateOrgProductInput,
+  UpdateOrgProductInput,
 } from "@persia/shared/crm";
 
 export interface PaginatedLeadsResult {
@@ -438,4 +444,32 @@ export interface LeadsActions {
    * + deleta o registro de group_memberships. Opcional.
    */
   removeLeadFromGroup?: (membershipId: string) => Promise<{ success: boolean }>;
+
+  // ---------------------------------------------------------------
+  // Produtos/Serviços (migration 106)
+  // ---------------------------------------------------------------
+
+  /** Lista todos os produtos do catálogo da org. */
+  listOrgProducts?: (opts?: { activeOnly?: boolean }) => Promise<OrgProduct[]>;
+
+  /** Cria um produto no catálogo. Requer role admin+. */
+  createOrgProduct?: (input: CreateOrgProductInput) => Promise<OrgProduct>;
+
+  /** Edita um produto do catálogo. */
+  updateOrgProduct?: (productId: string, input: UpdateOrgProductInput) => Promise<void>;
+
+  /** Exclui um produto do catálogo. Requer role admin+. */
+  deleteOrgProduct?: (productId: string) => Promise<void>;
+
+  /** Lista produtos vinculados ao lead (tab Produtos do drawer). */
+  getLeadProducts?: (leadId: string) => Promise<LeadProduct[]>;
+
+  /** Vincula um produto ao lead com quantidade/preço/desconto. */
+  addLeadProduct?: (leadId: string, input: AddLeadProductInput) => Promise<LeadProduct>;
+
+  /** Edita um vínculo lead↔produto (quantidade, preço, desconto). */
+  updateLeadProduct?: (leadProductId: string, input: UpdateLeadProductInput) => Promise<void>;
+
+  /** Remove um vínculo lead↔produto. */
+  removeLeadProduct?: (leadProductId: string) => Promise<void>;
 }

@@ -37,6 +37,13 @@ export type {
   Segment,
   // Deal loss tracking (PR-K3)
   DealLossReason,
+  // Produtos/Serviços (migration 106)
+  OrgProduct,
+  LeadProduct,
+  CreateOrgProductInput,
+  UpdateOrgProductInput,
+  AddLeadProductInput,
+  UpdateLeadProductInput,
 } from "./types";
 
 // Queries read-only compartilhadas entre apps/crm e apps/admin.
@@ -212,3 +219,14 @@ export {
 
 // PR-S5: type tambem exportado pro caller wrappear retorno
 export type { FindOrCreateConversationResult } from "./mutations";
+
+// Produtos/Serviços (migration 106)
+export { listOrgProducts, listLeadProducts } from "./queries";
+export {
+  createOrgProduct,
+  updateOrgProduct,
+  deleteOrgProduct,
+  addLeadProduct,
+  updateLeadProduct,
+  removeLeadProduct,
+} from "./mutations";

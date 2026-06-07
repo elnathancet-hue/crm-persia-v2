@@ -53,6 +53,16 @@ import {
   updateLeadComment,
 } from "@/actions/lead-comments";
 import { getLeadGroups, removeLeadFromGroup } from "@/actions/groups";
+import {
+  getOrgProducts,
+  createOrgProduct,
+  updateOrgProduct,
+  deleteOrgProduct,
+  getLeadProducts,
+  addLeadProduct,
+  updateLeadProduct,
+  removeLeadProduct,
+} from "@/actions/products";
 
 export const crmLeadsActions: LeadsActions = {
   listLeads: async (filters) => {
@@ -138,4 +148,13 @@ export const crmLeadsActions: LeadsActions = {
   // Tab Grupos no drawer
   getLeadGroups,
   removeLeadFromGroup,
+  // Produtos/Serviços (migration 106)
+  listOrgProducts: (opts) => getOrgProducts(opts),
+  createOrgProduct,
+  updateOrgProduct,
+  deleteOrgProduct,
+  getLeadProducts,
+  addLeadProduct,
+  updateLeadProduct,
+  removeLeadProduct,
 };

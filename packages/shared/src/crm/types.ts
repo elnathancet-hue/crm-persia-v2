@@ -355,3 +355,66 @@ export interface Segment {
   lead_count: number;
   created_at: string;
 }
+
+// ---------------------------------------------------------------
+// Produtos / Serviços
+// ---------------------------------------------------------------
+
+export interface OrgProduct {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  photo_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeadProduct {
+  id: string;
+  organization_id: string;
+  lead_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Join: produto do catálogo */
+  org_products?: OrgProduct | null;
+}
+
+export interface CreateOrgProductInput {
+  name: string;
+  description?: string | null;
+  price: number;
+  photo_url?: string | null;
+  is_active?: boolean;
+}
+
+export interface UpdateOrgProductInput {
+  name?: string;
+  description?: string | null;
+  price?: number;
+  photo_url?: string | null;
+  is_active?: boolean;
+}
+
+export interface AddLeadProductInput {
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  discount?: number;
+  notes?: string | null;
+}
+
+export interface UpdateLeadProductInput {
+  product_id?: string;
+  quantity?: number;
+  unit_price?: number;
+  discount?: number;
+  notes?: string | null;
+}

@@ -28,6 +28,7 @@ import {
   Filter as FilterIcon,
   Kanban,
   MessageSquare,
+  Package,
   Plus,
   Tag as TagIcon,
   Users,
@@ -66,8 +67,10 @@ import { getOrgActivities } from "@/actions/leads";
 import { SegmentList } from "@/components/segments/segment-list";
 import { TagsPageClient } from "@/app/(dashboard)/tags/tags-client";
 import { crmKanbanActions } from "@/features/crm-kanban/crm-kanban-actions";
+import { ProdutosTab } from "@/components/produtos/produtos-tab";
+import type { OrgProduct } from "@persia/shared/crm";
 
-type CrmTab = "pipeline" | "leads" | "grupos" | "segmentos" | "tags" | "atividades";
+type CrmTab = "pipeline" | "leads" | "grupos" | "segmentos" | "tags" | "atividades" | "produtos";
 
 const TABS: {
   key: CrmTab;
@@ -83,6 +86,7 @@ const TABS: {
   { key: "segmentos", label: "Segmentação", icon: FilterIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
   { key: "atividades", label: "Atividades", icon: Activity },
+  { key: "produtos", label: "Produtos", icon: Package },
 ];
 
 interface CrmShellProps {
@@ -135,6 +139,8 @@ interface CrmShellProps {
    * "IA ativa/pausada" no card.
    */
   kanbanAgentSummaries?: KanbanAgentSummary[];
+  /** Catálogo de produtos/serviços da org (migration 106). */
+  orgProducts?: OrgProduct[];
 }
 
 export function CrmShell(props: CrmShellProps) {
@@ -230,6 +236,7 @@ export function CrmShell(props: CrmShellProps) {
             activityCount={props.activityCount}
             segmentCount={props.segmentCount}
             tagCount={props.tagCount}
+            productCount={props.orgProducts?.length ?? 0}
           />
         </div>
 
@@ -290,6 +297,9 @@ export function CrmShell(props: CrmShellProps) {
           <TagsPageClient initialTags={props.tagsList as never} />
         )}
         {activeTab === "grupos" && <GroupsTab />}
+        {activeTab === "produtos" && (
+          <ProdutosTab initialProducts={props.orgProducts ?? []} />
+        )}
         {activeTab === "atividades" && (
           <ActivitiesTab
             initialActivities={props.activitiesData.initialActivities}
@@ -371,6 +381,7 @@ function CrmTabs({
   activityCount,
   segmentCount,
   tagCount,
+  productCount,
 }: {
   tabs: typeof TABS;
   active: CrmTab;
@@ -380,6 +391,7 @@ function CrmTabs({
   activityCount: number;
   segmentCount: number;
   tagCount: number;
+  productCount: number;
 }) {
   return (
     <div className="flex gap-0.5 border-b border-border overflow-x-auto">
@@ -397,7 +409,9 @@ function CrmTabs({
                   ? segmentCount
                   : tab.key === "tags"
                     ? tagCount
-                    : null;
+                    : tab.key === "produtos"
+                      ? productCount
+                      : null;
         return (
           <button
             key={tab.key}

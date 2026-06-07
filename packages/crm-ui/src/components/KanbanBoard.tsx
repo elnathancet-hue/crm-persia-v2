@@ -2059,17 +2059,11 @@ const DealCard = React.memo(function DealCardImpl({
   stages: Array<{ id: string; name: string; color: string | null }>;
   onMoveToStage: (dealId: string, stageId: string) => void;
 }) {
-  const [detailOpen, setDetailOpen] = React.useState(false);
-
-  // PR-Q: sincroniza presence quando o user logado abre/fecha o detalhe.
-  // useEffect cuida do unmount (Kanban troca de pipeline -> dispara null).
+  // Presence cleanup: quando o card desmonta (troca de pipeline), limpa.
   React.useEffect(() => {
-    if (!onViewChange) return;
-    onViewChange(detailOpen ? deal.id : null);
-    return () => {
-      if (detailOpen) onViewChange(null);
-    };
-  }, [detailOpen, deal.id, onViewChange]);
+    return () => { if (onViewChange) onViewChange(null); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const isDragging = draggedDealId === deal.id;
   const lead = deal.leads;
   const phone = lead?.phone;
@@ -2108,7 +2102,11 @@ const DealCard = React.memo(function DealCardImpl({
       onToggleSelected(deal.id);
       return;
     }
-    setDetailOpen(true);
+    // Abre LeadInfoDrawer inline (caller injeta onOpenLead).
+    if (onOpenLead && deal.lead_id) {
+      onViewChange?.(deal.id);
+      onOpenLead(deal.lead_id);
+    }
   };
 
   // ---- Inline edit (PR-K4) ----
@@ -2766,16 +2764,6 @@ const DealCard = React.memo(function DealCardImpl({
         </div>
       </div>
 
-      <DealDetailDialog
-        deal={deal}
-        lead={lead}
-        tags={tags}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        onDelete={onDelete}
-        onUpdate={onUpdate}
-        canEdit={canEdit}
-      />
     </>
   );
 });
@@ -3092,9 +3080,11 @@ function InlineEdit({
   );
 }
 
-// ============ DEAL DETAIL DIALOG ============
+// ============ ADD DEAL DIALOG (mantido abaixo para compatibilidade) ============
+// DealDetailDialog foi removido — clicar no card agora abre o LeadInfoDrawer
+// inline via onOpenLead (CrmClient → crm-client.tsx).
 
-function DealDetailDialog({
+function _DealDetailDialogRemoved({
   deal,
   lead,
   tags,

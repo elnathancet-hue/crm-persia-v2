@@ -63,3 +63,6 @@ export type {
   LeadMessageDirection,
 } from "./messages";
 export { findLastMessageForLead, deriveDirection } from "./messages";
+
+// Produtos/Serviços (migration 106)
+export { listOrgProducts, listLeadProducts } from "./products";
