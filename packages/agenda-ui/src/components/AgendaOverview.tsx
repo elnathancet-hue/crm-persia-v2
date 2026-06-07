@@ -69,7 +69,7 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
   appointments,
   loading = false,
   onSelectAppointment,
-  timezone = "America/Sao_Paulo",
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
 }) => {
   if (loading) {
     return (
@@ -84,6 +84,8 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
     );
   }
 
+  const now = Date.now();
+  const weekEnd = now + 7 * 24 * 60 * 60 * 1000;
   const upcoming = appointments.filter(
     (a) =>
       !a.deleted_at &&
@@ -91,7 +93,8 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
       (BLOCKING_APPOINTMENT_STATUSES as readonly AppointmentStatus[]).includes(
         a.status,
       ) &&
-      new Date(a.start_at).getTime() >= Date.now(),
+      new Date(a.start_at).getTime() >= now &&
+      new Date(a.start_at).getTime() <= weekEnd,
   ).length;
 
   return (
@@ -99,7 +102,7 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           icon={<CalendarCheck size={18} />}
-          label="Próximos"
+          label="Esta semana"
           value={upcoming}
           tone="brand"
         />

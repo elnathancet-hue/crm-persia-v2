@@ -139,8 +139,7 @@ export function AgendaPageClient({
   );
 
   const tabHidden: AgendaTab[] = [];
-  const showCalendarHeader =
-    activeTab === "calendar" || activeTab === "list";
+  const showCalendarHeader = activeTab === "calendar";
 
   const settingsActions: AgendaSettingsActions = useMemo(
     () => ({
@@ -218,18 +217,7 @@ export function AgendaPageClient({
           />
         )}
 
-        {activeTab === "list" && (
-          <AgendaCalendarView
-            viewMode="list"
-            currentDate={filters.currentDate}
-            appointments={appointments}
-            availabilityRule={availabilityRule}
-            onSelectAppointment={setSelected}
-            onChangeDate={filters.setCurrentDate}
-          />
-        )}
-
-        {activeTab === "availability" && <AgendaAvailabilitySettings />}
+{activeTab === "availability" && <AgendaAvailabilitySettings />}
 
         {activeTab === "booking-pages" && (
           <AgendaBookingPagesList orgSlug={orgSlug} services={services} />

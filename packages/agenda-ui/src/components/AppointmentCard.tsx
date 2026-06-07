@@ -66,23 +66,16 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
         {appointment.lead_id && showActions && onOpenLead && (
           <p className="flex items-center gap-1.5">
             <User size={11} className="shrink-0 text-muted-foreground/70" />
-            <span
-              role="link"
-              tabIndex={0}
+            <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenLead(appointment.lead_id!);
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.stopPropagation();
-                  onOpenLead(appointment.lead_id!);
-                }
-              }}
-              className="font-semibold text-primary hover:underline focus:underline focus:outline-none"
+              className="font-semibold text-primary hover:underline focus-visible:underline focus-visible:outline-none"
             >
               Abrir lead
-            </span>
+            </button>
           </p>
         )}
         {appointment.channel === "phone" && (

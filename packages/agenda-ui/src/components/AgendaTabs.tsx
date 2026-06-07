@@ -6,7 +6,6 @@ import {
   Clock as ClockIcon,
   LayoutGrid,
   Link as LinkIcon,
-  List as ListIcon,
   Settings as SettingsIcon,
 } from "lucide-react";
 
@@ -34,9 +33,8 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: "overview", label: "Visão geral", icon: LayoutGrid },
   { id: "calendar", label: "Calendário", icon: CalendarDays },
-  { id: "list", label: "Lista", icon: ListIcon },
   { id: "availability", label: "Disponibilidade", icon: ClockIcon },
-  { id: "booking-pages", label: "Páginas de agendamento", icon: LinkIcon },
+  { id: "booking-pages", label: "Páginas", icon: LinkIcon },
   { id: "settings", label: "Ajustes", icon: SettingsIcon },
 ];
 
