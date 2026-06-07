@@ -25,6 +25,16 @@ import {
 import type { LeadLastMessagePreview } from "@persia/shared/crm";
 import { Button } from "@persia/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -87,6 +97,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
     AppointmentStatus | "cancel" | null
   >(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = React.useState(false);
 
   const open = appointment !== null;
   const tz = appointment?.timezone || "America/Sao_Paulo";
@@ -106,9 +117,13 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
     }
   };
 
-  const handleCancel = async () => {
+  const handleCancel = () => {
     if (!appointment) return;
-    if (!confirm("Cancelar este agendamento? Você poderá registrar o motivo depois.")) return;
+    setCancelConfirmOpen(true);
+  };
+
+  const performCancel = async () => {
+    if (!appointment) return;
     setBusyAction("cancel");
     setError(null);
     try {
@@ -127,6 +142,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
   const isMutating = busyAction !== null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
         {appointment && (
@@ -304,7 +320,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
             </div>
 
             {!readOnly && appointment.kind === "appointment" && (
-              <DialogFooter className="border-t border-border bg-card p-4 gap-2 flex-col sm:flex-col sm:items-stretch sm:space-x-0">
+              <DialogFooter className="border-t border-border bg-card px-6 py-4 flex-row flex-wrap justify-end gap-2">
                 {ACTION_BUTTONS.filter((b) => b.status !== appointment.status).map(
                   (b) => {
                     const Icon = b.icon;
@@ -315,7 +331,7 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
                         variant={b.variant}
                         disabled={isMutating}
                         onClick={() => handleStatus(b.status)}
-                        className={["w-full", b.className ?? ""].join(" ")}
+                        className={b.className}
                       >
                         <Icon />
                         {busyAction === b.status ? "Aguarde..." : b.label}
@@ -332,7 +348,6 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
                       variant="outline"
                       disabled={isMutating}
                       onClick={() => onReschedule(appointment)}
-                      className="w-full"
                     >
                       <CalendarClock />
                       Reagendar
@@ -345,12 +360,10 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
                     variant="outline"
                     disabled={isMutating}
                     onClick={handleCancel}
-                    className="w-full text-destructive ring-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                    className="text-destructive ring-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                   >
                     <XCircle />
-                    {busyAction === "cancel"
-                      ? "Cancelando..."
-                      : "Cancelar agendamento"}
+                    Cancelar agendamento
                   </Button>
                 )}
               </DialogFooter>
@@ -359,6 +372,31 @@ export const AppointmentDrawer: React.FC<AppointmentDrawerProps> = ({
         )}
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancelar agendamento?</AlertDialogTitle>
+          <AlertDialogDescription>
+            O agendamento será marcado como cancelado. Você poderá registrar o
+            motivo depois.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={busyAction === "cancel"}>
+            Voltar
+          </AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={busyAction === "cancel"}
+            onClick={performCancel}
+          >
+            {busyAction === "cancel" ? "Cancelando..." : "Cancelar agendamento"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 };
 
