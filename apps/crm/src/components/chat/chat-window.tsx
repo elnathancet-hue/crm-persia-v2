@@ -50,6 +50,7 @@ import {
   CheckCheck,
   ChevronDown,
   Copy,
+  Download,
   FileText,
   Forward,
   Info,
@@ -1650,6 +1651,20 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                             <Copy className="size-4" />
                             Copiar
                           </DropdownMenuItem>
+                          {msg.media_url && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const a = document.createElement("a");
+                                a.href = msg.media_url!;
+                                a.download = "";
+                                a.target = "_blank";
+                                a.click();
+                              }}
+                            >
+                              <Download className="size-4" />
+                              Baixar
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={() => setReactionPickerMsgId(reactionPickerMsgId === msg.id ? null : msg.id)}
                           >

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ChevronDown,
   Copy,
+  Download,
   ExternalLink,
   File,
   FileText,
@@ -1803,6 +1804,20 @@ function GroupChatPanel({
                             }}>
                               <Copy className="size-4" />
                               Copiar
+                            </DropdownMenuItem>
+                          )}
+                          {msg.media_url && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const a = document.createElement("a");
+                                a.href = msg.media_url!;
+                                a.download = "";
+                                a.target = "_blank";
+                                a.click();
+                              }}
+                            >
+                              <Download className="size-4" />
+                              Baixar
                             </DropdownMenuItem>
                           )}
                           {msg.whatsapp_msg_id && (

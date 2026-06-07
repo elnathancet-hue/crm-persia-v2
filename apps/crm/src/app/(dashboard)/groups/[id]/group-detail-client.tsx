@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   ChevronDown,
   Copy,
+  Download,
   ExternalLink,
   EyeOff,
   File,
@@ -972,6 +973,20 @@ export function GroupDetailClient({
                             >
                               <Copy className="size-4" />
                               Copiar
+                            </DropdownMenuItem>
+                          )}
+                          {msg.media_url && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const a = document.createElement("a");
+                                a.href = msg.media_url!;
+                                a.download = "";
+                                a.target = "_blank";
+                                a.click();
+                              }}
+                            >
+                              <Download className="size-4" />
+                              Baixar
                             </DropdownMenuItem>
                           )}
                           {isOutbound && msg.text && msg.whatsapp_msg_id && (
