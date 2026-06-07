@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { KanbanBoard } from "@persia/crm-ui";
 import type {
   LeadKanbanCard,
+  LeadWithTags,
   Pipeline,
   Stage,
   TagRef,
@@ -29,6 +30,7 @@ import type { LeadUpcomingAppointment } from "@persia/shared/agenda";
 import type { KanbanAgentSummary } from "@persia/shared/ai-agent";
 import { useRole } from "@/lib/hooks/use-role";
 import {
+  LeadInfoDrawer,
   useCurrentUser,
   useDealPresence,
   useDealsRealtime,
@@ -36,6 +38,7 @@ import {
   useKanbanLeadsRealtime,
 } from "@persia/leads-ui";
 import { createClient } from "@/lib/supabase/client";
+import { getLead } from "@/actions/leads";
 
 interface Props {
   pipelines: Pipeline[];
@@ -80,6 +83,26 @@ export function CrmClient({
 }: Props) {
   const { isAgent, isAdmin } = useRole();
   const router = useRouter();
+
+  // Inline LeadInfoDrawer — abre ao clicar num card do Kanban sem sair do Funil.
+  const [openLeadId, setOpenLeadId] = React.useState<string | null>(null);
+  const [leadForDrawer, setLeadForDrawer] = React.useState<LeadWithTags | null>(null);
+
+  React.useEffect(() => {
+    if (!openLeadId) {
+      setLeadForDrawer(null);
+      return;
+    }
+    let cancelled = false;
+    getLead(openLeadId)
+      .then((res) => {
+        if (!cancelled && res?.lead) {
+          setLeadForDrawer(res.lead as unknown as LeadWithTags);
+        }
+      })
+      .catch(() => { /* silencioso */ });
+    return () => { cancelled = true; };
+  }, [openLeadId]);
 
   // PR-O Realtime: outro agente moveu/criou/deletou deal neste funil.
   // PR-P: debounce 200ms trailing — burst de drag-drop ou bulk move
@@ -138,34 +161,54 @@ export function CrmClient({
   }, [kanbanAgentSummaries]);
 
   return (
-    <KanbanBoard
-      pipelines={pipelines}
-      stages={stages}
-      kanbanLeads={kanbanLeads}
-      leads={leads}
-      canEdit={isAgent}
-      canManagePipelines={isAdmin}
-      canCreateKanban={false}
-      canEditStages={isAdmin}
-      onChange={() => router.refresh()}
-      goalsStorageKey="crm-kanban-goals-v1"
-      tags={tags}
-      assignees={assignees}
-      pipelineId={pipelineId}
-      onPipelineChange={onPipelineChange}
-      // PR-Q: presence — admin nao passa nada (compat)
-      dealWatchers={watchersByDeal}
-      onDealViewChange={setViewingDealId}
-      // Frente B: botão "Ver lead" no card do Kanban abre o
-      // LeadInfoDrawer via deeplink. Reusa o mesmo mecanismo da
-      // tab Leads (?lead=UUID), garantindo UX consistente.
-      onOpenLead={(leadId) => {
-        router.push(`/crm?tab=leads&lead=${leadId}`);
-      }}
-      // PR-KANBAN-UPCOMING (mai/2026): chip "Em Xh"/"Amanhã HH:MM" no card
-      upcomingAppointments={upcomingMap}
-      // PR-AGENT-INTEGRATION-6 (mai/2026): badge "IA ativa/pausada"
-      kanbanAgentSummaries={agentSummariesMap}
-    />
+    <>
+      <KanbanBoard
+        pipelines={pipelines}
+        stages={stages}
+        kanbanLeads={kanbanLeads}
+        leads={leads}
+        canEdit={isAgent}
+        canManagePipelines={isAdmin}
+        canCreateKanban={false}
+        canEditStages={isAdmin}
+        onChange={() => router.refresh()}
+        goalsStorageKey="crm-kanban-goals-v1"
+        tags={tags}
+        assignees={assignees}
+        pipelineId={pipelineId}
+        onPipelineChange={onPipelineChange}
+        // PR-Q: presence — admin nao passa nada (compat)
+        dealWatchers={watchersByDeal}
+        onDealViewChange={setViewingDealId}
+        // Abre LeadInfoDrawer inline sem sair do Funil.
+        onOpenLead={(leadId) => setOpenLeadId(leadId)}
+        // PR-KANBAN-UPCOMING (mai/2026): chip "Em Xh"/"Amanhã HH:MM" no card
+        upcomingAppointments={upcomingMap}
+        // PR-AGENT-INTEGRATION-6 (mai/2026): badge "IA ativa/pausada"
+        kanbanAgentSummaries={agentSummariesMap}
+      />
+      {leadForDrawer && (
+        <LeadInfoDrawer
+          open={!!leadForDrawer}
+          onOpenChange={(open) => {
+            if (!open) {
+              setOpenLeadId(null);
+              setLeadForDrawer(null);
+            }
+          }}
+          lead={leadForDrawer}
+          supabase={supabase}
+          canEdit={isAgent}
+          canDelete={isAgent}
+          members={assignees.map((a) => ({ user_id: a.id, name: a.name }))}
+          onSaved={() => router.refresh()}
+          onDeleted={() => {
+            setOpenLeadId(null);
+            setLeadForDrawer(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }
