@@ -89,6 +89,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@persia/ui/popover";
 import {
   syncGroups,
+  syncGroupImages,
   deleteGroup,
   sendMessageToGroup,
   sendMediaToGroup,
@@ -3230,6 +3231,8 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
     setSyncing(true);
     try {
       const result = await syncGroups();
+      // Busca fotos dos grupos que ainda não têm imagem (best-effort, não bloqueia)
+      syncGroupImages().catch(() => {});
       toast.success(`${result.synced} grupos sincronizados`);
       window.location.reload();
     } catch (err: any) {
