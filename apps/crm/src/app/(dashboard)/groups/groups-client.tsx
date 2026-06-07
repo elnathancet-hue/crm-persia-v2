@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import {
   AlertCircle,
   ArrowLeft,
+  Calendar,
   ChevronDown,
   Copy,
   Download,
@@ -770,7 +771,8 @@ function GroupChatPanel({
   const [bulkSelectMode, setBulkSelectMode] = React.useState(false);
   const [selectedMsgIds, setSelectedMsgIds] = React.useState<Set<string>>(new Set());
   const [deletingBulk, setDeletingBulk] = React.useState(false);
-  const [schedulePopoverOpen, setSchedulePopoverOpen] = React.useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = React.useState(false);
+  const [scheduleText, setScheduleText] = React.useState("");
   const [scheduleAt, setScheduleAt] = React.useState("");
   const [schedulingMessage, setSchedulingMessage] = React.useState(false);
   const [scheduledList, setScheduledList] = React.useState<Array<{ id: string; content: string; scheduled_at: string; status: string; error_message: string | null; created_at: string }>>([]);
@@ -1265,14 +1267,15 @@ function GroupChatPanel({
   }
 
   async function handleScheduleMessage() {
-    if (!chatInput.trim() || !scheduleAt) return;
+    if (!scheduleText.trim() || !scheduleAt) return;
     setSchedulingMessage(true);
     try {
-      await scheduleGroupMessage(group.id, chatInput.trim(), new Date(scheduleAt).toISOString());
+      await scheduleGroupMessage(group.id, scheduleText.trim(), new Date(scheduleAt).toISOString());
       toast.success("Mensagem agendada");
-      setChatInput("");
+      setScheduleText("");
       setScheduleAt("");
-      setSchedulePopoverOpen(false);
+      setScheduleDialogOpen(false);
+      handleLoadScheduled();
     } catch {
       toast.error("Erro ao agendar mensagem");
     } finally {
@@ -1549,6 +1552,16 @@ function GroupChatPanel({
             title="Contatos do grupo"
           >
             <UserCircle className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => { setScheduleDialogOpen(true); handleLoadScheduled(); }}
+            className="size-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Agendar mensagem"
+            aria-label="Agendar mensagem"
+          >
+            <Calendar className="size-4" />
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={handleOpenGroupDetails} title="Dados do grupo">
             <Settings className="size-4" />
@@ -2244,66 +2257,6 @@ function GroupChatPanel({
             </PopoverContent>
           </Popover>
 
-          {/* Schedule message */}
-          <Popover open={schedulePopoverOpen} onOpenChange={(o) => { setSchedulePopoverOpen(o); if (o) handleLoadScheduled(); }}>
-            <PopoverTrigger>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-10 shrink-0 rounded-full hover:bg-transparent"
-                style={{ color: "var(--chat-header-fg)" }}
-                title="Agendar mensagem"
-                aria-label="Agendar mensagem"
-                disabled={isRecording || sendingMessage}
-              >
-                <Clock className="size-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-80 p-4 flex flex-col gap-3">
-              <div className="font-medium text-sm">Agendar mensagem</div>
-              <Textarea
-                name="schedule-group-message"
-                placeholder="Texto da mensagem..."
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                className="min-h-[80px] text-sm resize-none"
-              />
-              <Input
-                type="datetime-local"
-                name="schedule-group-at"
-                value={scheduleAt}
-                onChange={(e) => setScheduleAt(e.target.value)}
-              />
-              <Button
-                size="sm"
-                onClick={handleScheduleMessage}
-                disabled={!chatInput.trim() || !scheduleAt || schedulingMessage}
-                className="self-end"
-              >
-                {schedulingMessage ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <Clock className="size-3.5 mr-1" />}
-                Agendar
-              </Button>
-              {scheduledList.length > 0 && (
-                <div className="border-t pt-3 flex flex-col gap-2 max-h-48 overflow-y-auto">
-                  <div className="text-xs font-medium text-muted-foreground">Pendentes</div>
-                  {scheduledList.map((s) => (
-                    <div key={s.id} className="flex items-start justify-between gap-2 text-xs">
-                      <div className="flex-1 min-w-0">
-                        <div className="truncate">{s.content}</div>
-                        <div className="text-muted-foreground">{formatFullDateTime(s.scheduled_at)}</div>
-                        {s.status === "error" && <div className="text-destructive">{s.error_message}</div>}
-                      </div>
-                      <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => handleCancelScheduled(s.id)}>
-                        <X className="size-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {loadingScheduled && <div className="text-xs text-muted-foreground text-center">Carregando...</div>}
-            </PopoverContent>
-          </Popover>
 
           {isRecording ? (
             <div
@@ -2704,6 +2657,78 @@ function GroupChatPanel({
               Cancelar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule message dialog */}
+      <Dialog open={scheduleDialogOpen} onOpenChange={(o) => { setScheduleDialogOpen(o); if (!o) { setScheduleText(""); setScheduleAt(""); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader className="space-y-2">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Calendar className="size-5" />
+            </div>
+            <DialogTitle>Agendar mensagem</DialogTitle>
+            <DialogDescription>
+              Programe uma mensagem para ser enviada automaticamente neste grupo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <Label>Mensagem</Label>
+                <span className="text-xs text-muted-foreground">{scheduleText.length}/1000</span>
+              </div>
+              <Textarea
+                value={scheduleText}
+                onChange={(e) => setScheduleText(e.target.value.slice(0, 1000))}
+                placeholder="Digite sua mensagem..."
+                className="min-h-[128px] resize-none"
+                maxLength={1000}
+              />
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <Label>Data e hora de envio</Label>
+              <Input
+                type="datetime-local"
+                value={scheduleAt}
+                onChange={(e) => setScheduleAt(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="mt-2"
+              />
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <Button type="button" variant="secondary" size="sm" onClick={() => { const d = new Date(Date.now() + 60 * 60_000); setScheduleAt(d.toISOString().slice(0, 16)); }}>+1h</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { const d = new Date(Date.now() + 24 * 60 * 60_000); setScheduleAt(d.toISOString().slice(0, 16)); }}>Amanhã</Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => { const d = new Date(Date.now() + 48 * 60 * 60_000); setScheduleAt(d.toISOString().slice(0, 16)); }}>+2 dias</Button>
+              </div>
+            </div>
+            {scheduledList.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Pendentes</p>
+                <div className="flex max-h-40 flex-col gap-2 overflow-y-auto">
+                  {scheduledList.map((s) => (
+                    <div key={s.id} className="flex items-start justify-between gap-2 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">{s.content}</div>
+                        <div className="text-muted-foreground">{formatFullDateTime(s.scheduled_at)}</div>
+                        {s.status === "error" && <div className="text-destructive">{s.error_message}</div>}
+                      </div>
+                      <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => handleCancelScheduled(s.id)}>
+                        <X className="size-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {loadingScheduled && <div className="text-center text-xs text-muted-foreground">Carregando...</div>}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+            <Button onClick={handleScheduleMessage} disabled={!scheduleText.trim() || !scheduleAt || schedulingMessage}>
+              {schedulingMessage ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <Calendar className="size-3.5 mr-1" />}
+              Agendar mensagem
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
