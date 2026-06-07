@@ -65,16 +65,42 @@ type CalEvent = RBCEvent & {
   resource: EventResource;
 };
 
+// PR-DS-TOKENS (jun/2026): trocado hex hardcoded por CSS vars semanticas
+// do design system — light/dark resolve automaticamente via globals.css.
 const STATUS_COLORS: Record<
   AppointmentStatus,
   { bg: string; bar: string; text: string }
 > = {
-  awaiting_confirmation: { bg: "#fef3c7", bar: "#d97706", text: "#78350f" },
-  confirmed: { bg: "#d1fae5", bar: "#059669", text: "#064e3b" },
-  completed: { bg: "#e0e7ff", bar: "#4f46e5", text: "#312e81" },
-  cancelled: { bg: "#ffe4e6", bar: "#e11d48", text: "#881337" },
-  no_show: { bg: "#f1f5f9", bar: "#64748b", text: "#334155" },
-  rescheduled: { bg: "#dbeafe", bar: "#2563eb", text: "#1e3a8a" },
+  awaiting_confirmation: {
+    bg: "var(--warning-soft)",
+    bar: "var(--warning)",
+    text: "var(--warning-soft-foreground)",
+  },
+  confirmed: {
+    bg: "var(--success-soft)",
+    bar: "var(--success)",
+    text: "var(--success-soft-foreground)",
+  },
+  completed: {
+    bg: "var(--progress-soft)",
+    bar: "var(--progress)",
+    text: "var(--progress-soft-foreground)",
+  },
+  cancelled: {
+    bg: "var(--failure-soft)",
+    bar: "var(--failure)",
+    text: "var(--failure-soft-foreground)",
+  },
+  no_show: {
+    bg: "var(--muted)",
+    bar: "var(--muted-foreground)",
+    text: "var(--muted-foreground)",
+  },
+  rescheduled: {
+    bg: "color-mix(in srgb, var(--primary) 12%, transparent)",
+    bar: "var(--primary)",
+    text: "var(--primary)",
+  },
 };
 
 function getEventStyle(event: CalEvent) {

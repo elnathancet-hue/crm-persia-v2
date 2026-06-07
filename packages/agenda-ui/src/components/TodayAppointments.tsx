@@ -56,7 +56,7 @@ export const TodayAppointments: React.FC<TodayAppointmentsProps> = ({
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+      <div className="mb-4 flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground">
         <CalendarCheck className="size-4 text-primary" />
         Hoje · {today.length} {today.length === 1 ? "compromisso" : "compromissos"}
       </div>

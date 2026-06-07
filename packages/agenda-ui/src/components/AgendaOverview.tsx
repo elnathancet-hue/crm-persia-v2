@@ -101,25 +101,25 @@ export const AgendaOverview: React.FC<AgendaOverviewProps> = ({
     <div className="space-y-8">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          icon={<CalendarCheck size={18} />}
+          icon={<CalendarCheck className="size-4" />}
           label="Esta semana"
           value={upcoming}
           tone="brand"
         />
         <MetricCard
-          icon={<ClockIcon size={18} />}
+          icon={<ClockIcon className="size-4" />}
           label="Aguardando confirmação"
           value={countByStatus(appointments, "awaiting_confirmation")}
           tone="warning"
         />
         <MetricCard
-          icon={<CheckCircle2 size={18} />}
+          icon={<CheckCircle2 className="size-4" />}
           label="Realizados"
           value={countByStatus(appointments, "completed")}
           tone="success"
         />
         <MetricCard
-          icon={<XCircle size={18} />}
+          icon={<XCircle className="size-4" />}
           label="Cancelados"
           value={countByStatus(appointments, "cancelled")}
           tone="danger"
