@@ -30,7 +30,7 @@ export function KpiCard({ title, value, description, icon: Icon, trend, variant 
                   trend.positive ? "text-success" : "text-failure",
                 )}
               >
-                {trend.positive ? "+" : ""}{trend.value}% vs semana passada
+                {trend.positive ? "↑" : "↓"} {trend.value}% vs período anterior
               </p>
             )}
           </div>
