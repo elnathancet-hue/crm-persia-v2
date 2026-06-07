@@ -3230,10 +3230,14 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
   async function handleSync() {
     setSyncing(true);
     try {
-      const result = await syncGroups();
-      // Busca fotos dos grupos que ainda não têm imagem (best-effort, não bloqueia)
-      syncGroupImages().catch(() => {});
-      toast.success(`${result.synced} grupos sincronizados`);
+      const [result, photoResult] = await Promise.all([
+        syncGroups(),
+        syncGroupImages().catch((e: any) => { toast.error(`Fotos: ${e?.message ?? "erro"}`); return null; }),
+      ]);
+      const photoMsg = photoResult && photoResult.updated > 0
+        ? ` • ${photoResult.updated} foto(s) atualizadas`
+        : "";
+      toast.success(`${result.synced} grupos sincronizados${photoMsg}`);
       window.location.reload();
     } catch (err: any) {
       toast.error(err.message || "Erro ao sincronizar");
