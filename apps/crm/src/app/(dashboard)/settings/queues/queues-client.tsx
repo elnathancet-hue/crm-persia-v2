@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Pencil, Trash2, Users, ListFilter } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, ListFilter, CheckCircle2, Circle } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { Badge } from "@persia/ui/badge";
 import {
@@ -39,6 +39,8 @@ interface Queue {
   name: string;
   description: string | null;
   distribution_type: string;
+  is_active: boolean;
+  set_lead_owner: boolean;
   member_count: number;
   created_at: string;
 }
@@ -65,6 +67,8 @@ export function QueuesPageClient({
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [distributionType, setDistributionType] = React.useState("round_robin");
+  const [isActive, setIsActive] = React.useState(true);
+  const [setLeadOwner, setSetLeadOwner] = React.useState(true);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
   function setError(field: string, msg: string) {
@@ -80,6 +84,8 @@ export function QueuesPageClient({
     setName("");
     setDescription("");
     setDistributionType("round_robin");
+    setIsActive(true);
+    setSetLeadOwner(true);
     setErrors({});
     setDialogOpen(true);
   }
@@ -89,6 +95,8 @@ export function QueuesPageClient({
     setName(queue.name);
     setDescription(queue.description || "");
     setDistributionType(queue.distribution_type);
+    setIsActive(queue.is_active ?? true);
+    setSetLeadOwner(queue.set_lead_owner ?? true);
     setDialogOpen(true);
   }
 
@@ -101,6 +109,8 @@ export function QueuesPageClient({
       fd.set("name", name.trim());
       fd.set("description", description);
       fd.set("distribution_type", distributionType);
+      fd.set("is_active", String(isActive));
+      fd.set("set_lead_owner", String(setLeadOwner));
 
       if (editingQueue) {
         await updateQueue(editingQueue.id, fd);
@@ -112,6 +122,8 @@ export function QueuesPageClient({
                   name: name.trim(),
                   description: description || null,
                   distribution_type: distributionType,
+                  is_active: isActive,
+                  set_lead_owner: setLeadOwner,
                 }
               : q
           )
@@ -183,6 +195,7 @@ export function QueuesPageClient({
               <TableHead>Nome</TableHead>
               <TableHead>Descrição</TableHead>
               <TableHead>Distribuição</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead>Membros</TableHead>
               <TableHead>Criação</TableHead>
               <TableHead>Ações</TableHead>
@@ -200,6 +213,17 @@ export function QueuesPageClient({
                     {DISTRIBUTION_LABELS[queue.distribution_type] ||
                       queue.distribution_type}
                   </Badge>
+                </TableCell>
+                <TableCell>
+                  {queue.is_active ? (
+                    <span className="flex items-center gap-1 text-xs text-success font-medium">
+                      <CheckCircle2 className="size-3.5" /> Ativa
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Circle className="size-3.5" /> Inativa
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1.5">
@@ -287,6 +311,40 @@ export function QueuesPageClient({
                   <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Fila ativa</Label>
+                <p className="text-xs text-muted-foreground">
+                  Novos leads recebidos serão distribuídos por esta fila
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isActive}
+                onClick={() => setIsActive((v) => !v)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "bg-primary" : "bg-input"}`}
+              >
+                <span className={`inline-block size-3.5 rounded-full bg-background shadow-sm transition-transform ${isActive ? "translate-x-4" : "translate-x-0.5"}`} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Atribuir lead ao agente</Label>
+                <p className="text-xs text-muted-foreground">
+                  Ao distribuir, define o agente como responsável pelo lead
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={setLeadOwner}
+                onClick={() => setSetLeadOwner((v) => !v)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${setLeadOwner ? "bg-primary" : "bg-input"}`}
+              >
+                <span className={`inline-block size-3.5 rounded-full bg-background shadow-sm transition-transform ${setLeadOwner ? "translate-x-4" : "translate-x-0.5"}`} />
+              </button>
             </div>
           </div>
           <DialogFooter>

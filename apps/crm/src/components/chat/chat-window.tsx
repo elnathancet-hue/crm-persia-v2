@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, getConversations, uploadScheduledMessageMediaAction, type ConversationWithLead } from "@/actions/conversations";
-import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
+import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage, transferConversationToQueue } from "@/actions/conversations";
 import { createAppointment } from "@/actions/agenda/appointments";
 import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, forwardMessagesToConversations, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
@@ -633,12 +633,13 @@ function TransferDialog({
         }
       });
 
-    // Fetch queues (no soft-delete column on this table — was silently filtering
-    // out every row because is_active does not exist on queues)
+    // Fetch active queues (is_active added in migration 104)
     supabase
       .from("queues")
       .select("id, name")
       .eq("organization_id", orgId)
+      .eq("is_active", true)
+      .order("name")
       .then(({ data }) => {
         if (data) setQueues(data);
       });
@@ -709,15 +710,11 @@ function TransferDialog({
                     className="w-full justify-start gap-2"
                     onClick={async () => {
                       try {
-                        const supabase = createClient();
-                        await supabase
-                          .from("conversations")
-                          .update({ queue_id: queue.id, status: "waiting_human", assigned_to: null })
-                          .eq("id", conversationId);
+                        await transferConversationToQueue(conversationId, queue.id);
                         toast.success(`Transferido para fila ${queue.name}`);
                         onOpenChange(false);
-                      } catch {
-                        toast.error("Erro ao transferir");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Erro ao transferir");
                       }
                     }}
                   >

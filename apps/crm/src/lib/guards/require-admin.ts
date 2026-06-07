@@ -1,5 +1,6 @@
-import { getAuthContext } from "@/lib/auth";
+import { getAuthContext, requirePermission } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import type { PermissionModule } from "@/lib/permissions";
 
 const ROLE_HIERARCHY: Record<string, number> = {
   owner: 40,
@@ -31,4 +32,21 @@ export async function requireAdminPageAccess() {
   }
 
   return ctx;
+}
+
+/**
+ * Server-side guard for module-permission pages.
+ * Redirects to /dashboard if the user's permissions don't include `read` on the module.
+ *
+ * Use in server components (layouts) that correspond to a PermissionModule:
+ *   await requireModulePageAccess("chat");
+ *
+ * This is a UX guard. The real defense is requirePermission() in server actions.
+ */
+export async function requireModulePageAccess(module: PermissionModule) {
+  try {
+    await requirePermission(module, "read");
+  } catch {
+    redirect("/dashboard");
+  }
 }

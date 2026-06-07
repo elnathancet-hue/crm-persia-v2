@@ -10,6 +10,7 @@ import {
   Settings,
 } from "lucide-react";
 import type { OrgRole } from "@/lib/hooks/use-role";
+import type { PermissionModule } from "@/lib/permissions";
 
 export interface NavChild {
   label: string;
@@ -22,6 +23,8 @@ export interface NavItem {
   icon: typeof LayoutDashboard;
   badge?: boolean;
   minRole?: OrgRole;
+  /** Módulo de permissão JSONB. undefined = sempre visível. */
+  module?: PermissionModule;
   children?: NavChild[];
 }
 
@@ -36,12 +39,14 @@ export const navigation: NavItem[] = [
     href: "/chat",
     icon: MessageSquare,
     badge: true,
+    module: "chat",
   },
   {
     label: "Grupos",
     href: "/groups",
     icon: UsersRound,
     minRole: "admin",
+    module: "groups",
   },
   // PR-K5: item "Leads" foi removido — agora vive como tab dentro de /crm.
   // /tags e /segments continuam acessiveis via URL direta (e podem virar
@@ -50,17 +55,20 @@ export const navigation: NavItem[] = [
     label: "CRM",
     href: "/crm",
     icon: Kanban,
+    module: "crm",
   },
   {
     label: "Agenda",
     href: "/agenda",
     icon: Calendar,
+    module: "agenda",
   },
   {
     label: "Automacao",
     href: "/automations",
     icon: Zap,
     minRole: "admin",
+    module: "automations",
     // PR-AUTOMATIONS-CLEANUP (mai/2026): menu reduzido de 5 itens flat
     // pra 2. Assistentes IA, Webhook IA e Picotador eram do sistema
     // legacy (pre Agente Nativo) e ficam escondidos do menu — codigo
@@ -79,16 +87,19 @@ export const navigation: NavItem[] = [
     href: "/campaigns",
     icon: Megaphone,
     minRole: "admin",
+    module: "campaigns",
   },
   {
     label: "Relatorio",
     href: "/reports",
     icon: BarChart3,
+    module: "reports",
   },
   {
     label: "Config",
     href: "/settings",
     icon: Settings,
     minRole: "admin",
+    module: "settings",
   },
 ];

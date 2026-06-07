@@ -8,7 +8,7 @@ export async function getQueues() {
 
   const { data: queues, error } = await supabase
     .from("queues")
-    .select("*")
+    .select("id, name, description, distribution_type, is_active, set_lead_owner, created_at")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
 
@@ -43,6 +43,8 @@ export async function createQueue(formData: FormData) {
       name: formData.get("name") as string,
       distribution_type: (formData.get("distribution_type") as string) || "round_robin",
       description: (formData.get("description") as string) || null,
+      is_active: formData.get("is_active") !== "false",
+      set_lead_owner: formData.get("set_lead_owner") !== "false",
     })
     .select()
     .single();
@@ -59,10 +61,14 @@ export async function updateQueue(id: string, formData: FormData) {
   const name = formData.get("name") as string;
   const distributionType = formData.get("distribution_type") as string;
   const description = formData.get("description") as string;
+  const isActive = formData.get("is_active");
+  const setLeadOwner = formData.get("set_lead_owner");
 
   if (name) updateData.name = name;
   if (distributionType) updateData.distribution_type = distributionType;
   if (description !== null) updateData.description = description;
+  if (isActive !== null) updateData.is_active = isActive !== "false";
+  if (setLeadOwner !== null) updateData.set_lead_owner = setLeadOwner !== "false";
 
   const { error } = await supabase.from("queues").update(updateData as never).eq("id", id).eq("organization_id", orgId);
 

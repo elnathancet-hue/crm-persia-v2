@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils";
 import { navigation } from "@/lib/constants/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useRole } from "@/lib/hooks/use-role";
 
-// Primary tabs always visible in bottom bar
+// Primary tabs always visible in bottom bar (when permitted)
 const PRIMARY_HREFS = ["/dashboard", "/chat", "/crm", "/agenda"];
 
 export function MobileBottomNav({ unreadCount, groupsUnreadCount }: { unreadCount: number; groupsUnreadCount: number }) {
@@ -20,8 +21,15 @@ export function MobileBottomNav({ unreadCount, groupsUnreadCount }: { unreadCoun
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const primaryItems = navigation.filter((item) =>
-    PRIMARY_HREFS.includes(item.href)
+  const { canAccessModule } = useRole();
+
+  const primaryItems = useMemo(
+    () => navigation.filter(
+      (item) =>
+        PRIMARY_HREFS.includes(item.href) &&
+        (item.module === undefined || canAccessModule(item.module)),
+    ),
+    [canAccessModule],
   );
 
   return (

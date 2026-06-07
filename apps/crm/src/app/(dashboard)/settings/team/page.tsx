@@ -10,7 +10,7 @@ async function getTeamData() {
 
   const { data: members } = await admin
     .from("organization_members")
-    .select("id, user_id, role, is_active, created_at, profiles(full_name, phone)")
+    .select("id, user_id, role, is_active, created_at, permissions, profiles(full_name, phone)")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: true });
 
@@ -24,6 +24,7 @@ async function getTeamData() {
         role: m.role,
         is_active: m.is_active,
         created_at: m.created_at,
+        permissions: m.permissions,
         email: authUser?.user?.email || "Sem email",
         name: m.profiles?.full_name || authUser?.user?.user_metadata?.full_name || "Sem nome",
       };

@@ -3347,6 +3347,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           organization_id: string
+          permissions: Json
           role: string
           user_id: string
         }
@@ -3355,6 +3356,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           organization_id: string
+          permissions?: import("./index").Json
           role?: string
           user_id: string
         }
@@ -3363,6 +3365,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           organization_id?: string
+          permissions?: import("./index").Json
           role?: string
           user_id?: string
         }
@@ -3697,14 +3700,61 @@ export type Database = {
           },
         ]
       }
+      queue_distribution_log: {
+        Row: {
+          id: string
+          organization_id: string
+          queue_id: string
+          assigned_to: string
+          conversation_id: string | null
+          lead_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          queue_id: string
+          assigned_to: string
+          conversation_id?: string | null
+          lead_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          queue_id?: string
+          assigned_to?: string
+          conversation_id?: string | null
+          lead_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "queue_distribution_log_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_distribution_log_queue_id_fkey"
+            columns: ["queue_id"]
+            isOneToOne: false
+            referencedRelation: "queues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       queues: {
         Row: {
           created_at: string | null
           description: string | null
           distribution_type: string | null
           id: string
+          is_active: boolean
           name: string
           organization_id: string
+          set_lead_owner: boolean
           updated_at: string | null
         }
         Insert: {
@@ -3712,8 +3762,10 @@ export type Database = {
           description?: string | null
           distribution_type?: string | null
           id?: string
+          is_active?: boolean
           name: string
           organization_id: string
+          set_lead_owner?: boolean
           updated_at?: string | null
         }
         Update: {
@@ -3721,8 +3773,10 @@ export type Database = {
           description?: string | null
           distribution_type?: string | null
           id?: string
+          is_active?: boolean
           name?: string
           organization_id?: string
+          set_lead_owner?: boolean
           updated_at?: string | null
         }
         Relationships: [
@@ -4511,6 +4565,10 @@ export type Database = {
           p_released_at?: string
         }
         Returns: boolean
+      }
+      pick_agent_from_queue: {
+        Args: { p_org_id: string; p_queue_id: string }
+        Returns: string | null
       }
       seed_default_loss_reasons: {
         Args: { p_org_id: string }

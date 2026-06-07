@@ -9,14 +9,18 @@ import { useState, useRef, useEffect, useMemo } from "react";
 
 export function Sidebar({ unreadCount, groupsUnreadCount }: { unreadCount: number; groupsUnreadCount: number }) {
   const pathname = usePathname();
-  const { canAccess, loading: roleLoading } = useRole();
+  const { canAccess, canAccessModule, loading: roleLoading } = useRole();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Filter navigation items by role — items without minRole are visible to all
+  // Filter navigation items by role + module permissions
   const visibleNav = useMemo(
-    () => navigation.filter((item) => canAccess(item.minRole ?? "viewer")),
-    [canAccess]
+    () => navigation.filter(
+      (item) =>
+        canAccess(item.minRole ?? "viewer") &&
+        (item.module === undefined || canAccessModule(item.module)),
+    ),
+    [canAccess, canAccessModule],
   );
 
   // Close popover on click outside

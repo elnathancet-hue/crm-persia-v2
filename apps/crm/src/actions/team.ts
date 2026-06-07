@@ -3,6 +3,7 @@
 import { requireRole } from "@/lib/auth";
 import { withAuditedAdmin } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
+import { FULL_PERMISSIONS, type OrgPermissions } from "@/lib/permissions";
 
 export async function createTeamMember(data: {
   firstName: string;
@@ -11,6 +12,7 @@ export async function createTeamMember(data: {
   phone: string;
   password: string;
   role: string;
+  permissions?: OrgPermissions;
 }) {
   const { orgId, userId } = await requireRole("admin");
 
@@ -57,6 +59,7 @@ export async function createTeamMember(data: {
         user_id: newUser.user.id,
         organization_id: orgId,
         role: data.role,
+        permissions: (data.permissions ?? FULL_PERMISSIONS) as never,
         is_active: true,
       });
 
@@ -122,6 +125,51 @@ export async function toggleMemberActive(memberId: string) {
       const { error } = await admin
         .from("organization_members")
         .update({ is_active: !member.is_active })
+        .eq("id", memberId)
+        .eq("organization_id", orgId);
+
+      if (error) throw new Error(error.message);
+    }
+  );
+  revalidatePath("/settings/team");
+}
+
+/**
+ * Atualiza role + permissions de um membro atomicamente.
+ * Chamado pelo preset-card da UI de equipe.
+ * Owners nunca podem ter role/permissions alterados.
+ */
+export async function updateMemberPermissions(
+  memberId: string,
+  role: string,
+  permissions: OrgPermissions,
+) {
+  const { orgId, userId } = await requireRole("admin");
+
+  await withAuditedAdmin(
+    {
+      reason: "crm_update_member_permissions",
+      userId,
+      orgId,
+      action: "crm_update_member_permissions",
+      entityType: "member",
+      entityId: memberId,
+      metadata: { role },
+    },
+    async (admin) => {
+      const { data: member } = await admin
+        .from("organization_members")
+        .select("role")
+        .eq("id", memberId)
+        .eq("organization_id", orgId)
+        .single();
+
+      if (!member) throw new Error("Membro nao encontrado");
+      if (member.role === "owner") throw new Error("Nao pode alterar permissoes do dono");
+
+      const { error } = await admin
+        .from("organization_members")
+        .update({ role, permissions: permissions as never })
         .eq("id", memberId)
         .eq("organization_id", orgId);
 

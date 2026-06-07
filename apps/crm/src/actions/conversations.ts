@@ -110,7 +110,7 @@ export async function getConversations(
   options: { filter?: ConversationFilter; search?: string } = {}
 ) {
   // Agent read — orgId param is validated against caller's org below
-  const { supabase, orgId: callerOrgId } = await requireRole("agent");
+  const { supabase, orgId: callerOrgId, userId, permissions } = await requireRole("agent");
   if (orgId !== callerOrgId) return { data: null, error: "Org mismatch" };
 
   const { filter = "all", search } = options;
@@ -135,6 +135,12 @@ export async function getConversations(
     .eq("organization_id", orgId)
     .neq("status", "closed")
     .order("last_message_at", { ascending: false, nullsFirst: false });
+
+  // Módulo C: escopo por own_only
+  // Conversas legadas têm assigned_to = "ai" — incluímos para não mostrar tela vazia
+  if (permissions?.chat?.own_only) {
+    query = query.or(`assigned_to.eq.${userId},assigned_to.eq.ai`);
+  }
 
   if (filter === "ai") {
     query = query.eq("assigned_to", "ai");
@@ -798,4 +804,58 @@ export async function uploadScheduledMessageMediaAction(
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Nao foi possivel enviar a midia" };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Módulo A-5 — Distribuição manual por fila
+// ---------------------------------------------------------------------------
+
+export async function getActiveQueues() {
+  const { supabase, orgId } = await requireRole("agent");
+  const { data, error } = await supabase
+    .from("queues")
+    .select("id, name")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .order("name");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function transferConversationToQueue(
+  conversationId: string,
+  queueId: string,
+) {
+  const { supabase, orgId } = await requireRole("agent");
+
+  const { data: agentId, error: rpcError } = await supabase.rpc(
+    "pick_agent_from_queue",
+    { p_org_id: orgId, p_queue_id: queueId },
+  );
+
+  if (rpcError) throw new Error(rpcError.message);
+  if (!agentId) throw new Error("Fila sem agentes disponíveis");
+
+  const { error: updateError } = await supabase
+    .from("conversations")
+    .update({
+      assigned_to: agentId,
+      queue_id: queueId,
+      status: "waiting_human",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", conversationId)
+    .eq("organization_id", orgId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  await supabase.from("queue_distribution_log").insert({
+    organization_id: orgId,
+    queue_id: queueId,
+    assigned_to: agentId,
+    conversation_id: conversationId,
+  });
+
+  revalidatePath("/chat");
+  return { agentId };
 }

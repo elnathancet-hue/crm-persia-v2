@@ -63,8 +63,12 @@ function asErrorMessage(err: unknown, fallback = "Erro inesperado. Tente novamen
 // ============================================================================
 
 export async function getLeads(filters: LeadFilters = {}) {
-  const { supabase, orgId } = await requireRole("agent");
-  return listLeads({ db: supabase, orgId }, filters);
+  const { supabase, orgId, userId, permissions } = await requireRole("agent");
+  // Módulo C: own_only restringe aos leads do próprio usuário
+  const scopedFilters: LeadFilters = permissions?.leads?.own_only
+    ? { ...filters, assigneeIds: [userId] }
+    : filters;
+  return listLeads({ db: supabase, orgId }, scopedFilters);
 }
 
 // ============================================================================

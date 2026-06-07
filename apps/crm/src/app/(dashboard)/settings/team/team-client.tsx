@@ -12,9 +12,10 @@ import {
   MoreHorizontal,
   Power,
   PowerOff,
+  KeyRound,
 } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Button } from "@persia/ui/button";
@@ -27,13 +28,6 @@ import {
   DialogFooter,
   DialogClose,
 } from "@persia/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@persia/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,7 +42,17 @@ import {
   TableHeader,
   TableRow,
 } from "@persia/ui/table";
-import { createTeamMember, updateMemberRole, toggleMemberActive } from "@/actions/team";
+import {
+  PERMISSION_PRESETS,
+  PRESET_LABELS,
+  PRESET_DESCRIPTIONS,
+  PRESET_ROLE,
+  detectPreset,
+  FULL_PERMISSIONS,
+  type OrgPermissions,
+  type PresetKey,
+} from "@/lib/permissions";
+import { createTeamMember, toggleMemberActive, updateMemberPermissions } from "@/actions/team";
 import { toast } from "sonner";
 
 interface TeamMember {
@@ -57,31 +61,68 @@ interface TeamMember {
   role: string;
   is_active: boolean;
   created_at: string;
+  permissions?: OrgPermissions;
   email: string;
   name: string;
 }
 
-const ROLE_CONFIG: Record<string, { label: string; description: string; icon: typeof Shield; variant: "default" | "secondary" | "outline" }> = {
-  owner: { label: "Dono", description: "Acesso total ao sistema", icon: ShieldCheck, variant: "default" },
-  admin: { label: "Admin", description: "Gerencia equipe, configurações e automações", icon: Shield, variant: "default" },
-  agent: { label: "Agente", description: "Atende conversas, gerencia leads e filas", icon: User, variant: "secondary" },
-  viewer: { label: "Visualizador", description: "Apenas visualiza, sem ação", icon: Eye, variant: "outline" },
+const ROLE_CONFIG: Record<string, { label: string; icon: typeof Shield; variant: "default" | "secondary" | "outline" }> = {
+  owner: { label: "Dono", icon: ShieldCheck, variant: "default" },
+  admin: { label: "Admin", icon: Shield, variant: "default" },
+  agent: { label: "Agente", icon: User, variant: "secondary" },
+  viewer: { label: "Visualizador", icon: Eye, variant: "outline" },
 };
+
+const PRESET_ORDER: PresetKey[] = ["agendador", "usuario", "usuario_leads", "gestor", "admin"];
+
+function PresetCards({
+  value,
+  onChange,
+}: {
+  value: PresetKey;
+  onChange: (v: PresetKey) => void;
+}) {
+  return (
+    <div className="grid gap-2">
+      {PRESET_ORDER.map((key) => (
+        <button
+          key={key}
+          type="button"
+          role="radio"
+          aria-checked={value === key}
+          onClick={() => onChange(key)}
+          className={`text-left rounded-lg border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            value === key
+              ? "border-primary bg-primary/5 ring-1 ring-primary"
+              : "border-border hover:border-muted-foreground/40"
+          }`}
+        >
+          <p className="text-sm font-semibold">{PRESET_LABELS[key]}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{PRESET_DESCRIPTIONS[key]}</p>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[] }) {
   const [members, setMembers] = React.useState<TeamMember[]>(initialMembers);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
-  // Form
+  // Create form
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
-  const [role, setRole] = React.useState("agent");
+  const [selectedPreset, setSelectedPreset] = React.useState<PresetKey>("usuario");
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  // Edit permissions dialog
+  const [permEditMember, setPermEditMember] = React.useState<TeamMember | null>(null);
+  const [editPreset, setEditPreset] = React.useState<PresetKey>("usuario");
 
   function setError(field: string, msg: string) {
     setErrors(prev => ({ ...prev, [field]: msg }));
@@ -106,7 +147,7 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
     setPhone("");
     setPassword("");
     setConfirmPassword("");
-    setRole("agent");
+    setSelectedPreset("usuario");
     setErrors({});
   }
 
@@ -131,14 +172,16 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
         password,
-        role,
+        role: PRESET_ROLE[selectedPreset],
+        permissions: PERMISSION_PRESETS[selectedPreset],
       });
       setMembers((prev) => [
         ...prev,
         {
           id: result.id,
           user_id: result.id,
-          role,
+          role: PRESET_ROLE[selectedPreset],
+          permissions: PERMISSION_PRESETS[selectedPreset],
           is_active: true,
           created_at: new Date().toISOString(),
           email: result.email,
@@ -155,13 +198,34 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
     }
   }
 
-  async function handleRoleChange(memberId: string, newRole: string) {
+  function openPermEdit(member: TeamMember) {
+    const current = detectPreset(member.permissions ?? FULL_PERMISSIONS) ?? "usuario";
+    setEditPreset(current);
+    setPermEditMember(member);
+  }
+
+  async function handleUpdatePermissions() {
+    if (!permEditMember) return;
+    setSaving(true);
     try {
-      await updateMemberRole(memberId, newRole);
-      setMembers((prev) => prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m)));
-      toast.success("Funcao atualizada");
+      await updateMemberPermissions(
+        permEditMember.id,
+        PRESET_ROLE[editPreset],
+        PERMISSION_PRESETS[editPreset],
+      );
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.id === permEditMember.id
+            ? { ...m, role: PRESET_ROLE[editPreset], permissions: PERMISSION_PRESETS[editPreset] }
+            : m,
+        ),
+      );
+      toast.success("Permissões atualizadas");
+      setPermEditMember(null);
     } catch (err: any) {
-      toast.error(err.message || "Erro ao atualizar");
+      toast.error(err.message || "Erro ao atualizar permissões");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -229,16 +293,9 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
                         {member.role === "owner" ? (
                           <Badge variant={rc.variant}>{rc.label}</Badge>
                         ) : (
-                          <Select value={member.role} onValueChange={(v) => handleRoleChange(member.id, v ?? member.role)}>
-                            <SelectTrigger className="h-7 w-28 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="agent">Agente</SelectItem>
-                              <SelectItem value="viewer">Visualizador</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <span className="text-sm text-muted-foreground">
+                            {PRESET_LABELS[detectPreset(member.permissions ?? FULL_PERMISSIONS) ?? "usuario"]}
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -258,6 +315,10 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openPermEdit(member)}>
+                                <KeyRound className="size-4" />
+                                Permissões
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleToggleActive(member.id)}>
                                 {member.is_active ? <PowerOff className="size-4" /> : <Power className="size-4" />}
                                 {member.is_active ? "Desativar" : "Ativar"}
@@ -274,6 +335,28 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
           </CardContent>
         </Card>
       )}
+
+      {/* Edit Permissions Dialog */}
+      <Dialog open={!!permEditMember} onOpenChange={(open) => { if (!open) setPermEditMember(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Permissões — {permEditMember?.name}</DialogTitle>
+            <DialogDescription>
+              Escolha o perfil de acesso para este membro
+            </DialogDescription>
+          </DialogHeader>
+          <PresetCards value={editPreset} onChange={setEditPreset} />
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>
+              Cancelar
+            </DialogClose>
+            <Button onClick={handleUpdatePermissions} disabled={saving}>
+              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Member Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -323,17 +406,8 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
             </div>
 
             <div className="space-y-2">
-              <Label>Função</Label>
-              <Select value={role} onValueChange={(v) => setRole(v ?? "agent")}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin - Gerencia equipe e configurações</SelectItem>
-                  <SelectItem value="agent">Agente - Atende conversas, gerencia leads</SelectItem>
-                  <SelectItem value="viewer">Visualizador - Apenas visualiza</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Permissões</Label>
+              <PresetCards value={selectedPreset} onChange={setSelectedPreset} />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

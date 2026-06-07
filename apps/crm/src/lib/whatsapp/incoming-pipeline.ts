@@ -29,6 +29,7 @@ import { phoneBR } from "@persia/shared/validation";
 import { revalidateLeadAndChatCaches } from "@/lib/cache/lead-revalidation";
 import { getAndCacheContactAvatar } from "@/lib/lead-avatar-cache";
 import { handleInboundReplyForCampaigns } from "@/lib/campaigns/stop-on-reply";
+import { distributeToQueue } from "@/lib/whatsapp/queue-distributor";
 
 export interface IncomingContext {
   supabase: SupabaseClient;
@@ -259,14 +260,23 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     .maybeSingle();
 
   if (!conversation) {
+    // Tenta distribuir pela fila antes de cair para "ai".
+    // Falha silenciosa: se distributeToQueue lançar, pipeline continua normalmente.
+    const dist = await distributeToQueue(supabase, orgId, lead.id).catch(() => ({
+      agentId: null,
+      queueId: null,
+      setLeadOwner: false,
+    }));
+
     const { data: newConv, error: convErr } = await supabase
       .from("conversations")
       .insert({
         organization_id: orgId,
         lead_id: lead.id,
         channel: "whatsapp",
-        status: "active",
-        assigned_to: "ai",
+        status: dist.agentId ? "waiting_human" : "active",
+        assigned_to: dist.agentId ?? "ai",
+        queue_id: dist.queueId ?? null,
         last_message_at: new Date().toISOString(),
       })
       .select("id, assigned_to, status")
@@ -292,6 +302,16 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
       });
     } else {
       conversation = newConv;
+      // Se a fila configurou set_lead_owner, atribui o agente ao lead também.
+      if (dist.agentId && dist.setLeadOwner) {
+        supabase
+          .from("leads")
+          .update({ assigned_to: dist.agentId })
+          .eq("id", lead.id)
+          .then(({ error }) => {
+            if (error) console.error("[queue-distributor] set_lead_owner failed:", error.message);
+          });
+      }
     }
   }
 

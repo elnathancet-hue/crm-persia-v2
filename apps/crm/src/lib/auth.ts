@@ -1,5 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import {
+  type OrgPermissions,
+  type PermissionModule,
+  type PermissionAction,
+  FULL_PERMISSIONS,
+  hasPermission,
+} from "@/lib/permissions";
 
 export type OrgRole = "owner" | "admin" | "agent" | "viewer";
 
@@ -13,6 +20,7 @@ const ROLE_HIERARCHY: Record<OrgRole, number> = {
 interface MembershipRow {
   organization_id: string;
   role: OrgRole;
+  permissions: OrgPermissions;
 }
 
 /**
@@ -28,7 +36,7 @@ async function loadMemberships(
 ): Promise<MembershipRow[]> {
   const { data, error } = await supabase
     .from("organization_members")
-    .select("organization_id, role")
+    .select("organization_id, role, permissions")
     .eq("user_id", userId)
     .eq("is_active", true)
     .order("created_at", { ascending: true });
@@ -40,6 +48,7 @@ async function loadMemberships(
     .map((r) => ({
       organization_id: r.organization_id as string,
       role: r.role as OrgRole,
+      permissions: (r.permissions as unknown as OrgPermissions) ?? FULL_PERMISSIONS,
     }));
 }
 
@@ -83,6 +92,7 @@ export async function getAuthContext() {
       orgId: null,
       userId: user.id,
       role: null,
+      permissions: FULL_PERMISSIONS,
       memberships: [] as MembershipRow[],
     };
   }
@@ -93,6 +103,7 @@ export async function getAuthContext() {
     orgId: active.organization_id,
     userId: user.id,
     role: active.role,
+    permissions: active.permissions,
     memberships,
   };
 }
@@ -143,6 +154,23 @@ export async function requireRole(minRole: OrgRole) {
     orgId: active.organization_id,
     userId: user.id,
     role: active.role,
+    permissions: active.permissions,
     memberships,
   };
+}
+
+/**
+ * Verifica se o membro tem permissão para uma ação em um módulo.
+ * Usa requireRole("viewer") — qualquer membro autenticado pode chamar.
+ * Lança "Permissao insuficiente" se o módulo/ação estiver bloqueado.
+ */
+export async function requirePermission(
+  module: PermissionModule,
+  action: PermissionAction = "read",
+) {
+  const ctx = await requireRole("viewer");
+  if (!hasPermission(ctx.permissions, module, action)) {
+    throw new Error(`Permissao insuficiente: ${module}.${action}`);
+  }
+  return ctx;
 }

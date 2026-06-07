@@ -22,7 +22,7 @@ interface MobileNavDrawerProps {
 
 export function MobileNavDrawer({ open, onClose, groupsUnreadCount }: MobileNavDrawerProps) {
   const pathname = usePathname();
-  const { canAccess } = useRole();
+  const { canAccess, canAccessModule } = useRole();
   const { profile } = useUser();
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
 
@@ -31,9 +31,10 @@ export function MobileNavDrawer({ open, onClose, groupsUnreadCount }: MobileNavD
       navigation.filter(
         (item) =>
           !PRIMARY_HREFS.includes(item.href) &&
-          canAccess(item.minRole ?? "viewer")
+          canAccess(item.minRole ?? "viewer") &&
+          (item.module === undefined || canAccessModule(item.module)),
       ),
-    [canAccess]
+    [canAccess, canAccessModule],
   );
 
   function handleLinkClick() {
