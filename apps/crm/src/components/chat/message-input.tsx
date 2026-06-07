@@ -62,6 +62,7 @@ type ReplyTo = {
 type MessageInputProps = {
   conversationId: string;
   onMessageSent: (message: Message) => void;
+  onReplaceMessage?: (tempId: string, msg: Message | null) => void;
   disabled?: boolean;
   replyTo?: ReplyTo | null;
   onClearReply?: () => void;
@@ -77,6 +78,7 @@ function getMediaType(mimeType: string): "image" | "audio" | "video" | "document
 export function MessageInput({
   conversationId,
   onMessageSent,
+  onReplaceMessage,
   disabled = false,
   replyTo,
   onClearReply,
@@ -201,7 +203,26 @@ export function MessageInput({
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         setIsRecording(false);
         setRecordingSeconds(0);
-        setSending(true);
+        const tempId = `optimistic-${Date.now()}`;
+        onMessageSent({
+          id: tempId,
+          conversation_id: conversationId,
+          organization_id: "",
+          lead_id: "",
+          sender: "agent",
+          sender_user_id: null,
+          content: null,
+          type: "ptt",
+          media_url: null,
+          media_type: "ptt",
+          whatsapp_msg_id: null,
+          status: "sending",
+          metadata: null,
+          created_at: new Date().toISOString(),
+          _optimistic: true,
+          _localPreview: null,
+        });
+        onClearReply?.();
         try {
           const formData = new FormData();
           formData.append("conversationId", conversationId);
@@ -210,12 +231,15 @@ export function MessageInput({
           if (replyTo?.whatsapp_msg_id) formData.append("replyToWhatsAppMsgId", replyTo.whatsapp_msg_id);
           if (replyTo?.id) formData.append("replyToMessageId", replyTo.id);
           const { data, error } = await sendMediaViaWhatsApp(formData);
-          if (data) { onMessageSent(data); onClearReply?.(); }
-          if (error) toast.error(`Falha ao enviar áudio: ${error}`);
+          if (data) {
+            onReplaceMessage?.(tempId, data);
+          } else {
+            onReplaceMessage?.(tempId, null);
+            toast.error(`Falha ao enviar áudio: ${error}`);
+          }
         } catch (err) {
+          onReplaceMessage?.(tempId, null);
           toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
-        } finally {
-          setSending(false);
         }
       };
 
@@ -255,32 +279,57 @@ export function MessageInput({
 
     // Send media if file is selected
     if (selectedFile) {
-      setSending(true);
+      const file = selectedFile;
+      const caption = content.trim() || undefined;
+      const mediaType = getMediaType(file.type);
+      const localPreview = filePreview;
+
+      // Optimistic: clear input immediately and show loading bubble
+      setContent("");
+      clearFile();
+      onClearReply?.();
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+      const tempId = `optimistic-${Date.now()}`;
+      onMessageSent({
+        id: tempId,
+        conversation_id: conversationId,
+        organization_id: "",
+        lead_id: "",
+        sender: "agent",
+        sender_user_id: null,
+        content: caption ?? null,
+        type: mediaType,
+        media_url: localPreview ?? null,
+        media_type: mediaType,
+        whatsapp_msg_id: null,
+        status: "sending",
+        metadata: null,
+        created_at: new Date().toISOString(),
+        _optimistic: true,
+        _localPreview: localPreview,
+      });
 
       try {
-        const mediaType = getMediaType(selectedFile.type);
         const formData = new FormData();
         formData.append("conversationId", conversationId);
-        formData.append("file", selectedFile);
+        formData.append("file", file);
         formData.append("type", mediaType);
-        if (content.trim()) formData.append("caption", content.trim());
+        if (caption) formData.append("caption", caption);
         if (replyTo?.whatsapp_msg_id) formData.append("replyToWhatsAppMsgId", replyTo.whatsapp_msg_id);
         if (replyTo?.id) formData.append("replyToMessageId", replyTo.id);
         const { data, error } = await sendMediaViaWhatsApp(formData);
-
         if (data) {
-          onMessageSent(data);
-          setContent("");
-          clearFile();
-          onClearReply?.();
-          if (textareaRef.current) textareaRef.current.style.height = "auto";
+          onReplaceMessage?.(tempId, data);
+        } else {
+          onReplaceMessage?.(tempId, null);
+          toast.error(`Falha ao enviar: ${error}`);
         }
-        if (error) toast.error(`Falha ao enviar: ${error}`);
       } catch (err) {
+        onReplaceMessage?.(tempId, null);
         toast.error(err instanceof Error ? err.message : "Erro ao processar arquivo");
       }
 
-      setSending(false);
       textareaRef.current?.focus();
       return;
     }

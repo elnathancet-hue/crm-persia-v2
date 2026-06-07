@@ -196,6 +196,10 @@ interface GroupMessage {
   reply_to_whatsapp_msg_id: string | null;
   is_pinned?: boolean;
   created_at: string;
+  /** Mensagem enviada localmente antes da confirmação do servidor */
+  _optimistic?: boolean;
+  /** Preview local (data URL) usado durante o upload */
+  _localPreview?: string | null;
 }
 
 async function resolveGroupMessageMediaUrl(
@@ -342,7 +346,6 @@ export function GroupDetailClient({
   const [attachedMediaType, setAttachedMediaType] = React.useState<
     "image" | "video" | "audio" | "document"
   >("document");
-  const [sendingMedia, setSendingMedia] = React.useState(false);
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -512,7 +515,15 @@ export function GroupDetailClient({
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         setIsRecording(false);
         setRecordingSeconds(0);
-        setSendingMedia(true);
+        const tempId = `optimistic-${Date.now()}`;
+        setMessages((prev) => [...prev, {
+          id: tempId, direction: "outbound", text: null,
+          sender_name: null, sender_jid: null, sender_phone: null,
+          sender_lead_id: null, sender_membership_id: null, sender_identity_kind: null,
+          sender_avatar_url: null, media_type: "ptt", media_url: null,
+          whatsapp_msg_id: null, reply_to_whatsapp_msg_id: null, is_pinned: false,
+          created_at: new Date().toISOString(), _optimistic: true, _localPreview: null,
+        }]);
         try {
           const formData = new FormData();
           formData.append("groupId", group.id);
@@ -521,18 +532,11 @@ export function GroupDetailClient({
           const result = await sendMediaToGroup(formData);
           if (result.error) throw new Error(result.error);
           if (result.message) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === result.message.id)) {
-                return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-              }
-              return [...prev, result.message as GroupMessage];
-            });
+            setMessages((prev) => prev.map((m) => m.id === tempId ? (result.message as GroupMessage) : m));
           }
-          toast.success("Áudio enviado");
         } catch (err: any) {
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
           toast.error(err.message || "Erro ao enviar áudio");
-        } finally {
-          setSendingMedia(false);
         }
       };
       recorder.start();
@@ -567,9 +571,18 @@ export function GroupDetailClient({
       const caption = chatInput.trim() || undefined;
       const file = attachedFile;
       const mt = attachedMediaType;
+      const localPreview = attachedPreview;
+      const tempId = `optimistic-${Date.now()}`;
       clearAttachment();
       setChatInput("");
-      setSendingMedia(true);
+      setMessages((prev) => [...prev, {
+        id: tempId, direction: "outbound", text: caption || null,
+        sender_name: null, sender_jid: null, sender_phone: null,
+        sender_lead_id: null, sender_membership_id: null, sender_identity_kind: null,
+        sender_avatar_url: null, media_type: mt, media_url: localPreview || null,
+        whatsapp_msg_id: null, reply_to_whatsapp_msg_id: null, is_pinned: false,
+        created_at: new Date().toISOString(), _optimistic: true, _localPreview: localPreview,
+      }]);
       try {
         const formData = new FormData();
         formData.append("groupId", group.id);
@@ -579,18 +592,11 @@ export function GroupDetailClient({
         const result = await sendMediaToGroup(formData);
         if (result.error) throw new Error(result.error);
         if (result.message) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === result.message.id)) {
-              return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-            }
-            return [...prev, result.message as GroupMessage];
-          });
+          setMessages((prev) => prev.map((m) => m.id === tempId ? (result.message as GroupMessage) : m));
         }
-        toast.success("Mídia enviada");
       } catch (err: any) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
         toast.error(err.message || "Erro ao enviar mídia");
-      } finally {
-        setSendingMedia(false);
       }
       return;
     }
@@ -1096,64 +1102,80 @@ export function GroupDetailClient({
                         }
                       >
                         {/* Media content */}
-                        {msg.media_type === "image" && msg.media_url && (
-                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={msg.media_url}
-                              alt="Imagem"
-                              className="max-w-[240px] max-h-[200px] object-cover"
-                            />
-                          </a>
+                        {msg.media_type === "image" && (
+                          msg._optimistic ? (
+                            <div className="relative max-w-[240px]">
+                              {msg._localPreview ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={msg._localPreview} alt="" className="max-w-[240px] max-h-[200px] object-cover opacity-50" />
+                              ) : (
+                                <div className="w-[240px] h-[140px] bg-black/10 rounded" />
+                              )}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <Loader2 className="size-8 text-white drop-shadow animate-spin" />
+                              </div>
+                            </div>
+                          ) : msg.media_url ? (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={msg.media_url} alt="Imagem" className="max-w-[240px] max-h-[200px] object-cover" />
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <Image className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Imagem</span>
+                            </div>
+                          )
                         )}
-                        {msg.media_type === "image" && !msg.media_url && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
-                            <Image className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Imagem</span>
-                          </div>
+                        {msg.media_type === "video" && (
+                          msg._optimistic ? (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Enviando vídeo…</span>
+                            </div>
+                          ) : msg.media_url ? (
+                            <video controls src={msg.media_url} className="max-w-[240px] max-h-[200px] rounded-xl mb-1" />
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <FileVideo className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Vídeo</span>
+                            </div>
+                          )
                         )}
-                        {msg.media_type === "video" && msg.media_url && (
-                          <video
-                            controls
-                            src={msg.media_url}
-                            className="max-w-[240px] max-h-[200px] rounded-xl mb-1"
-                          />
+                        {(msg.media_type === "audio" || msg.media_type === "ptt") && (
+                          msg._optimistic ? (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Enviando áudio…</span>
+                            </div>
+                          ) : msg.media_url ? (
+                            <div className="px-2.5 pt-2 mb-1">
+                              <GroupAudioPlayer src={msg.media_url} isOutgoing={isOutbound} />
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <Mic className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Áudio</span>
+                            </div>
+                          )
                         )}
-                        {msg.media_type === "video" && !msg.media_url && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
-                            <FileVideo className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
-                          </div>
-                        )}
-                        {(msg.media_type === "audio" || msg.media_type === "ptt") && msg.media_url && (
-                          <div className="px-2.5 pt-2 mb-1">
-                            <GroupAudioPlayer src={msg.media_url} isOutgoing={isOutbound} />
-                          </div>
-                        )}
-                        {(msg.media_type === "audio" || msg.media_type === "ptt") && !msg.media_url && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
-                            <Mic className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Áudio</span>
-                          </div>
-                        )}
-                        {msg.media_type === "document" && msg.media_url && (
-                          <a
-                            href={msg.media_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-2.5 pt-2 hover:underline"
-                          >
-                            <File className="size-5 text-muted-foreground shrink-0" />
-                            <span className="text-[13px] truncate max-w-[180px]">
-                              Abrir documento
-                            </span>
-                          </a>
-                        )}
-                        {msg.media_type === "document" && !msg.media_url && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2">
-                            <File className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Documento</span>
-                          </div>
+                        {msg.media_type === "document" && (
+                          msg._optimistic ? (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Enviando documento…</span>
+                            </div>
+                          ) : msg.media_url ? (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-2.5 pt-2 hover:underline">
+                              <File className="size-5 text-muted-foreground shrink-0" />
+                              <span className="text-[13px] truncate max-w-[180px]">Abrir documento</span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2">
+                              <File className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Documento</span>
+                            </div>
+                          )
                         )}
                         {msg.media_type === "sticker" && msg.media_url && (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -1281,9 +1303,9 @@ export function GroupDetailClient({
             <DropdownMenuTrigger
               className="size-10 shrink-0 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors disabled:opacity-50"
               style={{ color: "var(--chat-header-fg)" }}
-              disabled={sendingMedia || isRecording}
+              disabled={isRecording}
             >
-              {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+              <Plus className="size-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top">
               <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
@@ -1362,7 +1384,7 @@ export function GroupDetailClient({
                 boxShadow: "none",
               }}
               rows={1}
-              disabled={sendingMessage || sendingMedia}
+              disabled={sendingMessage}
             />
           )}
 
@@ -1380,7 +1402,7 @@ export function GroupDetailClient({
             <Button
               size="icon"
               onClick={handleSendMessage}
-              disabled={sendingMessage || sendingMedia}
+              disabled={sendingMessage}
               className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >

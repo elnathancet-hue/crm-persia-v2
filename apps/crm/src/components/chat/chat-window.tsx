@@ -1168,6 +1168,17 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     }
   };
 
+  const handleReplaceMessage = (tempId: string, msg: Message | null) => {
+    setMessages((prev) => {
+      if (msg === null) return prev.filter((m) => m.id !== tempId);
+      // If realtime already added the real message, just remove the optimistic placeholder
+      if (prev.some((m) => m.id === msg.id)) {
+        return prev.filter((m) => m.id !== tempId);
+      }
+      return prev.map((m) => (m.id === tempId ? msg : m));
+    });
+  };
+
   // Empty state
   if (!conversationId) {
     return (
@@ -1847,41 +1858,79 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   />
                                 </a>
                               )}
-                              {msg.media_url && msg.type === "image" && (
-                                <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
-                                </a>
+                              {msg.type === "image" && (
+                                msg._optimistic ? (
+                                  <div className="relative mb-1 max-w-[240px]">
+                                    {msg._localPreview ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img src={msg._localPreview} alt="" className="max-h-64 rounded-xl object-cover opacity-50" />
+                                    ) : (
+                                      <div className="w-[240px] h-[160px] rounded-xl bg-black/10" />
+                                    )}
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <Loader2 className="size-8 text-white drop-shadow animate-spin" />
+                                    </div>
+                                  </div>
+                                ) : msg.media_url ? (
+                                  <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
+                                  </a>
+                                ) : null
                               )}
-                              {msg.media_url && (msg.type === "audio" || msg.type === "ptt") && (
-                                <div className="mb-1">
-                                  <AudioPlayer src={msg.media_url} isOutgoing={!isLead} />
-                                </div>
+                              {(msg.type === "audio" || msg.type === "ptt") && (
+                                msg._optimistic ? (
+                                  <div className="mb-1 flex items-center gap-2 px-2">
+                                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">Enviando áudio...</span>
+                                  </div>
+                                ) : msg.media_url ? (
+                                  <div className="mb-1">
+                                    <AudioPlayer src={msg.media_url} isOutgoing={!isLead} />
+                                  </div>
+                                ) : null
                               )}
-                              {msg.media_url && msg.type === "video" && (
-                                <video controls className="max-h-64 rounded-xl mb-1">
-                                  <source src={msg.media_url} />
-                                </video>
+                              {msg.type === "video" && (
+                                msg._optimistic ? (
+                                  <div className="relative mb-1 max-w-[240px]">
+                                    <div className="w-[240px] h-[160px] rounded-xl bg-black/10 flex items-center justify-center">
+                                      <Loader2 className="size-8 text-white drop-shadow animate-spin" />
+                                    </div>
+                                  </div>
+                                ) : msg.media_url ? (
+                                  <video controls className="max-h-64 rounded-xl mb-1">
+                                    <source src={msg.media_url} />
+                                  </video>
+                                ) : null
                               )}
-                              {msg.media_url && msg.type === "document" && (
-                                <a
-                                  href={msg.media_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="mb-1 flex min-w-56 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80"
-                                >
-                                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                                    <FileText className="size-5" />
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block max-w-52 truncate text-xs font-medium">
-                                      {getMessageFileName(msg)}
+                              {msg.type === "document" && (
+                                msg._optimistic ? (
+                                  <div className="mb-1 flex min-w-56 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3">
+                                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                      <Loader2 className="size-5 animate-spin" />
                                     </span>
-                                    <span className="block text-[10px] text-muted-foreground">
-                                      Abrir documento
+                                    <span className="text-xs text-muted-foreground">Enviando documento...</span>
+                                  </div>
+                                ) : msg.media_url ? (
+                                  <a
+                                    href={msg.media_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mb-1 flex min-w-56 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80"
+                                  >
+                                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                      <FileText className="size-5" />
                                     </span>
-                                  </span>
-                                </a>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block max-w-52 truncate text-xs font-medium">
+                                        {getMessageFileName(msg)}
+                                      </span>
+                                      <span className="block text-[10px] text-muted-foreground">
+                                        Abrir documento
+                                      </span>
+                                    </span>
+                                  </a>
+                                ) : null
                               )}
                               {msg.type === "location" && Boolean(msg.metadata) && (
                                 <div className="flex flex-col gap-1 mb-1">
@@ -2077,6 +2126,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         <MessageInput
           conversationId={conversationId}
           onMessageSent={handleMessageSent}
+          onReplaceMessage={handleReplaceMessage}
           disabled={isClosed}
           replyTo={replyTo ? {
             id: replyTo.id,

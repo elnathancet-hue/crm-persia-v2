@@ -171,6 +171,8 @@ interface GroupMessage {
   is_pinned?: boolean | null;
   status?: string | null;
   sender_lead?: GroupMessageSenderLead | null;
+  _optimistic?: boolean;
+  _localPreview?: string | null;
 }
 
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
@@ -746,7 +748,6 @@ function GroupChatPanel({
   const [loadingMsgs, setLoadingMsgs] = React.useState(true);
   const [chatInput, setChatInput] = React.useState("");
   const [sendingMessage, setSendingMessage] = React.useState(false);
-  const [sendingMedia, setSendingMedia] = React.useState(false);
   const [attachedFile, setAttachedFile] = React.useState<File | null>(null);
   const [attachedPreview, setAttachedPreview] = React.useState<string | null>(null);
   const [attachedMediaType, setAttachedMediaType] = React.useState<"image" | "video" | "audio" | "document">("document");
@@ -995,13 +996,24 @@ function GroupChatPanel({
       const caption = chatInput.trim() || undefined;
       const file = attachedFile;
       const mt = attachedMediaType;
+      const localPreview = attachedPreview;
       const replyingTo = replyTo;
+      const tempId = `optimistic-${Date.now()}`;
       clearAttachment();
       setChatInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
       setReplyTo(null);
       shouldAutoScroll.current = true;
-      setSendingMedia(true);
+      setMessages((prev) => [...prev, {
+        id: tempId, direction: "outbound", text: caption || null,
+        sender_name: null, sender_jid: null, sender_phone: null,
+        sender_lead_id: null, sender_membership_id: null,
+        sender_identity_kind: "unknown" as const, sender_avatar_url: null,
+        created_at: new Date().toISOString(), whatsapp_msg_id: null,
+        media_url: localPreview || null, media_type: mt,
+        reply_to_whatsapp_msg_id: replyingTo?.whatsapp_msg_id ?? null,
+        is_pinned: false, status: "sending", _optimistic: true, _localPreview: localPreview,
+      }]);
       try {
         const formData = new FormData();
         formData.append("groupId", group.id);
@@ -1012,18 +1024,11 @@ function GroupChatPanel({
         const result = await sendMediaToGroup(formData);
         if (result.error) throw new Error(result.error);
         if (result.message) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === result.message.id)) {
-              return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-            }
-            return [...prev, result.message as GroupMessage];
-          });
+          setMessages((prev) => prev.map((m) => m.id === tempId ? (result.message as GroupMessage) : m));
         }
-        toast.success("Mídia enviada");
       } catch (err: any) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
         toast.error(err.message || "Erro ao enviar mídia");
-      } finally {
-        setSendingMedia(false);
       }
       return;
     }
@@ -1068,7 +1073,17 @@ function GroupChatPanel({
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         setIsRecording(false);
         setRecordingSeconds(0);
-        setSendingMedia(true);
+        const tempId = `optimistic-${Date.now()}`;
+        setMessages((prev) => [...prev, {
+          id: tempId, direction: "outbound", text: null,
+          sender_name: null, sender_jid: null, sender_phone: null,
+          sender_lead_id: null, sender_membership_id: null,
+          sender_identity_kind: "unknown" as const, sender_avatar_url: null,
+          created_at: new Date().toISOString(), whatsapp_msg_id: null,
+          media_url: null, media_type: "ptt",
+          reply_to_whatsapp_msg_id: null, is_pinned: false,
+          status: "sending", _optimistic: true, _localPreview: null,
+        }]);
         try {
           const formData = new FormData();
           formData.append("groupId", group.id);
@@ -1077,18 +1092,11 @@ function GroupChatPanel({
           const result = await sendMediaToGroup(formData);
           if (result.error) throw new Error(result.error);
           if (result.message) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === result.message.id)) {
-                return prev.map((m) => m.id === result.message.id ? { ...m, ...result.message } : m);
-              }
-              return [...prev, result.message as GroupMessage];
-            });
+            setMessages((prev) => prev.map((m) => m.id === tempId ? (result.message as GroupMessage) : m));
           }
-          toast.success("\u00C1udio enviado");
         } catch (err: any) {
-          toast.error(err.message || "Erro ao enviar \u00E1udio");
-        } finally {
-          setSendingMedia(false);
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          toast.error(err.message || "Erro ao enviar áudio");
         }
       };
       recorder.start();
@@ -1896,57 +1904,83 @@ function GroupChatPanel({
                             <img src={msg.media_url} alt="Sticker" className="size-28 object-contain" />
                           </a>
                         )}
-                        {msg.media_url && msg.media_type === "image" && (
-                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="block">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.media_url} alt="" className="max-h-64 w-full rounded-t-[7.5px] object-cover mb-1" />
-                          </a>
+                        {msg.media_type === "image" && (
+                          msg._optimistic ? (
+                            <div className="relative max-w-full">
+                              {msg._localPreview ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={msg._localPreview} alt="" className="max-h-64 w-full rounded-t-[7.5px] object-cover mb-1 opacity-50" />
+                              ) : (
+                                <div className="h-32 w-full rounded-t-[7.5px] bg-black/10 mb-1" />
+                              )}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <Loader2 className="size-8 text-white drop-shadow animate-spin" />
+                              </div>
+                            </div>
+                          ) : msg.media_url ? (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="block">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={msg.media_url} alt="" className="max-h-64 w-full rounded-t-[7.5px] object-cover mb-1" />
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <Image className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Imagem</span>
+                            </div>
+                          )
                         )}
-                        {!msg.media_url && msg.media_type === "image" && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
-                            <Image className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Imagem</span>
-                          </div>
+                        {(msg.media_type === "audio" || msg.media_type === "ptt") && (
+                          msg._optimistic ? (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Enviando áudio…</span>
+                            </div>
+                          ) : msg.media_url ? (
+                            <AudioPlayer src={msg.media_url} isOutgoing={isOutbound} />
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <Mic className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Áudio</span>
+                            </div>
+                          )
                         )}
-                        {msg.media_url && (msg.media_type === "audio" || msg.media_type === "ptt") && (
-                          <AudioPlayer src={msg.media_url} isOutgoing={isOutbound} />
+                        {msg.media_type === "video" && (
+                          msg._optimistic ? (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Enviando vídeo…</span>
+                            </div>
+                          ) : msg.media_url ? (
+                            <video controls className="max-h-64 w-full rounded-t-[7.5px] mb-1">
+                              <source src={msg.media_url} />
+                            </video>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <FileVideo className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Vídeo</span>
+                            </div>
+                          )
                         )}
-                        {!msg.media_url && (msg.media_type === "audio" || msg.media_type === "ptt") && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
-                            <Mic className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Áudio</span>
-                          </div>
-                        )}
-                        {msg.media_url && msg.media_type === "video" && (
-                          <video controls className="max-h-64 w-full rounded-t-[7.5px] mb-1">
-                            <source src={msg.media_url} />
-                          </video>
-                        )}
-                        {!msg.media_url && msg.media_type === "video" && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
-                            <FileVideo className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Vídeo</span>
-                          </div>
-                        )}
-                        {msg.media_url && msg.media_type === "document" && (
-                          <a
-                            href={msg.media_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mb-1 flex min-w-52 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80"
-                          >
-                            <FileText className="size-8 shrink-0 text-primary" />
-                            <span className="flex flex-col min-w-0">
-                              <span className="truncate text-[13px] font-medium">Documento</span>
-                              <span className="block text-[10px] text-muted-foreground">Abrir documento</span>
-                            </span>
-                          </a>
-                        )}
-                        {!msg.media_url && msg.media_type === "document" && (
-                          <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
-                            <File className="size-5 text-muted-foreground" />
-                            <span className="text-[13px] text-muted-foreground">Documento</span>
-                          </div>
+                        {msg.media_type === "document" && (
+                          msg._optimistic ? (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Enviando documento…</span>
+                            </div>
+                          ) : msg.media_url ? (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="mb-1 flex min-w-52 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80">
+                              <FileText className="size-8 shrink-0 text-primary" />
+                              <span className="flex flex-col min-w-0">
+                                <span className="truncate text-[13px] font-medium">Documento</span>
+                                <span className="block text-[10px] text-muted-foreground">Abrir documento</span>
+                              </span>
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
+                              <File className="size-5 text-muted-foreground" />
+                              <span className="text-[13px] text-muted-foreground">Documento</span>
+                            </div>
+                          )
                         )}
                         {/* Text / caption + timestamp */}
                         <div className={msg.text ? "px-2.5 py-1.5 text-[14.2px] leading-5" : "px-2.5 pb-1.5 pt-0 text-[14.2px] leading-5"}>
@@ -2133,11 +2167,11 @@ function GroupChatPanel({
                 type="button"
                 variant="ghost"
                 size="icon"
-                disabled={sendingMedia || isRecording}
+                disabled={isRecording}
                 className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
-                aria-label="Mais op\u00E7\u00F5es"
+                aria-label="Mais opções"
               >
-                {sendingMedia ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
+                <Plus className="size-5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start">
@@ -2172,7 +2206,7 @@ function GroupChatPanel({
                 style={{ color: "var(--chat-header-fg)" }}
                 title="Emoji"
                 aria-label="Emoji"
-                disabled={isRecording || sendingMessage || sendingMedia}
+                disabled={isRecording || sendingMessage}
               >
                 <Smile className="size-4" />
               </Button>
@@ -2202,7 +2236,7 @@ function GroupChatPanel({
                 style={{ color: "var(--chat-header-fg)" }}
                 title="Agendar mensagem"
                 aria-label="Agendar mensagem"
-                disabled={isRecording || sendingMessage || sendingMedia}
+                disabled={isRecording || sendingMessage}
               >
                 <Clock className="size-4" />
               </Button>
@@ -2282,7 +2316,7 @@ function GroupChatPanel({
               className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none placeholder:text-[color:var(--chat-timestamp)] focus:ring-1 focus:ring-[color:var(--chat-send-bg)]"
               style={{ background: "var(--chat-input-field-bg)", color: "var(--chat-header-fg)", border: "none" }}
               rows={1}
-              disabled={sendingMessage || sendingMedia}
+              disabled={sendingMessage}
             />
           )}
 
@@ -2299,11 +2333,11 @@ function GroupChatPanel({
             <Button
               size="icon"
               onClick={handleSendMessage}
-              disabled={sendingMessage || sendingMedia}
+              disabled={sendingMessage}
               className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
-              {(sendingMessage || sendingMedia) ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              {sendingMessage ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
             </Button>
           ) : (
             <Button

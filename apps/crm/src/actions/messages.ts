@@ -37,6 +37,10 @@ export type Message = {
   metadata: unknown;
   is_pinned?: boolean;
   created_at: string;
+  /** UI-only: true while media is being uploaded (not persisted) */
+  _optimistic?: boolean;
+  /** UI-only: local object URL for preview while uploading */
+  _localPreview?: string | null;
 };
 
 type ReplySnapshot = {
