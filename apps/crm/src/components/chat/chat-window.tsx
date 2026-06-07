@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, getConversations, uploadScheduledMessageMediaAction, type ConversationWithLead } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage } from "@/actions/conversations";
+import { createAppointment } from "@/actions/agenda/appointments";
 import { getMessages, resendMessage, resolveMessageMediaUrl, editWhatsAppMessage, reactToWhatsAppMessage, deleteWhatsAppMessage, hideMessage, pinWhatsAppMessage, forwardMessagesToConversations, type Message } from "@/actions/messages";
 import { MessageInput } from "@/components/chat/message-input";
 import { Avatar, AvatarFallback, AvatarImage } from "@persia/ui/avatar";
@@ -41,11 +42,13 @@ import {
   DropdownMenuSeparator,
 } from "@persia/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@persia/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@persia/ui/select";
 import {
   AlertCircle,
   ArrowLeft,
   Bot,
   Calendar,
+  CalendarPlus,
   Check,
   CheckCheck,
   ChevronDown,
@@ -752,6 +755,14 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [closing, setClosing] = useState(false);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [apptDialogOpen, setApptDialogOpen] = useState(false);
+  const [apptTitle, setApptTitle] = useState("");
+  const [apptDate, setApptDate] = useState("");
+  const [apptTime, setApptTime] = useState("");
+  const [apptDuration, setApptDuration] = useState("60");
+  const [apptChannel, setApptChannel] = useState<"whatsapp" | "phone" | "online" | "in_person" | "">("");
+  const [apptDescription, setApptDescription] = useState("");
+  const [savingAppt, setSavingAppt] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryText, setSummaryText] = useState<string | null>(null);
@@ -1145,6 +1156,45 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     toast.success("Bot retomou a conversa");
   };
 
+  const handleSaveAppointment = async () => {
+    if (!apptTitle.trim() || !apptDate || !apptTime) return;
+    setSavingAppt(true);
+    try {
+      const start = new Date(`${apptDate}T${apptTime}`);
+      const durationMin = parseInt(apptDuration, 10);
+      const end = new Date(start.getTime() + durationMin * 60_000);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await createAppointment({
+        kind: "appointment",
+        title: apptTitle.trim(),
+        description: apptDescription.trim() || null,
+        lead_id: leadId ?? null,
+        start_at: start.toISOString(),
+        end_at: end.toISOString(),
+        duration_minutes: durationMin,
+        timezone: tz,
+        status: "confirmed",
+        channel: apptChannel || null,
+        location: null,
+        meeting_url: null,
+        service_id: null,
+        booking_page_id: null,
+      });
+      toast.success("Agendamento criado na agenda!");
+      setApptDialogOpen(false);
+      setApptTitle("");
+      setApptDate("");
+      setApptTime("");
+      setApptDuration("60");
+      setApptChannel("");
+      setApptDescription("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao criar agendamento");
+    } finally {
+      setSavingAppt(false);
+    }
+  };
+
   const handleClose = async () => {
     if (!conversationId) return;
     setClosing(true);
@@ -1456,6 +1506,19 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   Ver no CRM
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem
+                onClick={() => {
+                  const leadName = lead?.name as string | undefined;
+                  setApptTitle(leadName ? `Consulta com ${leadName}` : "Consulta");
+                  const now = new Date(Date.now() + 60 * 60_000);
+                  setApptDate(now.toISOString().slice(0, 10));
+                  setApptTime(now.toTimeString().slice(0, 5));
+                  setApptDialogOpen(true);
+                }}
+              >
+                <CalendarPlus className="size-4" />
+                Agendar consulta
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setTransferOpen(true)}
@@ -2323,6 +2386,104 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               Cancelar
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Appointment dialog */}
+      <Dialog open={apptDialogOpen} onOpenChange={(o) => { setApptDialogOpen(o); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="space-y-2">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <CalendarPlus className="size-5" />
+            </div>
+            <DialogTitle>Agendar consulta</DialogTitle>
+            <DialogDescription>
+              O agendamento será criado na agenda e vinculado a este lead.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Título</Label>
+              <Input
+                value={apptTitle}
+                onChange={(e) => setApptTitle(e.target.value)}
+                placeholder="Ex: Consulta com João"
+                maxLength={120}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={apptDate}
+                  onChange={(e) => setApptDate(e.target.value)}
+                  min={new Date().toISOString().slice(0, 10)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Hora</Label>
+                <Input
+                  type="time"
+                  value={apptTime}
+                  onChange={(e) => setApptTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Duração</Label>
+                <Select value={apptDuration} onValueChange={(v) => { if (v) setApptDuration(v); }}>
+                  <SelectTrigger>
+                    <SelectValue>{apptDuration ? `${apptDuration} min` : "Selecione"}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 min</SelectItem>
+                    <SelectItem value="30">30 min</SelectItem>
+                    <SelectItem value="45">45 min</SelectItem>
+                    <SelectItem value="60">60 min</SelectItem>
+                    <SelectItem value="90">90 min</SelectItem>
+                    <SelectItem value="120">120 min</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Canal</Label>
+                <Select value={apptChannel} onValueChange={(v) => setApptChannel(v as typeof apptChannel)}>
+                  <SelectTrigger>
+                    <SelectValue>{apptChannel === "whatsapp" ? "WhatsApp" : apptChannel === "phone" ? "Telefone" : apptChannel === "online" ? "Online" : apptChannel === "in_person" ? "Presencial" : "Opcional"}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Nenhum</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="phone">Telefone</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                    <SelectItem value="in_person">Presencial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Observações <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <Textarea
+                value={apptDescription}
+                onChange={(e) => setApptDescription(e.target.value)}
+                placeholder="Notas sobre a consulta..."
+                className="min-h-[72px] resize-none"
+                maxLength={500}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+            <Button
+              onClick={handleSaveAppointment}
+              disabled={!apptTitle.trim() || !apptDate || !apptTime || savingAppt}
+            >
+              {savingAppt ? <Loader2 className="size-3.5 mr-1 animate-spin" /> : <CalendarPlus className="size-3.5 mr-1" />}
+              Criar agendamento
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
