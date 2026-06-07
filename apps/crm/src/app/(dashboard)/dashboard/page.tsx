@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { LeadsByMonthChart } from "@/components/dashboard/leads-by-month-chart";
 import { PeriodSelector, type PeriodValue } from "@/components/dashboard/period-selector";
+import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import {
   Users,
   TrendingUp,
@@ -13,6 +14,8 @@ import {
   MessageSquare,
   Clock,
   Target,
+  UserX,
+  UserMinus,
 } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
@@ -129,6 +132,10 @@ export default async function DashboardPage({
   // Fixed 6-month window for the chart — always macro, ignores period selector
   const sixMonthsAgo = new Date(now.getTime() - 182 * 24 * 60 * 60 * 1000).toISOString();
 
+  // Alert thresholds
+  const twoHoursAgo = new Date(now.getTime() - 2 * 3_600_000).toISOString();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+
   // ── All queries in parallel ───────────────────────────────────────────────
   const [
     // Cumulative / current-state (no period filter)
@@ -150,6 +157,10 @@ export default async function DashboardPage({
     sourceLeadsRes,
     pipelinesRes,
     leadsWithStageRes,
+    // Alerts
+    alertUnassignedRes,
+    alertWaitingRes,
+    alertInactiveRes,
   ] = await Promise.all([
     supabase
       .from("leads")
@@ -242,6 +253,31 @@ export default async function DashboardPage({
       .select("stage_id")
       .eq("organization_id", orgId)
       .not("stage_id", "is", null),
+
+    // Alert: leads sem responsavel
+    supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .is("assigned_to", null)
+      .neq("status", "customer")
+      .neq("status", "lost"),
+    // Alert: conversas esperando > 2h
+    supabase
+      .from("conversations")
+      .select("*", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .eq("status", "waiting_human")
+      .lt("updated_at", twoHoursAgo),
+    // Alert: leads inativos 7d
+    supabase
+      .from("leads")
+      .select("*", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .neq("status", "customer")
+      .neq("status", "lost")
+      .not("assigned_to", "is", null)
+      .lt("updated_at", sevenDaysAgo),
   ]);
 
   // ── Revenue ───────────────────────────────────────────────────────────────
@@ -265,6 +301,11 @@ export default async function DashboardPage({
   const closedPrev = wonPrev + lostPrev;
   const conversionNow = closedNow > 0 ? Math.round((wonNow / closedNow) * 100) : 0;
   const conversionPrev = closedPrev > 0 ? Math.round((wonPrev / closedPrev) * 100) : 0;
+
+  // ── Alert counts
+  const alertUnassigned = alertUnassignedRes.count ?? 0;
+  const alertWaiting = alertWaitingRes.count ?? 0;
+  const alertInactive = alertInactiveRes.count ?? 0;
 
   // ── Trends ────────────────────────────────────────────────────────────────
   const trendLeads = calcTrend(newLeadsNow, newLeadsPrev);
@@ -435,6 +476,15 @@ export default async function DashboardPage({
           />
         </div>
       </div>
+
+      {/* Alertas operacionais */}
+      <AlertsPanel
+        alerts={[
+          { id: "unassigned", icon: UserX, count: alertUnassigned, label: "leads sem responsável", href: "/crm", variant: "error" },
+          { id: "waiting", icon: Clock, count: alertWaiting, label: "conversas aguardando há mais de 2h", href: "/chat", variant: "warning" },
+          { id: "inactive", icon: UserMinus, count: alertInactive, label: "leads sem atividade há 7+ dias", href: "/crm", variant: "muted" },
+        ]}
+      />
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
