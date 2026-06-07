@@ -157,6 +157,13 @@ export function MessageInput({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Arquivo muito grande. O limite para envio via WhatsApp é 16 MB.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      return;
+    }
+
     setSelectedFile(file);
 
     // Generate preview for images

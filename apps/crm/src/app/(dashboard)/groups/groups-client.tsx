@@ -1123,6 +1123,11 @@ function GroupChatPanel({
     if (!file) return;
     e.target.value = "";
 
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Arquivo muito grande. O limite para envio via WhatsApp é 16 MB.");
+      return;
+    }
+
     let mediaType: "image" | "video" | "audio" | "document" = "document";
     if (file.type.startsWith("image/")) mediaType = "image";
     else if (file.type.startsWith("video/")) mediaType = "video";

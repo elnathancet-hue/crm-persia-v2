@@ -468,6 +468,12 @@ export function GroupDetailClient({
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Arquivo muito grande. O limite para envio via WhatsApp é 16 MB.");
+      return;
+    }
+
     let mt: "image" | "video" | "audio" | "document" = "document";
     if (file.type.startsWith("image/")) mt = "image";
     else if (file.type.startsWith("video/")) mt = "video";
