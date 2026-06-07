@@ -454,7 +454,10 @@ function GroupListPanel({
 }) {
   const filtered = groups.filter((g) => {
     const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === "todos" || g.category === categoryFilter;
+    const matchesCategory =
+      categoryFilter === "todos" ||
+      (categoryFilter === "nao-lidas" && (unreadCounts[g.id] ?? 0) > 0) ||
+      g.category === categoryFilter;
     return matchesSearch && matchesCategory;
   });
 
@@ -479,7 +482,7 @@ function GroupListPanel({
       {/* Category filter */}
       <div className="shrink-0 border-b border-[color:var(--chat-sidebar-divider)] px-3 py-2">
         <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-          {["todos", "geral", "aquecimento", "evento", "oferta", "alunos"].map((cat) => (
+          {["todos", "nao-lidas"].map((cat) => (
             <Button
               key={cat}
               variant="ghost"
@@ -490,7 +493,7 @@ function GroupListPanel({
                   : "bg-[color:var(--chat-input-field-bg)] text-muted-foreground hover:bg-muted/80"
               }`}
             >
-              {cat === "todos" ? "Todos" : CATEGORY_LABELS[cat]}
+              {cat === "todos" ? "Todos" : "Não lidas"}
             </Button>
           ))}
         </div>
@@ -2538,10 +2541,6 @@ function GroupChatPanel({
               </p>
 
               <div className="mt-5 flex items-center gap-4">
-                <Button variant="secondary" className="h-auto flex-col rounded-full px-5 py-3" onClick={() => setInviteOpen(true)}>
-                  <UserPlus className="size-5" />
-                  <span className="text-xs font-normal">Adicionar</span>
-                </Button>
                 <Button
                   variant="secondary"
                   className="h-auto flex-col rounded-full px-5 py-3"
@@ -2556,15 +2555,11 @@ function GroupChatPanel({
               </div>
             </div>
 
-            <div className="border-t px-5 py-4">
-              <Textarea
-                name="group-details-description"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Adicionar descricao ao grupo"
-                className="min-h-16 resize-none border-0 px-0 shadow-none focus-visible:ring-0"
-              />
-            </div>
+            {editDescription && (
+              <div className="border-t px-5 py-4">
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{editDescription}</p>
+              </div>
+            )}
 
             <div className="border-t px-5 py-4">
               <div className="flex items-center justify-between">
@@ -2592,95 +2587,7 @@ function GroupChatPanel({
               )}
             </div>
 
-            <div className="border-t py-2">
-              <div className="flex items-center gap-4 px-5 py-3">
-                <Heart className="size-5 text-muted-foreground" />
-                <span className="text-sm">Adicionar aos favoritos</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 px-5 py-3">
-                <div className="flex items-center gap-4">
-                  <Bell className="size-5 text-muted-foreground" />
-                  <span className="text-sm">Silenciar notificacoes</span>
-                </div>
-                <Switch checked={false} disabled />
-              </div>
-              <div className="mx-3 rounded-lg bg-muted/60 px-2 py-3">
-                <div className="flex items-start gap-4 px-3">
-                  <Lock className="mt-0.5 size-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm">Criptografia</p>
-                    <p className="text-xs text-muted-foreground">As mensagens sao protegidas com criptografia de ponta a ponta.</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 px-5 py-3">
-                <RefreshCw className="size-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <p className="text-sm">Mensagens temporarias</p>
-                  <Select value={editEphemeral} onValueChange={(v) => setEditEphemeral((v ?? "off") as typeof editEphemeral)}>
-                    <SelectTrigger className="mt-1 h-8 max-w-[180px]">
-                      <SelectValue>
-                        {{ off: "Desativadas", "1d": "1 dia", "7d": "7 dias", "90d": "90 dias" }[editEphemeral]}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="off">Desativadas</SelectItem>
-                      <SelectItem value="1d">1 dia</SelectItem>
-                      <SelectItem value="7d">7 dias</SelectItem>
-                      <SelectItem value="90d">90 dias</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 px-5 py-3">
-                <ShieldCheck className="size-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm">Privacidade avancada da conversa</p>
-                  <p className="text-xs text-muted-foreground">Desativada</p>
-                </div>
-              </div>
-            </div>
 
-            <div className="border-t px-5 py-4">
-              <div className="mb-3 flex items-center gap-4">
-                <Settings className="size-5 text-muted-foreground" />
-                <p className="text-sm font-medium">Permissoes do grupo</p>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm">Modo anuncio</p>
-                    <p className="text-xs text-muted-foreground">So admins enviam mensagens</p>
-                  </div>
-                  <Switch checked={editAnnounce} onCheckedChange={setEditAnnounce} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm">Editar dados do grupo</p>
-                    <p className="text-xs text-muted-foreground">Restrito a admins quando ativado</p>
-                  </div>
-                  <Switch checked={editLocked} onCheckedChange={setEditLocked} />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm">Aprovar novos membros</p>
-                    <p className="text-xs text-muted-foreground">Admin aprova entradas pelo link</p>
-                  </div>
-                  <Switch checked={editJoinApproval} onCheckedChange={setEditJoinApproval} />
-                </div>
-                <Select value={editMemberAddMode} onValueChange={(v) => setEditMemberAddMode((v ?? "all_member_add") as typeof editMemberAddMode)}>
-                  <SelectTrigger>
-                    <SelectValue>
-                      {{ all_member_add: "Todos podem adicionar membros", admin_add: "Somente admins adicionam membros" }[editMemberAddMode]}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all_member_add">Todos podem adicionar membros</SelectItem>
-                    <SelectItem value="admin_add">Somente admins adicionam membros</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
             <div className="border-t px-5 py-4">
               <div className="mb-3 flex items-center justify-between">
@@ -2698,27 +2605,6 @@ function GroupChatPanel({
                 </Button>
               </div>
               <div className="space-y-1">
-                <Button variant="ghost" className="h-auto w-full justify-start gap-4 px-0 py-3" onClick={() => setInviteOpen(true)}>
-                  <span className="flex size-10 items-center justify-center rounded-full bg-success text-success-foreground">
-                    <UserPlus className="size-5" />
-                  </span>
-                  <span>Adicionar membro</span>
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="h-auto w-full justify-start gap-4 px-0 py-3"
-                  onClick={async () => {
-                    const link = inviteLink || await getInviteLink(group.id);
-                    setInviteLink(link);
-                    await navigator.clipboard.writeText(link);
-                    toast.success("Link de convite copiado");
-                  }}
-                >
-                  <span className="flex size-10 items-center justify-center rounded-full bg-success text-success-foreground">
-                    <Link2 className="size-5" />
-                  </span>
-                  <span>Convidar via link</span>
-                </Button>
                 {membersLoading ? (
                   <div className="flex justify-center py-6">
                     <Loader2 className="size-5 animate-spin text-muted-foreground" />
