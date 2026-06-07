@@ -191,34 +191,25 @@ export function MessageInput({
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result as string;
-          setSending(true);
-          try {
-            const { data, error } = await sendMediaViaWhatsApp(conversationId, {
-              base64,
-              type: "ptt",
-              fileName: "audio.webm",
-              replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
-              replyToMessageId: replyTo?.id ?? undefined,
-            });
-            if (data) {
-              onMessageSent(data);
-              onClearReply?.();
-            }
-            if (error) toast.error(`Falha ao enviar áudio: ${error}`);
-          } catch (err) {
-            toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
-          } finally {
-            setSending(false);
-          }
-        };
-        reader.readAsDataURL(blob);
-
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         setIsRecording(false);
         setRecordingSeconds(0);
+        setSending(true);
+        try {
+          const formData = new FormData();
+          formData.append("conversationId", conversationId);
+          formData.append("file", blob, "audio.webm");
+          formData.append("type", "ptt");
+          if (replyTo?.whatsapp_msg_id) formData.append("replyToWhatsAppMsgId", replyTo.whatsapp_msg_id);
+          if (replyTo?.id) formData.append("replyToMessageId", replyTo.id);
+          const { data, error } = await sendMediaViaWhatsApp(formData);
+          if (data) { onMessageSent(data); onClearReply?.(); }
+          if (error) toast.error(`Falha ao enviar áudio: ${error}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Erro ao enviar áudio");
+        } finally {
+          setSending(false);
+        }
       };
 
       recorder.start();
@@ -260,22 +251,15 @@ export function MessageInput({
       setSending(true);
 
       try {
-        const reader = new FileReader();
-        const base64Promise = new Promise<string>((resolve) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(selectedFile);
-        });
-        const base64 = await base64Promise;
-
         const mediaType = getMediaType(selectedFile.type);
-        const { data, error } = await sendMediaViaWhatsApp(conversationId, {
-          base64,
-          type: mediaType,
-          fileName: selectedFile.name,
-          caption: content.trim() || undefined,
-          replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
-          replyToMessageId: replyTo?.id ?? undefined,
-        });
+        const formData = new FormData();
+        formData.append("conversationId", conversationId);
+        formData.append("file", selectedFile);
+        formData.append("type", mediaType);
+        if (content.trim()) formData.append("caption", content.trim());
+        if (replyTo?.whatsapp_msg_id) formData.append("replyToWhatsAppMsgId", replyTo.whatsapp_msg_id);
+        if (replyTo?.id) formData.append("replyToMessageId", replyTo.id);
+        const { data, error } = await sendMediaViaWhatsApp(formData);
 
         if (data) {
           onMessageSent(data);

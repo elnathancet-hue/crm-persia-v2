@@ -557,17 +557,25 @@ export async function forwardMessagesToConversations(
  * 3. Retorna a mensagem salva
  */
 export async function sendMediaViaWhatsApp(
-  conversationId: string,
-  file: {
-    base64: string;
-    type: "image" | "audio" | "video" | "document" | "ptt";
-    fileName: string;
-    caption?: string;
-    replyToWhatsAppMsgId?: string;
-    replyToMessageId?: string;
-  }
+  formData: FormData
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
+
+  const conversationId = formData.get("conversationId") as string;
+  const fileObj = formData.get("file") as File | null;
+  const mediaType = formData.get("type") as "image" | "audio" | "video" | "document" | "ptt";
+  const caption = (formData.get("caption") as string | null) || undefined;
+  const replyToWhatsAppMsgId = (formData.get("replyToWhatsAppMsgId") as string | null) || undefined;
+  const replyToMessageId = (formData.get("replyToMessageId") as string | null) || undefined;
+
+  if (!conversationId || !fileObj || !mediaType) return { error: "Dados incompletos" };
+
+  const fileName = fileObj.name || `${mediaType}-${Date.now()}`;
+  const mimeType = fileObj.type || "application/octet-stream";
+  const buffer = Buffer.from(await fileObj.arrayBuffer());
+  if (buffer.byteLength > 16 * 1024 * 1024) {
+    return { error: "Arquivo maior que 16MB" };
+  }
 
   // 2. Get conversation + lead phone
   const { data: conversation, error: convError } = await supabase
@@ -596,21 +604,8 @@ export async function sendMediaViaWhatsApp(
   const phone = lead?.phone as string | null;
   const admin = createAdminClient();
 
-  // Data URLs from MediaRecorder may include codec params:
-  // "data:audio/webm;codecs=opus;base64,{data}"
-  // The naive regex [^;]+ breaks on these — find ";base64," explicitly.
-  const base64Marker = ";base64,";
-  const markerIdx = file.base64.indexOf(base64Marker);
-  if (!file.base64.startsWith("data:") || markerIdx === -1) return { error: "Formato de midia invalido" };
-  const mimeType = file.base64.slice(5, markerIdx).split(";")[0]; // e.g. "audio/webm"
-  const content = file.base64.slice(markerIdx + base64Marker.length);
-  const buffer = Buffer.from(content, "base64");
-  if (buffer.byteLength > 16 * 1024 * 1024) {
-    return { error: "Arquivo maior que 16MB" };
-  }
-
   await ensureChatMediaBucket(admin);
-  const mediaPath = createChatMediaPath({ orgId, conversationId, fileName: file.fileName });
+  const mediaPath = createChatMediaPath({ orgId, conversationId, fileName });
   const { error: uploadError } = await admin.storage
     .from(CHAT_MEDIA_BUCKET)
     .upload(mediaPath, buffer, { contentType: mimeType, upsert: false });
@@ -622,7 +617,7 @@ export async function sendMediaViaWhatsApp(
       action: "crm_send_media",
       entityType: "conversation",
       entityId: conversationId,
-      metadata: { stage: "upload", media_type: file.type, mime_type: mimeType, bytes: buffer.byteLength },
+      metadata: { stage: "upload", media_type: mediaType, mime_type: mimeType, bytes: buffer.byteLength },
       error: uploadError,
     });
     return { error: uploadError.message };
@@ -636,7 +631,7 @@ export async function sendMediaViaWhatsApp(
     supabase,
     orgId,
     conversationId,
-    file.replyToMessageId,
+    replyToMessageId,
   );
 
   const { data: message, error: msgError } = await supabase
@@ -647,12 +642,12 @@ export async function sendMediaViaWhatsApp(
       lead_id: conversation.lead_id,
       sender: "agent",
       sender_user_id: userId,
-      content: file.caption || null,
-      type: file.type,
+      content: caption || null,
+      type: mediaType,
       media_url: mediaRef,
       media_type: mimeType,
       metadata: {
-        file_name: file.fileName,
+        file_name: fileName,
         mime_type: mimeType,
         ...(replySnapshot ? { reply_to: replySnapshot } : {}),
       },
@@ -670,7 +665,7 @@ export async function sendMediaViaWhatsApp(
       action: "crm_send_media",
       entityType: "conversation",
       entityId: conversationId,
-      metadata: { stage: "save_message", media_type: file.type, mime_type: mimeType, bytes: buffer.byteLength },
+      metadata: { stage: "save_message", media_type: mediaType, mime_type: mimeType, bytes: buffer.byteLength },
       error: msgError,
     });
     return { error: msgError.message };
@@ -710,7 +705,7 @@ export async function sendMediaViaWhatsApp(
         action: "crm_send_media",
         entityType: "message",
         entityId: message.id,
-        metadata: { conversation_id: conversationId, media_type: file.type, stage: "missing_connection" },
+        metadata: { conversation_id: conversationId, media_type: mediaType, stage: "missing_connection" },
         error: new Error("Nenhuma conexao WhatsApp ativa"),
       });
       return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: "Nenhuma conexao WhatsApp ativa" };
@@ -719,13 +714,13 @@ export async function sendMediaViaWhatsApp(
     try {
       const provider = createProvider(connection);
       const providerMediaUrl = await resolveProviderChatMediaUrl(admin, mediaRef);
-      const replyTo = file.replyToWhatsAppMsgId ?? replySnapshot?.whatsapp_msg_id ?? undefined;
+      const replyTo = replyToWhatsAppMsgId ?? replySnapshot?.whatsapp_msg_id ?? undefined;
       const result = await provider.sendMedia({
         phone,
-        type: file.type,
+        type: mediaType,
         media: providerMediaUrl,
-        caption: file.caption,
-        fileName: file.type === "document" ? file.fileName : undefined,
+        caption: caption,
+        fileName: mediaType === "document" ? fileName : undefined,
         ...(replyTo ? { replyTo } : {}),
       });
       const update: Record<string, unknown> = { status: "sent" };
@@ -738,7 +733,7 @@ export async function sendMediaViaWhatsApp(
         action: "crm_send_media",
         entityType: "message",
         entityId: message.id,
-        metadata: { conversation_id: conversationId, media_type: file.type, provider: connection.provider },
+        metadata: { conversation_id: conversationId, media_type: mediaType, provider: connection.provider },
       });
       return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent", whatsapp_msg_id: result.messageId ?? null } };
     } catch (err) {
@@ -751,7 +746,7 @@ export async function sendMediaViaWhatsApp(
         action: "crm_send_media",
         entityType: "message",
         entityId: message.id,
-        metadata: { conversation_id: conversationId, media_type: file.type, stage: "provider_send" },
+        metadata: { conversation_id: conversationId, media_type: mediaType, stage: "provider_send" },
         error: err,
       });
       return { data: { ...(message as Message), media_url: signedMediaUrl, status: "failed" }, error: reason };
@@ -766,7 +761,7 @@ export async function sendMediaViaWhatsApp(
     action: "crm_send_media",
     entityType: "message",
     entityId: message.id,
-    metadata: { conversation_id: conversationId, media_type: file.type, channel: conversation.channel },
+    metadata: { conversation_id: conversationId, media_type: mediaType, channel: conversation.channel },
   });
   return { data: { ...(message as Message), media_url: signedMediaUrl, status: "sent" } };
 }
