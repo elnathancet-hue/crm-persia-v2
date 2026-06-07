@@ -1484,11 +1484,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-56">
               {leadId && (
-                <DropdownMenuItem
-                  onClick={() => {
-                    window.open(`/leads/${leadId}`, "_blank");
-                  }}
-                >
+                <DropdownMenuItem onClick={handleOpenLeadDrawer}>
                   <User className="size-4" />
                   Visualizar lead
                 </DropdownMenuItem>
