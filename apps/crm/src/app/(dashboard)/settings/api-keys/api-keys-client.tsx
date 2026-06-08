@@ -9,11 +9,10 @@ import { Card, CardContent } from "@persia/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import {
@@ -62,19 +61,18 @@ function CreatedKeyDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CheckCircle2 className="size-5 text-success" />
-            Chave criada com sucesso
-          </DialogTitle>
-          <DialogDescription>
-            Copie e salve agora — por segurança esta chave{" "}
-            <strong>não será exibida novamente</strong>.
-          </DialogDescription>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">Chave criada com sucesso</DialogTitle>
+          <DialogHero
+            icon={<CheckCircle2 className="size-5" />}
+            title="Chave criada com sucesso"
+            tagline="Copie e salve agora — não será exibida novamente"
+            tone="success"
+          />
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {/* Warning banner */}
           <div className="flex items-start gap-2 rounded-lg border border-warning-ring bg-warning-soft p-3">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
@@ -124,11 +122,11 @@ function CreatedKeyDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button onClick={onClose} className="w-full sm:w-auto">
-            {copied ? "Copiei, fechar" : "Fechar"}
-          </Button>
-        </DialogFooter>
+          <div className="flex justify-end pt-2 border-t border-border/40">
+            <Button onClick={onClose}>
+              {copied ? "Copiei, fechar" : "Fechar"}
+            </Button>
+          </div>
       </DialogContent>
     </Dialog>
   );
@@ -167,21 +165,22 @@ function CreateKeyDialog({
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Criar chave de API</DialogTitle>
-          <DialogDescription>
-            A chave será usada para autenticar formulários externos via{" "}
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">x-api-key</code>.
-          </DialogDescription>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">Criar chave de API</DialogTitle>
+          <DialogHero
+            icon={<Key className="size-5" />}
+            title="Criar chave de API"
+            tagline="Autenticar formulários externos via x-api-key"
+          />
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="key-name">Nome</Label>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="space-y-1">
+            <Label htmlFor="key-name" className="text-xs text-muted-foreground">Nome</Label>
             <Input
               id="key-name"
-              name="name"
+              name="api_key_name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Site principal, LP Black Friday"
@@ -193,7 +192,7 @@ function CreateKeyDialog({
             </p>
           </div>
 
-          <DialogFooter>
+          <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancelar
             </Button>
@@ -201,7 +200,7 @@ function CreateKeyDialog({
               {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
               Criar chave
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

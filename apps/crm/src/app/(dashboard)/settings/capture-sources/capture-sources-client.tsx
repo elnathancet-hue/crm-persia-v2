@@ -409,14 +409,16 @@ function SourceSheet({
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Funil (opcional)</Label>
               <Select
-                value={form.pipeline_id || "__none__"}
-                onValueChange={(v) => setField("pipeline_id", !v || v === "__none__" ? "" : v)}
+                value={form.pipeline_id || undefined}
+                onValueChange={(v) => setField("pipeline_id", v === "clear" ? "" : (v ?? ""))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Sem funil definido" />
+                  <SelectValue placeholder="Sem funil (triagem manual)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">Sem funil (triagem manual)</SelectItem>
+                  {form.pipeline_id && (
+                    <SelectItem value="clear">— Sem funil (triagem manual)</SelectItem>
+                  )}
                   {pipelines.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
@@ -430,14 +432,16 @@ function SourceSheet({
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Etapa inicial (opcional)</Label>
                 <Select
-                  value={form.stage_id || "__first__"}
-                  onValueChange={(v) => setField("stage_id", !v || v === "__first__" ? "" : v)}
+                  value={form.stage_id || undefined}
+                  onValueChange={(v) => setField("stage_id", v === "clear" ? "" : (v ?? ""))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Primeira etapa do funil" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__first__">Primeira etapa do funil</SelectItem>
+                    {form.stage_id && (
+                      <SelectItem value="clear">— Primeira etapa do funil</SelectItem>
+                    )}
                     {filteredStages.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
@@ -539,6 +543,7 @@ export function CaptureSourcesClient({
   );
   const [snippetSource, setSnippetSource] = React.useState<CaptureSourceRow | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<CaptureSourceRow | null>(null);
 
   function openCreate() {
     setSheetSource(null);
@@ -558,8 +563,14 @@ export function CaptureSourcesClient({
     toast.success(sheetSource === null ? "Origem criada." : "Origem atualizada.");
   }
 
-  async function handleDelete(source: CaptureSourceRow) {
-    if (!confirm(`Excluir a origem "${source.name}"? Formulários vinculados a ela pararão de funcionar.`)) return;
+  function handleDelete(source: CaptureSourceRow) {
+    setDeleteConfirm(source);
+  }
+
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    const source = deleteConfirm;
+    setDeleteConfirm(null);
 
     setDeleting(source.id);
     try {
@@ -611,6 +622,29 @@ export function CaptureSourcesClient({
           onClose={() => setSnippetSource(null)}
         />
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Excluir origem</DialogTitle>
+            <DialogHero
+              icon={<Trash2 className="size-5" />}
+              title="Excluir origem"
+              tagline={deleteConfirm ? `"${deleteConfirm.name}" — formulários vinculados pararão de funcionar.` : ""}
+              tone="destructive"
+            />
+          </DialogHeader>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="space-y-4">
         {/* Header */}

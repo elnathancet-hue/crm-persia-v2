@@ -10,6 +10,7 @@ import {
   Power,
   PowerOff,
   Copy,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
 import { DialogHero } from "@persia/ui/dialog-hero";
@@ -64,6 +65,7 @@ export function WebhooksPageClient({
     React.useState<WebhookItem[]>(initialWebhooks);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<WebhookItem | null>(null);
 
   const [name, setName] = React.useState("");
   const [direction, setDirection] = React.useState("outbound");
@@ -116,8 +118,10 @@ export function WebhooksPageClient({
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Excluir este webhook?")) return;
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    const id = deleteConfirm.id;
+    setDeleteConfirm(null);
     setSaving(true);
     try {
       await deleteWebhook(id);
@@ -161,7 +165,7 @@ export function WebhooksPageClient({
           <TableHeader>
             <TableRow>
               <TableHead>Nome</TableHead>
-              <TableHead>Direcao</TableHead>
+              <TableHead>Direção</TableHead>
               <TableHead>URL / Token</TableHead>
               <TableHead>Eventos</TableHead>
               <TableHead>Status</TableHead>
@@ -180,7 +184,7 @@ export function WebhooksPageClient({
                       <ArrowUpFromLine className="size-3.5 text-success" />
                     )}
                     <span className="text-sm">
-                      {webhook.direction === "inbound" ? "Entrada" : "Saida"}
+                      {webhook.direction === "inbound" ? "Entrada" : "Saída"}
                     </span>
                   </div>
                 </TableCell>
@@ -246,7 +250,7 @@ export function WebhooksPageClient({
                       size="icon"
                       aria-label="Excluir webhook"
                       className="text-destructive"
-                      onClick={() => handleDelete(webhook.id)}
+                      onClick={() => setDeleteConfirm(webhook)}
                       disabled={saving}
                     >
                       <Trash2 className="size-3.5" />
@@ -258,6 +262,30 @@ export function WebhooksPageClient({
           </TableBody>
         </Table>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Excluir webhook</DialogTitle>
+            <DialogHero
+              icon={<Trash2 className="size-5" />}
+              title="Excluir webhook"
+              tagline={deleteConfirm ? `"${deleteConfirm.name}" será removido permanentemente.` : ""}
+              tone="destructive"
+            />
+          </DialogHeader>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={saving}>
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              Excluir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -282,7 +310,7 @@ export function WebhooksPageClient({
               />
             </div>
             <div className="space-y-2">
-              <Label>Direcao</Label>
+              <Label>Direção</Label>
               <Select
                 value={direction}
                 onValueChange={(v) => setDirection(v ?? "outbound")}
@@ -291,7 +319,7 @@ export function WebhooksPageClient({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="outbound">Saida (envia dados)</SelectItem>
+                  <SelectItem value="outbound">Saída (envia dados)</SelectItem>
                   <SelectItem value="inbound">Entrada (recebe dados)</SelectItem>
                 </SelectContent>
               </Select>

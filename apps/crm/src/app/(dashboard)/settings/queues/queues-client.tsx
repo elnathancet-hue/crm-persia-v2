@@ -47,8 +47,8 @@ interface Queue {
 }
 
 const DISTRIBUTION_LABELS: Record<string, string> = {
-  round_robin: "Round Robin",
-  random: "Aleatorio",
+  round_robin: "Rodízio (Round Robin)",
+  random: "Aleatório",
   least_busy: "Menos Ocupado",
   manual: "Manual",
 };
@@ -301,7 +301,7 @@ export function QueuesPageClient({
               />
             </div>
             <div className="space-y-2">
-              <Label>Tipo de Distribuicao</Label>
+              <Label>Tipo de Distribuição</Label>
               <Select
                 value={distributionType}
                 onValueChange={(v) => setDistributionType(v ?? "round_robin")}
@@ -310,8 +310,8 @@ export function QueuesPageClient({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="round_robin">Round Robin</SelectItem>
-                  <SelectItem value="random">Aleatorio</SelectItem>
+                  <SelectItem value="round_robin">Rodízio (Round Robin)</SelectItem>
+                  <SelectItem value="random">Aleatório</SelectItem>
                   <SelectItem value="least_busy">Menos Ocupado</SelectItem>
                   <SelectItem value="manual">Manual</SelectItem>
                 </SelectContent>

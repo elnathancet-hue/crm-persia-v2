@@ -16,6 +16,13 @@ import {
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { getWhatsAppStatus, connectWhatsApp, getQRCode, disconnectWhatsApp, resyncWhatsAppWebhook } from "@/actions/whatsapp-status";
 import { toast } from "sonner";
 
@@ -31,6 +38,7 @@ export function WhatsAppSettingsClient() {
   const [connecting, setConnecting] = React.useState(false);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [resyncing, setResyncing] = React.useState(false);
+  const [disconnectConfirm, setDisconnectConfirm] = React.useState(false);
   const qrIntervalRef = React.useRef<ReturnType<typeof setInterval>>(undefined);
   const qrRetryCountRef = React.useRef(0);
 
@@ -149,7 +157,6 @@ export function WhatsAppSettingsClient() {
   }
 
   async function handleDisconnect() {
-    if (!confirm("Tem certeza que deseja desconectar o WhatsApp? A IA parara de funcionar.")) return;
     setDisconnecting(true);
     try {
       const { error } = await disconnectWhatsApp();
@@ -245,7 +252,7 @@ export function WhatsAppSettingsClient() {
                   {resyncing ? <Loader2 className="size-4 animate-spin" /> : <Wifi className="size-4" />}
                   Sincronizar webhook
                 </Button>
-                <Button variant="destructive" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
+                <Button variant="destructive" size="sm" onClick={() => setDisconnectConfirm(true)} disabled={disconnecting}>
                   {disconnecting ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
                   Desconectar
                 </Button>
@@ -254,6 +261,34 @@ export function WhatsAppSettingsClient() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Disconnect confirmation dialog */}
+      <Dialog open={disconnectConfirm} onOpenChange={(open) => { if (!open) setDisconnectConfirm(false); }}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Desconectar WhatsApp</DialogTitle>
+            <DialogHero
+              icon={<LogOut className="size-5" />}
+              title="Desconectar WhatsApp"
+              tagline="A IA deixará de enviar e receber mensagens."
+              tone="destructive"
+            />
+          </DialogHeader>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="outline" onClick={() => setDisconnectConfirm(false)} disabled={disconnecting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={disconnecting}
+              onClick={() => { setDisconnectConfirm(false); handleDisconnect(); }}
+            >
+              {disconnecting && <Loader2 className="size-4 animate-spin" />}
+              Desconectar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* QR Code Popup — centered overlay */}
       {qrCode && !qrExpired && (

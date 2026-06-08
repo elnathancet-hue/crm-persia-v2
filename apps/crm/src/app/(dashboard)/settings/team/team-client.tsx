@@ -272,7 +272,7 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Funcao</TableHead>
+                  <TableHead>Função</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Desde</TableHead>
                   <TableHead></TableHead>
