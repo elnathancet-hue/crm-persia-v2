@@ -26,10 +26,12 @@ import {
   StopCircle,
   Tag as TagIcon,
   TagsIcon,
+  Timer,
   TrendingUp,
   UserCheck,
   UserCog,
   Users,
+  XCircle,
 } from "lucide-react";
 
 export type FlowSidebarCategory =
@@ -296,10 +298,38 @@ const ACTION_ITEMS: FlowSidebarItem[] = [
       config: { message: "" },
     },
   },
+  {
+    task_key: "action.close_conversation",
+    category: "acoes",
+    label: "Encerrar conversa",
+    description:
+      "Fecha a conversa atual sem pausar o agente. O lead continua ativo — se mandar nova mensagem, uma nova conversa abre e o agente retoma normalmente. Use no fim de fluxos que se encerram naturalmente (lead agendou, comprou, recusou).",
+    icon: XCircle,
+    node_type: "action",
+    default_data: {
+      label: "Encerrar conversa",
+      action_type: "close_conversation" satisfies FlowActionType,
+      config: { reason: "" },
+    },
+  },
+  {
+    task_key: "action.wait_seconds",
+    category: "acoes",
+    label: "Aguardar",
+    description:
+      "Pausa o fluxo por N segundos antes de executar a próxima ação. Útil pra espaçar envios ou dar tempo pro lead ler uma mensagem antes de receber outra. Máximo de 25 segundos.",
+    icon: Timer,
+    node_type: "action",
+    default_data: {
+      label: "Aguardar",
+      action_type: "wait_seconds" satisfies FlowActionType,
+      config: { seconds: 5 },
+    },
+  },
 ];
 
 // ============================================================================
-// Segmentações (V1 ainda não executáveis no runtime — placeholder visual)
+// Segmentações — condições IF/ELSE implementadas no runtime (flow/conditions.ts + runner.ts, PR 5)
 // ============================================================================
 
 const SEGMENTATION_ITEMS: FlowSidebarItem[] = [

@@ -137,7 +137,15 @@ export type FlowActionType =
   // humano via algoritmo least-loaded. config: {} (V1 sem filtros —
   // todos os membros assignable da org são candidatos). Paridade com
   // queue/round-robin do flow.json do Jordan.
-  | "round_robin_user";
+  | "round_robin_user"
+  // Auditoria Automacoes (jun/2026): fecha conversa (status='closed') sem
+  // encerrar o agente. Lead continua ativo — agente ainda pode receber msg.
+  // Diferente de stop_agent (pausa agente). config: { reason?: string }.
+  | "close_conversation"
+  // Auditoria Automacoes (jun/2026): pausa execucao do fluxo por N segundos.
+  // Util pra picotar sequencias de acoes. config: { seconds: number } (max 25).
+  // Special-case no runner (nao usa native handler — sleep inline).
+  | "wait_seconds";
 
 /**
  * Mapeia FlowActionType pra NativeHandlerName quando aplicável. Alguns

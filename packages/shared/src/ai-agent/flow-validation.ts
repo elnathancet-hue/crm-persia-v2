@@ -69,7 +69,12 @@ function actionConfigIssue(
     }
     case "stop_agent":
     case "round_robin_user":
+    case "close_conversation":
       return null;
+    case "wait_seconds": {
+      const seconds = Number(config.seconds ?? 0);
+      return seconds > 0 ? null : "Falta definir quantos segundos aguardar.";
+    }
   }
 }
 

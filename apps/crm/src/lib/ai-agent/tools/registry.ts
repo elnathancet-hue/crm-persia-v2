@@ -7,6 +7,7 @@ import type {
 import { getPreset } from "@persia/shared/ai-agent";
 import { addTagHandler } from "./add-tag";
 import { cancelAppointmentHandler } from "./cancel-appointment";
+import { closeConversationHandler } from "./close-conversation";
 import { createAppointmentHandler } from "./create-appointment";
 import { emitEventHandler } from "./emit-event";
 import { listLeadAppointmentsHandler } from "./list-lead-appointments";
@@ -51,6 +52,9 @@ export const nativeHandlers: NativeHandlerRegistry = {
   // (algoritmo least-loaded). Paridade com queue/round-robin do
   // flow.json do Jordan.
   round_robin_user: roundRobinUserHandler,
+  // Auditoria Automacoes (jun/2026): fecha conversa (status='closed') sem
+  // encerrar o agente. Lead continua ativo; nova msg cria nova conversa.
+  close_conversation: closeConversationHandler,
 };
 
 export function isImplementedNativeHandler(

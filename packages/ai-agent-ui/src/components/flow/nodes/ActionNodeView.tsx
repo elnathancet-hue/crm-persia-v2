@@ -14,8 +14,10 @@ import {
   StopCircle,
   Tag as TagIcon,
   TagsIcon,
+  Timer,
   UserCheck,
   UserCog,
+  XCircle,
 } from "lucide-react";
 import type {
   FlowActionNode,
@@ -39,6 +41,8 @@ const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   set_lead_custom_field: Pencil,
   send_whatsapp_message: MessageCircle,
   round_robin_user: Shuffle,
+  close_conversation: XCircle,
+  wait_seconds: Timer,
 };
 
 function configPreview(

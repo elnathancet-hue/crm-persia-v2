@@ -63,6 +63,11 @@ export const NATIVE_HANDLERS = [
   // mas runtime nao tinha handler — guardrail event silencioso. Agora
   // espelha add_tag: DELETE em lead_tags + lead_activity audit.
   "remove_tag",
+  // Auditoria Automacoes (jun/2026): fecha conversa (status='closed') sem
+  // encerrar o agente ou transferir pra humano. Lead continua ativo.
+  // Util pra encerrar atendimento quando fluxo termina mas o lead
+  // pode voltar (diferente de stop_agent que pausa o agente).
+  "close_conversation",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];

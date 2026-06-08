@@ -9,7 +9,7 @@
 //   - ai_agent node (LLM call + tool dispatch, segue edge `tool_success:<tool>`
 //     ou `default` quando não chama tool)
 //   - action node (dispara handler nativo, segue edge `default`)
-//   - condition node (placeholder — V1 NÃO implementa, registra fatal_error)
+//   - condition node (has_tag / lead_custom_field_equals / in_segment — implementado em conditions.ts + PR 5)
 //
 // Loop principal: começa do entry, executa node atual, escolhe próximo via
 // edges nomeadas, repete até hit_max_iterations OR não tem próximo node.
@@ -1075,6 +1075,39 @@ async function executeActionNode(
 
   const actionType = node.data.action_type;
 
+  // Auditoria Automacoes (jun/2026): wait_seconds — pausa inline no runner.
+  // NÃO usa native handler (side-effect-free, sem mutação de DB).
+  // Cap de 25s pra não exceder o timeout padrão do flow (30s).
+  if (actionType === "wait_seconds") {
+    const raw = node.data.config?.seconds;
+    const seconds = Math.min(Math.max(Number(raw) || 0, 0), 25);
+    ctx.provider.emit({
+      kind: "tool_call",
+      payload: {
+        tool_call_id: `action:${node.id}`,
+        tool_name: "wait_seconds",
+        input: { seconds },
+        via: "action_node",
+      },
+    });
+    if (seconds > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000));
+    }
+    ctx.provider.emit({
+      kind: "tool_result",
+      payload: {
+        tool_call_id: `action:${node.id}`,
+        tool_name: "wait_seconds",
+        success: true,
+        output: { waited_seconds: seconds },
+        side_effects: [`waited ${seconds}s`],
+        via: "action_node",
+      },
+    });
+    result.tool_calls_succeeded++;
+    return followDefaultEdge(ctx, node);
+  }
+
   // PR-FLOW-PIVOT PR 9 (mai/2026): action node standalone que envia
   // mensagem WhatsApp literal. NÃO usa native handler — emite `send_text`
   // direto pelo ctx.provider (igual a IA quando responde). Realtime
@@ -1109,6 +1142,8 @@ async function executeActionNode(
 
     // PR-FLOW-PIVOT PR 13 (mai/2026)
     round_robin_user: "round_robin_user",
+    // Auditoria Automacoes (jun/2026)
+    close_conversation: "close_conversation",
   };
 
   const handlerKey = directHandlers[actionType];
