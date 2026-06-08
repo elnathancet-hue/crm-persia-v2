@@ -272,6 +272,7 @@ export function getDefaultStopAgentToolSeed(params: {
     native_handler: preset.handler,
     webhook_url: null,
     webhook_secret: null,
+    mcp_server_id: null,
     is_enabled: true,
   };
 }

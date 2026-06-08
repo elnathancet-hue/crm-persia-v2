@@ -25,7 +25,7 @@ const PROTOCOL_VERSION = "2024-11-05";
 
 export interface McpServerConfig {
   server_url: string;
-  auth_type: "none" | "bearer";
+  auth_type: "none" | "bearer" | "headers";
   auth_token: string | null;
 }
 
@@ -93,6 +93,17 @@ async function rpcCall<T>(
   };
   if (config.auth_type === "bearer" && config.auth_token) {
     headers["Authorization"] = `Bearer ${config.auth_token}`;
+  } else if (config.auth_type === "headers" && config.auth_token) {
+    try {
+      const custom = JSON.parse(config.auth_token) as Record<string, string>;
+      for (const [k, v] of Object.entries(custom)) {
+        if (typeof k === "string" && typeof v === "string") {
+          headers[k] = v;
+        }
+      }
+    } catch {
+      // auth_token inválido como JSON — ignora headers
+    }
   }
 
   let res: Response;

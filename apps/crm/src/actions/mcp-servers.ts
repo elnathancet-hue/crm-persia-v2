@@ -25,7 +25,7 @@ export interface McpServerRow {
   id: string;
   name: string;
   server_url: string;
-  auth_type: "none" | "bearer";
+  auth_type: "none" | "bearer" | "headers";
   /** auth_token NUNCA é retornado pro client — mantém em backend. */
   has_auth_token: boolean;
   cached_tools: McpToolDefinition[];
@@ -114,14 +114,14 @@ const createSchema = z.object({
       (u) => u.startsWith("http://") || u.startsWith("https://"),
       "Deve começar com http:// ou https://",
     ),
-  auth_type: z.enum(["none", "bearer"]).default("none"),
-  auth_token: z.string().trim().max(2000).optional(),
+  auth_type: z.enum(["none", "bearer", "headers"]).default("none"),
+  auth_token: z.string().trim().max(4000).optional(),
 });
 
 export async function createMcpServer(input: {
   name: string;
   server_url: string;
-  auth_type: "none" | "bearer";
+  auth_type: "none" | "bearer" | "headers";
   auth_token?: string;
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
@@ -132,6 +132,9 @@ export async function createMcpServer(input: {
     if (parsed.data.auth_type === "bearer" && !parsed.data.auth_token?.trim()) {
       return { ok: false, error: "Bearer requer auth_token preenchido" };
     }
+    if (parsed.data.auth_type === "headers" && !parsed.data.auth_token?.trim()) {
+      return { ok: false, error: "Headers customizados requerem ao menos um header" };
+    }
 
     const { supabase, orgId, userId } = await requireRole("admin");
     const { data, error } = await asAgentDb(supabase)
@@ -141,7 +144,7 @@ export async function createMcpServer(input: {
         name: parsed.data.name,
         server_url: parsed.data.server_url,
         auth_type: parsed.data.auth_type,
-        auth_token: parsed.data.auth_type === "bearer" ? parsed.data.auth_token : null,
+        auth_token: parsed.data.auth_type !== "none" ? parsed.data.auth_token : null,
         is_active: true,
         created_by_user_id: userId,
       })
@@ -156,6 +159,30 @@ export async function createMcpServer(input: {
     }
     revalidatePath("/settings/mcp-servers");
     return { ok: true, id: (data as { id: string }).id };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) };
+  }
+}
+
+// ============================================================================
+// Toggle active
+// ============================================================================
+
+export async function toggleMcpServer(
+  serverId: string,
+  isActive: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!serverId) return { ok: false, error: "serverId inválido" };
+  try {
+    const { supabase, orgId } = await requireRole("admin");
+    const { error } = await asAgentDb(supabase)
+      .from("mcp_server_connections")
+      .update({ is_active: isActive })
+      .eq("organization_id", orgId)
+      .eq("id", serverId);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/settings/mcp-servers");
+    return { ok: true };
   } catch (err) {
     return { ok: false, error: errorMessage(err) };
   }
@@ -213,7 +240,7 @@ export async function syncMcpServer(
     const conn = data as {
       id: string;
       server_url: string;
-      auth_type: "none" | "bearer";
+      auth_type: "none" | "bearer" | "headers";
       auth_token: string | null;
     };
 

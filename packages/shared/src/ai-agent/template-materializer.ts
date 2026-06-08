@@ -44,6 +44,7 @@ export function materializePresetTool(params: {
     native_handler: params.preset.handler,
     webhook_url: null,
     webhook_secret: null,
+    mcp_server_id: null,
     is_enabled: true,
   };
 }

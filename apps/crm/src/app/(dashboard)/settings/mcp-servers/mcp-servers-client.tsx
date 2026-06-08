@@ -7,11 +7,14 @@ import {
   Loader2,
   Plus,
   Plug,
+  Power,
+  PowerOff,
   RefreshCw,
   Server,
   Trash2,
   Wrench,
   XCircle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@persia/ui/badge";
@@ -44,6 +47,7 @@ import {
   createMcpServer,
   deleteMcpServer,
   syncMcpServer,
+  toggleMcpServer,
   type McpServerRow,
 } from "@/actions/mcp-servers";
 
@@ -66,7 +70,7 @@ export function McpServersClient({ initialServers, initialError }: Props) {
   async function handleCreate(form: {
     name: string;
     server_url: string;
-    auth_type: "none" | "bearer";
+    auth_type: "none" | "bearer" | "headers";
     auth_token: string;
   }) {
     setPending("create");
@@ -99,6 +103,18 @@ export function McpServersClient({ initialServers, initialError }: Props) {
       }
       toast.success(`${res.tools_count} tools descobertas.`);
       refresh();
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function handleToggle(server: McpServerRow) {
+    setPending(`toggle:${server.id}`);
+    try {
+      const res = await toggleMcpServer(server.id, !server.is_active);
+      if (!res.ok) { toast.error(res.error || "Falha ao alterar status."); return; }
+      setServers((s) => s.map((sv) => sv.id === server.id ? { ...sv, is_active: !sv.is_active } : sv));
+      toast.success(server.is_active ? "Servidor desativado." : "Servidor ativado.");
     } finally {
       setPending(null);
     }
@@ -173,9 +189,14 @@ export function McpServersClient({ initialServers, initialError }: Props) {
                   {server.server_url}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Auth: {server.auth_type === "bearer" ? "Bearer token" : "Sem auth"}
-                  {server.has_auth_token && server.auth_type === "bearer" && (
-                    <span className="ml-1 opacity-70">(token salvo)</span>
+                  Auth:{" "}
+                  {server.auth_type === "bearer"
+                    ? "Access token / API key"
+                    : server.auth_type === "headers"
+                      ? "Headers personalizados"
+                      : "Nenhuma"}
+                  {server.has_auth_token && server.auth_type !== "none" && (
+                    <span className="ml-1 opacity-70">(salvo)</span>
                   )}
                 </p>
               </div>
@@ -241,6 +262,21 @@ export function McpServersClient({ initialServers, initialError }: Props) {
                   Sincronizar
                 </Button>
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleToggle(server)}
+                  disabled={!!pending}
+                >
+                  {pending === `toggle:${server.id}` ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : server.is_active ? (
+                    <PowerOff className="size-3.5" />
+                  ) : (
+                    <Power className="size-3.5" />
+                  )}
+                  {server.is_active ? "Desativar" : "Ativar"}
+                </Button>
+                <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => setDeleteConfirm(server)}
@@ -302,6 +338,13 @@ export function McpServersClient({ initialServers, initialError }: Props) {
 // Sub-component: add server sheet
 // ============================================================================
 
+type AuthType = "none" | "bearer" | "headers";
+
+interface CustomHeader {
+  key: string;
+  value: string;
+}
+
 function AddServerSheet({
   open,
   onOpenChange,
@@ -313,24 +356,61 @@ function AddServerSheet({
   onSubmit: (form: {
     name: string;
     server_url: string;
-    auth_type: "none" | "bearer";
+    auth_type: AuthType;
     auth_token: string;
   }) => void | Promise<void>;
   pending: boolean;
 }) {
-  const [name, setName] = React.useState("");
+  const [name, setName] = React.useState("MCP");
   const [serverUrl, setServerUrl] = React.useState("");
-  const [authType, setAuthType] = React.useState<"none" | "bearer">("none");
+  const [authType, setAuthType] = React.useState<AuthType>("bearer");
   const [authToken, setAuthToken] = React.useState("");
+  const [customHeaders, setCustomHeaders] = React.useState<CustomHeader[]>([
+    { key: "Authorization", value: "" },
+  ]);
 
   React.useEffect(() => {
     if (!open) {
-      setName("");
+      setName("MCP");
       setServerUrl("");
-      setAuthType("none");
+      setAuthType("bearer");
       setAuthToken("");
+      setCustomHeaders([{ key: "Authorization", value: "" }]);
     }
   }, [open]);
+
+  function addHeader() {
+    setCustomHeaders((h) => [...h, { key: "", value: "" }]);
+  }
+
+  function removeHeader(index: number) {
+    setCustomHeaders((h) => h.filter((_, i) => i !== index));
+  }
+
+  function updateHeader(index: number, field: "key" | "value", val: string) {
+    setCustomHeaders((h) =>
+      h.map((row, i) => (i === index ? { ...row, [field]: val } : row)),
+    );
+  }
+
+  function buildAuthToken(): string {
+    if (authType === "bearer") return authToken;
+    if (authType === "headers") {
+      const obj: Record<string, string> = {};
+      for (const { key, value } of customHeaders) {
+        if (key.trim()) obj[key.trim()] = value;
+      }
+      return JSON.stringify(obj);
+    }
+    return "";
+  }
+
+  const isValid =
+    name.trim() &&
+    serverUrl.trim() &&
+    (authType === "none" ||
+      (authType === "bearer" && authToken.trim()) ||
+      (authType === "headers" && customHeaders.some((h) => h.key.trim())));
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -339,78 +419,117 @@ function AddServerSheet({
           <SheetTitle className="sr-only">Adicionar servidor MCP</SheetTitle>
           <DialogHero
             icon={<Plug className="size-5" />}
-            title="Adicionar servidor MCP"
-            tagline="Conecte um servidor JSON-RPC para estender a IA com tools customizadas"
+            title="Configuração no MCP"
+            tagline="Configure o servidor MCP que será utilizado para gerenciar as ferramentas"
           />
         </SheetHeader>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="mcp-name">Nome amigável</Label>
+            <Label htmlFor="mcp-name">Nome do servidor</Label>
             <Input
               id="mcp-name"
               name="mcp_name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Meu ERP, GitHub MCP, Notion API"
+              placeholder="MCP"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="mcp-url">URL do servidor MCP</Label>
+            <Label htmlFor="mcp-url">URL do servidor</Label>
             <Input
               id="mcp-url"
               name="mcp_url"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              placeholder="https://mcp.exemplo.com/rpc"
+              placeholder="URL do servidor"
             />
-            <p className="text-xs text-muted-foreground">
-              Endpoint HTTP que recebe JSON-RPC 2.0 (tools/list, tools/call).
-            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="mcp-auth">Autenticação</Label>
             <Select
               value={authType}
-              onValueChange={(v) => v && setAuthType(v as "none" | "bearer")}
+              onValueChange={(v) => v && setAuthType(v as AuthType)}
             >
               <SelectTrigger id="mcp-auth">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Sem autenticação</SelectItem>
-                <SelectItem value="bearer">Bearer token (header Authorization)</SelectItem>
+                <SelectItem value="none">Nenhuma</SelectItem>
+                <SelectItem value="bearer">Access token / API key</SelectItem>
+                <SelectItem value="headers">Headers personalizados</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {authType === "bearer" && (
             <div className="space-y-1.5">
-              <Label htmlFor="mcp-token">Token</Label>
+              <Label htmlFor="mcp-token">Access token / API key</Label>
               <Input
                 id="mcp-token"
                 name="mcp_auth_token"
                 type="password"
                 value={authToken}
                 onChange={(e) => setAuthToken(e.target.value)}
-                placeholder="sk-..."
+                placeholder="Cole o token ou API key"
               />
+            </div>
+          )}
+          {authType === "headers" && (
+            <div className="space-y-2">
+              {customHeaders.map((row, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={row.key}
+                    onChange={(e) => updateHeader(i, "key", e.target.value)}
+                    placeholder="Header"
+                    className="flex-1"
+                  />
+                  <Input
+                    value={row.value}
+                    onChange={(e) => updateHeader(i, "value", e.target.value)}
+                    placeholder="Valor"
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-destructive hover:text-destructive"
+                    onClick={() => removeHeader(i)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addHeader}
+                className="gap-1.5"
+              >
+                <Plus className="size-3.5" />
+                Adicionar Header
+              </Button>
             </div>
           )}
         </div>
         <div className="border-t border-border p-4 flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancelar
+            Voltar
           </Button>
           <Button
-            onClick={() => onSubmit({ name, server_url: serverUrl, auth_type: authType, auth_token: authToken })}
-            disabled={
-              pending ||
-              !name.trim() ||
-              !serverUrl.trim() ||
-              (authType === "bearer" && !authToken.trim())
+            onClick={() =>
+              onSubmit({
+                name,
+                server_url: serverUrl,
+                auth_type: authType,
+                auth_token: buildAuthToken(),
+              })
             }
+            disabled={pending || !isValid}
           >
             {pending && <Loader2 className="size-3.5 animate-spin" />}
-            Adicionar
+            Continuar
           </Button>
         </div>
       </SheetContent>

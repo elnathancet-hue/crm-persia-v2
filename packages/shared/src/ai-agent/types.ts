@@ -194,6 +194,7 @@ export interface AgentTool {
   native_handler: NativeHandlerName | null; // required when mode='native'
   webhook_url: string | null;     // required when mode='n8n_webhook'
   webhook_secret: string | null;  // HMAC-SHA256 shared secret
+  mcp_server_id: string | null;   // required when mode='mcp'
   is_enabled: boolean;            // global switch per tool
   created_at: string;
   updated_at: string;
@@ -538,6 +539,7 @@ export interface CreateToolInput {
   native_handler?: NativeHandlerName;
   webhook_url?: string;
   webhook_secret?: string;
+  mcp_server_id?: string;
   is_enabled?: boolean;
 }
 
@@ -549,6 +551,20 @@ export interface UpdateToolInput {
   native_handler?: NativeHandlerName | null;
   webhook_url?: string | null;
   webhook_secret?: string | null;
+  mcp_server_id?: string | null;
+  is_enabled?: boolean;
+}
+
+// Convenience DTO for creating a tool backed by an MCP server tool.
+// The tool name must match exactly the tool name exposed by the server
+// (as returned by tools/list). Description and input_schema can be sourced
+// from cached_tools for convenience, but the runtime re-validates at call time.
+export interface CreateMcpToolInput {
+  config_id: string;
+  mcp_server_id: string;
+  name: string;               // must match tool name on MCP server
+  description: string;
+  input_schema: JSONSchemaObject;
   is_enabled?: boolean;
 }
 

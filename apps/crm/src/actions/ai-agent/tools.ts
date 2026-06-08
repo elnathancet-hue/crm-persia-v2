@@ -4,6 +4,7 @@ import { WEBHOOK_SECRET_MIN_LENGTH, getPreset } from "@persia/shared/ai-agent";
 import type {
   AgentTool,
   CreateCustomWebhookToolInput,
+  CreateMcpToolInput,
   CreateToolFromPresetInput,
   CreateToolInput,
   NativeHandlerName,
@@ -135,6 +136,43 @@ export async function createCustomWebhookTool(
     ...input,
     execution_mode: "n8n_webhook",
   });
+}
+
+export async function createMcpTool(input: CreateMcpToolInput): Promise<AgentTool> {
+  const { db, orgId } = await requireAgentRole("admin");
+  await assertConfigBelongsToOrg(db, orgId, input.config_id);
+
+  const { data: serverRow, error: serverErr } = await db
+    .from("mcp_server_connections")
+    .select("id, is_active")
+    .eq("organization_id", orgId)
+    .eq("id", input.mcp_server_id)
+    .maybeSingle();
+  if (serverErr || !serverRow) throw new Error("Servidor MCP nao encontrado");
+  const srv = serverRow as { id: string; is_active: boolean };
+  if (!srv.is_active) throw new Error("Servidor MCP inativo — ative antes de adicionar tools");
+
+  const { data, error } = await db
+    .from("agent_tools")
+    .insert({
+      organization_id: orgId,
+      config_id: input.config_id,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      input_schema: input.input_schema,
+      execution_mode: "mcp",
+      native_handler: null,
+      webhook_url: null,
+      webhook_secret: null,
+      mcp_server_id: input.mcp_server_id,
+      is_enabled: input.is_enabled ?? true,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "Erro ao criar tool MCP");
+  for (const path of agentPaths(input.config_id)) revalidatePath(path);
+  return data as AgentTool;
 }
 
 export async function updateTool(toolId: string, input: UpdateToolInput): Promise<AgentTool> {

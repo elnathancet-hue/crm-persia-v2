@@ -67,6 +67,7 @@ export function buildNotificationToolRow(
     native_handler: "trigger_notification",
     webhook_url: null,
     webhook_secret: null,
+    mcp_server_id: null,
     is_enabled: template.status === "active",
   };
 }
