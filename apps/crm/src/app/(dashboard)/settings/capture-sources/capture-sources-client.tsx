@@ -91,9 +91,11 @@ const CRM_HOST = "https://crm.funilpersia.top";
 
 function buildSnippet(sourceId: string) {
   return `<!-- Cole antes do </body> no seu site -->
+<!-- Substitua pk_live_... pela chave de API completa (disponível só na criação) -->
 <script
   src="${CRM_HOST}/capture.js"
   data-source-id="${sourceId}"
+  data-api-key="pk_live_SUA_CHAVE_AQUI"
 ></script>`;
 }
 
