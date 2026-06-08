@@ -12,15 +12,13 @@ import {
   Copy,
 } from "lucide-react";
 import { Button } from "@persia/ui/button";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { Badge } from "@persia/ui/badge";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
 } from "@persia/ui/dialog";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -263,14 +261,16 @@ export function WebhooksPageClient({
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Novo Webhook</DialogTitle>
-            <DialogDescription>
-              Configure um webhook de entrada ou saida
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Novo Webhook</DialogTitle>
+            <DialogHero
+              icon={<Webhook className="size-5" />}
+              title="Novo Webhook"
+              tagline="Configure um webhook de entrada ou saída"
+            />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="wh-name">Nome</Label>
               <Input
@@ -326,22 +326,18 @@ export function WebhooksPageClient({
                 onChange={(e) => setEvents(e.target.value)}
               />
             </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={saving || !name.trim() || (direction === "outbound" && !url.trim())}
+              >
+                {saving ? "Criando..." : "Criar Webhook"}
+              </Button>
+            </div>
           </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button
-              onClick={handleCreate}
-              disabled={
-                saving ||
-                !name.trim() ||
-                (direction === "outbound" && !url.trim())
-              }
-            >
-              {saving ? "Criando..." : "Criar Webhook"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

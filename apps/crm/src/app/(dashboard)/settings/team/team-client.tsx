@@ -24,9 +24,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
 } from "@persia/ui/dialog";
 import {
   DropdownMenu,
@@ -53,6 +50,7 @@ import {
   type PresetKey,
 } from "@/lib/permissions";
 import { RelativeTime } from "@persia/ui";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { createTeamMember, toggleMemberActive, updateMemberPermissions } from "@/actions/team";
 import { toast } from "sonner";
 
@@ -342,37 +340,43 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
 
       {/* Edit Permissions Dialog */}
       <Dialog open={!!permEditMember} onOpenChange={(open) => { if (!open) setPermEditMember(null); }}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Permissões — {permEditMember?.name}</DialogTitle>
-            <DialogDescription>
-              Escolha o perfil de acesso para este membro
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Permissões — {permEditMember?.name}</DialogTitle>
+            <DialogHero
+              icon={<KeyRound className="size-5" />}
+              title={`Permissões — ${permEditMember?.name ?? ""}`}
+              tagline="Escolha o perfil de acesso para este membro"
+            />
           </DialogHeader>
-          <PresetCards value={editPreset} onChange={setEditPreset} />
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button onClick={handleUpdatePermissions} disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-              Salvar
-            </Button>
-          </DialogFooter>
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <PresetCards value={editPreset} onChange={setEditPreset} />
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button variant="outline" onClick={() => setPermEditMember(null)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button onClick={handleUpdatePermissions} disabled={saving}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : null}
+                Salvar
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Create Member Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Criar Usuário</DialogTitle>
-            <DialogDescription>
-              O usuário terá acesso ao sistema com as permissões da função selecionada
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Criar Usuário</DialogTitle>
+            <DialogHero
+              icon={<Users className="size-5" />}
+              title="Criar Usuário"
+              tagline="Acesso ao sistema com as permissões do perfil selecionado"
+            />
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Nome *</Label>
@@ -444,17 +448,17 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
                 {errors.team_confirm && <p className="text-xs text-destructive mt-1">{errors.team_confirm}</p>}
               </div>
             </div>
-          </div>
 
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button onClick={handleCreate} disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              {saving ? "Criando..." : "Criar Membro"}
-            </Button>
-          </DialogFooter>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button variant="outline" onClick={() => { setCreateOpen(false); resetForm(); }} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreate} disabled={saving}>
+                {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                {saving ? "Criando..." : "Criar Membro"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

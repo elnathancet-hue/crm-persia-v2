@@ -27,10 +27,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import {
   Sheet,
   SheetContent,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@persia/ui/sheet";
@@ -297,11 +297,16 @@ function AddServerSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col">
-        <SheetHeader>
-          <SheetTitle>Adicionar servidor MCP</SheetTitle>
+      <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col p-0">
+        <SheetHeader className="border-b border-border bg-card p-5">
+          <SheetTitle className="sr-only">Adicionar servidor MCP</SheetTitle>
+          <DialogHero
+            icon={<Plug className="size-5" />}
+            title="Adicionar servidor MCP"
+            tagline="Conecte um servidor JSON-RPC para estender a IA com tools customizadas"
+          />
         </SheetHeader>
-        <div className="flex-1 overflow-y-auto py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="mcp-name">Nome amigável</Label>
             <Input
@@ -354,8 +359,8 @@ function AddServerSheet({
             </div>
           )}
         </div>
-        <SheetFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+        <div className="border-t border-border p-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancelar
           </Button>
           <Button
@@ -370,7 +375,7 @@ function AddServerSheet({
             {pending && <Loader2 className="size-3.5 animate-spin" />}
             Adicionar
           </Button>
-        </SheetFooter>
+        </div>
       </SheetContent>
     </Sheet>
   );

@@ -9,10 +9,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
 } from "@persia/ui/dialog";
+
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
@@ -33,6 +31,7 @@ import {
 } from "@persia/ui/table";
 import { Card, CardContent } from "@persia/ui/card";
 import { RelativeTime } from "@persia/ui";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { Switch } from "@persia/ui/switch";
 import { createQueue, updateQueue, deleteQueue } from "@/actions/queues";
 
@@ -265,18 +264,18 @@ export function QueuesPageClient({
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">
               {editingQueue ? "Editar Fila" : "Nova Fila de Atendimento"}
             </DialogTitle>
-            <DialogDescription>
-              {editingQueue
-                ? "Altere as configuracoes da fila"
-                : "Configure como os leads serao distribuidos"}
-            </DialogDescription>
+            <DialogHero
+              icon={<ListFilter className="size-5" />}
+              title={editingQueue ? "Editar Fila" : "Nova Fila de Atendimento"}
+              tagline={editingQueue ? "Altere as configurações da fila" : "Configure como os leads serão distribuídos"}
+            />
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="q-name">Nome *</Label>
               <Input
@@ -336,44 +335,44 @@ export function QueuesPageClient({
               </div>
               <Switch checked={setLeadOwner} onCheckedChange={setSetLeadOwner} />
             </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSave} disabled={saving || !name.trim()}>
+                {saving ? "Salvando..." : editingQueue ? "Salvar" : "Criar Fila"}
+              </Button>
+            </div>
           </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button onClick={handleSave} disabled={saving || !name.trim()}>
-              {saving
-                ? "Salvando..."
-                : editingQueue
-                ? "Salvar"
-                : "Criar Fila"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Excluir Fila</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja excluir a fila{" "}
-              <strong>{deletingQueue?.name}</strong>? Os membros serao desvinculados.
-            </DialogDescription>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Excluir Fila</DialogTitle>
+            <DialogHero
+              icon={<Trash2 className="size-5" />}
+              title="Excluir Fila"
+              tagline={`Remover "${deletingQueue?.name ?? ""}" permanentemente`}
+              tone="destructive"
+            />
           </DialogHeader>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>
-              Cancelar
-            </DialogClose>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={saving}
-            >
-              {saving ? "Excluindo..." : "Excluir"}
-            </Button>
-          </DialogFooter>
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Tem certeza que deseja excluir a fila{" "}
+              <strong className="text-foreground">{deletingQueue?.name}</strong>? Os membros serão desvinculados.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={saving}>
+                {saving ? "Excluindo..." : "Excluir"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </>
