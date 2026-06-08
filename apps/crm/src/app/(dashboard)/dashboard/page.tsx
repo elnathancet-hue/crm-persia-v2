@@ -9,6 +9,7 @@ import { PeriodSelector, type PeriodValue } from "@/components/dashboard/period-
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { TeamPerformance, type AgentStat } from "@/components/dashboard/team-performance";
+import { CampaignMiniCard, type CampaignSnapshot } from "@/components/dashboard/campaign-mini-card";
 import {
   Users,
   TrendingUp,
@@ -288,6 +289,20 @@ export default async function DashboardPage({
     // Feed: last 8 activities
     listOrgActivities({ db: supabase, orgId }, { page: 1, limit: 8 }),
   ]);
+
+  // ── Last campaign (last 30 days) ─────────────────────────────────────────
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  type LooseDb = Parameters<typeof supabase.from>[0];
+  const { data: lastCampaignData } = await supabase
+    .from("crm_campaigns" as LooseDb)
+    .select("id, name, status, sent_count, total_count, created_at")
+    .eq("organization_id", orgId)
+    .gte("created_at", thirtyDaysAgo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const lastCampaign: CampaignSnapshot | null =
+    lastCampaignData as unknown as CampaignSnapshot | null;
 
   // ── Team Performance (admin/owner only) ──────────────────────────────────
   let teamAgents: AgentStat[] = [];
@@ -628,6 +643,9 @@ export default async function DashboardPage({
           <TeamPerformance agents={teamAgents} period={periodLabel} />
         )}
       </div>
+
+      {/* Última campanha — só aparece se houver campanha nos últimos 30 dias */}
+      {lastCampaign && <CampaignMiniCard campaign={lastCampaign} />}
     </div>
   );
 }
