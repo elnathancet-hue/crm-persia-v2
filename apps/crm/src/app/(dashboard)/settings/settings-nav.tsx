@@ -10,6 +10,7 @@ import {
   KeyRound,
   ListChecks,
   Plug,
+  Settings,
   Smartphone,
   Users,
   Webhook,
@@ -41,10 +42,21 @@ export function SettingsNav({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold tracking-tight">Configurações</h1>
+      {/* Header — ícone + título + subtítulo */}
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <Settings className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold leading-tight tracking-tight">Configurações</h1>
+          <p className="text-sm text-muted-foreground">
+            Organização, equipe, billing e integrações
+          </p>
+        </div>
+      </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b pb-px">
+      <div className="flex gap-0 overflow-x-auto border-b border-border">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = pathname === tab.href;
@@ -52,10 +64,10 @@ export function SettingsNav({ children }: { children: React.ReactNode }) {
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap rounded-t-lg transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm whitespace-nowrap transition-colors relative ${
                 isActive
-                  ? "text-primary border-b-2 border-primary bg-card"
-                  : "text-muted-foreground hover:text-foreground hover:bg-card"
+                  ? "text-primary font-medium after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               <Icon className="size-4" />
