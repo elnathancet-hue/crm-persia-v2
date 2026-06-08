@@ -14,7 +14,7 @@ interface KpiCardProps {
 
 export function KpiCard({ title, value, description, icon: Icon, trend, variant = "default" }: KpiCardProps) {
   return (
-    <Card className="group relative overflow-hidden border-border/50 bg-gradient-to-b from-card to-card/50 rounded-xl hover:shadow-md transition-all duration-300">
+    <Card className="group relative overflow-hidden bg-card rounded-xl hover:shadow-md transition-all duration-300 border-border/60">
       <CardContent className="p-5 md:p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2 z-10">
@@ -42,22 +42,14 @@ export function KpiCard({ title, value, description, icon: Icon, trend, variant 
             )}
           </div>
           <div className={cn(
-            "size-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110",
+            "size-12 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105",
             variant === "warning" 
-              ? "bg-gradient-to-br from-warning/20 to-warning/5 text-warning border border-warning/10" 
-              : "bg-gradient-to-br from-primary/20 to-primary/5 text-primary border border-primary/10"
+              ? "bg-warning/10 text-warning" 
+              : "bg-primary/10 text-primary"
           )}>
-            <Icon className="size-5" strokeWidth={2.5} />
+            <Icon className="size-5" strokeWidth={2} />
           </div>
         </div>
-        {/* Subtle decorative background blob */}
-        <div 
-          className={cn(
-            "absolute -right-6 -top-6 size-24 rounded-full blur-2xl opacity-20 transition-opacity duration-300 group-hover:opacity-40",
-            variant === "warning" ? "bg-warning" : "bg-primary"
-          )}
-          aria-hidden="true"
-        />
       </CardContent>
     </Card>
   );
