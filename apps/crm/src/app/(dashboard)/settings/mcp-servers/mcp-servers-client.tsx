@@ -8,7 +8,7 @@ import {
   Plus,
   Plug,
   RefreshCw,
-  ServerCrash,
+  Server,
   Trash2,
   Wrench,
   XCircle,
@@ -28,6 +28,12 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 import { DialogHero } from "@persia/ui/dialog-hero";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -51,6 +57,7 @@ export function McpServersClient({ initialServers, initialError }: Props) {
   const [servers, setServers] = React.useState(initialServers);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const [pending, setPending] = React.useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<McpServerRow | null>(null);
 
   const refresh = React.useCallback(() => {
     router.refresh();
@@ -97,10 +104,9 @@ export function McpServersClient({ initialServers, initialError }: Props) {
     }
   }
 
-  async function handleDelete(serverId: string, name: string) {
-    if (!confirm(`Remover servidor "${name}"? Tools dele paradas de funcionar.`)) {
-      return;
-    }
+  async function handleDelete() {
+    if (!deleteConfirm) return;
+    const serverId = deleteConfirm.id;
     setPending(`delete:${serverId}`);
     try {
       const res = await deleteMcpServer(serverId);
@@ -109,6 +115,7 @@ export function McpServersClient({ initialServers, initialError }: Props) {
         return;
       }
       setServers((s) => s.filter((sv) => sv.id !== serverId));
+      setDeleteConfirm(null);
       toast.success("Servidor removido.");
     } finally {
       setPending(null);
@@ -118,19 +125,12 @@ export function McpServersClient({ initialServers, initialError }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Plug className="size-5" />
-            Servidores MCP
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Conecte servidores MCP (Model Context Protocol) externos pra
-            estender a IA com tools customizadas — APIs próprias, ERPs,
-            integrações de terceiros. Cada server discoverá suas tools
-            via JSON-RPC.
-          </p>
-        </div>
-        <Button onClick={() => setSheetOpen(true)} disabled={pending !== null}>
+        <p className="text-sm text-muted-foreground">
+          Conecte servidores MCP (Model Context Protocol) externos pra
+          estender a IA com tools customizadas — APIs próprias, ERPs,
+          integrações de terceiros. Cada server descobrirá suas tools via JSON-RPC.
+        </p>
+        <Button onClick={() => setSheetOpen(true)} disabled={pending !== null} className="shrink-0" size="sm">
           <Plus className="size-4" />
           Adicionar servidor
         </Button>
@@ -146,9 +146,18 @@ export function McpServersClient({ initialServers, initialError }: Props) {
 
       {servers.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Nenhum servidor MCP conectado. Clique em &quot;Adicionar
-            servidor&quot; pra começar.
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+            <Plug className="size-8 text-muted-foreground/50" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Nenhum servidor conectado</p>
+              <p className="text-xs text-muted-foreground">
+                Adicione um servidor MCP para estender a IA com tools customizadas.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setSheetOpen(true)}>
+              <Plus className="size-4" />
+              Adicionar servidor
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -157,7 +166,7 @@ export function McpServersClient({ initialServers, initialError }: Props) {
             <CardHeader className="flex-row items-start justify-between gap-3 pb-3">
               <div>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <ServerCrash className="size-4" />
+                  <Server className="size-4" />
                   {server.name}
                 </CardTitle>
                 <p className="text-xs text-muted-foreground font-mono mt-1">
@@ -171,14 +180,14 @@ export function McpServersClient({ initialServers, initialError }: Props) {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge
-                  variant={server.last_sync_error ? "destructive" : "outline"}
-                  className="gap-1"
-                >
+                <Badge variant={server.is_active ? "default" : "secondary"}>
+                  {server.is_active ? "Ativo" : "Inativo"}
+                </Badge>
+                <Badge variant={server.last_sync_error ? "destructive" : "outline"}>
                   {server.last_sync_error ? (
-                    <XCircle className="size-3" />
+                    <XCircle className="size-3 mr-1" />
                   ) : (
-                    <CheckCircle2 className="size-3" />
+                    <CheckCircle2 className="size-3 mr-1" />
                   )}
                   {server.cached_tools.length} tools
                 </Badge>
@@ -232,11 +241,10 @@ export function McpServersClient({ initialServers, initialError }: Props) {
                   Sincronizar
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="destructive"
                   size="sm"
-                  onClick={() => handleDelete(server.id, server.name)}
+                  onClick={() => setDeleteConfirm(server)}
                   disabled={pending === `delete:${server.id}`}
-                  className="text-destructive hover:text-destructive"
                 >
                   {pending === `delete:${server.id}` ? (
                     <Loader2 className="size-3.5 animate-spin" />
@@ -250,6 +258,35 @@ export function McpServersClient({ initialServers, initialError }: Props) {
           </Card>
         ))
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteConfirm} onOpenChange={(open) => { if (!open) setDeleteConfirm(null); }}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Remover servidor MCP</DialogTitle>
+            <DialogHero
+              icon={<Trash2 className="size-5" />}
+              title="Remover servidor"
+              tagline={`"${deleteConfirm?.name ?? ""}" será desconectado`}
+              tone="destructive"
+            />
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              As tools deste servidor deixarão de funcionar nos agentes de IA que as utilizam.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+              <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={!!pending}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={!!pending}>
+                {pending ? <Loader2 className="size-4 animate-spin" /> : null}
+                Remover
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AddServerSheet
         open={sheetOpen}
