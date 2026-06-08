@@ -48,6 +48,8 @@ import {
   ArrowRight,
   // Tab Produtos
   Package,
+  // Seção Captura (migration 109)
+  Globe,
 } from "lucide-react";
 import type { LeadWithTags, StageOutcome, OrgProduct, LeadProduct } from "@persia/shared/crm";
 import { TagBadge } from "@persia/tags-ui";
@@ -1360,6 +1362,49 @@ export function LeadInfoDrawer({
                   rows={5}
                 />
               </section>
+
+              {/* ============ CAPTURA ============ */}
+              {/* Visível apenas quando o lead veio via Lead Capture API (migration 109). */}
+              {(lead.utm_source || lead.utm_medium || lead.utm_campaign || lead.utm_term || lead.utm_content) && (
+                <section className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Globe className="size-4 text-muted-foreground" />
+                    CAPTURA
+                  </h3>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    {lead.utm_source && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">utm_source</dt>
+                        <dd className="font-medium truncate">{lead.utm_source}</dd>
+                      </div>
+                    )}
+                    {lead.utm_medium && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">utm_medium</dt>
+                        <dd className="font-medium truncate">{lead.utm_medium}</dd>
+                      </div>
+                    )}
+                    {lead.utm_campaign && (
+                      <div className="col-span-2">
+                        <dt className="text-xs text-muted-foreground">utm_campaign</dt>
+                        <dd className="font-medium truncate">{lead.utm_campaign}</dd>
+                      </div>
+                    )}
+                    {lead.utm_term && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">utm_term</dt>
+                        <dd className="font-medium truncate">{lead.utm_term}</dd>
+                      </div>
+                    )}
+                    {lead.utm_content && (
+                      <div>
+                        <dt className="text-xs text-muted-foreground">utm_content</dt>
+                        <dd className="font-medium truncate">{lead.utm_content}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </section>
+              )}
             </TabsContent>
 
             <TabsContent value="produtos" className="mt-0">

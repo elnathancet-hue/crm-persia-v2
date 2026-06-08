@@ -434,6 +434,7 @@ export default async function DashboardPage({
     group: "Grupo",
     smart_link: "Smart Link",
     webhook: "Webhook",
+    capture_api: "Formulário",
     unknown: "Desconhecida",
   };
 
