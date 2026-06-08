@@ -300,7 +300,8 @@ async function processJob(
       sent_at: sentAt,
     });
 
-    // Marcar campanha como running se ainda scheduled
+    // Marcar campanha como running ANTES de verificar conclusão — evita que
+    // campanhas rápidas (1 job) pulem direto de scheduled → completed.
     if (c.status === "scheduled") {
       await supabase
         .from("crm_campaigns")
@@ -454,15 +455,26 @@ async function completeCampaignIfDone(
 
   if ((pendingCount ?? 0) > 0) return;
 
+  const { count: sentCount } = await supabase
+    .from("crm_campaign_message_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("status", "sent");
+
   const { count: failedCount } = await supabase
     .from("crm_campaign_message_jobs")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
     .eq("status", "failed");
 
+  // Só marca "failed" se nenhum job foi enviado com sucesso — campanha com
+  // parcial de falhas (ex: 1 de 1000) ainda termina como "completed".
+  const finalStatus =
+    (failedCount ?? 0) > 0 && (sentCount ?? 0) === 0 ? "failed" : "completed";
+
   await supabase
     .from("crm_campaigns")
-    .update({ status: (failedCount ?? 0) > 0 ? "failed" : "completed" } as never)
+    .update({ status: finalStatus } as never)
     .eq("id", campaignId)
     .in("status", ["scheduled", "running"]);
 }

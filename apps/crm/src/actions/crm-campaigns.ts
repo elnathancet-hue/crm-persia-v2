@@ -642,11 +642,13 @@ export async function cancelCampaign(id: string): Promise<ActionResult<void>> {
       return { error: "Campanha já está finalizada" };
     }
 
-    // Cancela jobs pendentes (sem apagar histórico)
+    // Cancela jobs pendentes (sem apagar histórico).
+    // Inclui "sending" para evitar que jobs já travados continuem sendo
+    // entregues após o cancelamento (race condition do worker).
     await db.from("crm_campaign_message_jobs")
       .update({ status: "cancelled" })
       .eq("campaign_id", id)
-      .eq("status", "queued");
+      .in("status", ["queued", "sending"]);
 
     await db.from("crm_campaigns")
       .update({ status: "cancelled" })
