@@ -94,20 +94,21 @@ export function OrgSettingsClient({
             <div className="space-y-2">
               <Label>Nome da empresa *</Label>
               <Input
+                name="org_name"
                 value={name}
                 onChange={(e) => { setName(e.target.value); clearError("org_name"); }}
                 onBlur={() => { if (!name.trim()) setError("org_name", "Campo obrigatório"); else clearError("org_name"); }}
-                className={errors.org_name ? "border-destructive focus-visible:ring-destructive/50" : ""}
+                aria-invalid={!!errors.org_name}
               />
               {errors.org_name && <p className="text-xs text-destructive mt-1">{errors.org_name}</p>}
             </div>
             <div className="space-y-2">
               <Label>Nicho</Label>
-              <Input value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Ex: Estética, Educação..." />
+              <Input name="org_niche" value={niche} onChange={(e) => setNiche(e.target.value)} placeholder="Ex: Estética, Educação..." />
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Website</Label>
-              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." />
+              <Input name="org_website" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://..." />
             </div>
           </div>
         </CardContent>
@@ -130,6 +131,7 @@ export function OrgSettingsClient({
               <Label>Produto / Serviço</Label>
               <Input
                 value={product}
+                name="ai_product"
                 onChange={(e) => setProduct(e.target.value)}
                 placeholder="Ex: Curso de Identificação Humana"
               />
@@ -138,6 +140,7 @@ export function OrgSettingsClient({
               <Label>Público-alvo</Label>
               <Input
                 value={targetAudience}
+                name="ai_target_audience"
                 onChange={(e) => setTargetAudience(e.target.value)}
                 placeholder="Ex: Profissionais de segurança pública"
               />
@@ -146,6 +149,7 @@ export function OrgSettingsClient({
               <Label>Objetivo do atendimento</Label>
               <Input
                 value={salesGoal}
+                name="ai_sales_goal"
                 onChange={(e) => setSalesGoal(e.target.value)}
                 placeholder="Ex: Matricular o lead no curso"
               />
@@ -154,6 +158,7 @@ export function OrgSettingsClient({
               <Label>Informações-chave</Label>
               <Input
                 value={keyInfo}
+                name="ai_key_info"
                 onChange={(e) => setKeyInfo(e.target.value)}
                 placeholder="Ex: 15 módulos, 12 meses, 360h, EAD ao vivo"
               />
@@ -162,6 +167,7 @@ export function OrgSettingsClient({
           <div className="space-y-2">
             <Label>Restrições</Label>
             <Textarea
+              name="ai_restrictions"
               value={restrictions}
               onChange={(e) => setRestrictions(e.target.value)}
               placeholder="Ex: Nunca improvise preço. Nunca prometa aprovação em concursos."

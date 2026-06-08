@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { RelativeTime } from "@persia/ui";
 import {
   Select,
   SelectContent,
@@ -132,7 +133,7 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
   // ----------------------------------------------------------------
   if (!status.configured) {
     return (
-      <Card className="border-destructive/30">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ServerCrash className="size-5 text-destructive" />
@@ -285,7 +286,7 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
             <p className="text-xs text-muted-foreground">
               Última sincronização Google → CRM:{" "}
               <strong>
-                {new Date(status.last_polled_at).toLocaleString("pt-BR")}
+                <RelativeTime iso={status.last_polled_at} formatter={(d) => d.toLocaleString("pt-BR")} />
               </strong>
             </p>
           )}

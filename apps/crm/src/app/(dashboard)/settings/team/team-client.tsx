@@ -52,6 +52,7 @@ import {
   type OrgPermissions,
   type PresetKey,
 } from "@/lib/permissions";
+import { RelativeTime } from "@persia/ui";
 import { createTeamMember, toggleMemberActive, updateMemberPermissions } from "@/actions/team";
 import { toast } from "sonner";
 
@@ -85,21 +86,24 @@ function PresetCards({
   return (
     <div className="grid gap-2">
       {PRESET_ORDER.map((key) => (
-        <button
+        <Button
           key={key}
           type="button"
+          variant="outline"
           role="radio"
           aria-checked={value === key}
           onClick={() => onChange(key)}
-          className={`text-left rounded-lg border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          className={`h-auto w-full justify-start text-left p-3 ${
             value === key
               ? "border-primary bg-primary/5 ring-1 ring-primary"
-              : "border-border hover:border-muted-foreground/40"
+              : ""
           }`}
         >
-          <p className="text-sm font-semibold">{PRESET_LABELS[key]}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{PRESET_DESCRIPTIONS[key]}</p>
-        </button>
+          <div>
+            <p className="text-sm font-semibold">{PRESET_LABELS[key]}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 font-normal">{PRESET_DESCRIPTIONS[key]}</p>
+          </div>
+        </Button>
       ))}
     </div>
   );
@@ -304,13 +308,13 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {new Date(member.created_at).toLocaleDateString("pt-BR")}
+                        <RelativeTime iso={member.created_at} formatter={(d) => d.toLocaleDateString("pt-BR")} />
                       </TableCell>
                       <TableCell>
                         {member.role !== "owner" && (
                           <DropdownMenu>
                             <DropdownMenuTrigger>
-                              <Button variant="ghost" size="icon-sm" className="size-7">
+                              <Button variant="ghost" size="icon-sm" className="size-7" aria-label="Ações do membro">
                                 <MoreHorizontal className="size-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -373,36 +377,38 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
               <div className="space-y-2">
                 <Label>Nome *</Label>
                 <Input
+                  name="team_first_name"
                   placeholder="Nome"
                   value={firstName}
                   onChange={(e) => { setFirstName(e.target.value); clearError("team_name"); }}
                   onBlur={() => validateTeamField("team_name", firstName, { required: true })}
-                  className={errors.team_name ? "border-destructive focus-visible:ring-destructive/50" : ""}
+                  aria-invalid={!!errors.team_name}
                 />
                 {errors.team_name && <p className="text-xs text-destructive mt-1">{errors.team_name}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Sobrenome</Label>
-                <Input placeholder="Sobrenome" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+                <Input name="team_last_name" placeholder="Sobrenome" value={lastName} onChange={(e) => setLastName(e.target.value)} />
               </div>
             </div>
 
             <div className="space-y-2">
               <Label>E-mail *</Label>
               <Input
+                name="team_email"
                 type="email"
                 placeholder="email@exemplo.com"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); clearError("team_email"); }}
                 onBlur={() => validateTeamField("team_email", email, { required: true, email: true })}
-                className={errors.team_email ? "border-destructive focus-visible:ring-destructive/50" : ""}
+                aria-invalid={!!errors.team_email}
               />
               {errors.team_email && <p className="text-xs text-destructive mt-1">{errors.team_email}</p>}
             </div>
 
             <div className="space-y-2">
               <Label>Telefone</Label>
-              <Input placeholder="(00) 00000-0000" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Input name="team_phone" placeholder="(00) 00000-0000" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
 
             <div className="space-y-2">
@@ -414,24 +420,26 @@ export function TeamPageClient({ initialMembers }: { initialMembers: TeamMember[
               <div className="space-y-2">
                 <Label>Senha *</Label>
                 <Input
+                  name="team_password"
                   type="password"
                   placeholder="Min. 6 caracteres"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); clearError("team_password"); }}
                   onBlur={() => validateTeamField("team_password", password, { required: true, minLength: 6 })}
-                  className={errors.team_password ? "border-destructive focus-visible:ring-destructive/50" : ""}
+                  aria-invalid={!!errors.team_password}
                 />
                 {errors.team_password && <p className="text-xs text-destructive mt-1">{errors.team_password}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Confirmar senha *</Label>
                 <Input
+                  name="team_confirm"
                   type="password"
                   placeholder="Repetir senha"
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); clearError("team_confirm"); }}
                   onBlur={() => { if (password && confirmPassword && password !== confirmPassword) setError("team_confirm", "Senhas não conferem"); else clearError("team_confirm"); }}
-                  className={errors.team_confirm ? "border-destructive focus-visible:ring-destructive/50" : ""}
+                  aria-invalid={!!errors.team_confirm}
                 />
                 {errors.team_confirm && <p className="text-xs text-destructive mt-1">{errors.team_confirm}</p>}
               </div>

@@ -260,12 +260,15 @@ export function WhatsAppSettingsClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => { setQrCode(null); stopPolling(); }} />
           <div className="relative bg-card border rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Fechar QR Code"
               onClick={() => { setQrCode(null); stopPolling(); }}
-              className="absolute top-3 right-3 size-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="absolute top-3 right-3 size-8"
             >
               <X className="size-4" />
-            </button>
+            </Button>
 
             <div className="flex items-center gap-2 mb-4">
               <QrCode className="size-5 text-primary" />
@@ -307,12 +310,15 @@ export function WhatsAppSettingsClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setQrExpired(false)} />
           <div className="relative bg-card border rounded-2xl p-6 shadow-2xl max-w-xs w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
-            <button
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Fechar aviso"
               onClick={() => setQrExpired(false)}
-              className="absolute top-3 right-3 size-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="absolute top-3 right-3 size-8"
             >
               <X className="size-4" />
-            </button>
+            </Button>
             <div className="flex flex-col items-center gap-3 text-center">
               <div className="size-14 rounded-full bg-warning-soft flex items-center justify-center">
                 <AlertTriangle className="size-8 text-warning" />

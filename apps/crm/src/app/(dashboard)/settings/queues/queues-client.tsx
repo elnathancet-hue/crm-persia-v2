@@ -32,6 +32,8 @@ import {
   TableRow,
 } from "@persia/ui/table";
 import { Card, CardContent } from "@persia/ui/card";
+import { RelativeTime } from "@persia/ui";
+import { Switch } from "@persia/ui/switch";
 import { createQueue, updateQueue, deleteQueue } from "@/actions/queues";
 
 interface Queue {
@@ -232,13 +234,14 @@ export function QueuesPageClient({
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {new Date(queue.created_at).toLocaleDateString("pt-BR")}
+                  <RelativeTime iso={queue.created_at} formatter={(d) => d.toLocaleDateString("pt-BR")} />
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Editar fila"
                       onClick={() => openEditDialog(queue)}
                     >
                       <Pencil className="size-3.5" />
@@ -246,6 +249,7 @@ export function QueuesPageClient({
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Excluir fila"
                       className="text-destructive"
                       onClick={() => openDeleteDialog(queue)}
                     >
@@ -277,11 +281,12 @@ export function QueuesPageClient({
               <Label htmlFor="q-name">Nome *</Label>
               <Input
                 id="q-name"
+                name="queue_name"
                 placeholder="Ex: Suporte Nivel 1"
                 value={name}
                 onChange={(e) => { setName(e.target.value); clearError("queue_name"); }}
                 onBlur={() => { if (!name.trim()) setError("queue_name", "Campo obrigatório"); else clearError("queue_name"); }}
-                className={errors.queue_name ? "border-destructive focus-visible:ring-destructive/50" : ""}
+                aria-invalid={!!errors.queue_name}
               />
               {errors.queue_name && <p className="text-xs text-destructive mt-1">{errors.queue_name}</p>}
             </div>
@@ -289,6 +294,7 @@ export function QueuesPageClient({
               <Label htmlFor="q-desc">Descrição (opcional)</Label>
               <Textarea
                 id="q-desc"
+                name="queue_description"
                 rows={2}
                 placeholder="Descreva o propósito desta fila..."
                 value={description}
@@ -319,15 +325,7 @@ export function QueuesPageClient({
                   Novos leads recebidos serão distribuídos por esta fila
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isActive}
-                onClick={() => setIsActive((v) => !v)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "bg-primary" : "bg-input"}`}
-              >
-                <span className={`inline-block size-3.5 rounded-full bg-background shadow-sm transition-transform ${isActive ? "translate-x-4" : "translate-x-0.5"}`} />
-              </button>
+              <Switch checked={isActive} onCheckedChange={setIsActive} />
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="space-y-0.5">
@@ -336,15 +334,7 @@ export function QueuesPageClient({
                   Ao distribuir, define o agente como responsável pelo lead
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={setLeadOwner}
-                onClick={() => setSetLeadOwner((v) => !v)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${setLeadOwner ? "bg-primary" : "bg-input"}`}
-              >
-                <span className={`inline-block size-3.5 rounded-full bg-background shadow-sm transition-transform ${setLeadOwner ? "translate-x-4" : "translate-x-0.5"}`} />
-              </button>
+              <Switch checked={setLeadOwner} onCheckedChange={setSetLeadOwner} />
             </div>
           </div>
           <DialogFooter>

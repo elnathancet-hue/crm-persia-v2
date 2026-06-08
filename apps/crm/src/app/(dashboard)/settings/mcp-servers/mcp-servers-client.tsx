@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { RelativeTime } from "@persia/ui";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import {
@@ -136,7 +137,7 @@ export function McpServersClient({ initialServers, initialError }: Props) {
       </div>
 
       {initialError && (
-        <Card className="border-destructive/30">
+        <Card>
           <CardContent className="py-4 text-sm text-destructive">
             {initialError}
           </CardContent>
@@ -213,7 +214,7 @@ export function McpServersClient({ initialServers, initialError }: Props) {
               {server.last_synced_at && (
                 <p className="text-xs text-muted-foreground">
                   Última sincronização:{" "}
-                  {new Date(server.last_synced_at).toLocaleString("pt-BR")}
+                  <RelativeTime iso={server.last_synced_at} formatter={(d) => d.toLocaleString("pt-BR")} />
                 </p>
               )}
               <div className="flex gap-2">
@@ -305,6 +306,7 @@ function AddServerSheet({
             <Label htmlFor="mcp-name">Nome amigável</Label>
             <Input
               id="mcp-name"
+              name="mcp_name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Meu ERP, GitHub MCP, Notion API"
@@ -314,6 +316,7 @@ function AddServerSheet({
             <Label htmlFor="mcp-url">URL do servidor MCP</Label>
             <Input
               id="mcp-url"
+              name="mcp_url"
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
               placeholder="https://mcp.exemplo.com/rpc"
@@ -342,6 +345,7 @@ function AddServerSheet({
               <Label htmlFor="mcp-token">Token</Label>
               <Input
                 id="mcp-token"
+                name="mcp_auth_token"
                 type="password"
                 value={authToken}
                 onChange={(e) => setAuthToken(e.target.value)}

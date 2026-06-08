@@ -197,6 +197,7 @@ export function WebhooksPageClient({
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6"
+                          aria-label="Copiar token"
                           onClick={() => copyToClipboard(webhook.token!)}
                         >
                           <Copy className="size-3" />
@@ -232,6 +233,7 @@ export function WebhooksPageClient({
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label={webhook.is_active ? "Desativar webhook" : "Ativar webhook"}
                       onClick={() => handleToggleActive(webhook)}
                       disabled={saving}
                     >
@@ -244,6 +246,7 @@ export function WebhooksPageClient({
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Excluir webhook"
                       className="text-destructive"
                       onClick={() => handleDelete(webhook.id)}
                       disabled={saving}
@@ -272,6 +275,7 @@ export function WebhooksPageClient({
               <Label htmlFor="wh-name">Nome</Label>
               <Input
                 id="wh-name"
+                name="webhook_name"
                 placeholder="Ex: Notificação Slack"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -297,6 +301,7 @@ export function WebhooksPageClient({
                 <Label htmlFor="wh-url">URL de destino</Label>
                 <Input
                   id="wh-url"
+                  name="webhook_url"
                   placeholder="https://exemplo.com/webhook"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
@@ -315,6 +320,7 @@ export function WebhooksPageClient({
               </Label>
               <Input
                 id="wh-events"
+                name="webhook_events"
                 placeholder="lead.created, lead.updated, message.received"
                 value={events}
                 onChange={(e) => setEvents(e.target.value)}
