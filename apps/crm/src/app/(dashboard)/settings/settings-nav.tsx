@@ -2,19 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Building2,
-  Calendar,
-  CreditCard,
-  Globe,
-  KeyRound,
-  ListChecks,
-  Plug,
-  Settings,
-  Smartphone,
-  Users,
-  Webhook,
-} from "lucide-react";
+import { Settings } from "lucide-react";
 
 // PR-CRMOPS (mai/2026): tab "CRM" REMOVIDA. Configuracao do CRM voltou
 // pra dentro do proprio modulo /crm — funis sao editados via drawer
@@ -25,16 +13,16 @@ import {
 // /settings/* fica reservado pra config DE NEGOCIO/SISTEMA (org,
 // equipe, billing, integracoes). CRM nao se encaixa.
 const tabs = [
-  { label: "Organização", href: "/settings", icon: Building2 },
-  { label: "Equipe", href: "/settings/team", icon: Users },
-  { label: "Filas", href: "/settings/queues", icon: ListChecks },
-  { label: "Webhooks", href: "/settings/webhooks", icon: Webhook },
-  { label: "API", href: "/settings/api-keys", icon: KeyRound },
-  { label: "Origens", href: "/settings/capture-sources", icon: Globe },
-  { label: "WhatsApp", href: "/settings/whatsapp", icon: Smartphone },
-  { label: "Google Calendar", href: "/settings/google-calendar", icon: Calendar },
-  { label: "Servidores MCP", href: "/settings/mcp-servers", icon: Plug },
-  { label: "Plano", href: "/settings/billing", icon: CreditCard },
+  { label: "Organização",     href: "/settings" },
+  { label: "Canais",          href: "/settings/whatsapp" },
+  { label: "Equipe",          href: "/settings/team" },
+  { label: "Filas",           href: "/settings/queues" },
+  { label: "Google Calendar", href: "/settings/google-calendar" },
+  { label: "Webhooks",        href: "/settings/webhooks" },
+  { label: "Servidores MCP",  href: "/settings/mcp-servers" },
+  { label: "API",             href: "/settings/api-keys" },
+  { label: "Captura",         href: "/settings/capture-sources" },
+  { label: "Plano",           href: "/settings/billing" },
 ];
 
 export function SettingsNav({ children }: { children: React.ReactNode }) {
@@ -55,30 +43,28 @@ export function SettingsNav({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0 overflow-x-auto border-b border-border">
+      {/* Tabs — texto puro, sem ícone, espaçamento generoso */}
+      <div className="flex overflow-x-auto border-b border-border scrollbar-none">
         {tabs.map((tab) => {
-          const Icon = tab.icon;
           const isActive = pathname === tab.href;
           return (
             <Link
               key={tab.href}
               href={tab.href}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm whitespace-nowrap transition-colors relative ${
+              className={`relative shrink-0 px-4 py-3 text-sm whitespace-nowrap transition-colors ${
                 isActive
                   ? "text-primary font-medium after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Icon className="size-4" />
               {tab.label}
             </Link>
           );
         })}
       </div>
 
-      {/* Content */}
-      <div className="max-w-3xl">
+      {/* Content — mais largo para respirar */}
+      <div className="max-w-5xl">
         {children}
       </div>
     </div>
