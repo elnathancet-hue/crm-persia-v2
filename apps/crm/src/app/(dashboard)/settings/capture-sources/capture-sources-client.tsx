@@ -3,10 +3,12 @@
 import * as React from "react";
 import {
   Code2,
+  GitBranch,
   Globe,
   Loader2,
   Pencil,
   Plus,
+  Tag,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import {
@@ -30,13 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@persia/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@persia/ui/sheet";
 import {
   Table,
   TableBody,
@@ -327,165 +323,202 @@ function SourceSheet({
   }
 
   return (
-    <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>{isEdit ? "Editar origem" : "Nova origem de captura"}</SheetTitle>
-        </SheetHeader>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="border-b border-border bg-card p-5">
+          <DialogTitle className="sr-only">
+            {isEdit ? "Editar origem" : "Nova origem de captura"}
+          </DialogTitle>
+          <DialogHero
+            icon={<Globe className="size-5" />}
+            title={isEdit ? "Editar origem" : "Nova origem de captura"}
+            tagline={isEdit ? "Altere as configurações da origem" : "Configure uma nova fonte de leads"}
+          />
+        </DialogHeader>
 
-        <div className="space-y-5 py-4">
-          {/* Nome */}
-          <div className="space-y-1.5">
-            <Label htmlFor="source-name">Nome</Label>
-            <Input
-              id="source-name"
-              name="name"
-              value={form.name}
-              onChange={(e) => setField("name", e.target.value)}
-              placeholder="Ex: Site principal, LP Black Friday"
-              maxLength={100}
-            />
-          </div>
-
-          {/* Chave de API */}
-          <div className="space-y-1.5">
-            <Label>Chave de API</Label>
-            {apiKeys.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhuma chave ativa. Crie uma em{" "}
-                <a href="/settings/api-keys" className="underline">
-                  Configurações → API
-                </a>
-                .
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {/* Identificação */}
+          <section className="space-y-3">
+            <header className="space-y-0.5">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Globe className="size-4 text-muted-foreground" />
+                Identificação
+              </h3>
+              <p className="text-xs text-muted-foreground pl-6">
+                Nome e chave de API vinculada a esta origem
               </p>
-            ) : (
+            </header>
+
+            <div className="space-y-1">
+              <Label htmlFor="source-name" className="text-xs text-muted-foreground">Nome</Label>
+              <Input
+                id="source-name"
+                name="source_name"
+                value={form.name}
+                onChange={(e) => setField("name", e.target.value)}
+                placeholder="Ex: Site principal, LP Black Friday"
+                maxLength={100}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Chave de API</Label>
+              {apiKeys.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma chave ativa. Crie uma em{" "}
+                  <a href="/settings/api-keys" className="underline">
+                    Configurações → API
+                  </a>
+                  .
+                </p>
+              ) : (
+                <Select
+                  value={form.api_key_id}
+                  onValueChange={(v) => { if (v) setField("api_key_id", v); }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a chave de API" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {apiKeys.map((k) => (
+                      <SelectItem key={k.id} value={k.id}>
+                        {k.name}{" "}
+                        <span className="text-muted-foreground font-mono text-xs">
+                          ({k.key_prefix}...)
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </section>
+
+          {/* Roteamento */}
+          <section className="space-y-3">
+            <header className="space-y-0.5">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <GitBranch className="size-4 text-muted-foreground" />
+                Roteamento
+              </h3>
+              <p className="text-xs text-muted-foreground pl-6">
+                Para qual funil e etapa o lead entra automaticamente
+              </p>
+            </header>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Funil (opcional)</Label>
               <Select
-                value={form.api_key_id}
-                onValueChange={(v) => { if (v) setField("api_key_id", v); }}
+                value={form.pipeline_id || "__none__"}
+                onValueChange={(v) => setField("pipeline_id", !v || v === "__none__" ? "" : v)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a chave de API" />
+                  <SelectValue placeholder="Sem funil definido" />
                 </SelectTrigger>
                 <SelectContent>
-                  {apiKeys.map((k) => (
-                    <SelectItem key={k.id} value={k.id}>
-                      {k.name}{" "}
-                      <span className="text-muted-foreground font-mono text-xs">
-                        ({k.key_prefix}...)
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          {/* Pipeline */}
-          <div className="space-y-1.5">
-            <Label>Funil (opcional)</Label>
-            <Select
-              value={form.pipeline_id || "__none__"}
-              onValueChange={(v) => setField("pipeline_id", !v || v === "__none__" ? "" : v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Sem funil definido" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Sem funil (triagem manual)</SelectItem>
-                {pipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Se definido, o lead entra neste funil automaticamente.
-            </p>
-          </div>
-
-          {/* Stage (only when pipeline selected) */}
-          {form.pipeline_id && (
-            <div className="space-y-1.5">
-              <Label>Etapa inicial (opcional)</Label>
-              <Select
-                value={form.stage_id || "__first__"}
-                onValueChange={(v) => setField("stage_id", !v || v === "__first__" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Primeira etapa do funil" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__first__">Primeira etapa do funil</SelectItem>
-                  {filteredStages.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
+                  <SelectItem value="__none__">Sem funil (triagem manual)</SelectItem>
+                  {pipelines.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-          )}
 
-          {/* Tags */}
-          {tags.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Tags automáticas (opcional)</Label>
-              <div className="max-h-36 overflow-y-auto rounded-lg border p-2 space-y-1">
-                {tags.map((tag) => (
-                  <label
-                    key={tag.id}
-                    className="flex items-center gap-2 px-1 py-0.5 rounded cursor-pointer hover:bg-muted"
-                  >
-                    <Checkbox
-                      checked={form.tag_ids.includes(tag.id)}
-                      onCheckedChange={() => toggleTag(tag.id)}
-                    />
-                    <span
-                      className="size-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: tag.color }}
-                    />
-                    <span className="text-sm">{tag.name}</span>
-                  </label>
-                ))}
+            {form.pipeline_id && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Etapa inicial (opcional)</Label>
+                <Select
+                  value={form.stage_id || "__first__"}
+                  onValueChange={(v) => setField("stage_id", !v || v === "__first__" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Primeira etapa do funil" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__first__">Primeira etapa do funil</SelectItem>
+                    {filteredStages.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            )}
+          </section>
+
+          {/* Automação */}
+          <section className="space-y-3">
+            <header className="space-y-0.5">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Tag className="size-4 text-muted-foreground" />
+                Automação
+              </h3>
+              <p className="text-xs text-muted-foreground pl-6">
+                Aplicadas automaticamente em cada lead capturado por esta origem
+              </p>
+            </header>
+
+            {tags.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Tags automáticas (opcional)</Label>
+                <div className="max-h-36 overflow-y-auto rounded-lg border p-2 space-y-1">
+                  {tags.map((tag) => (
+                    <label
+                      key={tag.id}
+                      className="flex items-center gap-2 px-1 py-0.5 rounded cursor-pointer hover:bg-muted"
+                    >
+                      <Checkbox
+                        checked={form.tag_ids.includes(tag.id)}
+                        onCheckedChange={() => toggleTag(tag.id)}
+                      />
+                      <span
+                        className="size-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span className="text-sm">{tag.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <Label htmlFor="dedup-hours" className="text-xs text-muted-foreground">
+                Janela de deduplicação (horas)
+              </Label>
+              <Input
+                id="dedup-hours"
+                name="dedup_window_hours"
+                type="number"
+                min="0"
+                max="720"
+                value={form.dedup_window_hours}
+                onChange={(e) => setField("dedup_window_hours", e.target.value)}
+                className="w-32"
+              />
               <p className="text-xs text-muted-foreground">
-                Aplicadas em todo lead capturado por esta origem.
+                Se o mesmo telefone submeter dentro deste período, o lead não é duplicado.
+                Use 0 para desativar.
               </p>
             </div>
-          )}
+          </section>
 
-          {/* Dedup window */}
-          <div className="space-y-1.5">
-            <Label htmlFor="dedup-hours">Janela de deduplicação (horas)</Label>
-            <Input
-              id="dedup-hours"
-              name="dedup_window_hours"
-              type="number"
-              min="0"
-              max="720"
-              value={form.dedup_window_hours}
-              onChange={(e) => setField("dedup_window_hours", e.target.value)}
-              className="w-32"
-            />
-            <p className="text-xs text-muted-foreground">
-              Se o mesmo telefone submeter dentro deste período, o lead não é duplicado.
-              Use 0 para desativar.
-            </p>
+          {/* Footer */}
+          <div className="flex justify-end gap-2 pt-2 border-t border-border/40">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {isEdit ? "Salvar alterações" : "Criar origem"}
+            </Button>
           </div>
         </div>
-
-        <SheetFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
-            {isEdit ? "Salvar alterações" : "Criar origem"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 
