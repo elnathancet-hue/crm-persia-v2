@@ -12,35 +12,52 @@ interface KpiCardProps {
   variant?: "default" | "warning";
 }
 
-// PR-DSBASE: usa KpiValue/SectionLabel/MutedHint pra padronizar tipografia
-// + tokens semanticos `text-success/failure` no trend (era green-500/red-500).
 export function KpiCard({ title, value, description, icon: Icon, trend, variant = "default" }: KpiCardProps) {
   return (
-    <Card className="border rounded-xl hover:shadow-sm transition-shadow duration-200">
-      <CardContent className="p-4 md:p-6">
+    <Card className="group relative overflow-hidden border-border/50 bg-gradient-to-b from-card to-card/50 rounded-xl hover:shadow-md transition-all duration-300">
+      <CardContent className="p-5 md:p-6">
         <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <SectionLabel as="p">{title}</SectionLabel>
-            <KpiValue size="lg">{value}</KpiValue>
-            {description && <MutedHint>{description}</MutedHint>}
+          <div className="space-y-2 z-10">
+            <SectionLabel as="p" className="text-muted-foreground/80 tracking-wide uppercase text-[10px] font-bold">
+              {title}
+            </SectionLabel>
+            <div className="flex items-baseline gap-2">
+              <KpiValue size="lg" className="tracking-tight text-foreground">{value}</KpiValue>
+            </div>
+            {description && <MutedHint className="text-xs">{description}</MutedHint>}
             {trend && (
-              <p
-                className={cn(
-                  "text-xs font-medium",
-                  trend.positive ? "text-success" : "text-failure",
-                )}
-              >
-                {trend.positive ? "↑" : "↓"} {trend.value}% vs período anterior
-              </p>
+              <div className="flex items-center gap-1.5 mt-2">
+                <span
+                  className={cn(
+                    "inline-flex items-center justify-center px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider",
+                    trend.positive 
+                      ? "bg-success/10 text-success" 
+                      : "bg-failure/10 text-failure"
+                  )}
+                >
+                  {trend.positive ? "↑" : "↓"} {trend.value}%
+                </span>
+                <span className="text-[10px] text-muted-foreground font-medium">vs período anterior</span>
+              </div>
             )}
           </div>
           <div className={cn(
-            "size-10 rounded-xl flex items-center justify-center shrink-0",
-            variant === "warning" ? "bg-warning-soft" : "bg-primary/10"
+            "size-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-110",
+            variant === "warning" 
+              ? "bg-gradient-to-br from-warning/20 to-warning/5 text-warning border border-warning/10" 
+              : "bg-gradient-to-br from-primary/20 to-primary/5 text-primary border border-primary/10"
           )}>
-            <Icon className={cn("size-5", variant === "warning" ? "text-warning" : "text-primary")} />
+            <Icon className="size-5" strokeWidth={2.5} />
           </div>
         </div>
+        {/* Subtle decorative background blob */}
+        <div 
+          className={cn(
+            "absolute -right-6 -top-6 size-24 rounded-full blur-2xl opacity-20 transition-opacity duration-300 group-hover:opacity-40",
+            variant === "warning" ? "bg-warning" : "bg-primary"
+          )}
+          aria-hidden="true"
+        />
       </CardContent>
     </Card>
   );

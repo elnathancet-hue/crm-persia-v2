@@ -578,12 +578,12 @@ export default async function DashboardPage({
                     <span className="font-medium">{sourceLabels[source] ?? source}</span>
                     <span className="text-muted-foreground tabular-nums">{count}</span>
                   </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-2 rounded-full bg-muted/60 overflow-hidden shadow-inner">
                     <div
-                      className="h-full rounded-full transition-all"
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
                       style={{
                         width: `${Math.round((count / maxSourceCount) * 100)}%`,
-                        background: `hsl(var(--primary) / ${Math.max(0.35, 1 - idx * 0.13)})`,
+                        background: `linear-gradient(90deg, hsl(var(--primary) / ${Math.max(0.4, 1 - idx * 0.15)}), hsl(var(--primary) / ${Math.max(0.6, 1 - idx * 0.1)}))`
                       }}
                     />
                   </div>
@@ -612,23 +612,31 @@ export default async function DashboardPage({
               {mainPipeline ? "Nenhum lead nas etapas ainda." : "Nenhum funil configurado."}
             </p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
               {stageRows.map((stage) => (
-                <div key={stage.id} className="rounded-lg border bg-muted/40 p-3 space-y-1">
-                  <div
-                    className="size-2 rounded-full mb-2"
-                    style={{ background: stage.color ?? "hsl(var(--primary))" }}
-                  />
-                  <p className="text-xs text-muted-foreground leading-tight">{stage.name}</p>
-                  <p className="text-xl font-bold tabular-nums">{stage.count}</p>
-                  <div className="h-1.5 rounded-full bg-border overflow-hidden">
+                <div key={stage.id} className="group relative overflow-hidden rounded-xl border bg-card p-4 hover:shadow-md transition-all duration-300">
+                  <div className="flex items-center gap-2 mb-3">
                     <div
-                      className="h-full rounded-full bg-primary/70"
+                      className="size-2.5 rounded-full shadow-sm"
+                      style={{ background: stage.color ?? "hsl(var(--primary))" }}
+                    />
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider line-clamp-1">{stage.name}</p>
+                  </div>
+                  <p className="text-3xl font-black tracking-tighter tabular-nums mb-4">{stage.count}</p>
+                  <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-1000 ease-out"
                       style={{
                         width: `${Math.round((stage.count / maxStageCount) * 100)}%`,
+                        background: stage.color ?? "hsl(var(--primary))"
                       }}
                     />
                   </div>
+                  {/* Faint background tint on hover */}
+                  <div 
+                    className="absolute inset-0 opacity-0 group-hover:opacity-[0.03] transition-opacity duration-300 pointer-events-none"
+                    style={{ background: stage.color ?? "hsl(var(--primary))" }}
+                  />
                 </div>
               ))}
             </div>
