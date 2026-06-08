@@ -8,6 +8,7 @@ import { LeadsByMonthChart } from "@/components/dashboard/leads-by-month-chart";
 import { PeriodSelector, type PeriodValue } from "@/components/dashboard/period-selector";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { TeamPerformance, type AgentStat } from "@/components/dashboard/team-performance";
 import {
   Users,
   TrendingUp,
@@ -103,7 +104,7 @@ export default async function DashboardPage({
 
   const { data: member } = await supabase
     .from("organization_members")
-    .select("organization_id")
+    .select("organization_id, role")
     .eq("user_id", user.id)
     .eq("is_active", true)
     .order("created_at", { ascending: true })
@@ -124,6 +125,9 @@ export default async function DashboardPage({
   }
 
   const orgId = member.organization_id;
+  const isAdmin =
+    (member as { role?: string }).role === "admin" ||
+    (member as { role?: string }).role === "owner";
   const now = new Date();
 
   // Period from URL (?period=month is default)
@@ -284,6 +288,42 @@ export default async function DashboardPage({
     // Feed: last 8 activities
     listOrgActivities({ db: supabase, orgId }, { page: 1, limit: 8 }),
   ]);
+
+  // ── Team Performance (admin/owner only) ──────────────────────────────────
+  let teamAgents: AgentStat[] = [];
+  if (isAdmin) {
+    const { data: assignedLeads } = await supabase
+      .from("leads")
+      .select("assigned_to")
+      .eq("organization_id", orgId)
+      .not("assigned_to", "is", null)
+      .gte("created_at", periodStart);
+
+    if (assignedLeads && assignedLeads.length > 0) {
+      const counts: Record<string, number> = {};
+      for (const l of assignedLeads as { assigned_to: string }[]) {
+        if (l.assigned_to) counts[l.assigned_to] = (counts[l.assigned_to] ?? 0) + 1;
+      }
+      const top5 = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+      const userIds = top5.map(([id]) => id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", userIds);
+      const profileMap = new Map(
+        ((profiles ?? []) as { id: string; full_name: string | null }[]).map(
+          (p) => [p.id, p.full_name],
+        ),
+      );
+      teamAgents = top5.map(([userId, count]) => ({
+        userId,
+        name: profileMap.get(userId) ?? userId.slice(0, 8),
+        count,
+      }));
+    }
+  }
 
   // ── Revenue ───────────────────────────────────────────────────────────────
   const revenueNow = (wonRevenueRes.data ?? []).reduce(
@@ -581,8 +621,13 @@ export default async function DashboardPage({
         </CardContent>
       </Card>
 
-      {/* Feed de atividade recente */}
-      <ActivityFeed activities={recentActivities} />
+      {/* Feed de atividade + ranking da equipe */}
+      <div className={`grid grid-cols-1 gap-4${isAdmin && teamAgents.length > 0 ? " lg:grid-cols-2" : ""}`}>
+        <ActivityFeed activities={recentActivities} />
+        {isAdmin && teamAgents.length > 0 && (
+          <TeamPerformance agents={teamAgents} period={periodLabel} />
+        )}
+      </div>
     </div>
   );
 }
