@@ -1,11 +1,13 @@
 export const metadata = { title: "Dashboard" };
 
 import { createClient } from "@/lib/supabase/server";
+import { listOrgActivities } from "@persia/shared/crm";
 import { redirect } from "next/navigation";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { LeadsByMonthChart } from "@/components/dashboard/leads-by-month-chart";
 import { PeriodSelector, type PeriodValue } from "@/components/dashboard/period-selector";
 import { AlertsPanel } from "@/components/dashboard/alerts-panel";
+import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import {
   Users,
   TrendingUp,
@@ -161,6 +163,7 @@ export default async function DashboardPage({
     alertUnassignedRes,
     alertWaitingRes,
     alertInactiveRes,
+    activitiesRes,
   ] = await Promise.all([
     supabase
       .from("leads")
@@ -278,6 +281,8 @@ export default async function DashboardPage({
       .neq("status", "lost")
       .not("assigned_to", "is", null)
       .lt("updated_at", sevenDaysAgo),
+    // Feed: last 8 activities
+    listOrgActivities({ db: supabase, orgId }, { page: 1, limit: 8 }),
   ]);
 
   // ── Revenue ───────────────────────────────────────────────────────────────
@@ -306,6 +311,7 @@ export default async function DashboardPage({
   const alertUnassigned = alertUnassignedRes.count ?? 0;
   const alertWaiting = alertWaitingRes.count ?? 0;
   const alertInactive = alertInactiveRes.count ?? 0;
+  const recentActivities = activitiesRes.activities;
 
   // ── Trends ────────────────────────────────────────────────────────────────
   const trendLeads = calcTrend(newLeadsNow, newLeadsPrev);
@@ -574,6 +580,9 @@ export default async function DashboardPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Feed de atividade recente */}
+      <ActivityFeed activities={recentActivities} />
     </div>
   );
 }
