@@ -66,7 +66,9 @@ export function SettingsNav({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Content */}
-      {children}
+      <div className="max-w-3xl">
+        {children}
+      </div>
     </div>
   );
 }
