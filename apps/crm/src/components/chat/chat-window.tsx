@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, getConversations, uploadScheduledMessageMediaAction, type ConversationWithLead } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage, transferConversationToQueue } from "@/actions/conversations";
@@ -184,6 +184,30 @@ const LEAD_COLORS = [
 ];
 
 // ---- Helpers ----
+
+// Converte markdown do WhatsApp em React nodes.
+// Suporta: *negrito*, _itálico_, ~tachado~, `monoespaço`.
+// Preserva quebras de linha via whitespace-pre-wrap no container.
+function formatWhatsAppText(text: string): React.ReactNode {
+  const regex = /(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|`[^`\n]+`)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const raw = match[0];
+    const inner = raw.slice(1, -1);
+    const k = String(key++);
+    if (raw[0] === "*") parts.push(<strong key={k}>{inner}</strong>);
+    else if (raw[0] === "_") parts.push(<em key={k}>{inner}</em>);
+    else if (raw[0] === "~") parts.push(<s key={k}>{inner}</s>);
+    else parts.push(<code key={k} className="font-mono text-[0.9em] bg-black/10 rounded px-0.5">{inner}</code>);
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length > 0 ? <>{parts}</> : text;
+}
 
 function formatMessageTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString("pt-BR", {
@@ -2055,7 +2079,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                 </div>
                               )}
                               {msg.content && (
-                                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                                <p className="whitespace-pre-wrap break-words">{formatWhatsAppText(msg.content)}</p>
                               )}
                               {/* Time + "Editada" + status - WhatsApp style */}
                               <span
