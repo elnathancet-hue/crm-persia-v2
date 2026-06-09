@@ -25,6 +25,7 @@ import {
   Brain,
   CalendarCheck,
   CheckCircle2,
+  Download,
   Image,
   ExternalLink,
   HelpCircle,
@@ -36,6 +37,7 @@ import {
   Shield,
   Sparkles,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -111,6 +113,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@persia/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
 import type { FlowCatalogs } from "./flow/catalog-types";
 
 interface Props {
@@ -235,6 +245,8 @@ export function RulesTab({
   const [templates, setTemplates] = React.useState<MessageTemplate[]>(
     agent.message_templates ?? [],
   );
+  const [importModalOpen, setImportModalOpen] = React.useState(false);
+
   // Migration 101: validacao antes do envio.
   const [validationConfig, setValidationConfig] = React.useState<ValidationConfig>(
     () => normalizeValidationConfig(agent.validation_config),
@@ -736,22 +748,70 @@ export function RulesTab({
                   Textos prontos reutilizáveis nos nodes do Fluxo. Sugestão para IA ou resposta fixa sem IA.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const tempKey = `tpl_new_${Date.now()}`;
-                  setTemplates((prev) => [
-                    ...prev,
-                    { key: tempKey, name: "", mode: "ai_suggestion", message: "" },
-                  ]);
-                }}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
-              >
-                <Plus className="size-3.5" />
-                Novo template
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const tempKey = `tpl_new_${Date.now()}`;
+                    setTemplates((prev) => [
+                      ...prev,
+                      { key: tempKey, name: "", mode: "ai_suggestion", message: "" },
+                    ]);
+                  }}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                >
+                  <Plus className="size-3.5" />
+                  Novo template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportModalOpen(true)}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                >
+                  <Upload className="size-3.5" />
+                  Importar JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (templates.length === 0) {
+                      toast.info("Nenhum template para exportar.");
+                      return;
+                    }
+                    const exportable = templates.map(({ key, name, usage, mode, message }) => ({
+                      key,
+                      name,
+                      ...(usage ? { usage } : {}),
+                      mode,
+                      message,
+                    }));
+                    const json = JSON.stringify(exportable, null, 2);
+                    const blob = new Blob([json], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `templates-${agent.id.slice(0, 8)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success(`${templates.length} template(s) exportado(s).`);
+                  }}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                >
+                  <Download className="size-3.5" />
+                  Exportar JSON
+                </button>
+              </div>
             </div>
             <MessageTemplatesSection templates={templates} onChange={setTemplates} />
+            <ImportTemplatesModal
+              open={importModalOpen}
+              onClose={() => setImportModalOpen(false)}
+              existingTemplates={templates}
+              onApply={(next) => {
+                setTemplates(next);
+                setImportModalOpen(false);
+              }}
+            />
           </section>
         </CardContent>
       </Card>
@@ -2021,6 +2081,304 @@ function uniqueSlug(base: string, existing: string[]): string {
   let n = 2;
   while (existing.includes(`${base}_${n}`)) n++;
   return `${base}_${n}`;
+}
+
+// ============================================================================
+// ImportTemplatesModal
+// ============================================================================
+
+type ImportMode = "merge" | "replace";
+
+interface ParsedTemplate {
+  key: string;
+  name: string;
+  usage?: string;
+  mode: "ai_suggestion" | "fixed_response";
+  message: string;
+}
+
+interface ParseResult {
+  ok: true;
+  items: ParsedTemplate[];
+  errors: string[];
+}
+
+interface ParseError {
+  ok: false;
+  errors: string[];
+}
+
+function parseTemplateJson(raw: string): ParseResult | ParseError {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { ok: false, errors: ["JSON inválido. Verifique a sintaxe e tente novamente."] };
+  }
+  if (!Array.isArray(parsed)) {
+    return { ok: false, errors: ["O JSON deve ser um array ([ ... ])."] };
+  }
+  const errors: string[] = [];
+  const seenKeys = new Set<string>();
+  const items: ParsedTemplate[] = [];
+  for (let i = 0; i < parsed.length; i++) {
+    const raw = parsed[i] as Record<string, unknown>;
+    const label = `Item ${i + 1}`;
+    if (!raw.key || typeof raw.key !== "string" || !raw.key.trim()) {
+      errors.push(`${label}: campo "key" obrigatório.`);
+      continue;
+    }
+    const key = String(raw.key).trim();
+    if (/\s/.test(key)) {
+      errors.push(`${label}: chave "${key}" contém espaços.`);
+    }
+    if (!/^[a-z0-9_]+$/i.test(key)) {
+      errors.push(`${label}: chave "${key}" contém caracteres inválidos (use letras, números e _).`);
+    }
+    if (seenKeys.has(key)) {
+      errors.push(`Chave duplicada no arquivo: "${key}".`);
+    }
+    seenKeys.add(key);
+    if (!raw.name || typeof raw.name !== "string" || !raw.name.trim()) {
+      errors.push(`${label}: campo "name" obrigatório.`);
+    }
+    if (!raw.message || typeof raw.message !== "string" || !raw.message.trim()) {
+      errors.push(`${label}: campo "message" obrigatório.`);
+    }
+    const mode = raw.mode as string | undefined;
+    if (mode !== undefined && mode !== "ai_suggestion" && mode !== "fixed_response") {
+      errors.push(`${label}: mode inválido "${mode}". Use "ai_suggestion" ou "fixed_response".`);
+    }
+    if (errors.length === 0 || !errors.some((e) => e.startsWith(label))) {
+      items.push({
+        key,
+        name: String(raw.name ?? "").trim(),
+        ...(raw.usage ? { usage: String(raw.usage).trim() } : {}),
+        mode: (mode as "ai_suggestion" | "fixed_response") ?? "ai_suggestion",
+        message: String(raw.message ?? "").trim(),
+      });
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, items, errors: [] };
+}
+
+const EXAMPLE_JSON = `[
+  {
+    "key": "ask_name",
+    "name": "Perguntar nome",
+    "usage": "Use quando precisar perguntar o nome do lead.",
+    "mode": "ai_suggestion",
+    "message": "Qual é o seu nome?"
+  },
+  {
+    "key": "fallback",
+    "name": "Fallback padrão",
+    "usage": "Use quando a conversa sair do escopo.",
+    "mode": "fixed_response",
+    "message": "Certo, já já damos continuidade por aqui."
+  }
+]`;
+
+function ImportTemplatesModal({
+  open,
+  onClose,
+  existingTemplates,
+  onApply,
+}: {
+  open: boolean;
+  onClose: () => void;
+  existingTemplates: MessageTemplate[];
+  onApply: (next: MessageTemplate[]) => void;
+}) {
+  const [raw, setRaw] = React.useState("");
+  const [mode, setMode] = React.useState<ImportMode>("merge");
+  const [showExample, setShowExample] = React.useState(false);
+  const [result, setResult] = React.useState<ParseResult | ParseError | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      setRaw("");
+      setResult(null);
+      setShowExample(false);
+    }
+  }, [open]);
+
+  const handleValidate = () => {
+    setResult(parseTemplateJson(raw.trim()));
+  };
+
+  const handleApply = () => {
+    if (!result?.ok) return;
+    const imported = result.items as MessageTemplate[];
+    let next: MessageTemplate[];
+    if (mode === "replace") {
+      next = imported;
+    } else {
+      const existing = [...existingTemplates];
+      for (const tpl of imported) {
+        const idx = existing.findIndex((e) => e.key === tpl.key);
+        if (idx >= 0) {
+          existing[idx] = { ...existing[idx], ...tpl };
+        } else {
+          existing.push(tpl);
+        }
+      }
+      next = existing;
+    }
+    onApply(next);
+    toast.success(
+      mode === "replace"
+        ? `${imported.length} template(s) importado(s) (substituição total).`
+        : `${imported.length} template(s) importado(s) (adição/atualização).`
+    );
+  };
+
+  // Preview counts (only when parse is OK)
+  let previewNew = 0;
+  let previewUpdated = 0;
+  if (result?.ok) {
+    for (const tpl of result.items) {
+      if (existingTemplates.some((e) => e.key === tpl.key)) {
+        previewUpdated++;
+      } else {
+        previewNew++;
+      }
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Importar templates por JSON</DialogTitle>
+          <DialogDescription>
+            Cole um JSON com vários templates para criar ou atualizar mensagens em lote.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Mode selector */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Modo de importação</Label>
+            <Select
+              value={mode}
+              onValueChange={(v) => v && setMode(v as ImportMode)}
+            >
+              <SelectTrigger data-size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="merge">Adicionar / atualizar por chave</SelectItem>
+                <SelectItem value="replace">Substituir todos os templates</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Example toggle */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowExample((v) => !v)}
+              className="text-xs text-primary underline underline-offset-2"
+            >
+              {showExample ? "Ocultar exemplo" : "Ver exemplo de JSON"}
+            </button>
+            {showExample ? (
+              <pre className="mt-2 rounded-md bg-muted/60 p-3 text-[11px] leading-relaxed overflow-auto max-h-40 border border-border">
+                {EXAMPLE_JSON}
+              </pre>
+            ) : null}
+          </div>
+
+          {/* JSON textarea */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">JSON</Label>
+            <Textarea
+              rows={8}
+              placeholder="Cole o JSON aqui…"
+              value={raw}
+              onChange={(e) => { setRaw(e.target.value); setResult(null); }}
+              className="font-mono text-xs"
+            />
+          </div>
+
+          {/* File upload */}
+          <div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  setRaw(String(ev.target?.result ?? ""));
+                  setResult(null);
+                };
+                reader.readAsText(file);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="text-xs text-primary underline underline-offset-2"
+            >
+              Ou carregar arquivo .json
+            </button>
+          </div>
+
+          {/* Errors */}
+          {result && !result.ok ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1">
+              <p className="text-xs font-semibold text-destructive">Erros encontrados:</p>
+              <ul className="list-disc list-inside space-y-0.5">
+                {result.errors.map((e, i) => (
+                  <li key={i} className="text-xs text-destructive">{e}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* Preview */}
+          {result?.ok ? (
+            <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1">
+              <p className="text-xs font-semibold">{result.items.length} template(s) encontrado(s)</p>
+              {mode === "merge" ? (
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  <li>{previewNew} novo(s)</li>
+                  <li>{previewUpdated} atualizado(s)</li>
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Todos os templates atuais serão substituídos por {result.items.length} template(s).
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Cancelar
+          </Button>
+          {!result?.ok ? (
+            <Button size="sm" onClick={handleValidate} disabled={!raw.trim()}>
+              Validar JSON
+            </Button>
+          ) : (
+            <Button size="sm" onClick={handleApply}>
+              Importar templates
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function MessageTemplatesSection({
