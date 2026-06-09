@@ -65,24 +65,24 @@ const VARIANT_STYLES: Record<
   { container: string; icon: string; badge: string }
 > = {
   entry: {
-    container: "border-success/40 bg-card",
-    icon: "bg-success-soft text-success-soft-foreground",
-    badge: "text-success",
+    container: "border-success/70 bg-card",
+    icon: "bg-success/20 text-success",
+    badge: "bg-success/15 text-success",
   },
   ai_agent: {
-    container: "border-primary/40 bg-card",
-    icon: "bg-primary/15 text-primary",
-    badge: "text-primary",
+    container: "border-primary/60 bg-card",
+    icon: "bg-primary/20 text-primary",
+    badge: "bg-primary/15 text-primary",
   },
   action: {
-    container: "border-progress/40 bg-card",
-    icon: "bg-progress-soft text-progress-soft-foreground",
-    badge: "text-progress",
+    container: "border-progress/60 bg-card",
+    icon: "bg-progress/20 text-progress",
+    badge: "bg-progress/15 text-progress",
   },
   condition: {
-    container: "border-muted bg-card",
+    container: "border-border bg-card",
     icon: "bg-muted text-muted-foreground",
-    badge: "text-muted-foreground",
+    badge: "bg-muted text-muted-foreground",
   },
 };
 
@@ -113,14 +113,14 @@ export function NodeShell({
   return (
     <div
       className={cn(
-        "group rounded-xl border-2 shadow-sm transition-all relative",
+        "group rounded-xl border-2 shadow-md transition-all relative",
         // PR 21 + PR 23: largura cresce quando expandido (form inline).
         // wide layout (IA) ganha mais largura.
         isWide
-          ? "w-[560px]"
+          ? "w-[580px]"
           : isExpanded
-            ? "w-[420px]"
-            : "w-[260px]",
+            ? "w-[440px]"
+            : "w-[280px]",
         // PR 17: borda âmbar/failure se incompleto (override variant color)
         incomplete ? "border-failure/70 bg-card" : styles.container,
         selected
@@ -192,18 +192,18 @@ export function NodeShell({
         </div>
       ) : null}
 
-      <div className="flex items-start gap-2.5 p-3">
+      <div className="flex items-start gap-3 p-3.5">
         <div
           className={cn(
-            "size-9 shrink-0 rounded-lg flex items-center justify-center",
+            "size-10 shrink-0 rounded-xl flex items-center justify-center",
             styles.icon,
           )}
         >
-          <Icon className="size-4" />
+          <Icon className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <div className="text-sm font-semibold leading-tight text-foreground">
+            <div className="text-[15px] font-semibold leading-tight text-foreground">
               {label}
             </div>
             {incomplete ? (
@@ -216,8 +216,8 @@ export function NodeShell({
           {badge ? (
             <div
               className={cn(
-                "mt-0.5 text-[10px] font-medium uppercase tracking-wide",
-                incomplete ? "text-failure" : styles.badge,
+                "mt-1 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                incomplete ? "bg-failure/15 text-failure" : styles.badge,
               )}
             >
               {badge}
@@ -226,7 +226,7 @@ export function NodeShell({
         </div>
       </div>
       {children ? (
-        <div className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
+        <div className="border-t border-border/40 px-3.5 py-2.5 text-xs text-foreground/70 leading-relaxed">
           {children}
         </div>
       ) : null}
