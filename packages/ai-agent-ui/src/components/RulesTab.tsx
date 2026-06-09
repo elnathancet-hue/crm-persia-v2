@@ -663,24 +663,25 @@ export function RulesTab({
             isPrimary={agent.is_primary !== false}
           />
 
-          <div className="space-y-2">
-            <Label htmlFor="agent_name">Nome</Label>
-            <Input
-              id="agent_name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nomeie seu agente"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Descrição</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Adicione uma breve descrição sobre o que faz esse agente"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="agent_name">Nome do agente</Label>
+              <Input
+                id="agent_name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nomeie seu agente"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Descrição</Label>
+              <Input
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Uma linha sobre o que esse agente faz"
+              />
+            </div>
           </div>
           {/* PR 22 (mai/2026): prompt agora tem 2 modos de edição
               (texto corrido OU por partes). Antes era só textarea

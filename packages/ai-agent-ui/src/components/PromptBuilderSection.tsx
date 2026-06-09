@@ -1,11 +1,17 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, Info, Pencil } from "lucide-react";
+import { Braces, ChevronDown, Pencil } from "lucide-react";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Button } from "@persia/ui/button";
 import { cn } from "@persia/ui/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@persia/ui/dropdown-menu";
 
 interface Props {
   value: string;
@@ -13,9 +19,18 @@ interface Props {
   agentId: string;
 }
 
+const VARIABLES = [
+  { label: "Nome do lead", value: "{{lead.name}}" },
+  { label: "Telefone do lead", value: "{{lead.phone}}" },
+  { label: "E-mail do lead", value: "{{lead.email}}" },
+] as const;
+
 export function PromptBuilderSection({ value, onChange }: Props) {
   const [isEditing, setIsEditing] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  // Ref (não state) pra tracking síncrono do dropdown open — evita
+  // colapso acidental pelo onBlur quando o usuário clica em "Variáveis".
+  const variablesOpenRef = React.useRef(false);
   const preview = value.trim();
   const charCount = value.length;
 
@@ -24,39 +39,78 @@ export function PromptBuilderSection({ value, onChange }: Props) {
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
-  // Auto-colapsa quando o foco sai do container inteiro.
-  // e.relatedTarget = elemento que recebeu foco após o blur.
-  // Se ainda estiver dentro do container, não colapsa (ex: clique no botão "Fechar").
+  // Auto-colapsa ao sair do container, exceto quando o dropdown de
+  // Variáveis estiver aberto (evita fechar o editor ao inserir variável).
   function handleContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (variablesOpenRef.current) return;
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     setIsEditing(false);
   }
 
+  function insertVariable(variable: string) {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? start;
+    const newValue = value.slice(0, start) + variable + value.slice(end);
+    const newCursor = start + variable.length;
+    onChange(newValue);
+    // Restaura foco e cursor após React re-renderizar com o novo valor
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newCursor, newCursor);
+    });
+  }
+
   return (
-    <div className="space-y-3">
-      <div className="space-y-1.5">
+    <div className="space-y-2">
+      <div className="space-y-0.5">
         <Label htmlFor="prompt-builder">Instruções</Label>
-        {!isEditing && (
-          <p className="text-xs text-muted-foreground flex items-start gap-1.5">
-            <Info className="size-3.5 shrink-0 mt-0.5" />
-            Escreva quem é o agente, o que ele faz, regras, tom de conversa e
-            informações importantes.
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground">
+          Defina o comportamento do agente, tom de conversa, regras e
+          informações importantes.
+        </p>
       </div>
 
       {isEditing ? (
-        // onBlur no container — colapsa ao sair da área de edição
         <div className="space-y-2" onBlur={handleContainerBlur}>
-          <Textarea
-            ref={textareaRef}
-            id="prompt-builder"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            rows={14}
-            className="font-mono text-sm"
-            placeholder="Você é um atendente..."
-          />
+          <div className="relative">
+            <Textarea
+              ref={textareaRef}
+              id="prompt-builder"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              rows={14}
+              className="font-mono text-sm pr-32"
+              placeholder="Você é um atendente..."
+            />
+            {/* Botão Variáveis — canto superior direito do textarea */}
+            <div className="absolute top-2 right-2">
+              <DropdownMenu
+                onOpenChange={(open) => {
+                  variablesOpenRef.current = open;
+                }}
+              >
+                <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shadow-xs">
+                  <Braces className="size-3" />
+                  Variáveis
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {VARIABLES.map((v) => (
+                    <DropdownMenuItem
+                      key={v.value}
+                      onClick={() => insertVariable(v.value)}
+                    >
+                      <span className="flex-1">{v.label}</span>
+                      <code className="ml-2 text-xs text-muted-foreground font-mono">
+                        {v.value}
+                      </code>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground tabular-nums">
               {charCount > 0 ? `${charCount.toLocaleString("pt-BR")} caracteres` : ""}
