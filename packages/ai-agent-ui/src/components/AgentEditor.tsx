@@ -109,11 +109,6 @@ function buildSidebarGroups(_opts: {
       id: "actions",
       label: "Ações",
       items: [
-        // PR-AGENT-INTEGRATION-1: "Notificações" foi pra dentro de Regras
-        // (HandoffNotificationCard agrupado com switch de transferir
-        // pra humano). "Agendamento" virou tool habilitavel em Regras
-        // (sem aba dedicada). Sobra: Ferramentas + Follow-up.
-        { id: "tools", label: "Ferramentas", icon: Wrench },
         { id: "followups", label: "Follow-up", icon: Clock },
       ],
     },
