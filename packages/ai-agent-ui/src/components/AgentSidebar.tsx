@@ -65,7 +65,7 @@ export function AgentSidebar({
       className={cn(
         "flex flex-col gap-1 text-sm",
         variant === "panel" &&
-          "sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-xl border border-border bg-card p-2 transition-all",
+          "sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-xl border border-border bg-sidebar p-2 transition-all",
         variant === "drawer" && "p-1",
       )}
     >
