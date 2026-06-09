@@ -25,6 +25,7 @@ import {
   Brain,
   CalendarCheck,
   CheckCircle2,
+  ChevronDown,
   Database,
   Download,
   Image,
@@ -101,6 +102,7 @@ import {
 } from "@persia/ui/accordion";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
+import { cn } from "@persia/ui/utils";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
@@ -258,6 +260,9 @@ export function RulesTab({
     agent.message_templates ?? [],
   );
   const [importModalOpen, setImportModalOpen] = React.useState(false);
+  const [templatesOpen, setTemplatesOpen] = React.useState(
+    (agent.message_templates ?? []).length > 0,
+  );
 
   // Migration 113: fontes de dados estruturadas.
   const [structuredSources, setStructuredSources] = React.useState<StructuredSource[]>(
@@ -788,74 +793,97 @@ export function RulesTab({
             />
           </section>
 
-          <section className="space-y-2 border-t border-border pt-5">
-            <div className="flex items-center justify-between">
+          <section className="border-t border-border pt-5">
+            {/* Header colapsável */}
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen((v) => !v)}
+              className="w-full flex items-center justify-between gap-3 text-left group mb-2"
+            >
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Templates de mensagem</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  Templates de mensagem
+                  {templates.length > 0 && (
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground tabular-nums normal-case font-normal tracking-normal">
+                      {templates.length}
+                    </span>
+                  )}
+                </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Textos prontos reutilizáveis nos nodes do Fluxo. Sugestão para IA ou resposta fixa sem IA.
                 </p>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const tempKey = `tpl_new_${Date.now()}`;
-                    setTemplates((prev) => [
-                      ...prev,
-                      { key: tempKey, name: "", mode: "ai_suggestion", message: "" },
-                    ]);
-                  }}
-                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
-                >
-                  <Plus className="size-3.5" />
-                  Novo template
-                </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    className="flex items-center justify-center rounded-md border border-border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                    aria-label="Mais opções"
+              <ChevronDown
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform duration-200 shrink-0",
+                  templatesOpen && "rotate-180",
+                )}
+              />
+            </button>
+
+            {templatesOpen && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tempKey = `tpl_new_${Date.now()}`;
+                      setTemplates((prev) => [
+                        ...prev,
+                        { key: tempKey, name: "", mode: "ai_suggestion", message: "" },
+                      ]);
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
                   >
-                    <MoreHorizontal className="size-3.5" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setImportModalOpen(true)}>
-                      <Upload className="size-3.5" />
-                      Importar JSON
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        if (templates.length === 0) {
-                          toast.info("Nenhum template para exportar.");
-                          return;
-                        }
-                        const exportable = templates.map(({ key, name, usage, mode, message }) => ({
-                          key,
-                          name,
-                          ...(usage ? { usage } : {}),
-                          mode,
-                          message,
-                        }));
-                        const json = JSON.stringify(exportable, null, 2);
-                        const blob = new Blob([json], { type: "application/json" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = `templates-${agent.id.slice(0, 8)}.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                        toast.success(`${templates.length} template(s) exportado(s).`);
-                      }}
-                      disabled={templates.length === 0}
+                    <Plus className="size-3.5" />
+                    Novo template
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      className="flex items-center justify-center rounded-md border border-border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                      aria-label="Mais opções"
                     >
-                      <Download className="size-3.5" />
-                      Exportar JSON
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <MoreHorizontal className="size-3.5" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setImportModalOpen(true)}>
+                        <Upload className="size-3.5" />
+                        Importar JSON
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (templates.length === 0) {
+                            toast.info("Nenhum template para exportar.");
+                            return;
+                          }
+                          const exportable = templates.map(({ key, name, usage, mode, message }) => ({
+                            key,
+                            name,
+                            ...(usage ? { usage } : {}),
+                            mode,
+                            message,
+                          }));
+                          const json = JSON.stringify(exportable, null, 2);
+                          const blob = new Blob([json], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `templates-${agent.id.slice(0, 8)}.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                          toast.success(`${templates.length} template(s) exportado(s).`);
+                        }}
+                        disabled={templates.length === 0}
+                      >
+                        <Download className="size-3.5" />
+                        Exportar JSON
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+                <MessageTemplatesSection templates={templates} onChange={setTemplates} />
               </div>
-            </div>
-            <MessageTemplatesSection templates={templates} onChange={setTemplates} />
+            )}
             <ImportTemplatesModal
               open={importModalOpen}
               onClose={() => setImportModalOpen(false)}

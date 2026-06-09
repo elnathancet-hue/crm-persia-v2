@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  ChevronDown,
   FileText,
   Loader2,
   RefreshCcw,
@@ -9,6 +10,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { cn } from "@persia/ui/utils";
 import { toast } from "sonner";
 import {
   DOCUMENT_ALLOWED_MIME_TYPES,
@@ -60,6 +62,7 @@ export function DocumentsTab({
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const docs = sources.filter((s) => s.source_type === "document");
+  const [open, setOpen] = React.useState(docs.length > 0);
   const hasActiveIndexing = docs.some(
     (source) =>
       source.indexing_status === "pending" || source.indexing_status === "processing",
@@ -197,118 +200,140 @@ export function DocumentsTab({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <FileText className="size-5 text-primary" />
-            <h2 className="font-semibold">Documentos da base</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Faça upload de PDFs, DOCX ou TXT. O conteúdo é fatiado e indexado
-            para que o agente recupere os trechos relevantes em cada conversa.
-            Limite {MAX_MB}MB por arquivo.
-          </p>
-        </div>
+    <div className="space-y-3">
+      {/* Header colapsável */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 text-left group"
+      >
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void onRefresh();
-            }}
-            disabled={isPending}
-          >
-            <RefreshCcw className="size-4" />
-            Atualizar
-          </Button>
-          <Button onClick={openUpload} disabled={isPending}>
-            <Upload className="size-4" />
-            Enviar documento
-          </Button>
+          <FileText className="size-5 text-primary" />
+          <h2 className="font-semibold">Documentos da base</h2>
+          {docs.length > 0 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">
+              {docs.length}
+            </span>
+          )}
         </div>
-      </div>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform duration-200",
+            open && "rotate-180",
+          )}
+        />
+      </button>
 
-      {docs.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-12 flex flex-col items-center text-center gap-3">
-            <div className="size-12 rounded-2xl bg-muted flex items-center justify-center">
-              <FileText className="size-6 text-muted-foreground" />
+      {open && (
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Faça upload de PDFs, DOCX ou TXT. O conteúdo é fatiado e indexado
+              para que o agente recupere os trechos relevantes em cada conversa.
+              Limite {MAX_MB}MB por arquivo.
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void onRefresh();
+                }}
+                disabled={isPending}
+              >
+                <RefreshCcw className="size-4" />
+                Atualizar
+              </Button>
+              <Button onClick={openUpload} disabled={isPending}>
+                <Upload className="size-4" />
+                Enviar documento
+              </Button>
             </div>
-            <div className="max-w-md space-y-1">
-              <p className="font-semibold text-sm">Adicione a base de conhecimento</p>
-              <p className="text-xs text-muted-foreground">
-                Suba PDFs, DOCX ou TXT com o conteúdo que o agente deve consultar.
-                Etapas com base de conhecimento ativa recuperam os trechos relevantes
-                automaticamente em cada resposta.
-              </p>
-            </div>
-            <Button onClick={openUpload}>
-              <Upload className="size-4" />
-              Enviar primeiro documento
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-2">
-          {docs.map((source) => {
-            const meta = source.metadata as DocMetadata;
-            return (
-              <Card key={source.id} className="transition-shadow hover:shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-sm truncate tracking-tight">
-                          {source.title}
-                        </p>
-                        <IndexingStatusBadge
-                          status={source.indexing_status}
-                          error={source.indexing_error}
-                          chunkCount={source.chunk_count}
-                        />
+          </div>
+
+          {docs.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-12 flex flex-col items-center text-center gap-3">
+                <div className="size-12 rounded-2xl bg-muted flex items-center justify-center">
+                  <FileText className="size-6 text-muted-foreground" />
+                </div>
+                <div className="max-w-md space-y-1">
+                  <p className="font-semibold text-sm">Adicione a base de conhecimento</p>
+                  <p className="text-xs text-muted-foreground">
+                    Suba PDFs, DOCX ou TXT com o conteúdo que o agente deve consultar.
+                    Etapas com base de conhecimento ativa recuperam os trechos relevantes
+                    automaticamente em cada resposta.
+                  </p>
+                </div>
+                <Button onClick={openUpload}>
+                  <Upload className="size-4" />
+                  Enviar primeiro documento
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {docs.map((source) => {
+                const meta = source.metadata as DocMetadata;
+                return (
+                  <Card key={source.id} className="transition-shadow hover:shadow-sm">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-sm truncate tracking-tight">
+                              {source.title}
+                            </p>
+                            <IndexingStatusBadge
+                              status={source.indexing_status}
+                              error={source.indexing_error}
+                              chunkCount={source.chunk_count}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {meta.original_filename}
+                            {" · "}
+                            {formatBytes(meta.size_bytes)}
+                            {" · "}
+                            {mimeTypeLabel(meta.mime_type)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {source.indexing_status === "failed" ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-10"
+                              aria-label="Reindexar"
+                              onClick={() => handleReindex(source)}
+                              disabled={isPending}
+                            >
+                              <RefreshCcw className="size-4" />
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-10"
+                            aria-label="Apagar"
+                            onClick={() => handleDelete(source)}
+                            disabled={isPending}
+                          >
+                            {deletingId === source.id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-4" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {meta.original_filename}
-                        {" · "}
-                        {formatBytes(meta.size_bytes)}
-                        {" · "}
-                        {mimeTypeLabel(meta.mime_type)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {source.indexing_status === "failed" ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-10"
-                          aria-label="Reindexar"
-                          onClick={() => handleReindex(source)}
-                          disabled={isPending}
-                        >
-                          <RefreshCcw className="size-4" />
-                        </Button>
-                      ) : null}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-10"
-                        aria-label="Apagar"
-                        onClick={() => handleDelete(source)}
-                        disabled={isPending}
-                      >
-                        {deletingId === source.id ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
         </div>
       )}
 
