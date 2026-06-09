@@ -21,7 +21,7 @@
 -- O(log N) em vez de O(N). Usa 'portuguese' pra stemming correto.
 -- ============================================================================
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_content_fts
+CREATE INDEX IF NOT EXISTS idx_messages_content_fts
   ON public.messages
   USING gin(to_tsvector('portuguese', coalesce(content, '')));
 
@@ -36,7 +36,7 @@ COMMENT ON INDEX public.idx_messages_content_fts IS
 -- de uma org. Sem índice, faz seq scan mesmo com idx_messages_org.
 -- ============================================================================
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_org_lead
+CREATE INDEX IF NOT EXISTS idx_messages_org_lead
   ON public.messages (organization_id, lead_id);
 
 COMMENT ON INDEX public.idx_messages_org_lead IS
@@ -94,8 +94,8 @@ COMMENT ON INDEX public.group_messages_org_whatsapp_msg_id_unique IS
 -- ============================================================================
 -- Rollback (não executar — apenas referência)
 -- ============================================================================
--- DROP INDEX CONCURRENTLY IF EXISTS public.idx_messages_content_fts;
--- DROP INDEX CONCURRENTLY IF EXISTS public.idx_messages_org_lead;
+-- DROP INDEX IF EXISTS public.idx_messages_content_fts;
+-- DROP INDEX IF EXISTS public.idx_messages_org_lead;
 -- DROP INDEX CONCURRENTLY IF EXISTS public.group_messages_org_whatsapp_msg_id_unique;
 -- CREATE INDEX IF NOT EXISTS idx_group_messages_whatsapp_msg_id
 --   ON group_messages (organization_id, whatsapp_msg_id)
