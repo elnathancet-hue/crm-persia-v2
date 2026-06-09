@@ -208,8 +208,8 @@ export function DocumentsTab({
         className="w-full flex items-center justify-between gap-3 text-left group"
       >
         <div className="flex items-center gap-2">
-          <FileText className="size-5 text-primary" />
-          <h2 className="font-semibold">Documentos da base</h2>
+          <FileText className="size-4 text-primary" />
+          <span className="text-sm font-medium">Documentos da base</span>
           {docs.length > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">
               {docs.length}

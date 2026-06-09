@@ -260,6 +260,8 @@ export function RulesTab({
     agent.message_templates ?? [],
   );
   const [importModalOpen, setImportModalOpen] = React.useState(false);
+  const [nameEditing, setNameEditing] = React.useState(false);
+  const [descEditing, setDescEditing] = React.useState(false);
   const [templatesOpen, setTemplatesOpen] = React.useState(
     (agent.message_templates ?? []).length > 0,
   );
@@ -666,23 +668,59 @@ export function RulesTab({
           />
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="agent_name">Nome do agente</Label>
-              <Input
-                id="agent_name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Nomeie seu agente"
-              />
+              {nameEditing ? (
+                <Input
+                  id="agent_name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Nomeie seu agente"
+                  autoFocus
+                  onBlur={() => setNameEditing(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") setNameEditing(false);
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setNameEditing(true)}
+                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary/50 hover:bg-muted/20 transition-colors min-h-9"
+                >
+                  <span className={cn("flex-1 truncate", !name && "text-muted-foreground italic")}>
+                    {name || "Nomeie seu agente"}
+                  </span>
+                  <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-60 transition-opacity" />
+                </button>
+              )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="description">Descrição</Label>
-              <Input
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Uma linha sobre o que esse agente faz"
-              />
+              {descEditing ? (
+                <Input
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Uma linha sobre o que esse agente faz"
+                  autoFocus
+                  onBlur={() => setDescEditing(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Escape") setDescEditing(false);
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setDescEditing(true)}
+                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary/50 hover:bg-muted/20 transition-colors min-h-9"
+                >
+                  <span className={cn("flex-1 truncate", !description && "text-muted-foreground italic")}>
+                    {description || "Uma linha sobre o que esse agente faz"}
+                  </span>
+                  <Pencil className="size-3 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-60 transition-opacity" />
+                </button>
+              )}
             </div>
           </div>
           {/* PR 22 (mai/2026): prompt agora tem 2 modos de edição
