@@ -659,10 +659,10 @@ export function AIAgentForm({ draft, setDraft, catalogs, catalogsLoading }: Cata
       <FieldCard
         icon={ListChecks}
         title="Dados obrigatórios da etapa"
-        description="O fluxo só avança quando o lead tiver todos esses dados preenchidos."
+        description="O fluxo só avança quando todos os dados abaixo forem coletados."
         variant="muted"
         optional
-        helperText="Verificado APENAS quando a IA não disparou uma saída explícita. Campos: 'lead.name', 'lead.phone', 'lead.email' ou 'lead.<campo_customizado>'."
+        helperText="Esta verificação só acontece se a IA não escolher uma saída manualmente. Se faltar algum dado, o fluxo segue pelo caminho de dados faltantes."
       >
         <RequiredFieldsSection
           draft={draft}
@@ -768,6 +768,23 @@ interface RequiredFieldItem {
   description?: string;
 }
 
+// Campos comuns com label automático
+const COMMON_FIELDS: Array<{ value: string; label: string }> = [
+  { value: "lead.name", label: "Nome do lead" },
+  { value: "lead.phone", label: "Telefone" },
+  { value: "lead.email", label: "E-mail" },
+  { value: "lead.interest", label: "Interesse" },
+  { value: "lead.pain", label: "Dor principal" },
+  { value: "lead.urgency", label: "Urgência" },
+  { value: "lead.city", label: "Cidade" },
+  { value: "lead.budget", label: "Orçamento" },
+  { value: "lead.product_interest", label: "Produto/serviço de interesse" },
+];
+
+function autoLabel(field: string): string {
+  return COMMON_FIELDS.find((f) => f.value === field)?.label ?? "";
+}
+
 function RequiredFieldsSection({
   draft,
   setDraft,
@@ -792,7 +809,7 @@ function RequiredFieldsSection({
       ...d,
       required_fields: [
         ...((d.required_fields as RequiredFieldItem[] | undefined) ?? []),
-        { field: "lead.", label: "", description: "" },
+        { field: "", label: "", description: "" },
       ],
     }));
   };
@@ -819,121 +836,186 @@ function RequiredFieldsSection({
 
   const completionHandle = (draft.completion_handle as string) ?? "";
   const incompleteHandle = (draft.incomplete_handle as string) ?? "";
+  const handlesEqual =
+    fields.length > 0 &&
+    (completionHandle || "default") === (incompleteHandle || "default");
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end -mt-1">
         <Button type="button" variant="ghost" size="sm" onClick={addField}>
           <Plus className="size-3.5 mr-1" />
-          Adicionar campo
+          Adicionar dado
         </Button>
       </div>
 
       {fields.length === 0 ? (
         <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
-          Nenhum campo obrigatório. A IA avança sem verificação de dados.
+          Nenhum dado obrigatório. A IA avança sem verificação.
         </div>
       ) : (
         <div className="space-y-2">
-          {fields.map((f, idx) => (
-            <div
-              key={idx}
-              className="rounded-md border border-border bg-background p-2.5 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <Label className="text-[11px]">Campo #{idx + 1}</Label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeField(idx)}
-                  className="h-6 w-6 p-0 text-destructive"
-                >
-                  <Trash2 className="size-3" />
-                </Button>
+          {fields.map((f, idx) => {
+            const fieldKey = f.field.trim();
+            const isDuplicate = fields.some(
+              (other, oi) => oi !== idx && other.field.trim() === fieldKey && fieldKey !== "",
+            );
+            const noLeadPrefix = fieldKey !== "" && !fieldKey.startsWith("lead.");
+
+            return (
+              <div
+                key={idx}
+                className={`rounded-md border bg-background p-2.5 space-y-2 ${isDuplicate ? "border-destructive/50" : "border-border"}`}
+              >
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] text-muted-foreground">Dado #{idx + 1}</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeField(idx)}
+                    className="h-6 w-6 p-0 text-destructive"
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
+
+                {/* Campo: seleção rápida + input manual */}
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">
+                    Dado que precisa ser coletado <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={COMMON_FIELDS.some((cf) => cf.value === fieldKey) ? fieldKey : "_custom"}
+                    onValueChange={(v) => {
+                      if (!v || v === "_custom") return;
+                      updateField(idx, {
+                        field: v,
+                        label: autoLabel(v),
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs">
+                      <SelectValue placeholder="Escolha ou digite abaixo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMMON_FIELDS.map((cf) => (
+                        <SelectItem key={cf.value} value={cf.value} className="text-xs">
+                          {cf.label}
+                          <span className="ml-1.5 text-muted-foreground font-mono text-[10px]">({cf.value})</span>
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="_custom" className="text-xs text-muted-foreground">
+                        Campo personalizado…
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={fieldKey}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const suggested = autoLabel(val);
+                      updateField(idx, {
+                        field: val,
+                        ...(suggested && !f.label ? { label: suggested } : {}),
+                      });
+                    }}
+                    placeholder="Ex: lead.name"
+                    className={`h-7 text-xs font-mono ${isDuplicate || fieldKey === "" ? "border-destructive/60" : ""}`}
+                  />
+                  {isDuplicate ? (
+                    <p className="text-[10px] text-destructive">Campo duplicado neste node.</p>
+                  ) : noLeadPrefix ? (
+                    <p className="text-[10px] text-warning-soft-foreground">
+                      Recomendado usar o padrão lead.nome_do_campo
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground">
+                      Escolha um campo comum acima ou digite uma chave personalizada (ex: lead.cidade).
+                    </p>
+                  )}
+                </div>
+
+                {/* Nome amigável */}
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">
+                    Nome exibido
+                  </Label>
+                  <Input
+                    value={f.label ?? ""}
+                    onChange={(e) => updateField(idx, { label: e.target.value })}
+                    placeholder="Ex: Nome do lead"
+                    className="h-7 text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Aparece no Tester e nos logs para facilitar a leitura.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Chave do campo <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={f.field}
-                  onChange={(e) => updateField(idx, { field: e.target.value })}
-                  placeholder="lead.name"
-                  className="h-7 text-xs font-mono"
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  Padrões: lead.name · lead.phone · lead.email · lead.&lt;campo_customizado&gt;
-                </p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Nome amigável (opcional)
-                </Label>
-                <Input
-                  value={f.label ?? ""}
-                  onChange={(e) => updateField(idx, { label: e.target.value })}
-                  placeholder="Ex: Nome do lead"
-                  className="h-7 text-xs"
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {fields.length > 0 ? (
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Caminho se tudo preenchido
-            </Label>
-            <Select
-              value={completionHandle || "default"}
-              onValueChange={(v) =>
-                setDraft((d) => ({
-                  ...d,
-                  completion_handle: v === "default" ? undefined : v,
-                }))
-              }
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {handleOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="space-y-2 pt-1">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">
+                Quando todos os dados forem coletados
+              </Label>
+              <Select
+                value={completionHandle || "default"}
+                onValueChange={(v) =>
+                  setDraft((d) => ({
+                    ...d,
+                    completion_handle: v === "default" ? undefined : v,
+                  }))
+                }
+              >
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {handleOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-muted-foreground">
+                Quando ainda faltar algum dado
+              </Label>
+              <Select
+                value={incompleteHandle || "default"}
+                onValueChange={(v) =>
+                  setDraft((d) => ({
+                    ...d,
+                    incomplete_handle: v === "default" ? undefined : v,
+                  }))
+                }
+              >
+                <SelectTrigger className="h-7 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {handleOptions.map((o) => (
+                    <SelectItem key={o.value} value={o.value} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Caminho se faltando dados
-            </Label>
-            <Select
-              value={incompleteHandle || "default"}
-              onValueChange={(v) =>
-                setDraft((d) => ({
-                  ...d,
-                  incomplete_handle: v === "default" ? undefined : v,
-                }))
-              }
-            >
-              <SelectTrigger className="h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {handleOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value} className="text-xs">
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {handlesEqual ? (
+            <p className="text-[10px] text-warning-soft-foreground bg-warning-soft rounded px-2 py-1">
+              Os dois caminhos estão iguais. O fluxo seguirá pelo mesmo caminho em qualquer caso.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

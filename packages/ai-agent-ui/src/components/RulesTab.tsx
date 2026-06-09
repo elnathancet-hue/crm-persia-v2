@@ -738,12 +738,13 @@ export function RulesTab({
               </div>
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  const tempKey = `tpl_new_${Date.now()}`;
                   setTemplates((prev) => [
                     ...prev,
-                    { key: `tpl_${Date.now()}`, name: "", mode: "ai_suggestion", message: "" },
-                  ])
-                }
+                    { key: tempKey, name: "", mode: "ai_suggestion", message: "" },
+                  ]);
+                }}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
               >
                 <Plus className="size-3.5" />
@@ -1994,9 +1995,33 @@ const TEMPLATE_MODE_LABELS: Record<MessageTemplate["mode"], string> = {
 };
 
 const TEMPLATE_MODE_DESCRIPTIONS: Record<MessageTemplate["mode"], string> = {
-  ai_suggestion: "Injetado no prompt do node IA — ela adapta conforme o contexto.",
+  ai_suggestion: "Injetado no prompt do node IA — a IA pode adaptar conforme o contexto.",
   fixed_response: "Enviado exatamente como está, sem chamar a IA.",
 };
+
+/**
+ * Converte um nome em slug: minúsculas, sem acentos, underline em vez de espaços.
+ * Ex: "Perguntar nome" → "perguntar_nome"
+ */
+function nameToSlug(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_\s]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+/**
+ * Garante slug único dentro da lista. Se já existir, adiciona _2, _3 etc.
+ */
+function uniqueSlug(base: string, existing: string[]): string {
+  if (!existing.includes(base)) return base;
+  let n = 2;
+  while (existing.includes(`${base}_${n}`)) n++;
+  return `${base}_${n}`;
+}
 
 function MessageTemplatesSection({
   templates,
@@ -2005,6 +2030,20 @@ function MessageTemplatesSection({
   templates: MessageTemplate[];
   onChange: React.Dispatch<React.SetStateAction<MessageTemplate[]>>;
 }) {
+  const nameInputRefs = React.useRef<Map<string, HTMLInputElement>>(new Map());
+
+  const handleNew = () => {
+    const tempKey = `tpl_new_${Date.now()}`;
+    onChange((prev) => [
+      ...prev,
+      { key: tempKey, name: "", mode: "ai_suggestion", message: "" },
+    ]);
+    // Foco automático após render
+    setTimeout(() => {
+      nameInputRefs.current.get(tempKey)?.focus();
+    }, 50);
+  };
+
   if (templates.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
@@ -2019,6 +2058,11 @@ function MessageTemplatesSection({
         <MessageTemplateCard
           key={tpl.key}
           tpl={tpl}
+          allKeys={templates.map((t) => t.key).filter((k) => k !== tpl.key)}
+          nameInputRef={(el) => {
+            if (el) nameInputRefs.current.set(tpl.key, el);
+            else nameInputRefs.current.delete(tpl.key);
+          }}
           onUpdate={(patch) =>
             onChange((prev) =>
               prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)),
@@ -2027,31 +2071,71 @@ function MessageTemplatesSection({
           onDelete={() =>
             onChange((prev) => prev.filter((_, i) => i !== idx))
           }
+          usedInNodes={[]} // sem verificação de nodes por enquanto
         />
       ))}
     </div>
   );
 }
 
+// Botão "Novo template" movido para dentro da section no JSX principal (usa handleNew)
+// — mas a section acima é usada diretamente. O botão já existe no JSX pai (handleSave).
+
 function MessageTemplateCard({
   tpl,
+  allKeys,
+  nameInputRef,
   onUpdate,
   onDelete,
+  usedInNodes,
 }: {
   tpl: MessageTemplate;
+  allKeys: string[];
+  nameInputRef: (el: HTMLInputElement | null) => void;
   onUpdate: (patch: Partial<MessageTemplate>) => void;
   onDelete: () => void;
+  usedInNodes: string[];
 }) {
-  const [expanded, setExpanded] = React.useState(tpl.name === "");
+  const [expanded, setExpanded] = React.useState(tpl.name === "" || tpl.key.startsWith("tpl_new_"));
+  const [pendingDelete, setPendingDelete] = React.useState(false);
+
+  const displayName = tpl.name.trim() || "Novo template";
+  const slugDuplicate = allKeys.includes(tpl.key);
+  const hasSpaceInKey = /\s/.test(tpl.key);
+  const keyErrors = [
+    slugDuplicate && "Chave duplicada — use um nome diferente",
+    hasSpaceInKey && "A chave não pode ter espaços",
+  ].filter(Boolean) as string[];
+
+  const handleNameChange = (name: string) => {
+    const slug = nameToSlug(name);
+    const newKey = slug
+      ? uniqueSlug(slug, allKeys)
+      : tpl.key.startsWith("tpl_new_") ? "" : tpl.key;
+    onUpdate({ name, key: newKey });
+  };
+
+  const handleDelete = () => {
+    if (usedInNodes.length > 0) {
+      setPendingDelete(true);
+    } else {
+      onDelete();
+    }
+  };
 
   return (
-    <div className="rounded-md border border-border bg-card shadow-sm">
+    <div className={`rounded-md border bg-card shadow-sm ${slugDuplicate ? "border-destructive/50" : "border-border"}`}>
       {/* Header row */}
       <div className="flex items-center gap-2 px-3 py-2">
         <Sparkles className="size-3.5 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {tpl.name.trim() || <span className="text-muted-foreground italic">Sem nome</span>}
-        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{displayName}</p>
+          {tpl.key && !tpl.key.startsWith("tpl_new_") ? (
+            <p className="truncate text-[10px] text-muted-foreground">
+              Chave: {tpl.key} • {TEMPLATE_MODE_LABELS[tpl.mode]}
+            </p>
+          ) : null}
+        </div>
         <span
           className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
             tpl.mode === "fixed_response"
@@ -2071,7 +2155,7 @@ function MessageTemplateCard({
         </button>
         <button
           type="button"
-          onClick={onDelete}
+          onClick={handleDelete}
           className="shrink-0 rounded p-1 hover:bg-destructive/10 transition-colors"
           aria-label="Remover template"
         >
@@ -2079,34 +2163,65 @@ function MessageTemplateCard({
         </button>
       </div>
 
+      {/* Confirmação de exclusão quando usado em nodes */}
+      {pendingDelete ? (
+        <div className="border-t border-destructive/20 bg-destructive/5 px-3 py-2 text-xs space-y-2">
+          <p className="text-destructive font-medium">
+            Este template está sendo usado em {usedInNodes.length} node(s). Se excluir, esses nodes perderão a referência.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="rounded bg-destructive px-2 py-1 text-xs text-white hover:bg-destructive/80"
+            >
+              Excluir mesmo assim
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingDelete(false)}
+              className="rounded border border-border px-2 py-1 text-xs hover:bg-muted"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Expanded form */}
       {expanded ? (
         <div className="space-y-3 border-t border-border px-3 pb-3 pt-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label className="text-xs">Nome *</Label>
+              <Label className="text-xs">Nome do template *</Label>
               <Input
+                ref={nameInputRef}
                 value={tpl.name}
-                onChange={(e) => onUpdate({ name: e.target.value })}
-                placeholder="Ex: Primeiro contato"
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="Ex: Perguntar nome"
                 className="h-8 text-sm"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Chave (slug) *</Label>
+              <Label className="text-xs">Chave do template *</Label>
               <Input
-                value={tpl.key}
+                value={tpl.key.startsWith("tpl_new_") ? "" : tpl.key}
                 onChange={(e) =>
-                  onUpdate({ key: e.target.value.toLowerCase().replace(/\s+/g, "_") })
+                  onUpdate({ key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").replace(/\s+/g, "_") })
                 }
-                placeholder="Ex: primeiro_contato"
-                className="h-8 font-mono text-sm"
+                placeholder="Ex: perguntar_nome"
+                className={`h-8 font-mono text-sm ${keyErrors.length > 0 ? "border-destructive" : ""}`}
               />
+              {keyErrors.length > 0 ? (
+                <p className="text-[10px] text-destructive">{keyErrors[0]}</p>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">Usada nos nodes do fluxo para referenciar este template.</p>
+              )}
             </div>
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs">Modo</Label>
+            <Label className="text-xs">Modo de uso</Label>
             <div className="grid grid-cols-2 gap-2">
               {(["ai_suggestion", "fixed_response"] as const).map((mode) => (
                 <button
@@ -2126,17 +2241,22 @@ function MessageTemplateCard({
                 </button>
               ))}
             </div>
+            {tpl.mode === "fixed_response" ? (
+              <p className="rounded-md bg-warning-soft px-2.5 py-1.5 text-[11px] text-warning-soft-foreground mt-1">
+                Esta mensagem será enviada exatamente como está, sem passar pela IA.
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-1">
             <Label className="text-xs">
               Quando usar{" "}
-              <span className="text-muted-foreground">(opcional — guia a IA)</span>
+              <span className="text-muted-foreground">(opcional)</span>
             </Label>
             <Input
               value={tpl.usage ?? ""}
               onChange={(e) => onUpdate({ usage: e.target.value || undefined })}
-              placeholder="Ex: Quando lead nunca respondeu antes"
+              placeholder="Ex: Use quando o agente precisar perguntar o nome do lead."
               className="h-8 text-sm"
             />
           </div>
@@ -2155,12 +2275,17 @@ function MessageTemplateCard({
               onChange={(e) => onUpdate({ message: e.target.value })}
               placeholder={
                 tpl.mode === "fixed_response"
-                  ? "Olá, {{nome}}! Vi seu interesse e quero te ajudar..."
-                  : "Texto de referência que a IA adaptará ao contexto..."
+                  ? "Texto exato que será enviado ao cliente, sem alterações..."
+                  : "Texto de referência que a IA pode adaptar ao contexto..."
               }
               rows={4}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+              className={`w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none ${
+                !tpl.message.trim() ? "border-input" : "border-input"
+              }`}
             />
+            {!tpl.message.trim() ? (
+              <p className="text-[10px] text-muted-foreground">Campo obrigatório.</p>
+            ) : null}
           </div>
         </div>
       ) : null}
