@@ -65,8 +65,8 @@ export function AgentSidebar({
       className={cn(
         "flex flex-col gap-1 text-sm",
         variant === "panel" &&
-          "sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-xl border border-border bg-muted/40 p-2 transition-all",
-        variant === "drawer" && "p-1",
+          "sticky top-32 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-xl border border-sidebar-border bg-sidebar p-2 transition-all",
+        variant === "drawer" && "p-1 bg-sidebar",
       )}
     >
       {/* PR 23: toggle de collapse no topo. Só aparece quando o caller
@@ -79,7 +79,7 @@ export function AgentSidebar({
           aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
           title={isCollapsed ? "Expandir menu" : "Recolher menu"}
           className={cn(
-            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors",
+            "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors",
             isCollapsed ? "justify-center" : "justify-end",
           )}
         >
@@ -100,13 +100,13 @@ export function AgentSidebar({
           className={cn("flex flex-col gap-0.5", gIdx > 0 && "mt-3")}
         >
           {!isCollapsed ? (
-            <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
               {group.label}
             </p>
           ) : (
             // Separador visual entre grupos no modo collapsed (sem texto).
             gIdx > 0 ? (
-              <div className="mx-2 my-1 border-t border-border/40" aria-hidden />
+              <div className="mx-2 my-1 border-t border-sidebar-border" aria-hidden />
             ) : null
           )}
           {group.items.map((item) => {
@@ -127,14 +127,14 @@ export function AgentSidebar({
                     ? "justify-center px-2 py-2"
                     : "gap-2.5 px-3 py-2",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    ? "bg-sidebar-accent text-sidebar-primary"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 )}
               >
                 <Icon
                   className={cn(
                     "size-4 shrink-0",
-                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                    isActive ? "text-sidebar-primary" : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground",
                   )}
                 />
                 {!isCollapsed ? (
@@ -145,8 +145,8 @@ export function AgentSidebar({
                         className={cn(
                           "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-medium tabular-nums",
                           isActive
-                            ? "bg-primary/20 text-primary"
-                            : "bg-muted text-muted-foreground",
+                            ? "bg-sidebar-primary/20 text-sidebar-primary"
+                            : "bg-sidebar-accent text-sidebar-foreground/50",
                         )}
                       >
                         {item.badge}

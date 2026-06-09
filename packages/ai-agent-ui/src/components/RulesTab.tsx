@@ -686,7 +686,12 @@ export function RulesTab({
                 <button
                   type="button"
                   onClick={() => setNameEditing(true)}
-                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary/50 hover:bg-muted/20 transition-colors min-h-9"
+                  className={cn(
+                    "group flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors min-h-9",
+                    name
+                      ? "border-primary/25 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
+                      : "border-border bg-background hover:border-primary/50 hover:bg-muted/20",
+                  )}
                 >
                   <span className={cn("flex-1 truncate", !name && "text-muted-foreground italic")}>
                     {name || "Nomeie seu agente"}
@@ -713,7 +718,12 @@ export function RulesTab({
                 <button
                   type="button"
                   onClick={() => setDescEditing(true)}
-                  className="group flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm hover:border-primary/50 hover:bg-muted/20 transition-colors min-h-9"
+                  className={cn(
+                    "group flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors min-h-9",
+                    description
+                      ? "border-primary/25 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
+                      : "border-border bg-background hover:border-primary/50 hover:bg-muted/20",
+                  )}
                 >
                   <span className={cn("flex-1 truncate", !description && "text-muted-foreground italic")}>
                     {description || "Uma linha sobre o que esse agente faz"}
@@ -764,7 +774,7 @@ export function RulesTab({
                     }}
                     disabled={!catalogsLoaded}
                   >
-                    <SelectTrigger id="new_lead_pipeline_id">
+                    <SelectTrigger id="new_lead_pipeline_id" className={selectedPipelineId ? "border-primary/25 bg-primary/5" : ""}>
                       <SelectValue>
                         {selectedPipelineId
                           ? pipelineOptions.find((p) => p.id === selectedPipelineId)
@@ -794,7 +804,7 @@ export function RulesTab({
                     }
                     disabled={!catalogsLoaded || !selectedPipelineId}
                   >
-                    <SelectTrigger id="new_lead_stage_id">
+                    <SelectTrigger id="new_lead_stage_id" className={newLeadStageId ? "border-primary/25 bg-primary/5" : ""}>
                       <SelectValue>
                         {newLeadStageId
                           ? selectedNewLeadStage?.name ?? "Etapa selecionada"

@@ -86,7 +86,7 @@ export function AIAgentNodeView({
       <NodeShell
         icon={BadgeCheck}
         label={data.label || "Conversar com IA"}
-        badge="Atendimento com IA"
+        badge="IA"
         variant="ai_agent"
         selected={selected}
         onDelete={onDelete}
@@ -117,7 +117,7 @@ export function AIAgentNodeView({
           </div>
         ) : (
           <div className="italic text-muted-foreground/70">
-            Cai no caminho padrão quando responder.
+            Segue o fluxo padrão após responder.
           </div>
         )}
       </NodeShell>
@@ -130,8 +130,8 @@ export function AIAgentNodeView({
         style={{ top: `${50 - (instructions.length * handleSpacing) / 2}%` }}
         className="!size-3 !bg-primary !border-2 !border-background"
       >
-        <span className="absolute -right-12 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground">
-          continua
+        <span className="absolute -right-14 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground whitespace-nowrap">
+          → padrão
         </span>
       </Handle>
       {/* Handles dinâmicos — 1 por instruction. ID == output_handle.
