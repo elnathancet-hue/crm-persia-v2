@@ -65,7 +65,7 @@ const VARIANT_STYLES: Record<FieldCardVariant, { header: string; icon: string; b
   muted: {
     header: "bg-muted border-border",
     icon: "bg-muted-foreground/10 text-muted-foreground",
-    badge: "text-muted-foreground",
+    badge: "text-foreground",
   },
 };
 
@@ -109,13 +109,13 @@ export function FieldCard({
               ) : null}
             </div>
             {optional ? (
-              <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-foreground/60">
                 Opcional
               </span>
             ) : null}
           </div>
           {description ? (
-            <div className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+            <div className="mt-0.5 text-[11px] text-foreground leading-snug">
               {description}
             </div>
           ) : null}
@@ -126,7 +126,7 @@ export function FieldCard({
       <div className="px-3 py-2.5 space-y-1.5">
         {children}
         {helperText ? (
-          <p className="text-[11px] text-muted-foreground leading-snug pt-0.5">
+          <p className="text-[11px] text-foreground leading-snug pt-0.5">
             {helperText}
           </p>
         ) : null}

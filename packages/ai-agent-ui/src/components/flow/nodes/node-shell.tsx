@@ -257,9 +257,8 @@ export function NodeShell({
       {isExpanded ? (
         <div
           className={cn(
-            "border-t border-border/60 px-3 py-3 bg-muted/20 overflow-y-auto",
+            "border-t border-border/60 px-3 py-3 bg-muted/20",
             "nodrag nopan nowheel",
-            isWide ? "max-h-[80vh]" : "max-h-[480px]",
           )}
           // ReactFlow escuta pointer/mouse, não click. stopPropagation
           // aqui garante que NENHUM handler do canvas dispare quando
