@@ -102,7 +102,7 @@ export function InlineFormPanel({
     // que escapam do tree DOM — handlers aqui sao defesa em profundidade.
     // NAO usar preventDefault — isso quebraria focus nativo nos campos.
     <div
-      className="space-y-3 nodrag nopan nowheel"
+      className="space-y-3 nodrag nopan"
       onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}

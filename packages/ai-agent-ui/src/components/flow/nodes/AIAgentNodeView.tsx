@@ -68,26 +68,11 @@ export function AIAgentNodeView({
       />
     ) : null;
 
-  // Layout dos handles à direita:
-  //   - default (sempre presente)
-  //   - 1 handle por instruction
-  //
-  // Modo edição (onPatch presente = card expandido com form inline):
-  //   ancora pelo bottom pra ficar na altura da seção "Próximos passos"
-  //   na base do card. Default fica acima das instructions.
-  //   Espaçamento de 28px entre handles.
-  //
-  // Modo visualização (sem onPatch = card colapsado):
-  //   usa top % centrado no card (comportamento original).
-  const isEditMode = Boolean(onPatch);
+  // Handles distribuídos verticalmente ao redor de 50% (centro do card).
+  // Espaçamento proporcional à altura — 60% do card dividido por N handles.
+  // React Flow não suporta `bottom` em handles; usa sempre `top %`.
   const totalHandles = 1 + instructions.length;
   const handleSpacing = totalHandles > 1 ? 60 / totalHandles : 0;
-
-  // Posição de cada handle em modo edição (bottom-anchored):
-  //   default = base + instructions.length * 28px (mais alto)
-  //   instruction[idx] = base + (instructions.length - 1 - idx) * 28px
-  const BASE_BOTTOM = 48; // px acima do rodapé do card
-  const HANDLE_STEP = 28; // px entre handles
 
   return (
     <>
@@ -141,11 +126,7 @@ export function AIAgentNodeView({
         type="source"
         position={Position.Right}
         id="default"
-        style={
-          isEditMode
-            ? { bottom: `${BASE_BOTTOM + instructions.length * HANDLE_STEP}px`, top: "auto" }
-            : { top: `${50 - (instructions.length * handleSpacing) / 2}%` }
-        }
+        style={{ top: `${50 - (instructions.length * handleSpacing) / 2}%` }}
         className="!size-3 !bg-primary !border-2 !border-background"
       >
         <span className="absolute -right-14 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground whitespace-nowrap">
@@ -158,7 +139,6 @@ export function AIAgentNodeView({
       {instructions.map((ins, idx) => {
         const topPct =
           50 - (instructions.length * handleSpacing) / 2 + (idx + 1) * handleSpacing;
-        const bottomPx = BASE_BOTTOM + (instructions.length - 1 - idx) * HANDLE_STEP;
         const labelText = ins.description?.trim() || ins.output_handle;
         return (
           <Handle
@@ -166,11 +146,7 @@ export function AIAgentNodeView({
             type="source"
             position={Position.Right}
             id={ins.output_handle}
-            style={
-              isEditMode
-                ? { bottom: `${bottomPx}px`, top: "auto" }
-                : { top: `${topPct}%` }
-            }
+            style={{ top: `${topPct}%` }}
             className="!size-3 !bg-success !border-2 !border-background"
           >
             <span className="absolute -right-2 translate-x-full -translate-y-1/2 text-[9px] font-semibold text-success whitespace-nowrap max-w-[140px] truncate">
