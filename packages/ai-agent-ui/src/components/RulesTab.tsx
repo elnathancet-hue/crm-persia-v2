@@ -262,9 +262,7 @@ export function RulesTab({
   const [importModalOpen, setImportModalOpen] = React.useState(false);
   const [nameEditing, setNameEditing] = React.useState(false);
   const [descEditing, setDescEditing] = React.useState(false);
-  const [templatesOpen, setTemplatesOpen] = React.useState(
-    (agent.message_templates ?? []).length > 0,
-  );
+  const [templatesOpen, setTemplatesOpen] = React.useState(false);
 
   // Migration 113: fontes de dados estruturadas.
   const [structuredSources, setStructuredSources] = React.useState<StructuredSource[]>(
@@ -745,7 +743,7 @@ export function RulesTab({
 
           <section className="space-y-3 pt-1">
             <div className="flex items-center gap-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
                 CRM inicial para contato novo
               </p>
               <HelpTooltip>
@@ -828,7 +826,7 @@ export function RulesTab({
 
           <section className="space-y-3 pt-4 border-t border-border">
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conhecimento</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground">Conhecimento</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Arquivos que o agente pode consultar durante a conversa.
               </p>
@@ -849,7 +847,7 @@ export function RulesTab({
               className="w-full flex items-center justify-between gap-3 text-left group mb-2"
             >
               <div>
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-foreground flex items-center gap-1.5">
                   Templates de mensagem
                   {templates.length > 0 && (
                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground tabular-nums normal-case font-normal tracking-normal">
@@ -2051,7 +2049,7 @@ function JumpChip({
       className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
         dirty
           ? "border-progress/40 bg-progress/10 text-progress hover:bg-progress/20"
-          : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+          : "border-primary/40 bg-card text-foreground hover:bg-primary/5 hover:border-primary/60"
       }`}
     >
       {label}
