@@ -100,7 +100,7 @@ import {
   AccordionTrigger,
 } from "@persia/ui/accordion";
 import { Button } from "@persia/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Card, CardContent } from "@persia/ui/card";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Switch } from "@persia/ui/switch";
@@ -654,10 +654,7 @@ export function RulesTab({
       <UnsavedChangesGuard dirty={dirty} />
 
       <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Configuração do agente</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5 py-5">
           <EntryConditionsCard
             configId={agent.id}
             isPrimary={agent.is_primary !== false}
@@ -693,19 +690,18 @@ export function RulesTab({
             agentId={agent.id}
           />
 
-          <section className="space-y-3 pt-2">
-            <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="new_lead_stage_id">
-                  CRM inicial para contato novo
-                </Label>
-                <HelpTooltip>
-                  Quando o WhatsApp criar um lead novo por este agente, ele ja
-                  entra nessa etapa do Kanban. Se deixar vazio, fica no
-                  comportamento padrao atual.
-                </HelpTooltip>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+          <section className="space-y-3 pt-1">
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                CRM inicial para contato novo
+              </p>
+              <HelpTooltip>
+                Quando o WhatsApp criar um lead novo por este agente, ele ja
+                entra nessa etapa do Kanban. Se deixar vazio, fica no
+                comportamento padrao atual.
+              </HelpTooltip>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="new_lead_pipeline_id" className="text-xs">
                     Funil
@@ -775,12 +771,11 @@ export function RulesTab({
                   </Select>
                 </div>
               </div>
-            </div>
           </section>
 
           <section className="space-y-3 pt-4 border-t border-border">
             <div>
-              <h3 className="text-sm font-semibold">Conhecimento</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Conhecimento</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Arquivos que o agente pode consultar durante a conversa.
               </p>
@@ -796,7 +791,7 @@ export function RulesTab({
           <section className="space-y-2 border-t border-border pt-5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold">Templates de mensagem</h3>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Templates de mensagem</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Textos prontos reutilizáveis nos nodes do Fluxo. Sugestão para IA ou resposta fixa sem IA.
                 </p>
@@ -1977,7 +1972,7 @@ function JumpChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+      className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
         dirty
           ? "border-progress/40 bg-progress/10 text-progress hover:bg-progress/20"
           : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
