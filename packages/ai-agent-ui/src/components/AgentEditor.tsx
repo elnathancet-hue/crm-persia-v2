@@ -9,8 +9,10 @@ import {
   Circle,
   Clock,
   FlaskConical,
+  GitBranch,
   History,
   ListOrdered,
+  Maximize2,
   Menu,
   PlayCircle,
   Save,
@@ -214,6 +216,7 @@ export function AgentEditor({
   // SSR mismatch ao não tocar window no primeiro render — hidrata via
   // useEffect abaixo.
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
+  const [flowFullscreen, setFlowFullscreen] = React.useState(false);
   React.useEffect(() => {
     try {
       const stored = window.localStorage.getItem(
@@ -601,7 +604,28 @@ export function AgentEditor({
               onSaveControlChange={handleRulesSaveControlChange}
             />
           )}
-          {activeSection === "stages" && <FlowCanvas configId={agent.id} />}
+          {activeSection === "stages" && (
+            <div className="flex flex-col items-center justify-center gap-6 rounded-xl border border-border/60 bg-card py-16 px-8 text-center min-h-[320px]">
+              <div className="size-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                <GitBranch className="size-8" />
+              </div>
+              <div className="space-y-2 max-w-sm">
+                <p className="text-lg font-semibold">Fluxo de atendimento</p>
+                <p className="text-sm text-muted-foreground">
+                  Desenhe a sequência de etapas que o agente segue — entradas, respostas de IA, ações automáticas e condições.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="lg"
+                onClick={() => setFlowFullscreen(true)}
+                className="gap-2"
+              >
+                <Maximize2 className="size-4" />
+                Editar fluxo
+              </Button>
+            </div>
+          )}
           {activeSection === "tools" && (
             <PlaceholderTab
               icon={Wrench}
@@ -623,17 +647,58 @@ export function AgentEditor({
 
       {/* Tester FAB — fixo bottom-right, z-40 (acima de conteudo, abaixo
           do header sticky z-30 + de sheets/dialogs z-50). Pill com label
-          em todas as resolucoes pra discoverability. */}
-      <Button
-        type="button"
-        onClick={() => setTesterOpen(true)}
-        size="lg"
-        className="fixed bottom-6 right-6 z-40 rounded-full px-5 shadow-lg shadow-primary/30"
-        aria-label="Testar agente"
-      >
-        <FlaskConical className="size-4" />
-        Testar agente
-      </Button>
+          em todas as resolucoes pra discoverability.
+          Escondido no modo fullscreen (o overlay tem próprio botão Testar). */}
+      {!flowFullscreen && (
+        <Button
+          type="button"
+          onClick={() => setTesterOpen(true)}
+          size="lg"
+          className="fixed bottom-6 right-6 z-40 rounded-full px-5 shadow-lg shadow-primary/30"
+          aria-label="Testar agente"
+        >
+          <FlaskConical className="size-4" />
+          Testar agente
+        </Button>
+      )}
+
+      {/* Fullscreen flow editor — cobre tudo (CRM nav, header, etc.)
+          com z-[100]. Só a barra superior e o FlowCanvas aparecem. */}
+      {flowFullscreen && (
+        <div className="fixed inset-0 z-[100] bg-background flex flex-col">
+          {/* Barra superior do editor fullscreen */}
+          <div className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-background px-4 h-12">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setFlowFullscreen(false)}
+              className="gap-1.5"
+            >
+              <ArrowLeft className="size-4" />
+              Voltar
+            </Button>
+            <div className="flex-1 min-w-0">
+              <span className="text-sm font-semibold truncate">{agent.name}</span>
+              <span className="ml-2 text-xs text-muted-foreground">— Fluxo de atendimento</span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setTesterOpen(true)}
+              className="gap-1.5"
+            >
+              <FlaskConical className="size-3.5" />
+              Testar
+            </Button>
+          </div>
+          {/* Canvas ocupa todo o espaço restante */}
+          <div className="flex flex-1 min-h-0">
+            <FlowCanvas configId={agent.id} fullscreen />
+          </div>
+        </div>
+      )}
 
       <TesterSheet
         configId={agent.id}

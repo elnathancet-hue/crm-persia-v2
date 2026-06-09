@@ -65,6 +65,7 @@ import {
   AlertDialogTitle,
 } from "@persia/ui/alert-dialog";
 import { Button } from "@persia/ui/button";
+import { cn } from "@persia/ui/utils";
 import { useAgentActions } from "../../context";
 import type { FlowCatalogs } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
@@ -153,6 +154,10 @@ function reactFlowToPersia(
 
 interface FlowCanvasProps {
   configId: string;
+  /** Quando true, o canvas preenche o container pai via flex-1 min-h-0.
+   * Usado pelo modo fullscreen do AgentEditor — o wrapper externo controla
+   * a altura; aqui removemos sticky + height fixo pra não conflitar. */
+  fullscreen?: boolean;
 }
 
 export function FlowCanvas(props: FlowCanvasProps) {
@@ -172,7 +177,7 @@ interface FlowSnapshot {
   edges: Edge[];
 }
 
-function FlowCanvasInner({ configId }: FlowCanvasProps) {
+function FlowCanvasInner({ configId, fullscreen }: FlowCanvasProps) {
   const actions = useAgentActions();
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [nodes, setNodes] = React.useState<Node[]>([]);
@@ -1143,7 +1148,12 @@ function FlowCanvasInner({ configId }: FlowCanvasProps) {
        top-32 (8rem = 128px) aproxima o offset do header sticky +
        PublishingChecklist — pode precisar ajuste fino visual.
        h-[calc(100vh-9rem)] = altura disponível abaixo do header. */
-    <div className="sticky top-32 flex h-[calc(100vh-9rem)] min-h-[600px] rounded-xl border border-border/60 overflow-hidden bg-background">
+    <div className={cn(
+      "flex overflow-hidden bg-background",
+      fullscreen
+        ? "flex-1 min-h-0"
+        : "sticky top-32 h-[calc(100vh-9rem)] min-h-[600px] rounded-xl border border-border/60",
+    )}>
       {/* PR 27 (mai/2026): avisa cliente ao sair com mudanças no fluxo
           não salvas. Dialog "este projeto não foi salvo" + opções
           "Continuar editando" / "Sair sem salvar". */}
