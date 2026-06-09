@@ -2258,15 +2258,15 @@ function ImportTemplatesModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Importar templates por JSON</DialogTitle>
           <DialogDescription>
             Cole um JSON com vários templates para criar ou atualizar mensagens em lote.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-4 py-2 pr-1">
           {/* Mode selector */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Modo de importação</Label>
@@ -2308,7 +2308,7 @@ function ImportTemplatesModal({
               placeholder="Cole o JSON aqui…"
               value={raw}
               onChange={(e) => { setRaw(e.target.value); setResult(null); }}
-              className="font-mono text-xs"
+              className="font-mono text-xs resize-none"
             />
           </div>
 
@@ -2370,7 +2370,7 @@ function ImportTemplatesModal({
           ) : null}
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t border-border pt-3">
           <Button variant="ghost" size="sm" onClick={onClose}>
             Cancelar
           </Button>
