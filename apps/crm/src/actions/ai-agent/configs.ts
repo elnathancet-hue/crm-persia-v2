@@ -248,6 +248,12 @@ export async function updateAgent(
     };
   }
   if (patch.status !== undefined) updates.status = patch.status;
+  // Migration 100: templates substituem o array inteiro.
+  if (patch.message_templates !== undefined) updates.message_templates = patch.message_templates;
+  // Migration 101: validação antes do envio.
+  if (patch.validation_config !== undefined) updates.validation_config = patch.validation_config;
+  // Migration 113: fontes estruturadas.
+  if (patch.structured_sources !== undefined) updates.structured_sources = patch.structured_sources;
 
   const { data, error } = await db
     .from("agent_configs")

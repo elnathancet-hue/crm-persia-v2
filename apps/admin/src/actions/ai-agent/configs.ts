@@ -306,6 +306,9 @@ export async function updateAgent(
       };
     }
     if (patch.status !== undefined) updates.status = patch.status;
+    if (patch.message_templates !== undefined) updates.message_templates = patch.message_templates;
+    if (patch.validation_config !== undefined) updates.validation_config = patch.validation_config;
+    if (patch.structured_sources !== undefined) updates.structured_sources = patch.structured_sources;
 
     const { data, error } = await fromAny(db, "agent_configs")
       .update(updates)

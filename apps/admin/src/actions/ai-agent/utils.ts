@@ -179,6 +179,11 @@ export function normalizeAgentPatch(
   }
 
   if (input.status !== undefined) patch.status = input.status;
+  // Campos JSONB complexos — passam diretamente.
+  if (input.humanization_config !== undefined) patch.humanization_config = input.humanization_config;
+  if (input.message_templates !== undefined) patch.message_templates = input.message_templates;
+  if (input.validation_config !== undefined) patch.validation_config = input.validation_config;
+  if (input.structured_sources !== undefined) patch.structured_sources = input.structured_sources;
   return patch;
 }
 

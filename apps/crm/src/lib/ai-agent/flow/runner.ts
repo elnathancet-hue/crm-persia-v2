@@ -23,6 +23,7 @@ import type {
   FlowNode,
   MessageTemplate,
   NativeHandlerName,
+  StructuredSource,
   ToolExecutionMode,
   ValidationConfig,
 } from "@persia/shared/ai-agent";
@@ -39,6 +40,32 @@ import type { AgentDb } from "../db";
 import { GuardrailError } from "../guardrails";
 import { buildNativeHandlerContext } from "./handler-context";
 import { buildKnowledgeBlock } from "./knowledge-injector";
+
+// ── Migration 113: Structured Sources ──────────────────────────────────────
+// Injeta fontes de dados habilitadas no system prompt.
+// JSON sources: dados injetados inline (sem tool call).
+// MCP sources: mencionados como referência (tools já disponíveis via agent_tools).
+function buildStructuredSourcesBlock(sources: StructuredSource[]): string | null {
+  const enabled = sources.filter((s) => s.enabled);
+  if (enabled.length === 0) return null;
+  const parts: string[] = [
+    "FONTES DE DADOS ESTRUTURADAS:",
+    "As informações abaixo foram disponibilizadas para você consultar durante a conversa.",
+    "",
+  ];
+  for (const src of enabled) {
+    const header = `## ${src.name}${src.description ? ` — ${src.description}` : ""}`;
+    parts.push(header);
+    if (src.type === "json") {
+      parts.push(JSON.stringify(src.data, null, 2));
+    } else {
+      // MCP: tools já estão disponíveis via agent_tools — apenas referencia
+      parts.push("[Dados disponíveis via tools do servidor MCP configurado]");
+    }
+    parts.push("");
+  }
+  return parts.join("\n");
+}
 import { getOpenAiApiMode } from "./openai-api-mode";
 import {
   runChatCompletionTurn,
@@ -302,17 +329,17 @@ async function loadEnabledTools(
 async function loadAgentConfig(
   db: AgentDb,
   ctx: FlowRunContext,
-): Promise<{ model: string; system_prompt: string; message_templates: MessageTemplate[]; validation_config: ValidationConfig }> {
+): Promise<{ model: string; system_prompt: string; message_templates: MessageTemplate[]; validation_config: ValidationConfig; structured_sources: StructuredSource[] }> {
   const { data, error } = await db
     .from("agent_configs")
-    .select("model, system_prompt, message_templates, validation_config")
+    .select("model, system_prompt, message_templates, validation_config, structured_sources")
     .eq("organization_id", ctx.organizationId)
     .eq("id", ctx.agentConfigId)
     .maybeSingle();
   if (error || !data) {
     throw new Error(error?.message || "agent_config não encontrado");
   }
-  const row = data as { model: string; system_prompt: string; message_templates?: unknown; validation_config?: unknown };
+  const row = data as { model: string; system_prompt: string; message_templates?: unknown; validation_config?: unknown; structured_sources?: unknown };
   return {
     model: row.model,
     system_prompt: row.system_prompt ?? "",
@@ -322,6 +349,10 @@ async function loadAgentConfig(
       : [],
     // Migration 101: default {} → normalizeValidationConfig aplica enabled=false.
     validation_config: normalizeValidationConfig(row.validation_config),
+    // Migration 113: default [] pra agentes sem fontes configuradas.
+    structured_sources: Array.isArray(row.structured_sources)
+      ? (row.structured_sources as StructuredSource[])
+      : [],
   };
 }
 
@@ -655,6 +686,10 @@ async function executeAIAgentNode(
   // regras gerais e agora ganha contexto factual antes de pensar.
   // Buildado em paralelo com agentConfig/tools acima.
   if (knowledgeBlock) systemParts.push(knowledgeBlock);
+  // Migration 113: fontes de dados estruturadas (JSON inline / MCP reference).
+  // Injeta após knowledge block — IA lê persona + regras + docs → depois dados estruturados.
+  const sourcesBlock = buildStructuredSourcesBlock(agentConfig.structured_sources);
+  if (sourcesBlock) systemParts.push(sourcesBlock);
   // Migration 100: inject de template ai_suggestion selecionado no node.
   // Entra após knowledge (contexto factual já lido) e antes de ROUTING
   // EVENTS (instruções de branch) — IA recebe referência de mensagem

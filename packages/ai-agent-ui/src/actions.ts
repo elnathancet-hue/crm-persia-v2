@@ -202,6 +202,19 @@ export interface AgentActions {
   ) => Promise<AgentScheduledJob>;
   deleteScheduledJob: (jobId: string) => Promise<void>;
 
+  // MCP servers — subset público (sem auth_token) pra pickers de fontes estruturadas.
+  // Opcional: admin pode não implementar (UI desabilita tipo MCP quando ausente).
+  listMcpServers?: () => Promise<{
+    ok: true;
+    servers: Array<{
+      id: string;
+      name: string;
+      server_url: string;
+      is_active: boolean;
+      cached_tools: Array<{ name: string; description?: string; inputSchema: Record<string, unknown> }>;
+    }>;
+  } | { ok: false; error: string }>;
+
   // Calendar connections (PR7.3)
   listCalendarConnections: () => Promise<AgentCalendarConnectionPublic[]>;
   deleteCalendarConnection: (connectionId: string) => Promise<void>;

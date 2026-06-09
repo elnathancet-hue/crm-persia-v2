@@ -62,6 +62,7 @@ import {
   deleteCalendarConnection,
   listCalendarConnections,
 } from "@/actions/ai-agent/calendar";
+import { listMcpServers } from "@/actions/mcp-servers";
 import {
   createFollowup,
   deleteFollowup,
@@ -113,6 +114,7 @@ export const crmAgentActions: AgentActions = {
   createScheduledJob,
   updateScheduledJob,
   deleteScheduledJob,
+  listMcpServers,
   listCalendarConnections,
   deleteCalendarConnection,
   buildOAuthStartUrl,

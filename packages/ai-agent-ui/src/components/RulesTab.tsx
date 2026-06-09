@@ -25,6 +25,7 @@ import {
   Brain,
   CalendarCheck,
   CheckCircle2,
+  Database,
   Download,
   Image,
   ExternalLink,
@@ -48,7 +49,11 @@ import type {
   AgentGuardrails,
   AgentKnowledgeSource,
   AgentTool,
+  JsonDataType,
+  McpStructuredSource,
+  JsonStructuredSource,
   MessageTemplate,
+  StructuredSource,
   UpdateAgentInput,
   ValidationConfig,
 } from "@persia/shared/ai-agent";
@@ -247,6 +252,18 @@ export function RulesTab({
   );
   const [importModalOpen, setImportModalOpen] = React.useState(false);
 
+  // Migration 113: fontes de dados estruturadas.
+  const [structuredSources, setStructuredSources] = React.useState<StructuredSource[]>(
+    agent.structured_sources ?? [],
+  );
+  const [sourceModalOpen, setSourceModalOpen] = React.useState(false);
+  const [editingSource, setEditingSource] = React.useState<StructuredSource | null>(null);
+  const [mcpServers, setMcpServers] = React.useState<Array<{
+    id: string; name: string; is_active: boolean;
+    cached_tools: Array<{ name: string; description?: string; inputSchema: Record<string, unknown> }>;
+  }>>([]);
+  const [mcpServersLoaded, setMcpServersLoaded] = React.useState(false);
+
   // Migration 101: validacao antes do envio.
   const [validationConfig, setValidationConfig] = React.useState<ValidationConfig>(
     () => normalizeValidationConfig(agent.validation_config),
@@ -304,6 +321,18 @@ export function RulesTab({
     };
   }, [agent.id, getFlowCatalogs]);
 
+  const { listMcpServers } = useAgentActions();
+  React.useEffect(() => {
+    if (!listMcpServers) { setMcpServersLoaded(true); return; }
+    let cancelled = false;
+    listMcpServers().then((res) => {
+      if (cancelled) return;
+      if (res.ok) setMcpServers(res.servers.filter((s) => s.is_active));
+      setMcpServersLoaded(true);
+    }).catch(() => { if (!cancelled) setMcpServersLoaded(true); });
+    return () => { cancelled = true; };
+  }, [listMcpServers]);
+
   // Save flow fix #1 (mai/2026): preserva input do cliente durante save.
   //
   // Antes: este useEffect ressincronizava state local SEMPRE que agent.*
@@ -349,6 +378,7 @@ export function RulesTab({
     setSelectedPipelineId(null);
     setTemplates(agent.message_templates ?? []);
     setValidationConfig(normalizeValidationConfig(agent.validation_config));
+    setStructuredSources(agent.structured_sources ?? []);
   }, [
     agent.id,
     agent.name,
@@ -458,6 +488,9 @@ export function RulesTab({
     JSON.stringify(validationConfig) !==
     JSON.stringify(normalizeValidationConfig(agent.validation_config));
 
+  const sourcesDirty =
+    JSON.stringify(structuredSources) !== JSON.stringify(agent.structured_sources ?? []);
+
   const dirty =
     promptDirty ||
     nameDirty ||
@@ -469,7 +502,8 @@ export function RulesTab({
     debounceDirty ||
     humanizationDirty ||
     templatesDirty ||
-    validationDirty;
+    validationDirty ||
+    sourcesDirty;
 
   // Sincroniza ref do dirty pro useEffect de resync acima ler sem
   // recriar deps. Padrao "ref reflete state recente" — comum em
@@ -543,6 +577,7 @@ export function RulesTab({
     }
     if (templatesDirty) patch.message_templates = templates;
     if (validationDirty) patch.validation_config = validationConfig;
+    if (sourcesDirty) patch.structured_sources = structuredSources;
     onChange(patch, "Configurações salvas");
   }, [
     promptDirty,
@@ -576,6 +611,8 @@ export function RulesTab({
     initialHumanization.handoff_include_summary,
     validationDirty,
     validationConfig,
+    sourcesDirty,
+    structuredSources,
     onChange,
   ]);
 
@@ -864,6 +901,11 @@ export function RulesTab({
             label="Validação"
             dirty={validationDirty}
             onClick={() => jumpToAccordion("validation")}
+          />
+          <JumpChip
+            label="Fontes"
+            dirty={sourcesDirty}
+            onClick={() => jumpToAccordion("sources")}
           />
         </div>
 
@@ -1618,6 +1660,82 @@ export function RulesTab({
               ) : null}
             </AccordionContent>
           </AccordionItem>
+
+          {/* ────────────────────────────────────────────────────
+              Grupo 6: Fontes estruturadas (Migration 113)
+              Dados consultáveis pelo agente (MCP ou JSON inline)
+              ──────────────────────────────────────────────────── */}
+          <AccordionItem value="sources" id="accordion-sources" className="px-3">
+            <AccordionTrigger className="py-3 text-sm">
+              <span className="flex items-center gap-2">
+                <Database className="size-4 text-primary" />
+                Fontes estruturadas
+                {sourcesDirty ? <DirtyDot /> : null}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3 pb-4 pt-1">
+              <p className="text-xs text-muted-foreground">
+                Dados que o agente pode consultar durante a conversa — tabelas de preços,
+                produtos, regras de negócio ou servidores MCP externos.
+              </p>
+
+              {structuredSources.length > 0 ? (
+                <div className="space-y-2">
+                  {structuredSources.map((src) => (
+                    <StructuredSourceCard
+                      key={src.id}
+                      source={src}
+                      mcpServers={mcpServers}
+                      onToggle={(enabled) =>
+                        setStructuredSources((prev) =>
+                          prev.map((s) => s.id === src.id ? { ...s, enabled } : s)
+                        )
+                      }
+                      onEdit={() => { setEditingSource(src); setSourceModalOpen(true); }}
+                      onRemove={() =>
+                        setStructuredSources((prev) => prev.filter((s) => s.id !== src.id))
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Nenhuma fonte cadastrada.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={() => { setEditingSource(null); setSourceModalOpen(true); }}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+              >
+                <Plus className="size-3.5" />
+                Adicionar fonte
+              </button>
+
+              <SourceModal
+                open={sourceModalOpen}
+                source={editingSource}
+                existingIds={structuredSources.map((s) => s.id)}
+                mcpServers={mcpServers}
+                mcpServersLoaded={mcpServersLoaded}
+                onClose={() => { setSourceModalOpen(false); setEditingSource(null); }}
+                onSave={(src) => {
+                  setStructuredSources((prev) => {
+                    const idx = prev.findIndex((s) => s.id === src.id);
+                    if (idx >= 0) {
+                      const next = [...prev];
+                      next[idx] = src;
+                      return next;
+                    }
+                    return [...prev, src];
+                  });
+                  setSourceModalOpen(false);
+                  setEditingSource(null);
+                }}
+              />
+            </AccordionContent>
+          </AccordionItem>
         </Accordion>
 
       </div>
@@ -2089,6 +2207,409 @@ function uniqueSlug(base: string, existing: string[]): string {
   let n = 2;
   while (existing.includes(`${base}_${n}`)) n++;
   return `${base}_${n}`;
+}
+
+// ============================================================================
+// StructuredSourceCard
+// ============================================================================
+
+const JSON_DATA_TYPE_LABELS: Record<string, string> = {
+  pricing_tables: "Tabelas de preços",
+  products: "Produtos",
+  services: "Serviços",
+  support_tables: "Tabelas de suporte",
+  business_rules: "Regras de negócio",
+  templates: "Templates",
+  promotions: "Promoções",
+  custom: "Personalizado",
+};
+
+function StructuredSourceCard({
+  source,
+  mcpServers,
+  onToggle,
+  onEdit,
+  onRemove,
+}: {
+  source: StructuredSource;
+  mcpServers: Array<{ id: string; name: string }>;
+  onToggle: (enabled: boolean) => void;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  const typeLabel = source.type === "mcp" ? "MCP" : "JSON";
+  const subLabel =
+    source.type === "mcp"
+      ? (mcpServers.find((s) => s.id === source.config.mcp_id)?.name ?? source.config.mcp_id.slice(0, 8))
+      : (JSON_DATA_TYPE_LABELS[source.data_type] ?? source.data_type);
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2">
+      <Switch
+        checked={source.enabled}
+        onCheckedChange={onToggle}
+        aria-label={`Ativar ${source.name}`}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium leading-tight">{source.name}</p>
+        <p className="text-[10px] text-muted-foreground">
+          <span className="rounded bg-muted px-1 py-0.5 font-mono text-[9px]">{typeLabel}</span>
+          {" "}
+          {subLabel}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        aria-label="Editar fonte"
+      >
+        <Pencil className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        aria-label="Remover fonte"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ============================================================================
+// SourceModal — adicionar / editar uma StructuredSource
+// ============================================================================
+
+type SourceType = "mcp" | "json";
+type SourceModalServer = { id: string; name: string; is_active: boolean; cached_tools: Array<{ name: string; description?: string }> };
+
+const JSON_DATA_TYPES: { value: JsonDataType; label: string }[] = [
+  { value: "pricing_tables", label: "Tabelas de preços" },
+  { value: "products", label: "Produtos" },
+  { value: "services", label: "Serviços" },
+  { value: "support_tables", label: "Tabelas de suporte" },
+  { value: "business_rules", label: "Regras de negócio" },
+  { value: "templates", label: "Templates" },
+  { value: "promotions", label: "Promoções" },
+  { value: "custom", label: "Personalizado" },
+];
+
+function nanoid8() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function SourceModal({
+  open,
+  source,
+  existingIds,
+  mcpServers,
+  mcpServersLoaded,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  source: StructuredSource | null;
+  existingIds: string[];
+  mcpServers: SourceModalServer[];
+  mcpServersLoaded: boolean;
+  onClose: () => void;
+  onSave: (src: StructuredSource) => void;
+}) {
+  const isEditing = source !== null;
+
+  // Form state
+  const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
+  const [enabled, setEnabled] = React.useState(true);
+  const [srcType, setSrcType] = React.useState<SourceType>("json");
+
+  // MCP fields
+  const [mcpId, setMcpId] = React.useState("");
+  const [allowedTools, setAllowedTools] = React.useState<string[]>([]);
+
+  // JSON fields
+  const [dataType, setDataType] = React.useState<JsonDataType>("custom");
+  const [jsonRaw, setJsonRaw] = React.useState("{}");
+  const [jsonError, setJsonError] = React.useState<string | null>(null);
+  const [jsonValid, setJsonValid] = React.useState(false);
+
+  // Reset on open
+  React.useEffect(() => {
+    if (!open) {
+      setJsonError(null);
+      setJsonValid(false);
+      return;
+    }
+    if (source) {
+      setName(source.name);
+      setDescription(source.description ?? "");
+      setEnabled(source.enabled);
+      setSrcType(source.type);
+      if (source.type === "mcp") {
+        setMcpId(source.config.mcp_id);
+        setAllowedTools(source.config.allowed_tools);
+        setDataType("custom");
+        setJsonRaw("{}");
+      } else {
+        setMcpId("");
+        setAllowedTools([]);
+        setDataType(source.data_type);
+        setJsonRaw(JSON.stringify(source.data, null, 2));
+        setJsonValid(true);
+      }
+    } else {
+      setName("");
+      setDescription("");
+      setEnabled(true);
+      setSrcType("json");
+      setMcpId("");
+      setAllowedTools([]);
+      setDataType("custom");
+      setJsonRaw("{}");
+      setJsonValid(true);
+    }
+    setJsonError(null);
+  }, [open, source]);
+
+  const selectedServer = mcpServers.find((s) => s.id === mcpId);
+
+  const handleValidateJson = () => {
+    try {
+      const parsed = JSON.parse(jsonRaw.trim() || "{}");
+      if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+        setJsonError("O JSON deve ser um objeto { ... }.");
+        setJsonValid(false);
+        return;
+      }
+      setJsonRaw(JSON.stringify(parsed, null, 2));
+      setJsonError(null);
+      setJsonValid(true);
+    } catch (e) {
+      setJsonError("JSON inválido. Verifique a sintaxe.");
+      setJsonValid(false);
+    }
+  };
+
+  const canSave = () => {
+    if (!name.trim()) return false;
+    if (srcType === "mcp") return !!mcpId;
+    return jsonValid;
+  };
+
+  const handleSave = () => {
+    if (!canSave()) return;
+    const id = source?.id ?? nanoid8();
+    if (srcType === "mcp") {
+      const src: McpStructuredSource = {
+        id, name: name.trim(), description: description.trim() || undefined,
+        type: "mcp", enabled,
+        config: { mcp_id: mcpId, allowed_tools: allowedTools },
+      };
+      onSave(src);
+    } else {
+      let data: Record<string, unknown> = {};
+      try { data = JSON.parse(jsonRaw.trim() || "{}"); } catch { /* already validated */ }
+      const src: JsonStructuredSource = {
+        id, name: name.trim(), description: description.trim() || undefined,
+        type: "json", enabled, data_type: dataType, data,
+      };
+      onSave(src);
+    }
+  };
+
+  const noMcpServers = mcpServersLoaded && mcpServers.length === 0;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>{isEditing ? "Editar fonte" : "Adicionar fonte estruturada"}</DialogTitle>
+          <DialogDescription>
+            Dados que o agente pode consultar — tabela de preços, produtos, servidor MCP, etc.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-4 py-2">
+            {/* Name */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Nome</Label>
+              <Input
+                placeholder="Ex: Tabela de preços 2026"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Quando usar <span className="text-muted-foreground">(opcional)</span></Label>
+              <Input
+                placeholder="Ex: Use quando o lead perguntar sobre valores"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            {/* Enabled */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium">Ativar fonte</Label>
+              <Switch checked={enabled} onCheckedChange={setEnabled} />
+            </div>
+
+            {/* Type selector */}
+            {!isEditing ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Tipo</Label>
+                <Select value={srcType} onValueChange={(v) => v && setSrcType(v as SourceType)}>
+                  <SelectTrigger data-size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="json">JSON inline — dados embutidos no agente</SelectItem>
+                    <SelectItem value="mcp" disabled={noMcpServers}>
+                      MCP — servidor externo{noMcpServers ? " (nenhum configurado)" : ""}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Tipo</Label>
+                <p className="text-xs text-muted-foreground">
+                  {srcType === "mcp" ? "MCP — servidor externo" : "JSON inline"}
+                  {" "}(não pode ser alterado após criação)
+                </p>
+              </div>
+            )}
+
+            {/* ── MCP config ── */}
+            {srcType === "mcp" ? (
+              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+                {/* Server picker */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Servidor MCP</Label>
+                  {!mcpServersLoaded ? (
+                    <p className="text-xs text-muted-foreground">Carregando servidores…</p>
+                  ) : mcpServers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Nenhum servidor MCP ativo. Configure em{" "}
+                      <Link href="/settings/mcp-servers" className="text-primary underline">
+                        Configurações → MCP
+                      </Link>.
+                    </p>
+                  ) : (
+                    <Select value={mcpId} onValueChange={(v) => { if (v) { setMcpId(v); setAllowedTools([]); } }}>
+                      <SelectTrigger data-size="sm">
+                        <SelectValue placeholder="Selecionar servidor…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mcpServers.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* Tools filter */}
+                {selectedServer && selectedServer.cached_tools.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">
+                      Tools permitidas{" "}
+                      <span className="text-muted-foreground">(vazio = todas)</span>
+                    </Label>
+                    <div className="max-h-40 overflow-y-auto space-y-1 rounded border border-border bg-background p-2">
+                      {selectedServer.cached_tools.map((tool) => {
+                        const checked = allowedTools.includes(tool.name);
+                        return (
+                          <label key={tool.name} className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 shrink-0"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAllowedTools((prev) => [...prev, tool.name]);
+                                } else {
+                                  setAllowedTools((prev) => prev.filter((t) => t !== tool.name));
+                                }
+                              }}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-mono leading-tight">{tool.name}</p>
+                              {tool.description ? (
+                                <p className="text-[10px] text-muted-foreground leading-tight">{tool.description}</p>
+                              ) : null}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : selectedServer ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma tool encontrada neste servidor. Sincronize em Configurações → MCP.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* ── JSON config ── */}
+            {srcType === "json" ? (
+              <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Categoria</Label>
+                  <Select value={dataType} onValueChange={(v) => v && setDataType(v as JsonDataType)}>
+                    <SelectTrigger data-size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {JSON_DATA_TYPES.map((dt) => (
+                        <SelectItem key={dt.value} value={dt.value}>{dt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">JSON</Label>
+                  <Textarea
+                    rows={8}
+                    placeholder='{ "plano_basico": 97, "plano_pro": 197 }'
+                    value={jsonRaw}
+                    onChange={(e) => { setJsonRaw(e.target.value); setJsonValid(false); setJsonError(null); }}
+                    className="resize-none font-mono text-xs"
+                  />
+                  {jsonError ? (
+                    <p className="text-xs text-destructive">{jsonError}</p>
+                  ) : jsonValid ? (
+                    <p className="text-xs text-success">JSON válido.</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleValidateJson}
+                    className="text-xs text-primary underline underline-offset-2"
+                  >
+                    Validar JSON
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <DialogFooter className="shrink-0 gap-2 border-t pt-3">
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
+          <Button size="sm" onClick={handleSave} disabled={!canSave()}>
+            {isEditing ? "Salvar alterações" : "Adicionar fonte"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ============================================================================

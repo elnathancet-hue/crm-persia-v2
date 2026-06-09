@@ -140,6 +140,12 @@ export function normalizeAgentPatch(
     patch.new_lead_stage_id = input.new_lead_stage_id || null;
   }
   if (input.status !== undefined) patch.status = input.status;
+  // Campos JSONB complexos — passam diretamente, normalização/merge é
+  // feita no updateAgent que tem acesso ao valor atual do servidor.
+  if (input.humanization_config !== undefined) patch.humanization_config = input.humanization_config;
+  if (input.message_templates !== undefined) patch.message_templates = input.message_templates;
+  if (input.validation_config !== undefined) patch.validation_config = input.validation_config;
+  if (input.structured_sources !== undefined) patch.structured_sources = input.structured_sources;
   return patch;
 }
 

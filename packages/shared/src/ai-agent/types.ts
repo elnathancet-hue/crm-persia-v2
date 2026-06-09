@@ -15,6 +15,65 @@ import type { HumanizationConfig } from "./humanization";
 import type { ValidationConfig } from "./validation";
 
 // ============================================================================
+// Structured Sources — fontes de dados tipadas (migration 113)
+// ============================================================================
+
+export type StructuredSourceType = "mcp" | "json";
+
+/**
+ * Categorias de dado inline (JSON). Usadas no system prompt block pra
+ * dar contexto ao LLM sobre o que cada fonte representa.
+ */
+export type JsonDataType =
+  | "pricing_tables"
+  | "products"
+  | "services"
+  | "support_tables"
+  | "business_rules"
+  | "templates"
+  | "promotions"
+  | "custom";
+
+interface BaseStructuredSource {
+  /** UUID gerado no client (nanoid). Estável entre edições. */
+  id: string;
+  /** Nome amigável exibido na UI e no prompt. */
+  name: string;
+  type: StructuredSourceType;
+  enabled: boolean;
+  /** Descrição curta: quando / por que usar esta fonte. */
+  description?: string;
+}
+
+/**
+ * Fonte MCP: referência a um mcp_server_connection existente.
+ * O runtime filtra as tools expostas ao LLM pelo `allowed_tools` —
+ * se vazio, todas as tools do servidor ficam disponíveis.
+ */
+export interface McpStructuredSource extends BaseStructuredSource {
+  type: "mcp";
+  config: {
+    /** ID de mcp_server_connections (organization-scoped). */
+    mcp_id: string;
+    /** Lista branca de tool names. [] = todas as tools do servidor. */
+    allowed_tools: string[];
+  };
+}
+
+/**
+ * Fonte JSON inline: dados embutidos diretamente no agente.
+ * Injetados no system prompt via get_structured_source_data tool.
+ */
+export interface JsonStructuredSource extends BaseStructuredSource {
+  type: "json";
+  data_type: JsonDataType;
+  /** Objeto JSON arbitrário (tabelas, produtos, regras, etc.). */
+  data: Record<string, unknown>;
+}
+
+export type StructuredSource = McpStructuredSource | JsonStructuredSource;
+
+// ============================================================================
 // Message Templates — reutilizáveis por agente (migration 100)
 // ============================================================================
 
@@ -206,6 +265,9 @@ export interface AgentConfig {
   // Migration 101: validação antes do envio. Default {} (disabled) pra
   // compatibilidade — normalizeValidationConfig aplica defaults.
   validation_config?: ValidationConfig;
+  // Migration 113: fontes de dados estruturadas (MCP ou JSON inline).
+  // Default [] para compatibilidade — runner usa ?? [].
+  structured_sources?: StructuredSource[];
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -560,6 +622,8 @@ export interface CreateAgentInput {
   message_templates?: MessageTemplate[];
   // Migration 101: config de validação antes do envio.
   validation_config?: ValidationConfig;
+  // Migration 113: fontes de dados estruturadas.
+  structured_sources?: StructuredSource[];
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
