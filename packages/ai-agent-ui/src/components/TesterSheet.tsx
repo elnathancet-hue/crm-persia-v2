@@ -688,6 +688,27 @@ function appendFaithfulTurns(
                 : ""
             } — roteando por "${handle}"`,
       });
+    } else if (ev.kind === "response_validated") {
+      const approved = ev.payload.approved === true;
+      const action = ev.payload.action ? String(ev.payload.action) : null;
+      const reasons = Array.isArray(ev.payload.reasons)
+        ? ev.payload.reasons.map(String)
+        : [];
+      const actionLabels: Record<string, string> = {
+        rewrite: "reescrita solicitada",
+        fallback: "mensagem de reserva usada",
+        pause_ai: "agente pausado",
+        alert_only: "so registrado",
+      };
+      newTurns.push({
+        kind: "system",
+        icon: approved ? "info" : "pause",
+        text: approved
+          ? "Validacao: resposta aprovada"
+          : `Validacao: resposta bloqueada (${reasons.join(", ")}) — ${
+              action ? (actionLabels[action] ?? action) : "sem acao"
+            }`,
+      });
     }
   }
 

@@ -22,6 +22,7 @@ export * from "./calendar";
 export * from "./agent-templates";
 export * from "./followups";
 export * from "./humanization";
+export * from "./validation";
 export * from "./entry-conditions";
 export * from "./lead-status";
 export * from "./flow";

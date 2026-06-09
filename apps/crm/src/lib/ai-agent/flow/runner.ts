@@ -24,6 +24,7 @@ import type {
   MessageTemplate,
   NativeHandlerName,
   ToolExecutionMode,
+  ValidationConfig,
 } from "@persia/shared/ai-agent";
 import {
   calculateCostUsdCents,
@@ -31,6 +32,7 @@ import {
   findOutgoingEdges,
   getNodeById,
   getPreset,
+  normalizeValidationConfig,
 } from "@persia/shared/ai-agent";
 import { assertWithinCostLimits, type CostLimitCache } from "../cost-limits";
 import type { AgentDb } from "../db";
@@ -62,6 +64,8 @@ import type {
   FlowRunResult,
   TesterRunEvent,
 } from "./types";
+import { validateAgentResponse } from "./response-validator";
+import { pauseAgent } from "../pause-agent";
 
 const DEFAULT_MAX_ITERATIONS = 20;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -298,17 +302,17 @@ async function loadEnabledTools(
 async function loadAgentConfig(
   db: AgentDb,
   ctx: FlowRunContext,
-): Promise<{ model: string; system_prompt: string; message_templates: MessageTemplate[] }> {
+): Promise<{ model: string; system_prompt: string; message_templates: MessageTemplate[]; validation_config: ValidationConfig }> {
   const { data, error } = await db
     .from("agent_configs")
-    .select("model, system_prompt, message_templates")
+    .select("model, system_prompt, message_templates, validation_config")
     .eq("organization_id", ctx.organizationId)
     .eq("id", ctx.agentConfigId)
     .maybeSingle();
   if (error || !data) {
     throw new Error(error?.message || "agent_config não encontrado");
   }
-  const row = data as { model: string; system_prompt: string; message_templates?: unknown };
+  const row = data as { model: string; system_prompt: string; message_templates?: unknown; validation_config?: unknown };
   return {
     model: row.model,
     system_prompt: row.system_prompt ?? "",
@@ -316,7 +320,133 @@ async function loadAgentConfig(
     message_templates: Array.isArray(row.message_templates)
       ? (row.message_templates as MessageTemplate[])
       : [],
+    // Migration 101: default {} → normalizeValidationConfig aplica enabled=false.
+    validation_config: normalizeValidationConfig(row.validation_config),
   };
+}
+
+
+/**
+ * Pede ao LLM que reescreva a resposta bloqueada.
+ * Retorna null se a reescrita falhar ou ainda nao passar na validacao.
+ */
+async function rewriteBlockedResponse(
+  originalText: string,
+  reasons: string[],
+  config: ValidationConfig,
+  client: OpenAI,
+  model: string,
+): Promise<string | null> {
+  const rulesHint = reasons
+    .map((r) => {
+      if (r === "empty_response") return "A resposta estava vazia.";
+      if (r.startsWith("too_long:")) return `A resposta excedeu ${config.max_chars} caracteres.`;
+      if (r.startsWith("multiple_questions:")) return "A resposta continha mais de uma pergunta.";
+      if (r.startsWith("forbidden_phrase:"))
+        return `A resposta continha a frase proibida: "${r.slice("forbidden_phrase:".length)}".`;
+      if (r.startsWith("blocked_promise:"))
+        return `A resposta continha a promessa bloqueada: "${r.slice("blocked_promise:".length)}".`;
+      return r;
+    })
+    .join(" ");
+  const rewritePrompt = [
+    "Reescreva a mensagem abaixo corrigindo os seguintes problemas: " + rulesHint,
+    "",
+    "Mensagem original:",
+    originalText,
+    "",
+    "Responda APENAS com a mensagem reescrita, sem explicacoes.",
+  ].join("\n");
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [{ role: "user", content: rewritePrompt }],
+      max_tokens: Math.min(config.max_chars > 0 ? Math.ceil(config.max_chars / 3) : 500, 500),
+    });
+    const rewritten = (completion.choices[0]?.message?.content ?? "").trim();
+    if (!rewritten) return null;
+    const { approved } = validateAgentResponse(rewritten, config);
+    return approved ? rewritten : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Valida texto gerado pela IA, aplica acao configurada se bloqueado,
+ * e emite os eventos corretos. Centraliza os 2 pontos de send_text
+ * em executeAIAgentNode.
+ *
+ * Acoes on_block:
+ *   rewrite    — pede reescrita ao LLM; se falhar usa fallback_message
+ *   fallback   — substitui por fallback_message; nao envia se vazio
+ *   pause_ai   — pausa o agente, nao envia nada
+ *   alert_only — envia mesmo assim, so loga evento
+ */
+async function applyValidationAndSend(
+  text: string,
+  validationConfig: ValidationConfig,
+  db: AgentDb,
+  ctx: FlowRunContext,
+  result: FlowRunResult,
+  client: OpenAI,
+  model: string,
+): Promise<void> {
+  const validation = validateAgentResponse(text, validationConfig);
+
+  if (!validation.approved) {
+    const action = validation.action!;
+    let finalText: string | null = null;
+
+    if (action === "rewrite") {
+      finalText = await rewriteBlockedResponse(text, validation.reasons, validationConfig, client, model);
+      if (finalText === null && validationConfig.fallback_message) {
+        finalText = validationConfig.fallback_message;
+      }
+    } else if (action === "fallback") {
+      finalText = validationConfig.fallback_message || null;
+    } else if (action === "pause_ai") {
+      if (!ctx.dryRun) {
+        await pauseAgent({
+          db,
+          orgId: ctx.organizationId,
+          agentConversationId: ctx.agentConversationId,
+          reason: `validation_blocked:${validation.reasons.join(",")}`,
+        });
+      }
+    } else {
+      // alert_only: envia mesmo assim
+      finalText = text;
+    }
+
+    ctx.provider.emit({
+      kind: "response_validated",
+      payload: {
+        approved: false,
+        action,
+        reasons: validation.reasons,
+        original_text: text,
+        final_text: finalText ?? null,
+      },
+    });
+
+    if (finalText) {
+      result.assistant_reply += result.assistant_reply ? "\n" + finalText : finalText;
+      ctx.provider.emit({ kind: "send_text", payload: { message: finalText } });
+    }
+    return;
+  }
+
+  // Aprovado
+  if (validationConfig.enabled) {
+    ctx.provider.emit({
+      kind: "response_validated",
+      payload: { approved: true, reasons: [], action: null },
+    });
+  }
+
+  result.assistant_reply += result.assistant_reply ? "\n" + text : text;
+  ctx.provider.emit({ kind: "send_text", payload: { message: text } });
 }
 
 function getOpenAIClient(): OpenAI {
@@ -842,11 +972,7 @@ async function executeAIAgentNode(
         });
       }
       if (text) {
-        result.assistant_reply += result.assistant_reply ? "\n" + text : text;
-        ctx.provider.emit({
-          kind: "send_text",
-          payload: { message: text },
-        });
+        await applyValidationAndSend(text, agentConfig.validation_config, db, ctx, result, client, model);
       }
       break;
     }
@@ -1018,13 +1144,7 @@ async function executeAIAgentNode(
           });
         }
         if (iterCleaned) {
-          result.assistant_reply += result.assistant_reply
-            ? "\n" + iterCleaned
-            : iterCleaned;
-          ctx.provider.emit({
-            kind: "send_text",
-            payload: { message: iterCleaned },
-          });
+          await applyValidationAndSend(iterCleaned, agentConfig.validation_config, db, ctx, result, client, model);
         }
         break;
       }

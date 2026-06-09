@@ -33,6 +33,7 @@ import {
   Pencil,
   Plug,
   Plus,
+  Shield,
   Sparkles,
   Trash2,
   X,
@@ -47,6 +48,7 @@ import type {
   AgentTool,
   MessageTemplate,
   UpdateAgentInput,
+  ValidationConfig,
 } from "@persia/shared/ai-agent";
 import {
   AFTER_HOURS_MESSAGE_DEFAULT,
@@ -71,6 +73,7 @@ import {
   clampSplitDelaySeconds,
   clampSplitThresholdChars,
   normalizeHumanizationConfig,
+  normalizeValidationConfig,
   sanitizeBusinessHours,
   sanitizeKeywordList,
   type BusinessHours,
@@ -232,6 +235,10 @@ export function RulesTab({
   const [templates, setTemplates] = React.useState<MessageTemplate[]>(
     agent.message_templates ?? [],
   );
+  // Migration 101: validacao antes do envio.
+  const [validationConfig, setValidationConfig] = React.useState<ValidationConfig>(
+    () => normalizeValidationConfig(agent.validation_config),
+  );
   const [selectedPipelineId, setSelectedPipelineId] = React.useState<string | null>(
     null,
   );
@@ -329,6 +336,7 @@ export function RulesTab({
     setNewLeadStageId(agent.new_lead_stage_id ?? null);
     setSelectedPipelineId(null);
     setTemplates(agent.message_templates ?? []);
+    setValidationConfig(normalizeValidationConfig(agent.validation_config));
   }, [
     agent.id,
     agent.name,
@@ -341,6 +349,7 @@ export function RulesTab({
     agent.debounce_window_ms,
     agent.new_lead_stage_id,
     agent.message_templates,
+    agent.validation_config,
   ]);
 
   const pipelineOptions = React.useMemo(() => {
@@ -433,6 +442,10 @@ export function RulesTab({
   const templatesDirty =
     JSON.stringify(templates) !== JSON.stringify(agent.message_templates ?? []);
 
+  const validationDirty =
+    JSON.stringify(validationConfig) !==
+    JSON.stringify(normalizeValidationConfig(agent.validation_config));
+
   const dirty =
     promptDirty ||
     nameDirty ||
@@ -443,7 +456,8 @@ export function RulesTab({
     newLeadStageDirty ||
     debounceDirty ||
     humanizationDirty ||
-    templatesDirty;
+    templatesDirty ||
+    validationDirty;
 
   // Sincroniza ref do dirty pro useEffect de resync acima ler sem
   // recriar deps. Padrao "ref reflete state recente" — comum em
@@ -516,6 +530,7 @@ export function RulesTab({
       };
     }
     if (templatesDirty) patch.message_templates = templates;
+    if (validationDirty) patch.validation_config = validationConfig;
     onChange(patch, "Configurações salvas");
   }, [
     promptDirty,
@@ -547,6 +562,8 @@ export function RulesTab({
     nextBusinessHours,
     nextAfterHoursMessage,
     initialHumanization.handoff_include_summary,
+    validationDirty,
+    validationConfig,
     onChange,
   ]);
 
@@ -773,6 +790,11 @@ export function RulesTab({
             label="Integrações"
             dirty={integrationsDirty}
             onClick={() => jumpToAccordion("integrations")}
+          />
+          <JumpChip
+            label="Validação"
+            dirty={validationDirty}
+            onClick={() => jumpToAccordion("validation")}
           />
         </div>
 
@@ -1251,7 +1273,7 @@ export function RulesTab({
           <AccordionItem
             value="integrations"
             id="accordion-integrations"
-            className="px-3"
+            className="border-b px-3 last:border-b-0"
           >
             <AccordionTrigger className="py-3 text-sm">
               <span className="flex items-center gap-2">
@@ -1323,6 +1345,208 @@ export function RulesTab({
                   </Link>
                 ) : null}
               </section>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* ────────────────────────────────────────────────────
+              Grupo 5: Validação antes do envio
+              (Migration 101)
+              ──────────────────────────────────────────────────── */}
+          <AccordionItem value="validation" id="accordion-validation" className="px-3">
+            <AccordionTrigger className="py-3 text-sm">
+              <span className="flex items-center gap-2">
+                <Shield className="size-4 text-primary" />
+                Validação de resposta
+                {validationDirty ? <DirtyDot /> : null}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className="space-y-4 pb-4 pt-1">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="validation-enabled" className="text-sm font-medium">
+                    Ativar validação
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Verifica cada resposta antes de enviar. Agentes novos começam com validação desativada.
+                  </p>
+                </div>
+                <Switch
+                  id="validation-enabled"
+                  checked={validationConfig.enabled}
+                  onCheckedChange={(v) =>
+                    setValidationConfig((prev) => ({ ...prev, enabled: v }))
+                  }
+                />
+              </div>
+
+              {validationConfig.enabled ? (
+                <div className="space-y-4 rounded-lg border border-border/60 bg-muted/20 p-3">
+                  {/* max_chars */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="validation-max-chars" className="text-sm">
+                        Tamanho máximo (caracteres)
+                      </Label>
+                      <HelpTooltip>
+                        0 = sem limite. Respostas maiores que este valor serão bloqueadas.
+                      </HelpTooltip>
+                    </div>
+                    <Input
+                      id="validation-max-chars"
+                      type="number"
+                      min={0}
+                      value={validationConfig.max_chars}
+                      onChange={(e) =>
+                        setValidationConfig((prev) => ({
+                          ...prev,
+                          max_chars: Math.max(0, parseInt(e.target.value) || 0),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  {/* one_question_only */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Máximo de 1 pergunta por resposta</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Bloqueia respostas com mais de um "?".
+                      </p>
+                    </div>
+                    <Switch
+                      checked={validationConfig.one_question_only}
+                      onCheckedChange={(v) =>
+                        setValidationConfig((prev) => ({ ...prev, one_question_only: v }))
+                      }
+                    />
+                  </div>
+
+                  {/* block_empty_response */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">Bloquear resposta vazia</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Impede envio quando a IA gera texto em branco.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={validationConfig.block_empty_response}
+                      onCheckedChange={(v) =>
+                        setValidationConfig((prev) => ({ ...prev, block_empty_response: v }))
+                      }
+                    />
+                  </div>
+
+                  {/* forbidden_phrases */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="validation-forbidden" className="text-sm">
+                        Frases proibidas
+                      </Label>
+                      <HelpTooltip>
+                        Uma frase por linha. Respostas que contiverem qualquer frase serão bloqueadas (ignora maiúsculas/minúsculas).
+                      </HelpTooltip>
+                    </div>
+                    <Textarea
+                      id="validation-forbidden"
+                      rows={3}
+                      placeholder={"preço negociável\npagamento parcelado"}
+                      value={validationConfig.forbidden_phrases.join("\n")}
+                      onChange={(e) =>
+                        setValidationConfig((prev) => ({
+                          ...prev,
+                          forbidden_phrases: e.target.value
+                            .split("\n")
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  {/* blocked_promises */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="validation-promises" className="text-sm">
+                        Promessas bloqueadas
+                      </Label>
+                      <HelpTooltip>
+                        Expressões que a IA não pode prometer ao lead (ex: "garantia", "desconto especial").
+                      </HelpTooltip>
+                    </div>
+                    <Textarea
+                      id="validation-promises"
+                      rows={3}
+                      placeholder={"garantia total\ndesconto especial"}
+                      value={validationConfig.blocked_promises.join("\n")}
+                      onChange={(e) =>
+                        setValidationConfig((prev) => ({
+                          ...prev,
+                          blocked_promises: e.target.value
+                            .split("\n")
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        }))
+                      }
+                    />
+                  </div>
+
+                  {/* on_block */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="validation-on-block" className="text-sm">
+                      Ação ao bloquear
+                    </Label>
+                    <Select
+                      value={validationConfig.on_block}
+                      onValueChange={(v) =>
+                        setValidationConfig((prev) => ({
+                          ...prev,
+                          on_block: v as ValidationConfig["on_block"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="validation-on-block">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="rewrite">Reescrever com IA</SelectItem>
+                        <SelectItem value="fallback">Usar mensagem de reserva</SelectItem>
+                        <SelectItem value="pause_ai">Pausar agente</SelectItem>
+                        <SelectItem value="alert_only">Só registrar (envia mesmo assim)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* fallback_message */}
+                  {(validationConfig.on_block === "fallback" ||
+                    validationConfig.on_block === "rewrite") ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="validation-fallback" className="text-sm">
+                          Mensagem de reserva
+                        </Label>
+                        <HelpTooltip>
+                          {validationConfig.on_block === "rewrite"
+                            ? "Usada se a reescrita também falhar na validação."
+                            : "Enviada no lugar da resposta bloqueada."}
+                        </HelpTooltip>
+                      </div>
+                      <Textarea
+                        id="validation-fallback"
+                        rows={2}
+                        placeholder="Ex: Deixa eu verificar isso contigo em um momento."
+                        value={validationConfig.fallback_message}
+                        onChange={(e) =>
+                          setValidationConfig((prev) => ({
+                            ...prev,
+                            fallback_message: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </AccordionContent>
           </AccordionItem>
         </Accordion>

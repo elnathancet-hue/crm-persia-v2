@@ -12,6 +12,7 @@
 
 import type { HandoffNotificationTargetType } from "./handoff";
 import type { HumanizationConfig } from "./humanization";
+import type { ValidationConfig } from "./validation";
 
 // ============================================================================
 // Message Templates — reutilizáveis por agente (migration 100)
@@ -202,6 +203,9 @@ export interface AgentConfig {
   // Migration 100: templates de mensagem reutilizáveis. Default [] pra
   // compatibilidade com agentes existentes — runtime sempre usa ?? [].
   message_templates?: MessageTemplate[];
+  // Migration 101: validação antes do envio. Default {} (disabled) pra
+  // compatibilidade — normalizeValidationConfig aplica defaults.
+  validation_config?: ValidationConfig;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -410,6 +414,7 @@ export type TesterEventKind =
   | "send_media"
   | "tool_result"
   | "required_fields_checked"
+  | "response_validated"
   | "skipped";
 
 export interface TesterEvent {
@@ -553,6 +558,8 @@ export interface CreateAgentInput {
   behavior_mode?: "flow";
   // Migration 100: lista completa de templates (substitui o array inteiro ao salvar).
   message_templates?: MessageTemplate[];
+  // Migration 101: config de validação antes do envio.
+  validation_config?: ValidationConfig;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {
