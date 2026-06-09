@@ -54,6 +54,13 @@ export interface FlowCatalogCustomField {
   field_type: string;
 }
 
+export interface FlowCatalogMessageTemplate {
+  key: string;
+  name: string;
+  usage?: string;
+  mode: "ai_suggestion" | "fixed_response";
+}
+
 /**
  * mai/2026: itens da Biblioteca de midia (automation_tools). Action
  * "Enviar midia" usa pra cliente escolher o arquivo da lista em vez
@@ -93,6 +100,10 @@ export interface FlowCatalogs {
   /** mai/2026: Biblioteca de midia (automation_tools). Action node
    * "Enviar midia" usa pra picker em vez de Input livre. */
   media_library: FlowCatalogMedia[];
+  /** jun/2026: Templates de mensagem do agente (agent_configs.message_templates).
+   * AIAgentForm usa pra picker de ai_suggestion; ActionForm usa
+   * pra picker de fixed_response no send_template_message. */
+  message_templates: FlowCatalogMessageTemplate[];
 }
 
 export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
@@ -105,4 +116,5 @@ export const EMPTY_FLOW_CATALOGS: FlowCatalogs = {
   segments: [],
   custom_fields: [],
   media_library: [],
+  message_templates: [],
 };

@@ -96,6 +96,21 @@ export interface FlowAIInstruction {
   output_handle: string;
 }
 
+/**
+ * Campo obrigatório para avançar na etapa. Usado pelo runtime pra verificar
+ * se o lead já forneceu os dados necessários antes de avançar.
+ *
+ * field: chave do campo. Campos padrão: "lead.name", "lead.phone", "lead.email".
+ * Campos customizados: "lead.<field_key>" (qualquer field_key cadastrado).
+ * label: nome amigável pra exibição no Tester (ex: "Nome do lead").
+ * description: dica opcional pro cliente entender o que o campo representa.
+ */
+export interface RequiredField {
+  field: string;
+  label?: string;
+  description?: string;
+}
+
 export interface FlowAIAgentNode extends FlowNodeBase {
   type: "ai_agent";
   data: {
@@ -106,6 +121,26 @@ export interface FlowAIAgentNode extends FlowNodeBase {
     model?: string;
     /** Instruções com handles nomeados — definem branches deterministicos. */
     instructions: FlowAIInstruction[];
+    /**
+     * Migration 100: chave de template com mode=ai_suggestion a injetar no
+     * system prompt deste node como bloco de referência para a IA.
+     * Runtime busca em agentConfig.message_templates pelo key.
+     * undefined = sem template selecionado.
+     */
+    template_key?: string;
+    /**
+     * Campos que o lead DEVE ter preenchido para avançar após este node IA.
+     * Verificado APENAS quando emit_event NÃO foi chamado (routing explícito
+     * tem prioridade). Se todos presentes → segue `completion_handle`.
+     * Se algum ausente → segue `incomplete_handle`.
+     * Ambos fazem fallback para "default" se a edge não existir.
+     * undefined ou [] = sem verificação (comportamento atual preservado).
+     */
+    required_fields?: RequiredField[];
+    /** Handle a seguir quando todos os required_fields estão presentes. */
+    completion_handle?: string;
+    /** Handle a seguir quando algum required_field está ausente. */
+    incomplete_handle?: string;
   };
 }
 
@@ -145,7 +180,11 @@ export type FlowActionType =
   // Auditoria Automacoes (jun/2026): pausa execucao do fluxo por N segundos.
   // Util pra picotar sequencias de acoes. config: { seconds: number } (max 25).
   // Special-case no runner (nao usa native handler — sleep inline).
-  | "wait_seconds";
+  | "wait_seconds"
+  // Migration 100: envia template com mode=fixed_response exatamente como
+  // cadastrado, sem chamar IA. config: { template_key: string }.
+  // Special-case no runner (busca template em agentConfig.message_templates).
+  | "send_template_message";
 
 /**
  * Mapeia FlowActionType pra NativeHandlerName quando aplicável. Alguns
@@ -352,6 +391,38 @@ function normalizeNode(raw: unknown): FlowNode | null {
         const i = normalizeInstruction(item);
         if (i) instructions.push(i);
       }
+      // Migration 100: template_key opcional — slug de MessageTemplate
+      // com mode=ai_suggestion a injetar no system prompt do node.
+      const template_key =
+        isString(dataRaw.template_key) && dataRaw.template_key.trim().length > 0
+          ? dataRaw.template_key.trim()
+          : undefined;
+      // required_fields: normaliza array; cada item precisa de `field` string.
+      const rawRF = Array.isArray(dataRaw.required_fields) ? dataRaw.required_fields : [];
+      const required_fields: RequiredField[] = [];
+      for (const item of rawRF) {
+        if (!item || typeof item !== "object") continue;
+        const rf = item as Record<string, unknown>;
+        const field = trimToMax(rf.field, 120);
+        if (!field) continue;
+        const label = isString(rf.label) ? trimToMax(rf.label, 120) : undefined;
+        const description = isString(rf.description)
+          ? trimToMax(rf.description, 500)
+          : undefined;
+        required_fields.push({
+          field,
+          ...(label ? { label } : {}),
+          ...(description ? { description } : {}),
+        });
+      }
+      const completion_handle =
+        isString(dataRaw.completion_handle) && dataRaw.completion_handle.trim().length > 0
+          ? trimToMax(dataRaw.completion_handle, MAX_HANDLE_NAME_LENGTH)
+          : undefined;
+      const incomplete_handle =
+        isString(dataRaw.incomplete_handle) && dataRaw.incomplete_handle.trim().length > 0
+          ? trimToMax(dataRaw.incomplete_handle, MAX_HANDLE_NAME_LENGTH)
+          : undefined;
       return {
         id: obj.id,
         type: "ai_agent",
@@ -361,6 +432,10 @@ function normalizeNode(raw: unknown): FlowNode | null {
           system_prompt,
           ...(model ? { model } : {}),
           instructions,
+          ...(template_key ? { template_key } : {}),
+          ...(required_fields.length > 0 ? { required_fields } : {}),
+          ...(completion_handle ? { completion_handle } : {}),
+          ...(incomplete_handle ? { incomplete_handle } : {}),
         },
       };
     }
@@ -587,6 +662,8 @@ export function flowActionTypeToNativeHandler(
     // `send_whatsapp_message` (PR 9) NÃO mapeia: é tratado por
     // special-case no runner (emite send_text via FlowProviderStub em
     // vez de chamar handler nativo).
+    // `send_template_message` (migration 100) também NÃO mapeia: special-case
+    // no runner (busca template em agentConfig.message_templates + emite send_text).
     round_robin_user: "round_robin_user",
   };
   return direct[actionType] ?? null;

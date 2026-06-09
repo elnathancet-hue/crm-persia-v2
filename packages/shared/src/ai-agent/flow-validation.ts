@@ -67,6 +67,10 @@ function actionConfigIssue(
       if (!startAt) return "Falta a data e hora do agendamento.";
       return null;
     }
+    case "send_template_message":
+      return String(config.template_key ?? "").trim()
+        ? null
+        : "Falta escolher o template de mensagem.";
     case "stop_agent":
     case "round_robin_user":
     case "close_conversation":

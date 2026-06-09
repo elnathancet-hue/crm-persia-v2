@@ -381,6 +381,7 @@ const UI_VISIBLE_KINDS = new Set<TesterRunEvent["kind"]>([
   "set_typing_off",
   "send_media",
   "tool_result",
+  "required_fields_checked",
   "skipped",
 ]);
 
@@ -402,6 +403,8 @@ function mapEventKind(kind: TesterRunEvent["kind"]): TesterEvent["kind"] {
       return "send_media";
     case "tool_result":
       return "tool_result";
+    case "required_fields_checked":
+      return "required_fields_checked";
     case "skipped":
       return "skipped";
     default:

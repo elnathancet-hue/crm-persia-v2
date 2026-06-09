@@ -14,6 +14,7 @@ import type {
   FlowCatalogAgent,
   FlowCatalogAgendaService,
   FlowCatalogMedia,
+  FlowCatalogMessageTemplate,
   FlowCatalogNotificationTemplate,
 } from "@persia/ai-agent-ui";
 import { assertConfigBelongsToOrg, requireAdminAgentOrg } from "./utils";
@@ -40,6 +41,7 @@ export async function getFlowCatalogs(
     segmentsRes,
     customFieldsRes,
     mediaRes,
+    msgTemplatesRes,
   ] = await Promise.allSettled([
     listTags(ctx, { orderBy: "name" }),
     // Backlog #5 Auditoria (mai/2026): rodada 2 #3 — admin precisa
@@ -82,6 +84,11 @@ export async function getFlowCatalogs(
       .eq("is_active", true)
       .not("slug", "is", null)
       .order("name", { ascending: true }),
+    fromAny(db, "agent_configs")
+      .select("message_templates")
+      .eq("organization_id", orgId)
+      .eq("id", configId)
+      .single(),
   ]);
 
   const pipelinesById = new Map(
@@ -154,6 +161,12 @@ export async function getFlowCatalogs(
             category: string;
           }>)
             .filter((m): m is FlowCatalogMedia => typeof m.slug === "string" && m.slug.length > 0)
+        : [],
+    message_templates:
+      msgTemplatesRes.status === "fulfilled" && !msgTemplatesRes.value.error
+        ? (
+            (msgTemplatesRes.value.data?.message_templates ?? []) as FlowCatalogMessageTemplate[]
+          ).filter((t) => typeof t.key === "string" && t.key.length > 0)
         : [],
   };
 }

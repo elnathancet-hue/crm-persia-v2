@@ -644,28 +644,51 @@ function appendFaithfulTurns(
   }
 
   for (const ev of res.events) {
-    if (ev.kind !== "tool_result") continue;
-    const toolName = String(ev.payload.tool_name ?? "acao");
-    const via = String(ev.payload.via ?? "");
-    if (via !== "action_node") continue;
-    const success = ev.payload.success === true;
-    const sideEffects = Array.isArray(ev.payload.side_effects)
-      ? ev.payload.side_effects.map(String).filter(Boolean)
-      : [];
-    const error =
-      typeof ev.payload.error === "string" ? ev.payload.error : "";
+    if (ev.kind === "tool_result") {
+      const toolName = String(ev.payload.tool_name ?? "acao");
+      const via = String(ev.payload.via ?? "");
+      if (via !== "action_node") continue;
+      const success = ev.payload.success === true;
+      const sideEffects = Array.isArray(ev.payload.side_effects)
+        ? ev.payload.side_effects.map(String).filter(Boolean)
+        : [];
+      const error =
+        typeof ev.payload.error === "string" ? ev.payload.error : "";
 
-    newTurns.push({
-      kind: "system",
-      icon: success ? "info" : "error",
-      text: success
-        ? `Acao "${labelForTool(toolName)}" simulada: ${
-            sideEffects[0] ?? "handler retornou sucesso"
-          }`
-        : `Acao "${labelForTool(toolName)}" falhou: ${
-            error || "erro desconhecido"
-          }`,
-    });
+      newTurns.push({
+        kind: "system",
+        icon: success ? "info" : "error",
+        text: success
+          ? `Acao "${labelForTool(toolName)}" simulada: ${
+              sideEffects[0] ?? "handler retornou sucesso"
+            }`
+          : `Acao "${labelForTool(toolName)}" falhou: ${
+              error || "erro desconhecido"
+            }`,
+      });
+    } else if (ev.kind === "required_fields_checked") {
+      const allPresent = ev.payload.all_present === true;
+      const missingFields = Array.isArray(ev.payload.missing_fields)
+        ? ev.payload.missing_fields.map(String).filter(Boolean)
+        : [];
+      const checkedFields = Array.isArray(ev.payload.fields_checked)
+        ? ev.payload.fields_checked.map(String).filter(Boolean)
+        : [];
+      const handle = String(ev.payload.handle_selected ?? "");
+      const total = checkedFields.length;
+      const present = total - missingFields.length;
+      newTurns.push({
+        kind: "system",
+        icon: allPresent ? "info" : "pause",
+        text: allPresent
+          ? `Campos obrigatorios: ${present}/${total} presentes — roteando por "${handle}"`
+          : `Campos obrigatorios: ${present}/${total} presentes${
+              missingFields.length > 0
+                ? ` — faltando: ${missingFields.join(", ")}`
+                : ""
+            } — roteando por "${handle}"`,
+      });
+    }
   }
 
   // Steps + transicao no fim
@@ -703,6 +726,8 @@ function labelForTool(toolName: string): string {
       return "Disparar notificacao";
     case "create_appointment":
       return "Criar agendamento";
+    case "send_template_message":
+      return "Enviar template fixo";
     default:
       return toolName;
   }

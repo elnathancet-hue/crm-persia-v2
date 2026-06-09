@@ -151,7 +151,12 @@ export function NodeConfigSheet({
             />
           ) : null}
           {node.type === "ai_agent" ? (
-            <AIAgentForm draft={draft} setDraft={setDraft} />
+            <AIAgentForm
+              draft={draft}
+              setDraft={setDraft}
+              catalogs={catalogs}
+              catalogsLoading={catalogsLoading}
+            />
           ) : null}
           {node.type === "action" ? (
             <ActionForm
@@ -523,7 +528,7 @@ function KeywordListField({
   );
 }
 
-export function AIAgentForm({ draft, setDraft }: FormProps) {
+export function AIAgentForm({ draft, setDraft, catalogs, catalogsLoading }: CatalogFormProps) {
   const instructions = (draft.instructions as Array<{
     id: string;
     description: string;
@@ -628,6 +633,45 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
       </FieldCard>
 
       <FieldCard
+        icon={FileText}
+        title="Template de mensagem"
+        description="Injetado no prompt da IA como referência — ela pode adaptar o texto."
+        variant="muted"
+        optional
+        helperText="A IA recebe o template como sugestão, não como obrigação. Para enviar texto fixo sem IA, use o node Ação → 'Enviar template fixo'."
+      >
+        {renderSimpleSelect({
+          loading: catalogsLoading,
+          value: (draft.template_key as string) ?? "",
+          onChange: (v) =>
+            setDraft((d) => ({ ...d, template_key: v === "__none__" ? undefined : v })),
+          options: [
+            { value: "__none__", label: "Nenhum" },
+            ...catalogs.message_templates
+              .filter((t) => t.mode === "ai_suggestion")
+              .map((t) => ({ value: t.key, label: t.name })),
+          ],
+          emptyLabel: "Nenhum template criado. Adicione em Configurações → Templates.",
+          placeholder: "Selecione um template (opcional)",
+        })}
+      </FieldCard>
+
+      <FieldCard
+        icon={ListChecks}
+        title="Dados obrigatórios da etapa"
+        description="O fluxo só avança quando o lead tiver todos esses dados preenchidos."
+        variant="muted"
+        optional
+        helperText="Verificado APENAS quando a IA não disparou uma saída explícita. Campos: 'lead.name', 'lead.phone', 'lead.email' ou 'lead.<campo_customizado>'."
+      >
+        <RequiredFieldsSection
+          draft={draft}
+          setDraft={setDraft}
+          instructions={instructions}
+        />
+      </FieldCard>
+
+      <FieldCard
         icon={Sparkles}
         title="Próximos passos do fluxo"
         description="Saídas nomeadas que a IA pode disparar."
@@ -710,6 +754,188 @@ export function AIAgentForm({ draft, setDraft }: FormProps) {
           </div>
         )}
       </FieldCard>
+    </div>
+  );
+}
+
+// ============================================================================
+// RequiredFieldsSection — subcomponente interno de AIAgentForm
+// ============================================================================
+
+interface RequiredFieldItem {
+  field: string;
+  label?: string;
+  description?: string;
+}
+
+function RequiredFieldsSection({
+  draft,
+  setDraft,
+  instructions,
+}: {
+  draft: Record<string, unknown>;
+  setDraft: React.Dispatch<React.SetStateAction<Record<string, unknown>>>;
+  instructions: Array<{ id: string; description: string; output_handle: string }>;
+}) {
+  const fields = (draft.required_fields as RequiredFieldItem[] | undefined) ?? [];
+
+  const handleOptions = [
+    { value: "default", label: "Caminho padrão (default)" },
+    ...instructions.map((i) => ({
+      value: i.output_handle,
+      label: i.output_handle || `Saída sem nome`,
+    })),
+  ];
+
+  const addField = () => {
+    setDraft((d) => ({
+      ...d,
+      required_fields: [
+        ...((d.required_fields as RequiredFieldItem[] | undefined) ?? []),
+        { field: "lead.", label: "", description: "" },
+      ],
+    }));
+  };
+
+  const updateField = (idx: number, patch: Partial<RequiredFieldItem>) => {
+    setDraft((d) => {
+      const list = [
+        ...((d.required_fields as RequiredFieldItem[] | undefined) ?? []),
+      ];
+      list[idx] = { ...list[idx]!, ...patch };
+      return { ...d, required_fields: list };
+    });
+  };
+
+  const removeField = (idx: number) => {
+    setDraft((d) => {
+      const list = [
+        ...((d.required_fields as RequiredFieldItem[] | undefined) ?? []),
+      ];
+      list.splice(idx, 1);
+      return { ...d, required_fields: list };
+    });
+  };
+
+  const completionHandle = (draft.completion_handle as string) ?? "";
+  const incompleteHandle = (draft.incomplete_handle as string) ?? "";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-end -mt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={addField}>
+          <Plus className="size-3.5 mr-1" />
+          Adicionar campo
+        </Button>
+      </div>
+
+      {fields.length === 0 ? (
+        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground italic">
+          Nenhum campo obrigatório. A IA avança sem verificação de dados.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((f, idx) => (
+            <div
+              key={idx}
+              className="rounded-md border border-border bg-background p-2.5 space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <Label className="text-[11px]">Campo #{idx + 1}</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => removeField(idx)}
+                  className="h-6 w-6 p-0 text-destructive"
+                >
+                  <Trash2 className="size-3" />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Chave do campo <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  value={f.field}
+                  onChange={(e) => updateField(idx, { field: e.target.value })}
+                  placeholder="lead.name"
+                  className="h-7 text-xs font-mono"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Padrões: lead.name · lead.phone · lead.email · lead.&lt;campo_customizado&gt;
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Nome amigável (opcional)
+                </Label>
+                <Input
+                  value={f.label ?? ""}
+                  onChange={(e) => updateField(idx, { label: e.target.value })}
+                  placeholder="Ex: Nome do lead"
+                  className="h-7 text-xs"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {fields.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Caminho se tudo preenchido
+            </Label>
+            <Select
+              value={completionHandle || "default"}
+              onValueChange={(v) =>
+                setDraft((d) => ({
+                  ...d,
+                  completion_handle: v === "default" ? undefined : v,
+                }))
+              }
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {handleOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Caminho se faltando dados
+            </Label>
+            <Select
+              value={incompleteHandle || "default"}
+              onValueChange={(v) =>
+                setDraft((d) => ({
+                  ...d,
+                  incomplete_handle: v === "default" ? undefined : v,
+                }))
+              }
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {handleOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1048,6 +1274,31 @@ export function ActionForm({
             onChange={(e) => updateConfig({ message: e.target.value })}
             placeholder="Olá {{lead.name}}, tudo bem? Aqui é o time da empresa..."
           />
+        </FieldCard>
+      )}
+
+      {actionType === "send_template_message" && (
+        <FieldCard
+          icon={MessageSquare}
+          title="Template fixo"
+          description="Selecione um template de resposta fixa — enviado exatamente como está, sem chamar a IA."
+          variant="primary"
+          required
+          helperText="Suporta variáveis como {{lead.name}}, {{lead.phone}}. Para texto IA-adaptável, use o node IA com template sugestão."
+        >
+          {renderSimpleSelect({
+            loading: catalogsLoading,
+            value: (config.template_key as string) ?? "",
+            onChange: (v) => updateConfig({ template_key: v }),
+            options: catalogs.message_templates
+              .filter((t) => t.mode === "fixed_response")
+              .map((t) => ({
+                value: t.key,
+                label: t.usage ? `${t.name} — ${t.usage}` : t.name,
+              })),
+            emptyLabel: "Nenhum template fixo criado. Adicione em Configurações → Templates.",
+            placeholder: "Selecione um template",
+          })}
         </FieldCard>
       )}
 

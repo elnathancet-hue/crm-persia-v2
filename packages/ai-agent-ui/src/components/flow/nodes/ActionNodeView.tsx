@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   ListChecks,
   MessageCircle,
+  MessageSquare,
   Pencil,
   Power,
   Shuffle,
@@ -40,6 +41,7 @@ const ACTION_ICONS: Record<FlowActionType, typeof TagIcon> = {
   transfer_to_agent: UserCog,
   set_lead_custom_field: Pencil,
   send_whatsapp_message: MessageCircle,
+  send_template_message: MessageSquare,
   round_robin_user: Shuffle,
   close_conversation: XCircle,
   wait_seconds: Timer,
@@ -106,6 +108,11 @@ function configPreview(
       const firstLine = message.split("\n")[0] ?? "";
       return firstLine.length > 60 ? `${firstLine.slice(0, 57)}...` : firstLine;
     }
+    case "send_template_message": {
+      const tplKey = (config.template_key as string) || "";
+      const tpl = catalogs?.message_templates.find((t) => t.key === tplKey);
+      return tpl ? tpl.name : (tplKey || "Sem template selecionado");
+    }
     case "round_robin_user":
       return "Próximo atendente disponível (menos leads)";
     default:
@@ -151,6 +158,9 @@ function incompleteReasonFor(
       return null;
     case "send_whatsapp_message":
       if (!(config.message as string)?.trim()) return "Falta mensagem";
+      return null;
+    case "send_template_message":
+      if (!(config.template_key as string)?.trim()) return "Falta template";
       return null;
     default:
       return null;

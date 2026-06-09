@@ -116,7 +116,12 @@ export function InlineFormPanel({
         />
       )}
       {nodeType === "ai_agent" && (
-        <AIAgentForm draft={draft} setDraft={setDraft} />
+        <AIAgentForm
+          draft={draft}
+          setDraft={setDraft}
+          catalogs={catalogs}
+          catalogsLoading={catalogsLoading}
+        />
       )}
       {nodeType === "action" && (
         <ActionForm

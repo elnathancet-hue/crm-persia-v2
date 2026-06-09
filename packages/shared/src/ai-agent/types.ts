@@ -14,6 +14,31 @@ import type { HandoffNotificationTargetType } from "./handoff";
 import type { HumanizationConfig } from "./humanization";
 
 // ============================================================================
+// Message Templates — reutilizáveis por agente (migration 100)
+// ============================================================================
+
+/**
+ * Template de mensagem cadastrado no agente.
+ *
+ * mode=ai_suggestion: injetado no system prompt do AI node como bloco
+ *   contextual de referência. A IA ainda pode adaptar o texto.
+ *
+ * mode=fixed_response: enviado exatamente como está pelo action node
+ *   send_template_message — sem chamar a IA.
+ */
+export interface MessageTemplate {
+  /** Slug único dentro do agente. Ex: "apresentacao_plano". */
+  key: string;
+  /** Nome exibido na UI. Ex: "Apresentação do Plano". */
+  name: string;
+  /** Descrição de quando usar (aparece no prompt pra ai_suggestion). */
+  usage?: string;
+  mode: "ai_suggestion" | "fixed_response";
+  /** Texto da mensagem. Suporta {{lead.name}}, {{lead.phone}}, {{lead.email}}. */
+  message: string;
+}
+
+// ============================================================================
 // Native handler registry (enum) — MUST match DB check constraint in
 // apps/crm/supabase/migrations/017_ai_agent_core.sql
 // Adding a new handler = new migration + new entry here + new TS handler.
@@ -174,6 +199,9 @@ export interface AgentConfig {
   // visual via @xyflow/react). Substitui o modelo legado de
   // stages/actions. Coluna mantida pra futuro multi-modo.
   behavior_mode?: "flow";
+  // Migration 100: templates de mensagem reutilizáveis. Default [] pra
+  // compatibilidade com agentes existentes — runtime sempre usa ?? [].
+  message_templates?: MessageTemplate[];
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -381,6 +409,7 @@ export type TesterEventKind =
   | "set_typing_off"
   | "send_media"
   | "tool_result"
+  | "required_fields_checked"
   | "skipped";
 
 export interface TesterEvent {
@@ -522,6 +551,8 @@ export interface CreateAgentInput {
   template_slug?: import("./agent-templates").AgentTemplateSlug;
   // PR-FLOW-PIVOT: único valor aceito é 'flow'. Default no server.
   behavior_mode?: "flow";
+  // Migration 100: lista completa de templates (substitui o array inteiro ao salvar).
+  message_templates?: MessageTemplate[];
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {

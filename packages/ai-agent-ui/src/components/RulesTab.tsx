@@ -30,8 +30,12 @@ import {
   HelpCircle,
   MessageSquare,
   Minus,
+  Pencil,
   Plug,
   Plus,
+  Sparkles,
+  Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -41,6 +45,7 @@ import type {
   AgentGuardrails,
   AgentKnowledgeSource,
   AgentTool,
+  MessageTemplate,
   UpdateAgentInput,
 } from "@persia/shared/ai-agent";
 import {
@@ -223,6 +228,10 @@ export function RulesTab({
   const [newLeadStageId, setNewLeadStageId] = React.useState<string | null>(
     agent.new_lead_stage_id ?? null,
   );
+  // Migration 100: templates de mensagem reutilizáveis.
+  const [templates, setTemplates] = React.useState<MessageTemplate[]>(
+    agent.message_templates ?? [],
+  );
   const [selectedPipelineId, setSelectedPipelineId] = React.useState<string | null>(
     null,
   );
@@ -319,6 +328,7 @@ export function RulesTab({
     setDebounceWindowMs(clampDebounceWindowMs(agent.debounce_window_ms));
     setNewLeadStageId(agent.new_lead_stage_id ?? null);
     setSelectedPipelineId(null);
+    setTemplates(agent.message_templates ?? []);
   }, [
     agent.id,
     agent.name,
@@ -330,6 +340,7 @@ export function RulesTab({
     agent.humanization_config,
     agent.debounce_window_ms,
     agent.new_lead_stage_id,
+    agent.message_templates,
   ]);
 
   const pipelineOptions = React.useMemo(() => {
@@ -419,6 +430,9 @@ export function RulesTab({
       JSON.stringify(initialHumanization.business_hours) ||
     nextAfterHoursMessage !== initialHumanization.after_hours_message;
 
+  const templatesDirty =
+    JSON.stringify(templates) !== JSON.stringify(agent.message_templates ?? []);
+
   const dirty =
     promptDirty ||
     nameDirty ||
@@ -428,7 +442,8 @@ export function RulesTab({
     calendarConnectionDirty ||
     newLeadStageDirty ||
     debounceDirty ||
-    humanizationDirty;
+    humanizationDirty ||
+    templatesDirty;
 
   // Sincroniza ref do dirty pro useEffect de resync acima ler sem
   // recriar deps. Padrao "ref reflete state recente" — comum em
@@ -500,6 +515,7 @@ export function RulesTab({
         handoff_include_summary: initialHumanization.handoff_include_summary,
       };
     }
+    if (templatesDirty) patch.message_templates = templates;
     onChange(patch, "Configurações salvas");
   }, [
     promptDirty,
@@ -510,6 +526,8 @@ export function RulesTab({
     calendarConnectionDirty,
     newLeadStageDirty,
     humanizationDirty,
+    templatesDirty,
+    templates,
     prompt,
     name,
     description,
@@ -691,6 +709,31 @@ export function RulesTab({
               onChange={onKnowledgeSourcesChange}
               onRefresh={onKnowledgeRefresh}
             />
+          </section>
+
+          <section className="space-y-2 border-t border-border pt-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Templates de mensagem</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Textos prontos reutilizáveis nos nodes do Fluxo. Sugestão para IA ou resposta fixa sem IA.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setTemplates((prev) => [
+                    ...prev,
+                    { key: `tpl_${Date.now()}`, name: "", mode: "ai_suggestion", message: "" },
+                  ])
+                }
+                className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+              >
+                <Plus className="size-3.5" />
+                Novo template
+              </button>
+            </div>
+            <MessageTemplatesSection templates={templates} onChange={setTemplates} />
           </section>
         </CardContent>
       </Card>
@@ -1713,3 +1756,190 @@ function BusinessHoursInline({
   );
 }
 
+// ─── Templates de mensagem ───────────────────────────────────────────────────
+// CRUD inline: lista de cards com campos key/name/usage/mode/message.
+// key: slug único usado pelo Fluxo pra referenciar o template.
+// mode ai_suggestion: injetado no system prompt do node IA como bloco
+//   de referência — IA adapta conforme contexto.
+// mode fixed_response: enviado literal pelo action node send_template_message
+//   sem chamar IA. Suporta {{nome}}, {{telefone}} etc.
+
+const TEMPLATE_MODE_LABELS: Record<MessageTemplate["mode"], string> = {
+  ai_suggestion: "Sugestão para IA",
+  fixed_response: "Resposta fixa",
+};
+
+const TEMPLATE_MODE_DESCRIPTIONS: Record<MessageTemplate["mode"], string> = {
+  ai_suggestion: "Injetado no prompt do node IA — ela adapta conforme o contexto.",
+  fixed_response: "Enviado exatamente como está, sem chamar a IA.",
+};
+
+function MessageTemplatesSection({
+  templates,
+  onChange,
+}: {
+  templates: MessageTemplate[];
+  onChange: React.Dispatch<React.SetStateAction<MessageTemplate[]>>;
+}) {
+  if (templates.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
+        Nenhum template criado. Clique em "Novo template" para começar.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {templates.map((tpl, idx) => (
+        <MessageTemplateCard
+          key={tpl.key}
+          tpl={tpl}
+          onUpdate={(patch) =>
+            onChange((prev) =>
+              prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)),
+            )
+          }
+          onDelete={() =>
+            onChange((prev) => prev.filter((_, i) => i !== idx))
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+function MessageTemplateCard({
+  tpl,
+  onUpdate,
+  onDelete,
+}: {
+  tpl: MessageTemplate;
+  onUpdate: (patch: Partial<MessageTemplate>) => void;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = React.useState(tpl.name === "");
+
+  return (
+    <div className="rounded-md border border-border bg-card shadow-sm">
+      {/* Header row */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Sparkles className="size-3.5 shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {tpl.name.trim() || <span className="text-muted-foreground italic">Sem nome</span>}
+        </span>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            tpl.mode === "fixed_response"
+              ? "bg-amber-500/15 text-amber-600"
+              : "bg-primary/10 text-primary"
+          }`}
+        >
+          {TEMPLATE_MODE_LABELS[tpl.mode]}
+        </span>
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="shrink-0 rounded p-1 hover:bg-muted transition-colors"
+          aria-label={expanded ? "Recolher" : "Expandir"}
+        >
+          <Pencil className="size-3.5 text-muted-foreground" />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="shrink-0 rounded p-1 hover:bg-destructive/10 transition-colors"
+          aria-label="Remover template"
+        >
+          <Trash2 className="size-3.5 text-muted-foreground hover:text-destructive" />
+        </button>
+      </div>
+
+      {/* Expanded form */}
+      {expanded ? (
+        <div className="space-y-3 border-t border-border px-3 pb-3 pt-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Nome *</Label>
+              <Input
+                value={tpl.name}
+                onChange={(e) => onUpdate({ name: e.target.value })}
+                placeholder="Ex: Primeiro contato"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Chave (slug) *</Label>
+              <Input
+                value={tpl.key}
+                onChange={(e) =>
+                  onUpdate({ key: e.target.value.toLowerCase().replace(/\s+/g, "_") })
+                }
+                placeholder="Ex: primeiro_contato"
+                className="h-8 font-mono text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">Modo</Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["ai_suggestion", "fixed_response"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onUpdate({ mode })}
+                  className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                    tpl.mode === mode
+                      ? "border-primary/50 bg-primary/10"
+                      : "border-border bg-muted/30 hover:bg-muted/60"
+                  }`}
+                >
+                  <p className="text-xs font-medium">{TEMPLATE_MODE_LABELS[mode]}</p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground leading-snug">
+                    {TEMPLATE_MODE_DESCRIPTIONS[mode]}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">
+              Quando usar{" "}
+              <span className="text-muted-foreground">(opcional — guia a IA)</span>
+            </Label>
+            <Input
+              value={tpl.usage ?? ""}
+              onChange={(e) => onUpdate({ usage: e.target.value || undefined })}
+              placeholder="Ex: Quando lead nunca respondeu antes"
+              className="h-8 text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs">
+              Mensagem *{" "}
+              {tpl.mode === "fixed_response" && (
+                <span className="text-muted-foreground">
+                  — suporta {"{{nome}}"}, {"{{telefone}}"} etc.
+                </span>
+              )}
+            </Label>
+            <textarea
+              value={tpl.message}
+              onChange={(e) => onUpdate({ message: e.target.value })}
+              placeholder={
+                tpl.mode === "fixed_response"
+                  ? "Olá, {{nome}}! Vi seu interesse e quero te ajudar..."
+                  : "Texto de referência que a IA adaptará ao contexto..."
+              }
+              rows={4}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

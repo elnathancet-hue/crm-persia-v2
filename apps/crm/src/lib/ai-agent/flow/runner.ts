@@ -21,6 +21,7 @@ import type {
   FlowConditionNode,
   FlowEntryNode,
   FlowNode,
+  MessageTemplate,
   NativeHandlerName,
   ToolExecutionMode,
 } from "@persia/shared/ai-agent";
@@ -297,20 +298,24 @@ async function loadEnabledTools(
 async function loadAgentConfig(
   db: AgentDb,
   ctx: FlowRunContext,
-): Promise<{ model: string; system_prompt: string }> {
+): Promise<{ model: string; system_prompt: string; message_templates: MessageTemplate[] }> {
   const { data, error } = await db
     .from("agent_configs")
-    .select("model, system_prompt")
+    .select("model, system_prompt, message_templates")
     .eq("organization_id", ctx.organizationId)
     .eq("id", ctx.agentConfigId)
     .maybeSingle();
   if (error || !data) {
     throw new Error(error?.message || "agent_config não encontrado");
   }
-  const row = data as { model: string; system_prompt: string };
+  const row = data as { model: string; system_prompt: string; message_templates?: unknown };
   return {
     model: row.model,
     system_prompt: row.system_prompt ?? "",
+    // Migration 100: default [] pra compatibilidade com agentes pré-migration.
+    message_templates: Array.isArray(row.message_templates)
+      ? (row.message_templates as MessageTemplate[])
+      : [],
   };
 }
 
@@ -319,6 +324,141 @@ function getOpenAIClient(): OpenAI {
     throw new Error("OPENAI_API_KEY não configurada");
   }
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+/**
+ * Verifica se os campos obrigatorios de um AI node estao presentes no lead.
+ *
+ * Campos padrao (`lead.name`, `lead.phone`, `lead.email`) sao lidos direto
+ * da tabela `leads`. Campos customizados (`lead.<field_key>`) sao lidos
+ * via `custom_fields` + `lead_custom_field_values`.
+ *
+ * Se `ctx.leadId` for null (sessao de teste sem lead), todos os campos
+ * sao considerados ausentes.
+ *
+ * @returns { fields_checked, missing_fields, handle_selected }
+ */
+async function checkRequiredFields(
+  db: AgentDb,
+  ctx: FlowRunContext,
+  node: FlowAIAgentNode,
+): Promise<{
+  fields_checked: string[];
+  missing_fields: string[];
+  handle_selected: string;
+}> {
+  const requiredFields = node.data.required_fields ?? [];
+  const fields_checked = requiredFields.map((rf) => rf.field);
+  const missing_fields: string[] = [];
+
+  if (!ctx.leadId) {
+    // Sem lead — todos os campos sao considerados ausentes.
+    return {
+      fields_checked,
+      missing_fields: fields_checked,
+      handle_selected: node.data.incomplete_handle ?? "incomplete",
+    };
+  }
+
+  const STANDARD_FIELDS = new Set(["name", "phone", "email"]);
+
+  // Separa campos padrao de campos customizados.
+  const standardToCheck: string[] = []; // ex: ["name", "email"]
+  const customToCheck: string[] = []; // ex: ["interesse", "orcamento"]
+
+  for (const rf of requiredFields) {
+    const parts = rf.field.split(".");
+    if (parts[0] !== "lead" || parts.length < 2) {
+      // Campo malformado — marca como ausente (defensivo).
+      missing_fields.push(rf.field);
+      continue;
+    }
+    const key = parts.slice(1).join(".");
+    if (STANDARD_FIELDS.has(key)) {
+      standardToCheck.push(key);
+    } else {
+      customToCheck.push(key);
+    }
+  }
+
+  // Carrega campos padrao do lead (uma unica query).
+  const presentStandard = new Set<string>();
+  if (standardToCheck.length > 0) {
+    const cols = [...new Set(standardToCheck)].join(", ");
+    const { data: leadRow } = await db
+      .from("leads")
+      .select(cols)
+      .eq("organization_id", ctx.organizationId)
+      .eq("id", ctx.leadId)
+      .maybeSingle();
+    if (leadRow) {
+      for (const key of standardToCheck) {
+        const val = (leadRow as Record<string, unknown>)[key];
+        if (typeof val === "string" && val.trim().length > 0) {
+          presentStandard.add(key);
+        }
+      }
+    }
+  }
+
+  // Verifica campos padrao.
+  for (const rf of requiredFields) {
+    const parts = rf.field.split(".");
+    if (parts[0] !== "lead" || parts.length < 2) continue;
+    const key = parts.slice(1).join(".");
+    if (!STANDARD_FIELDS.has(key)) continue;
+    if (!presentStandard.has(key)) {
+      missing_fields.push(rf.field);
+    }
+  }
+
+  // Carrega valores de campos customizados (uma query por field_key pra
+  // evitar joins complexos; fields customizados sao raros — max ~5).
+  if (customToCheck.length > 0) {
+    const uniqueKeys = [...new Set(customToCheck)];
+    const presentCustom = new Set<string>();
+
+    for (const fieldKey of uniqueKeys) {
+      // 1. Resolve custom_field_id pelo field_key.
+      const { data: cfRow } = await db
+        .from("custom_fields")
+        .select("id")
+        .eq("organization_id", ctx.organizationId)
+        .eq("field_key", fieldKey)
+        .maybeSingle();
+      if (!cfRow) continue; // campo nao cadastrado — ausente
+
+      // 2. Verifica se ha valor preenchido para este lead.
+      const { data: valRow } = await db
+        .from("lead_custom_field_values")
+        .select("value")
+        .eq("lead_id", ctx.leadId)
+        .eq("custom_field_id", cfRow.id)
+        .maybeSingle();
+
+      if (valRow && typeof valRow.value === "string" && valRow.value.trim().length > 0) {
+        presentCustom.add(fieldKey);
+      }
+    }
+
+    // Verifica campos customizados.
+    for (const rf of requiredFields) {
+      const parts = rf.field.split(".");
+      if (parts[0] !== "lead" || parts.length < 2) continue;
+      const key = parts.slice(1).join(".");
+      if (STANDARD_FIELDS.has(key)) continue;
+      if (!presentCustom.has(key)) {
+        missing_fields.push(rf.field);
+      }
+    }
+  }
+
+  const allPresent = missing_fields.length === 0;
+  const handle_selected = allPresent
+    ? (node.data.completion_handle ?? "completion")
+    : (node.data.incomplete_handle ?? "incomplete");
+
+  return { fields_checked, missing_fields, handle_selected };
 }
 
 async function executeAIAgentNode(
@@ -385,6 +525,29 @@ async function executeAIAgentNode(
   // regras gerais e agora ganha contexto factual antes de pensar.
   // Buildado em paralelo com agentConfig/tools acima.
   if (knowledgeBlock) systemParts.push(knowledgeBlock);
+  // Migration 100: inject de template ai_suggestion selecionado no node.
+  // Entra após knowledge (contexto factual já lido) e antes de ROUTING
+  // EVENTS (instruções de branch) — IA recebe referência de mensagem
+  // logo antes das instruções de saída, no momento certo.
+  // Apenas o template selecionado neste node é injetado — sem vazar
+  // todos os templates no prompt (evita custo desnecessário e confusão).
+  if (node.data.template_key) {
+    const tpl = (agentConfig.message_templates).find(
+      (t) => t.key === node.data.template_key && t.mode === "ai_suggestion",
+    );
+    if (tpl) {
+      const templateBlock = [
+        "TEMPLATE DE MENSAGEM DE REFERÊNCIA",
+        `Nome: ${tpl.name}`,
+        ...(tpl.usage ? [`Quando usar: ${tpl.usage}`] : []),
+        "Mensagem sugerida:",
+        tpl.message,
+        "",
+        "Instrução: Use este template como referência para esta etapa, adaptando apenas se necessário ao contexto da conversa.",
+      ].join("\n");
+      systemParts.push(templateBlock);
+    }
+  }
   // PR-EMIT-FIX (mai/2026): EVENTS TO EMIT movido pro FIM do system prompt.
   // Antes ficava antes do prompt-base do agente e era "enterrado" pelo
   // contexto longo de persona/regras. No final, entra com máxima
@@ -874,8 +1037,11 @@ async function executeAIAgentNode(
   //   1. PR 7 (mai/2026): emit_event(handle) → segue edge `<handle>` direto
   //      (sem prefixo tool_success:). Permite handles nomeados que o
   //      cliente configurou nas instructions[] do node IA.
-  //   2. tool_success:<tool_name> da última tool bem-sucedida (PR 2).
-  //   3. edge `default` (fallback quando IA só respondeu texto).
+  //   2. required_fields check → se emit_event NÃO foi chamado e o node
+  //      tem campos obrigatorios, verifica presença no lead e roteia por
+  //      completion_handle / incomplete_handle (ambos com fallback pra default).
+  //   3. tool_success:<tool_name> da última tool bem-sucedida (PR 2).
+  //   4. edge `default` (fallback quando IA só respondeu texto).
   if (emittedHandleName) {
     const handleEdges = findOutgoingEdges(ctx.flowConfig, node.id, emittedHandleName);
     if (handleEdges[0]) {
@@ -891,7 +1057,7 @@ async function executeAIAgentNode(
       return handleEdges[0].target;
     }
     // Edge cadastrada não existe — loga warning + cai pro fluxo normal
-    // (tool_success → default). LLM pode ter inventado handle.
+    // (required_fields → tool_success → default). LLM pode ter inventado handle.
     ctx.provider.emit({
       kind: "guardrail",
       payload: {
@@ -899,6 +1065,48 @@ async function executeAIAgentNode(
         handle: emittedHandleName,
       },
     });
+  }
+  // required_fields check: só ativo quando emit_event NÃO foi chamado e o
+  // node tem pelo menos 1 campo obrigatorio configurado.
+  if (!emittedHandleName && (node.data.required_fields?.length ?? 0) > 0) {
+    const rfResult = await checkRequiredFields(db, ctx, node);
+    ctx.provider.emit({
+      kind: "required_fields_checked",
+      payload: {
+        fields_checked: rfResult.fields_checked,
+        missing_fields: rfResult.missing_fields,
+        handle_selected: rfResult.handle_selected,
+        all_present: rfResult.missing_fields.length === 0,
+      },
+    });
+    const rfEdges = findOutgoingEdges(ctx.flowConfig, node.id, rfResult.handle_selected);
+    if (rfEdges[0]) {
+      ctx.provider.emit({
+        kind: "edge_traversed",
+        payload: {
+          from: node.id,
+          to: rfEdges[0].target,
+          handle: rfResult.handle_selected,
+          via: "required_fields",
+        },
+      });
+      return rfEdges[0].target;
+    }
+    // Handle sem edge configurada — cai pra default.
+    const rfDefaultEdges = findOutgoingEdges(ctx.flowConfig, node.id, "default");
+    if (rfDefaultEdges[0]) {
+      ctx.provider.emit({
+        kind: "edge_traversed",
+        payload: {
+          from: node.id,
+          to: rfDefaultEdges[0].target,
+          handle: "default",
+          via: "required_fields_fallback",
+        },
+      });
+      return rfDefaultEdges[0].target;
+    }
+    return null;
   }
   if (lastSuccessfulToolName && lastSuccessfulToolName !== "emit_event") {
     const successHandle = `tool_success:${lastSuccessfulToolName}`;
@@ -1120,6 +1328,13 @@ async function executeActionNode(
     return executeSendWhatsappMessageAction(db, ctx, node, result);
   }
 
+  // Migration 100: action node que envia template com mode=fixed_response
+  // exatamente como cadastrado, sem chamar IA. Equivalente ao
+  // send_whatsapp_message mas a mensagem vem de agentConfig.message_templates.
+  if (actionType === "send_template_message") {
+    return executeSendTemplateMessageAction(db, ctx, node, result);
+  }
+
   // Mapeamento direto FlowActionType → NativeHandlerName quando possível.
   const directHandlers: Partial<Record<typeof actionType, keyof typeof nativeHandlers>> = {
     add_tag: "add_tag",
@@ -1295,6 +1510,115 @@ async function executeSendWhatsappMessageAction(
       tool_name: "send_whatsapp_message",
       success: true,
       output: { message_length: interpolated.length },
+      via: "action_node",
+    },
+  });
+  result.tool_calls_succeeded++;
+
+  return followDefaultEdge(ctx, node);
+}
+
+// ============================================================================
+// Migration 100: action node "Enviar template de mensagem".
+// Envia template com mode=fixed_response exatamente como cadastrado —
+// sem chamar IA. Carrega message_templates do agente, busca pelo
+// template_key configurado no node, interpola placeholders e emite
+// send_text via ctx.provider (mesmo mecanismo do send_whatsapp_message).
+// ============================================================================
+
+async function executeSendTemplateMessageAction(
+  db: AgentDb,
+  ctx: FlowRunContext,
+  node: FlowActionNode,
+  result: FlowRunResult,
+): Promise<string | null> {
+  const templateKey =
+    typeof node.data.config.template_key === "string"
+      ? node.data.config.template_key.trim()
+      : "";
+
+  ctx.provider.emit({
+    kind: "tool_call",
+    payload: {
+      tool_call_id: `action:${node.id}`,
+      tool_name: "send_template_message",
+      input: { template_key: templateKey },
+      via: "action_node",
+    },
+  });
+
+  // Busca o agentConfig pra ler message_templates.
+  // loadAgentConfig é leve (1 query) — tolerável neste special-case
+  // sem mudar a assinatura de executeActionNode.
+  let templates: MessageTemplate[] = [];
+  try {
+    const cfg = await loadAgentConfig(db, ctx);
+    templates = cfg.message_templates;
+  } catch {
+    // best-effort — falha ao carregar config não bloqueia o flow
+  }
+
+  const tpl = templates.find(
+    (t) => t.key === templateKey && t.mode === "fixed_response",
+  );
+
+  if (!tpl) {
+    ctx.provider.emit({
+      kind: "tool_result",
+      payload: {
+        tool_call_id: `action:${node.id}`,
+        tool_name: "send_template_message",
+        success: false,
+        error: templateKey
+          ? `template "${templateKey}" não encontrado ou não é fixed_response`
+          : "template_key não configurado no node",
+        via: "action_node",
+      },
+    });
+    result.tool_calls_failed++;
+    return followDefaultEdge(ctx, node);
+  }
+
+  const lead = await loadLeadForInterpolation(db, ctx.organizationId, ctx.leadId);
+  const interpolated = interpolateLeadPlaceholders(tpl.message, lead);
+
+  if (!interpolated.trim()) {
+    ctx.provider.emit({
+      kind: "tool_result",
+      payload: {
+        tool_call_id: `action:${node.id}`,
+        tool_name: "send_template_message",
+        success: false,
+        error: "mensagem do template vazia após interpolação",
+        via: "action_node",
+      },
+    });
+    result.tool_calls_failed++;
+    return followDefaultEdge(ctx, node);
+  }
+
+  ctx.provider.emit({
+    kind: "send_text",
+    payload: { message: interpolated, via: "action_node" },
+  });
+
+  result.assistant_reply += result.assistant_reply
+    ? "\n" + interpolated
+    : interpolated;
+
+  ctx.provider.emit({
+    kind: "tool_result",
+    payload: {
+      tool_call_id: `action:${node.id}`,
+      tool_name: "send_template_message",
+      success: true,
+      output: {
+        template_key: tpl.key,
+        template_name: tpl.name,
+        mode: "fixed_response",
+        message_sent: interpolated,
+      },
+      side_effects: [`template "${tpl.name}" enviado (${interpolated.length} chars)`],
       via: "action_node",
     },
   });

@@ -54,6 +54,7 @@ export interface TesterRunEvent {
     | "tool_result"
     | "llm_call"
     | "guardrail"
+    | "required_fields_checked"
     | "skipped";
   payload: Record<string, unknown>;
 }
