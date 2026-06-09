@@ -579,10 +579,18 @@ export function RulesTab({
     onChange,
   ]);
 
+  // Fix: separar atualização de cleanup de unmount.
+  // Antes: cleanup retornado aqui chamava onSaveControlChange(null) entre
+  // cada re-run do efeito (não só no unmount) → rulesSaveMeta zerava
+  // transitoriamente a cada mudança de dirty/isPending → footer piscava.
   React.useEffect(() => {
     onSaveControlChange?.({ dirty, isPending, onSave: handleSave });
-    return () => onSaveControlChange?.(null);
   }, [dirty, handleSave, isPending, onSaveControlChange]);
+
+  // Cleanup exclusivo de unmount — não roda entre re-runs.
+  // onSaveControlChange é stable (useCallback de deps vazias no AgentEditor).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => () => onSaveControlChange?.(null), []);
 
   return (
     /* PR 34 (mai/2026): outer wrap pra acomodar sticky save bar no

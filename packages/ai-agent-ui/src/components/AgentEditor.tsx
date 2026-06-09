@@ -303,14 +303,21 @@ export function AgentEditor({
     successMsg?: string;
   } | null>(null);
 
+  // Fix: destructure os callbacks estáveis (useCallback de deps vazias em
+  // useSaveStatus) em vez de depender do objeto saveStatus inteiro.
+  // O objeto saveStatus é recriado a cada render (novo ref), o que tornava
+  // persistAgent instável — recriado a cada mudança de status (salvando →
+  // salvo → idle), causando cascata de re-renders e flicker no save state.
+  const { markSaving, markSaved, markError } = saveStatus;
+
   const persistAgent = React.useCallback(
     (patch: Parameters<AgentActions["updateAgent"]>[1], successMsg?: string) => {
-      saveStatus.markSaving();
+      markSaving();
       startTransition(async () => {
         try {
           const updated = await updateAgent(agent.id, patch);
           setAgent(updated);
-          saveStatus.markSaved();
+          markSaved();
           lastFailedPatchRef.current = null;
           // Manter toast.success só pra mudanças explícitas (ex:
           // troca de status/nome) — campos auto-saved não geram toast
@@ -318,12 +325,12 @@ export function AgentEditor({
           if (successMsg) toast.success(successMsg);
         } catch (err) {
           const message = err instanceof Error ? err.message : "Falha ao salvar";
-          saveStatus.markError(message);
+          markError(message);
           lastFailedPatchRef.current = { patch, successMsg };
         }
       });
     },
-    [agent.id, updateAgent, saveStatus],
+    [agent.id, updateAgent, markSaving, markSaved, markError],
   );
 
   const handleRetrySave = React.useCallback(() => {
