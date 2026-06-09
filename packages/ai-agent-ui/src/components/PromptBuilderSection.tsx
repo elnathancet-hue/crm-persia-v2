@@ -24,6 +24,14 @@ export function PromptBuilderSection({ value, onChange }: Props) {
     requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
+  // Auto-colapsa quando o foco sai do container inteiro.
+  // e.relatedTarget = elemento que recebeu foco após o blur.
+  // Se ainda estiver dentro do container, não colapsa (ex: clique no botão "Fechar").
+  function handleContainerBlur(e: React.FocusEvent<HTMLDivElement>) {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsEditing(false);
+  }
+
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
@@ -38,7 +46,8 @@ export function PromptBuilderSection({ value, onChange }: Props) {
       </div>
 
       {isEditing ? (
-        <div className="space-y-2">
+        // onBlur no container — colapsa ao sair da área de edição
+        <div className="space-y-2" onBlur={handleContainerBlur}>
           <Textarea
             ref={textareaRef}
             id="prompt-builder"
