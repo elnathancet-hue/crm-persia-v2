@@ -162,7 +162,10 @@ export async function getConversations(
           .from("messages")
           .select("conversation_id")
           .eq("organization_id", orgId)
-          .ilike("content", `%${sanitized}%`)
+          .textSearch("content", sanitized, {
+            config: "portuguese",
+            type: "websearch",
+          })
           .limit(200),
       ]);
 
