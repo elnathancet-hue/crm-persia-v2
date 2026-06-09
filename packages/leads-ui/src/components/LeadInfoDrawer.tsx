@@ -535,10 +535,12 @@ export function LeadInfoDrawer({
     targetPipelineId: string,
     targetStageId: string,
   ) {
-    if (!currentDeal) return;
+    // currentDeal.id === lead.id (PR-K-CENTRIC). Quando lead ainda nao
+    // tem pipeline ("Colocar em funil"), currentDeal é null — usa lead.id.
+    const mutLeadId = currentDeal?.id ?? lead.id;
     if (
-      currentDeal.pipeline_id === targetPipelineId &&
-      currentDeal.stage_id === targetStageId
+      currentDeal?.pipeline_id === targetPipelineId &&
+      currentDeal?.stage_id === targetStageId
     ) {
       return;
     }
@@ -548,14 +550,14 @@ export function LeadInfoDrawer({
     }
     setStageChangePending(true);
     const result = await actions.moveLeadToPipeline(
-      currentDeal.id,
+      mutLeadId,
       targetPipelineId,
       targetStageId,
     );
     setStageChangePending(false);
     if (result && "error" in result && result.error) {
       toast.error(result.error, {
-        id: `lead-pipeline-${currentDeal.id}`,
+        id: `lead-pipeline-${mutLeadId}`,
         duration: 5000,
       });
       return;
@@ -573,7 +575,7 @@ export function LeadInfoDrawer({
       }
     }
     toast.success("Funil atualizado", {
-      id: `lead-pipeline-${currentDeal.id}`,
+      id: `lead-pipeline-${mutLeadId}`,
       duration: 5000,
     });
   }
