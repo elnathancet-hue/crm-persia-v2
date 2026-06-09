@@ -32,6 +32,7 @@ import {
   HelpCircle,
   MessageSquare,
   Minus,
+  MoreHorizontal,
   Pencil,
   Plug,
   Plus,
@@ -126,6 +127,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@persia/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@persia/ui/dropdown-menu";
 import type { FlowCatalogs } from "./flow/catalog-types";
 
 interface Props {
@@ -793,7 +800,7 @@ export function RulesTab({
                   Textos prontos reutilizáveis nos nodes do Fluxo. Sugestão para IA ou resposta fixa sem IA.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -808,43 +815,48 @@ export function RulesTab({
                   <Plus className="size-3.5" />
                   Novo template
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setImportModalOpen(true)}
-                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
-                >
-                  <Upload className="size-3.5" />
-                  Importar JSON
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (templates.length === 0) {
-                      toast.info("Nenhum template para exportar.");
-                      return;
-                    }
-                    const exportable = templates.map(({ key, name, usage, mode, message }) => ({
-                      key,
-                      name,
-                      ...(usage ? { usage } : {}),
-                      mode,
-                      message,
-                    }));
-                    const json = JSON.stringify(exportable, null, 2);
-                    const blob = new Blob([json], { type: "application/json" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `templates-${agent.id.slice(0, 8)}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    toast.success(`${templates.length} template(s) exportado(s).`);
-                  }}
-                  className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
-                >
-                  <Download className="size-3.5" />
-                  Exportar JSON
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="flex items-center justify-center rounded-md border border-border bg-muted/40 p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    aria-label="Mais opções"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setImportModalOpen(true)}>
+                      <Upload className="size-3.5" />
+                      Importar JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (templates.length === 0) {
+                          toast.info("Nenhum template para exportar.");
+                          return;
+                        }
+                        const exportable = templates.map(({ key, name, usage, mode, message }) => ({
+                          key,
+                          name,
+                          ...(usage ? { usage } : {}),
+                          mode,
+                          message,
+                        }));
+                        const json = JSON.stringify(exportable, null, 2);
+                        const blob = new Blob([json], { type: "application/json" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `templates-${agent.id.slice(0, 8)}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        toast.success(`${templates.length} template(s) exportado(s).`);
+                      }}
+                      disabled={templates.length === 0}
+                    >
+                      <Download className="size-3.5" />
+                      Exportar JSON
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
             <MessageTemplatesSection templates={templates} onChange={setTemplates} />
@@ -888,7 +900,7 @@ export function RulesTab({
             onClick={() => jumpToAccordion("decide")}
           />
           <JumpChip
-            label="Humanizacao"
+            label="Humanização"
             dirty={converseDirty}
             onClick={() => jumpToAccordion("converse")}
           />
