@@ -287,7 +287,7 @@ export function EntryForm({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <FieldCard
         icon={Pencil}
         title="Nome desta entrada"
@@ -583,7 +583,7 @@ export function AIAgentForm({ draft, setDraft, catalogs, catalogsLoading }: Cata
   const hasLocalPrompt = systemPromptValue.trim().length > 0;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <FieldCard
         icon={Pencil}
         title="Nome da etapa"
@@ -841,7 +841,7 @@ function RequiredFieldsSection({
     (completionHandle || "default") === (incompleteHandle || "default");
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <div className="flex items-center justify-end -mt-1">
         <Button type="button" variant="ghost" size="sm" onClick={addField}>
           <Plus className="size-3.5 mr-1" />
@@ -1039,7 +1039,7 @@ export function ActionForm({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <FieldCard
         icon={Pencil}
         title="Nome da ação"
@@ -1490,7 +1490,7 @@ export function ConditionForm({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <FieldCard
         icon={Pencil}
         title="Nome da verificação"
@@ -1735,7 +1735,7 @@ function PipelineStagePicker({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <FieldCard
         icon={Filter}
         title="Funil Kanban"

@@ -257,7 +257,7 @@ export function NodeShell({
       {isExpanded ? (
         <div
           className={cn(
-            "border-t border-border/60 px-3 py-3 bg-muted/20",
+            "border-t border-border/60 px-4 py-4 bg-muted/20",
             "nodrag nopan nowheel",
           )}
           // ReactFlow escuta pointer/mouse, não click. stopPropagation

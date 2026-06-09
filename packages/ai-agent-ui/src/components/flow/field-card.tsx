@@ -86,21 +86,21 @@ export function FieldCard({
       {/* Header colorido com icone + titulo. Cor varia por variant. */}
       <div
         className={cn(
-          "flex items-start gap-2.5 px-3 py-2.5 border-b",
+          "flex items-start gap-3 px-4 py-3 border-b",
           styles.header,
         )}
       >
         <div
           className={cn(
-            "size-8 shrink-0 rounded-md flex items-center justify-center mt-0.5",
+            "size-9 shrink-0 rounded-md flex items-center justify-center mt-0.5",
             styles.icon,
           )}
         >
-          <Icon className="size-3.5" />
+          <Icon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <div className={cn("text-xs font-semibold", styles.badge)}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className={cn("text-sm font-semibold", styles.badge)}>
               {title}
               {required ? (
                 <span className="ml-0.5 text-destructive" aria-hidden>
@@ -109,24 +109,23 @@ export function FieldCard({
               ) : null}
             </div>
             {optional ? (
-              <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-foreground/60">
+              <span className="rounded-full bg-background/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-foreground/60">
                 Opcional
               </span>
             ) : null}
           </div>
           {description ? (
-            <div className="mt-0.5 text-[11px] text-foreground leading-snug">
+            <div className="mt-1 text-xs text-foreground leading-snug">
               {description}
             </div>
           ) : null}
         </div>
       </div>
-      {/* Corpo branco com o controle + helper. Padding generoso pra
-          respirar dentro do node expandido. */}
-      <div className="px-3 py-2.5 space-y-1.5">
+      {/* Corpo branco com o controle + helper. */}
+      <div className="px-4 py-3 space-y-2">
         {children}
         {helperText ? (
-          <p className="text-[11px] text-foreground leading-snug pt-0.5">
+          <p className="text-xs text-foreground leading-snug pt-0.5">
             {helperText}
           </p>
         ) : null}
