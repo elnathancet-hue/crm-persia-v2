@@ -710,32 +710,42 @@ export function AgentEditor({
               onDirtyChange={setFlowCanvasDirty}
             />
           </div>
+          {/* Confirmação inline — dentro do overlay pra aparecer acima do
+              canvas (z-[100]). AlertDialog via portal ficaria atrás por ter
+              z-50 < z-100 e não respeitar o stacking context do fullscreen. */}
+          {flowLeaveConfirmOpen && (
+            <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/50">
+              <div className="mx-4 w-full max-w-sm rounded-xl bg-popover p-6 shadow-xl ring-1 ring-foreground/10">
+                <h3 className="font-heading text-lg font-semibold leading-tight text-foreground">
+                  Sair sem salvar o fluxo?
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Você fez mudanças no fluxo que ainda não foram salvas. Se sair agora, essas alterações serão perdidas.
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setFlowLeaveConfirmOpen(false)}
+                  >
+                    Continuar editando
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setFlowLeaveConfirmOpen(false);
+                      setFlowCanvasDirty(false);
+                      setFlowFullscreen(false);
+                    }}
+                  >
+                    Sair sem salvar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      {/* Confirmação ao sair do canvas com mudanças não salvas */}
-      <AlertDialog open={flowLeaveConfirmOpen} onOpenChange={setFlowLeaveConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Sair sem salvar o fluxo?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Você fez mudanças no fluxo que ainda não foram salvas. Se sair agora, essas alterações serão perdidas.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setFlowLeaveConfirmOpen(false);
-                setFlowCanvasDirty(false);
-                setFlowFullscreen(false);
-              }}
-            >
-              Sair sem salvar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <TesterSheet
         configId={agent.id}

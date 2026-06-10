@@ -68,18 +68,18 @@ export function AIAgentNodeView({
       />
     ) : null;
 
-  // Handles ancorados em px absolutos no header do card (~68px de altura).
-  // Centro do header ≈ 34px do topo. Usar px em vez de `top %` evita
-  // que os handles flutuem para o meio do formulário quando o card
-  // expande (form pode ter 400px+, fazendo 50% cair em lugar errado).
-  //
-  // Default: centralizado no header (34px).
-  // Instructions: distribuídas na seção de conteúdo logo abaixo do header.
-  // Header ~68px + border 1px + py-2.5 10px = ~79px até o conteúdo.
-  // "Quando terminar" label ~16px + cada row ~20px.
+  // Handles ancorados em px absolutos, centralizados no header (~34px).
+  // O form inline é sempre visível, tornando o card muito alto (~600px).
+  // Usar top % fazia handles flutuar no meio do form. Usar px absolutos
+  // mas fixos na seção de conteúdo (~95-115px) também parecia "topo"
+  // numa altura de 600px. Solução: grupo de handles centrado no header,
+  // distribuído simetricamente ao redor de 34px com espaçamento fixo.
+  // Assim os handles ficam sempre no header independente da altura do card.
   const HEADER_CENTER_PX = 34;
-  const CONTENT_START_PX = 95; // após header + border + padding + label
-  const ROW_HEIGHT_PX = 20;
+  const HANDLE_GAP_PX = 16;
+  const totalSources = 1 + instructions.length; // default + instruções
+  const groupHeight = (totalSources - 1) * HANDLE_GAP_PX;
+  const groupStartTop = HEADER_CENTER_PX - groupHeight / 2;
 
   return (
     <>
@@ -87,7 +87,7 @@ export function AIAgentNodeView({
         type="target"
         position={Position.Left}
         id="in"
-        style={{ top: HEADER_CENTER_PX }}
+        style={{ top: HEADER_CENTER_PX, transform: "translate(-50%, -50%)" }}
         className="!size-3 !bg-primary !border-2 !border-background"
       />
       <NodeShell
@@ -134,7 +134,7 @@ export function AIAgentNodeView({
         type="source"
         position={Position.Right}
         id="default"
-        style={{ top: instructions.length === 0 ? HEADER_CENTER_PX : CONTENT_START_PX - ROW_HEIGHT_PX }}
+        style={{ top: groupStartTop, transform: "translate(50%, -50%)" }}
         className="!size-3 !bg-primary !border-2 !border-background"
       >
         <span className="absolute -right-14 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground whitespace-nowrap">
@@ -144,7 +144,7 @@ export function AIAgentNodeView({
       {/* Handles dinâmicos — 1 por instruction. ID == output_handle.
           Posicionados próximos à linha correspondente na lista. */}
       {instructions.map((ins, idx) => {
-        const topPx = CONTENT_START_PX + idx * ROW_HEIGHT_PX;
+        const topPx = groupStartTop + (idx + 1) * HANDLE_GAP_PX;
         const labelText = ins.description?.trim() || ins.output_handle;
         return (
           <Handle
@@ -152,7 +152,7 @@ export function AIAgentNodeView({
             type="source"
             position={Position.Right}
             id={ins.output_handle}
-            style={{ top: topPx }}
+            style={{ top: topPx, transform: "translate(50%, -50%)" }}
             className="!size-3 !bg-success !border-2 !border-background"
           >
             <span className="absolute -right-2 translate-x-full -translate-y-1/2 text-[9px] font-semibold text-success whitespace-nowrap max-w-[140px] truncate">
