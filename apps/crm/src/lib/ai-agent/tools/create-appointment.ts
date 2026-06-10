@@ -109,7 +109,7 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
     if (!data) {
       return failureResult(`tipo de agendamento "${parsed.data.type_slug}" nao encontrado`, {
         slug: parsed.data.type_slug,
-        hint: "verifique a lista de tipos disponiveis no contexto",
+        hint: "use um dos slugs listados em TIPOS DE AGENDAMENTO DISPONÍVEIS no prompt",
       });
     }
     appointmentType = data as AppointmentTypeRow;

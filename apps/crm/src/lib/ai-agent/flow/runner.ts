@@ -668,6 +668,31 @@ async function executeAIAgentNode(
       ctx.inboundMessage.text,
     ),
   ]);
+  // Inject de tipos de agendamento: query pós-Promise.all, só roda quando
+  // create_appointment está habilitado neste flow. Sem isso a IA não sabe
+  // quais slugs existem → type_slug chega null no handler → service_id null
+  // em 100% dos agendamentos criados pela IA.
+  let appointmentTypesBlock: string | null = null;
+  if (tools.some((t) => t.native_handler === "create_appointment")) {
+    const { data: agendaServices } = await db
+      .from("agenda_services")
+      .select("slug, name, duration_minutes")
+      .eq("organization_id", ctx.organizationId)
+      .eq("is_active", true)
+      .order("name");
+    if (agendaServices && agendaServices.length > 0) {
+      const lines = agendaServices.map(
+        (s: { slug: string; name: string; duration_minutes: number | null }) =>
+          `- ${s.slug}: ${s.name}${s.duration_minutes ? ` (${s.duration_minutes}min)` : ""}`,
+      );
+      appointmentTypesBlock = [
+        "TIPOS DE AGENDAMENTO DISPONÍVEIS:",
+        ...lines,
+        "",
+        "Ao criar um agendamento, use o campo type_slug com um dos valores acima.",
+      ].join("\n");
+    }
+  }
   const client = getOpenAIClient();
   const model = node.data.model ?? agentConfig.model;
 
@@ -690,6 +715,9 @@ async function executeAIAgentNode(
   // Injeta após knowledge block — IA lê persona + regras + docs → depois dados estruturados.
   const sourcesBlock = buildStructuredSourcesBlock(agentConfig.structured_sources);
   if (sourcesBlock) systemParts.push(sourcesBlock);
+  // Tipos de agendamento: entra após fontes estruturadas e antes do
+  // template de referência — IA conhece os slugs antes de ter que agir.
+  if (appointmentTypesBlock) systemParts.push(appointmentTypesBlock);
   // Migration 100: inject de template ai_suggestion selecionado no node.
   // Entra após knowledge (contexto factual já lido) e antes de ROUTING
   // EVENTS (instruções de branch) — IA recebe referência de mensagem
