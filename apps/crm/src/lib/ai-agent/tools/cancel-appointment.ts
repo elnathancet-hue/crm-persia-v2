@@ -100,7 +100,11 @@ export const cancelAppointmentHandler: NativeHandler = async (context, input) =>
     // 3. Notifica lead via WhatsApp (PR #220). Fire-and-forget — falha
     //    na notificacao NAO desfaz o cancelamento no DB.
     void notifyLeadAppointmentCancelled(cancelled, reason).catch((err) => {
-      console.error("[cancel-appointment tool] notify failed:", err);
+      logError("cancel_appointment_notify_failed", {
+        organization_id: context.organization_id,
+        appointment_id: cancelled.id,
+        error: errorMessage(err),
+      });
     });
 
     // 4. PR-FLOW-PIVOT PR 14b (mai/2026): se appointment tinha event no

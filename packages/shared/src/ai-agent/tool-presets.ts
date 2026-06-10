@@ -41,7 +41,7 @@ export interface NativeToolPreset {
   icon_name: string;            // lucide-react icon name; UI maps to component
   category: ToolCategory;
   input_schema: JSONSchemaObject;
-  shipped_in_pr: "PR1" | "PR3" | "PR5" | "PR7" | "PR8";
+  shipped_in_pr: "PR1" | "PR3" | "PR5" | "PR7" | "PR8" | "PR-AGENDA-COMPLETE";
 }
 
 export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
@@ -630,6 +630,78 @@ export const NATIVE_TOOL_PRESETS: readonly NativeToolPreset[] = [
     },
   },
   {
+    handler: "get_available_slots",
+    name: "get_available_slots",
+    display_name: "Consultar horários disponíveis",
+    description:
+      "Query the professional's available time slots before proposing options to the lead. Returns concrete dates and times (e.g. 'Mon 10:00, 14:00 | Tue 09:00'). Call this BEFORE create_appointment so the AI can offer real options instead of guessing. Respects availability rules (business hours) and existing appointment conflicts.",
+    ui_description:
+      "Consulta os horários livres do profissional responsável para a IA apresentar opções reais ao lead.",
+    icon_name: "CalendarSearch",
+    category: "scheduling",
+    shipped_in_pr: "PR-AGENDA-COMPLETE",
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["start_date", "days_ahead", "type_slug", "duration_minutes"],
+      properties: {
+        start_date: {
+          type: "string",
+          nullable: true,
+          description:
+            "Starting date for the search in YYYY-MM-DD format. Default: today in the professional's timezone. Pass null to start from today.",
+        },
+        days_ahead: {
+          type: "integer",
+          minimum: 1,
+          maximum: 14,
+          nullable: true,
+          description:
+            "How many days ahead to look. Default 7. Pass null to use the default.",
+        },
+        type_slug: {
+          type: "string",
+          nullable: true,
+          description:
+            "Slug of the appointment type (from TIPOS DE AGENDAMENTO). Inherits duration and default professional from the type. Pass null if no type is configured.",
+        },
+        duration_minutes: {
+          type: "integer",
+          minimum: 15,
+          maximum: 480,
+          nullable: true,
+          description:
+            "Duration to check availability for, in minutes. Used when type_slug is null or type has no duration. Default 60. Pass null to use the default.",
+        },
+      },
+    },
+  },
+  {
+    handler: "confirm_appointment",
+    name: "confirm_appointment",
+    display_name: "Confirmar agendamento",
+    description:
+      "Confirm a pending appointment (status: awaiting_confirmation → confirmed) when the lead explicitly agrees in the chat ('pode ser', 'confirmo', 'sim'). Sends a WhatsApp confirmation to the lead automatically. Use list_lead_appointments first to find the appointment_id. Idempotent — safe to call if already confirmed.",
+    ui_description:
+      "Confirma um agendamento pendente quando o lead aceita verbalmente no chat e avisa o lead pelo WhatsApp.",
+    icon_name: "CalendarCheck",
+    category: "scheduling",
+    shipped_in_pr: "PR-AGENDA-COMPLETE",
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["appointment_id"],
+      properties: {
+        appointment_id: {
+          type: "string",
+          format: "uuid",
+          description:
+            "UUID of the appointment to confirm. Use list_lead_appointments to find it.",
+        },
+      },
+    },
+  },
+  {
     handler: "emit_event",
     name: "emit_event",
     display_name: "Avançar pelo fluxo",
@@ -697,7 +769,7 @@ export function getPreset(handler: NativeHandlerName): NativeToolPreset | undefi
 export function getPresetsShippedInOrBefore(
   currentPr: NativeToolPreset["shipped_in_pr"],
 ): NativeToolPreset[] {
-  const order: NativeToolPreset["shipped_in_pr"][] = ["PR1", "PR3", "PR5", "PR7", "PR8"];
+  const order: NativeToolPreset["shipped_in_pr"][] = ["PR1", "PR3", "PR5", "PR7", "PR8", "PR-AGENDA-COMPLETE"];
   const cutoff = order.indexOf(currentPr);
   return NATIVE_TOOL_PRESETS.filter(
     (preset) => order.indexOf(preset.shipped_in_pr) <= cutoff,

@@ -8,7 +8,9 @@ import { getPreset } from "@persia/shared/ai-agent";
 import { addTagHandler } from "./add-tag";
 import { cancelAppointmentHandler } from "./cancel-appointment";
 import { closeConversationHandler } from "./close-conversation";
+import { confirmAppointmentHandler } from "./confirm-appointment";
 import { createAppointmentHandler } from "./create-appointment";
+import { getAvailableSlotsHandler } from "./get-available-slots";
 import { emitEventHandler } from "./emit-event";
 import { listLeadAppointmentsHandler } from "./list-lead-appointments";
 import { movePipelineStageHandler } from "./move-pipeline-stage";
@@ -39,6 +41,8 @@ export const nativeHandlers: NativeHandlerRegistry = {
   list_lead_appointments: listLeadAppointmentsHandler,
   cancel_appointment: cancelAppointmentHandler,
   reschedule_appointment: rescheduleAppointmentHandler,
+  get_available_slots: getAvailableSlotsHandler,
+  confirm_appointment: confirmAppointmentHandler,
   // PR-AI-AGENT-HUMAN-D (mai/2026): envio de midia da biblioteca
   send_media: sendMediaHandler,
   // PR-FLOW-PIVOT PR 7 (mai/2026): tool sem side-effect — sinaliza pro

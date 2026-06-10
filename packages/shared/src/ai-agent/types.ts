@@ -153,6 +153,13 @@ export const NATIVE_HANDLERS = [
   // Util pra encerrar atendimento quando fluxo termina mas o lead
   // pode voltar (diferente de stop_agent que pausa o agente).
   "close_conversation",
+  // Auditoria Agenda (jun/2026): completa o ciclo conversacional de
+  // agendamento. get_available_slots elimina tentativa-erro (a IA consulta
+  // horarios livres e oferece opcoes ao lead antes de criar). confirm_appointment
+  // resolve o status awaiting_confirmation → confirmed quando lead aceita
+  // verbalmente, sem exigir acao manual do operador.
+  "get_available_slots",
+  "confirm_appointment",
 ] as const;
 
 export type NativeHandlerName = (typeof NATIVE_HANDLERS)[number];

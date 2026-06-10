@@ -1,13 +1,17 @@
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
-import { rescheduleAppointment as rescheduleSharedAppointment } from "@persia/shared/agenda";
+import {
+  rescheduleAppointment as rescheduleSharedAppointment,
+  getDefaultAvailabilityRule,
+  isWithinAvailability,
+} from "@persia/shared/agenda";
 import { notifyLeadAppointmentRescheduled } from "@/lib/agenda/notifications/dispatch";
 import { errorMessage, logError } from "@/lib/observability";
 import {
   loadGoogleConnectionForOrg,
   updateGoogleEvent,
 } from "@/lib/google-calendar/events";
-import { failureResult, getHandlerDb, successResult } from "./shared";
+import { buildAvailabilityError, failureResult, getHandlerDb, successResult } from "./shared";
 
 // PR-AGENDA-TOOLS (mai/2026): AI reagenda appointment quando lead pede
 // outro horario via chat. Cria replacement (status awaiting_confirmation)
@@ -28,6 +32,7 @@ const rescheduleSchema = z.object({
 interface AppointmentRow {
   id: string;
   lead_id: string | null;
+  user_id: string | null;
   duration_minutes: number;
   status: string;
   google_event_id: string | null;
@@ -59,7 +64,7 @@ export const rescheduleAppointmentHandler: NativeHandler = async (
   // 1. Confirma appointment existe + pertence ao org + ao lead.
   const { data: apptRow, error: apptError } = await db
     .from("appointments")
-    .select("id, lead_id, duration_minutes, status, google_event_id, timezone")
+    .select("id, lead_id, user_id, duration_minutes, status, google_event_id, timezone")
     .eq("organization_id", context.organization_id)
     .eq("id", parsed.data.appointment_id)
     .maybeSingle();
@@ -76,6 +81,27 @@ export const rescheduleAppointmentHandler: NativeHandler = async (
     parsed.data.new_duration_minutes ?? appt.duration_minutes;
   const endMs = startMs + newDuration * 60_000;
   const new_end_at = new Date(endMs).toISOString();
+
+  // Verifica horario comercial do profissional responsavel pelo agendamento.
+  // Se tiver regra configurada, reagendamento para fora da janela e rejeitado.
+  if (appt.user_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agendaCtx = { db: db as any, orgId: context.organization_id };
+    const availabilityRule = await getDefaultAvailabilityRule(agendaCtx, appt.user_id);
+    if (availabilityRule && !isWithinAvailability(availabilityRule, parsed.data.new_start_at, new_end_at)) {
+      const payload = await buildAvailabilityError(
+        db,
+        context.organization_id,
+        appt.user_id,
+        availabilityRule,
+        newDuration,
+      );
+      return failureResult(
+        "horario fora da disponibilidade configurada — use get_available_slots ou oferea os suggested_slots ao lead",
+        payload,
+      );
+    }
+  }
 
   if (context.dry_run) {
     return successResult(
@@ -114,7 +140,12 @@ export const rescheduleAppointmentHandler: NativeHandler = async (
       result.original,
       result.replacement,
     ).catch((err) => {
-      console.error("[reschedule-appointment tool] notify failed:", err);
+      logError("reschedule_appointment_notify_failed", {
+        organization_id: context.organization_id,
+        original_id: result.original.id,
+        replacement_id: result.replacement.id,
+        error: errorMessage(err),
+      });
     });
 
     // 4. PR-FLOW-PIVOT PR 14b (mai/2026): se original tinha event no

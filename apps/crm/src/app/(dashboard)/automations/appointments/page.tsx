@@ -1,8 +1,11 @@
-import { getAppointmentTypes } from "@/actions/appointment-types";
+import { getAppointmentTypes, getOrgMembersForSelect } from "@/actions/appointment-types";
 import { AppointmentTypesClient } from "./appointment-types-client";
 
 export default async function AppointmentTypesPage() {
-  const types = await getAppointmentTypes();
+  const [types, members] = await Promise.all([
+    getAppointmentTypes(),
+    getOrgMembersForSelect(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -13,7 +16,7 @@ export default async function AppointmentTypesPage() {
           &quot;Avaliação 60min&quot;). Sem isso, a IA inventa títulos e durações diferentes a cada conversa.
         </p>
       </div>
-      <AppointmentTypesClient initialTypes={types} />
+      <AppointmentTypesClient initialTypes={types} members={members} />
     </div>
   );
 }

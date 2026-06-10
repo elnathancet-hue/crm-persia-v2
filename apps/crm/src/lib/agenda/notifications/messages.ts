@@ -72,6 +72,24 @@ export function buildBookingConfirmationMessage(
   );
 }
 
+export interface ConfirmationMessageInput {
+  appointment: Appointment;
+  leadName: string;
+}
+
+export function buildConfirmationMessage(input: ConfirmationMessageInput): string {
+  const { appointment, leadName } = input;
+  const greeting = renderGreeting(leadName);
+  const date = formatDate(appointment.start_at, appointment.timezone);
+  const time = formatTime(appointment.start_at, appointment.timezone);
+
+  return (
+    `${greeting}! Seu agendamento "${appointment.title}" ` +
+    `para ${date} às ${time} foi *confirmado*.\n\n` +
+    `Qualquer dúvida ou se precisar reagendar, é só responder.`
+  );
+}
+
 export interface RescheduleMessageInput {
   original: Appointment;
   replacement: Appointment;

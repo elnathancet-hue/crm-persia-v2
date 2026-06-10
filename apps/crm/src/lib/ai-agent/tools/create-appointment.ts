@@ -12,6 +12,7 @@ import {
   loadGoogleConnectionForOrg,
 } from "@/lib/google-calendar/events";
 import {
+  buildAvailabilityError,
   failureResult,
   getHandlerDb,
   insertLeadActivity,
@@ -65,6 +66,8 @@ interface AppointmentTypeRow {
   default_channel: "whatsapp" | "phone" | "online" | "in_person" | null;
   default_location: string | null;
   default_meeting_url: string | null;
+  // C2: profissional padrão por tipo de serviço (migration 115)
+  default_user_id: string | null;
 }
 
 interface LeadRow {
@@ -103,7 +106,7 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
     const { data, error } = await db
       .from("agenda_services")
       .select(
-        "id, name, duration_minutes, default_channel, default_location, default_meeting_url",
+        "id, name, duration_minutes, default_channel, default_location, default_meeting_url, default_user_id",
       )
       .eq("organization_id", context.organization_id)
       .ilike("slug", parsed.data.type_slug)
@@ -157,10 +160,11 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
 
   const lead = leadRow as LeadRow;
 
-  // Resolve responsavel: usa assigned_to do lead ou fallback pro primeiro
-  // admin/owner da org. Sem isso a IA falhava em leads sem atribuicao,
-  // mesmo quando o cliente quer que o gestor/admin seja o dono default.
-  let responsibleUserId = lead.assigned_to;
+  // Resolve responsavel: prioridade C2 — se o tipo de servico tem
+  // default_user_id (profissional fixo p/ esse tipo), usa ele. Senao,
+  // cai em assigned_to do lead. Por ultimo, fallback pro primeiro
+  // admin/owner da org.
+  let responsibleUserId = appointmentType?.default_user_id ?? lead.assigned_to;
   if (!responsibleUserId) {
     const { data: adminMember } = await db
       .from("organization_members")
@@ -180,12 +184,20 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
 
   const endMs = startMs + resolvedDuration * 60_000;
   const end_at = new Date(endMs).toISOString();
-  // PR-FIX-LEADS-TIMEZONE (mai/2026): tabela `leads` NAO tem coluna
-  // `timezone` (descoberto em teste live — handler tentava SELECT
-  // timezone e falhava 4x antes de IA cair em stop_agent). Default
-  // America/Sao_Paulo direto (timezone real do lead pode entrar em
-  // migration futura se necessario).
-  const timezone = "America/Sao_Paulo";
+  // I3: timezone vem da org (migration 115: organizations.default_timezone).
+  // Fallback "America/Sao_Paulo" so se query falhar (org muito antiga sem
+  // a coluna, ou RLS bloqueando).
+  let timezone = "America/Sao_Paulo";
+  {
+    const { data: orgRow } = await db
+      .from("organizations")
+      .select("default_timezone")
+      .eq("id", context.organization_id)
+      .maybeSingle();
+    if (orgRow && typeof (orgRow as { default_timezone?: string }).default_timezone === "string") {
+      timezone = (orgRow as { default_timezone: string }).default_timezone;
+    }
+  }
 
   // Verifica horario comercial do responsavel. Se ele configurou
   // availability_rules (ex: Seg-Sex 08:00-18:00), a IA NAO pode agendar
@@ -194,18 +206,17 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
   const agendaCtx = { db: db as any, orgId: context.organization_id };
   const availabilityRule = await getDefaultAvailabilityRule(agendaCtx, responsibleUserId);
   if (availabilityRule && !isWithinAvailability(availabilityRule, parsed.data.start_at, end_at)) {
-    const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    const available = availabilityRule.days
-      .filter((d) => d.enabled && d.intervals.length > 0)
-      .map(
-        (d) =>
-          `${dayNames[d.day_of_week]}: ${d.intervals.map((i) => `${i.start}–${i.end}`).join(", ")}`,
-      )
-      .join(" | ");
-    return failureResult("horario fora da disponibilidade configurada", {
-      available_hours: available || "nenhum horario habilitado",
-      timezone: availabilityRule.timezone,
-    });
+    const payload = await buildAvailabilityError(
+      db,
+      context.organization_id,
+      responsibleUserId,
+      availabilityRule,
+      resolvedDuration,
+    );
+    return failureResult(
+      "horario fora da disponibilidade configurada — use get_available_slots ou oferea os suggested_slots ao lead",
+      payload,
+    );
   }
 
   if (context.dry_run) {

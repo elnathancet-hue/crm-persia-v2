@@ -51,6 +51,10 @@ const ASSIGNABLE_ROLES = ["agent", "admin", "owner"] as const;
 
 const roundRobinUserSchema = z.object({
   reason: z.string().trim().min(1).max(500).nullish(),
+  // pause_after: default true (historico — paridade com transfer_to_user).
+  // Flows que continuam apos distribuicao (ex: round_robin antes de
+  // create_appointment) passam false pra nao pausar o agente.
+  pause_after: z.boolean().nullish(),
 });
 
 interface MemberCandidate {
@@ -201,14 +205,19 @@ export const roundRobinUserHandler: NativeHandler = async (context, input) => {
 
   if (leadError) return failureResult(leadError.message);
 
-  // 6. Pausa agente — humano assumiu (paridade com transfer_to_user).
-  const pauseResult = await pauseAgent({
-    db,
-    orgId: context.organization_id,
-    agentConversationId: context.agent_conversation_id,
-    reason: `round_robin_distribution:${displayName}`,
-  });
-  if (pauseResult.error) {
+  // 6. Pausa agente — só quando pause_after != false.
+  // Flows que continuam após distribuição (ex: round_robin → create_appointment)
+  // passam pause_after: false para o agente não ser pausado prematuramente.
+  const shouldPause = parsed.data.pause_after !== false;
+  const pauseResult = shouldPause
+    ? await pauseAgent({
+        db,
+        orgId: context.organization_id,
+        agentConversationId: context.agent_conversation_id,
+        reason: `round_robin_distribution:${displayName}`,
+      })
+    : { paused: false, error: null };
+  if (shouldPause && pauseResult.error) {
     logError("round_robin_user_pause_failed", {
       organization_id: context.organization_id,
       agent_conversation_id: context.agent_conversation_id,

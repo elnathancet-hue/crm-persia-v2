@@ -18,6 +18,7 @@ import type { Appointment } from "@persia/shared/agenda";
 import {
   buildBookingConfirmationMessage,
   buildCancellationMessage,
+  buildConfirmationMessage,
   buildRescheduleMessage,
 } from "./messages";
 
@@ -160,5 +161,18 @@ export async function notifyLeadAppointmentRescheduled(
 ): Promise<NotificationOutcome> {
   return dispatch(replacement, (lead) =>
     buildRescheduleMessage({ original, replacement, leadName: lead.name }),
+  );
+}
+
+/**
+ * Avisa o lead que o agendamento foi confirmado (status mudou de
+ * awaiting_confirmation para confirmed). Usado pelo tool confirm_appointment
+ * da IA quando o lead confirma verbalmente no chat.
+ */
+export async function notifyLeadAppointmentConfirmed(
+  appointment: Appointment,
+): Promise<NotificationOutcome> {
+  return dispatch(appointment, (lead) =>
+    buildConfirmationMessage({ appointment, leadName: lead.name }),
   );
 }

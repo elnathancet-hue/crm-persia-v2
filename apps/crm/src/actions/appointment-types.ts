@@ -1,6 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 // PR-AI-AGENT-APPOINTMENT-TYPES (mai/2026): CRUD pra `agenda_services`
@@ -18,11 +19,40 @@ export interface AppointmentType {
   default_channel: "whatsapp" | "phone" | "online" | "in_person" | null;
   default_location: string | null;
   default_meeting_url: string | null;
+  // C2 (jun/2026): profissional padrão para este tipo de serviço (migration 115)
+  default_user_id: string | null;
   price_cents: number | null;
   color: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface OrgMemberOption {
+  user_id: string;
+  name: string;
+}
+
+export async function getOrgMembersForSelect(): Promise<OrgMemberOption[]> {
+  const { orgId } = await requireRole("admin");
+  const admin = createAdminClient();
+
+  const { data: members } = await admin
+    .from("organization_members")
+    .select("user_id, role, profiles(full_name)")
+    .eq("organization_id", orgId)
+    .eq("is_active", true)
+    .in("role", ["owner", "admin", "agent"])
+    .order("created_at", { ascending: true });
+
+  if (!members) return [];
+
+  return (members as Array<{ user_id: string; profiles?: { full_name?: string } | null }>).map(
+    (m) => ({
+      user_id: m.user_id,
+      name: m.profiles?.full_name || m.user_id.slice(0, 8),
+    }),
+  );
 }
 
 function slugify(text: string): string {
@@ -54,6 +84,7 @@ export interface CreateAppointmentTypeInput {
   default_channel?: AppointmentType["default_channel"];
   default_location?: string;
   default_meeting_url?: string;
+  default_user_id?: string | null;
   price_cents?: number | null;
   color?: string | null;
 }
@@ -86,6 +117,7 @@ export async function createAppointmentType(
       default_channel: input.default_channel ?? null,
       default_location: input.default_location?.trim() || null,
       default_meeting_url: input.default_meeting_url?.trim() || null,
+      default_user_id: input.default_user_id ?? null,
       price_cents: input.price_cents ?? null,
       color: input.color ?? null,
     })
@@ -110,6 +142,7 @@ export interface UpdateAppointmentTypeInput {
   default_channel?: AppointmentType["default_channel"];
   default_location?: string | null;
   default_meeting_url?: string | null;
+  default_user_id?: string | null;
   price_cents?: number | null;
   color?: string | null;
   is_active?: boolean;

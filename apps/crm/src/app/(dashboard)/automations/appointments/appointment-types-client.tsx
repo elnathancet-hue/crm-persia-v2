@@ -48,6 +48,7 @@ import {
   deleteAppointmentType,
   updateAppointmentType,
   type AppointmentType,
+  type OrgMemberOption,
 } from "@/actions/appointment-types";
 import { toast } from "sonner";
 
@@ -74,9 +75,10 @@ const CHANNEL_ICONS: Record<
 
 interface Props {
   initialTypes: AppointmentType[];
+  members: OrgMemberOption[];
 }
 
-export function AppointmentTypesClient({ initialTypes }: Props) {
+export function AppointmentTypesClient({ initialTypes, members }: Props) {
   const [types, setTypes] = React.useState<AppointmentType[]>(initialTypes);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -91,6 +93,7 @@ export function AppointmentTypesClient({ initialTypes }: Props) {
   );
   const [location, setLocation] = React.useState("");
   const [meetingUrl, setMeetingUrl] = React.useState("");
+  const [defaultUserId, setDefaultUserId] = React.useState<string | null>(null);
 
   function openCreate() {
     setName("");
@@ -99,6 +102,7 @@ export function AppointmentTypesClient({ initialTypes }: Props) {
     setChannel(null);
     setLocation("");
     setMeetingUrl("");
+    setDefaultUserId(null);
     setDialogOpen(true);
   }
 
@@ -122,6 +126,7 @@ export function AppointmentTypesClient({ initialTypes }: Props) {
         default_channel: channel ?? undefined,
         default_location: location.trim() || undefined,
         default_meeting_url: meetingUrl.trim() || undefined,
+        default_user_id: defaultUserId,
       });
       setTypes((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
       toast.success("Tipo de agendamento criado");
@@ -389,6 +394,31 @@ export function AppointmentTypesClient({ initialTypes }: Props) {
                   value={meetingUrl}
                   onChange={(e) => setMeetingUrl(e.target.value)}
                 />
+              </div>
+            )}
+
+            {members.length > 0 && (
+              <div className="space-y-2">
+                <Label>Profissional padrão (opcional)</Label>
+                <Select
+                  value={defaultUserId ?? "none"}
+                  onValueChange={(v) => setDefaultUserId(v === "none" ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Qualquer responsável do lead" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Qualquer responsável do lead</SelectItem>
+                    {members.map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Quando definido, a IA sempre agenda com este profissional, independente de quem é o responsável do lead.
+                </p>
               </div>
             )}
           </div>

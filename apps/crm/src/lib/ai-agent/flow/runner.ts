@@ -672,14 +672,33 @@ async function executeAIAgentNode(
   // create_appointment está habilitado neste flow. Sem isso a IA não sabe
   // quais slugs existem → type_slug chega null no handler → service_id null
   // em 100% dos agendamentos criados pela IA.
+  // I3 (jun/2026): também carrega org timezone para injetar data/hora atual
+  // no fuso correto — IA sabia propor "amanhã às 10h" mas não sabia que
+  // timezone era esse.
   let appointmentTypesBlock: string | null = null;
-  if (tools.some((t) => t.native_handler === "create_appointment")) {
-    const { data: agendaServices } = await db
-      .from("agenda_services")
-      .select("slug, name, duration_minutes")
-      .eq("organization_id", ctx.organizationId)
-      .eq("is_active", true)
-      .order("name");
+  let schedulingContextBlock: string | null = null;
+  const hasAppointmentTools = tools.some(
+    (t) =>
+      t.native_handler === "create_appointment" ||
+      t.native_handler === "reschedule_appointment" ||
+      t.native_handler === "get_available_slots",
+  );
+  if (hasAppointmentTools) {
+    const [{ data: agendaServices }, { data: orgRow }] = await Promise.all([
+      db
+        .from("agenda_services")
+        .select("slug, name, duration_minutes")
+        .eq("organization_id", ctx.organizationId)
+        .eq("is_active", true)
+        .order("name"),
+      db
+        .from("organizations")
+        .select("default_timezone")
+        .eq("id", ctx.organizationId)
+        .maybeSingle(),
+    ]);
+    const orgTimezone =
+      (orgRow as { default_timezone?: string } | null)?.default_timezone ?? "America/Sao_Paulo";
     if (agendaServices && agendaServices.length > 0) {
       const lines = agendaServices.map(
         (s: { slug: string; name: string; duration_minutes: number | null }) =>
@@ -692,6 +711,22 @@ async function executeAIAgentNode(
         "Ao criar um agendamento, use o campo type_slug com um dos valores acima.",
       ].join("\n");
     }
+    // Injeta data/hora atual no fuso da org para a IA propor horários corretos.
+    const nowLocal = new Date().toLocaleString("pt-BR", {
+      timeZone: orgTimezone,
+      weekday: "long",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    schedulingContextBlock = [
+      "CONTEXTO DE AGENDAMENTO:",
+      `- Data/hora atual: ${nowLocal} (${orgTimezone})`,
+      "- Sempre proponha horários no futuro. Ao mencionar dias como 'amanhã' ou 'segunda-feira', calcule a partir desta data.",
+      "- Use ISO 8601 com offset de fuso (ex: 2026-06-11T10:00:00-03:00) no campo start_at.",
+    ].join("\n");
   }
   const client = getOpenAIClient();
   const model = node.data.model ?? agentConfig.model;
@@ -718,6 +753,8 @@ async function executeAIAgentNode(
   // Tipos de agendamento: entra após fontes estruturadas e antes do
   // template de referência — IA conhece os slugs antes de ter que agir.
   if (appointmentTypesBlock) systemParts.push(appointmentTypesBlock);
+  // I3: data/hora atual no fuso da org — IA calcula "amanhã" corretamente.
+  if (schedulingContextBlock) systemParts.push(schedulingContextBlock);
   // Migration 100: inject de template ai_suggestion selecionado no node.
   // Entra após knowledge (contexto factual já lido) e antes de ROUTING
   // EVENTS (instruções de branch) — IA recebe referência de mensagem

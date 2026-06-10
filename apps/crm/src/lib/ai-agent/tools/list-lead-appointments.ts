@@ -46,6 +46,21 @@ export const listLeadAppointmentsHandler: NativeHandler = async (
       },
     );
 
+    // Resolve nomes dos tipos de serviço em batch (evita N queries).
+    // Apenas service_ids únicos não-nulos.
+    const serviceIds = [...new Set(rows.map((r) => r.service_id).filter(Boolean))] as string[];
+    const serviceNameMap = new Map<string, string>();
+    if (serviceIds.length > 0) {
+      const { data: services } = await db
+        .from("agenda_services")
+        .select("id, name")
+        .in("id", serviceIds)
+        .eq("organization_id", context.organization_id);
+      for (const s of (services ?? []) as Array<{ id: string; name: string }>) {
+        serviceNameMap.set(s.id, s.name);
+      }
+    }
+
     const appointments = rows.map((row) => ({
       appointment_id: row.id,
       title: row.title,
@@ -57,6 +72,8 @@ export const listLeadAppointmentsHandler: NativeHandler = async (
       location: row.location,
       meeting_url: row.meeting_url,
       timezone: row.timezone,
+      service_id: row.service_id ?? null,
+      type_name: row.service_id ? (serviceNameMap.get(row.service_id) ?? null) : null,
     }));
 
     return successResult(
