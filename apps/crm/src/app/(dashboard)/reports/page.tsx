@@ -1,11 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Badge } from "@persia/ui/badge";
-import { PageTitle } from "@persia/ui/typography";
+import { BarChart3 } from "lucide-react";
+import { ReportsFilterBar } from "@/components/reports/reports-filter-bar";
 
 export const metadata = { title: "Relatórios" };
 
-export default async function ReportsPage() {
+type SearchParams = Promise<{ from?: string; to?: string }>;
+
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { from, to } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -24,7 +32,53 @@ export default async function ReportsPage() {
   const orgId = member?.organization_id;
   if (!orgId) return null;
 
+  // ─── Período (filtro de data) ─────────────────────────────────────────────
+  // Valida formato YYYY-MM-DD para evitar injeção em parâmetros de query.
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const validFrom = from && iso.test(from) ? from : undefined;
+  const validTo = to && iso.test(to) ? `${to}T23:59:59` : undefined;
+
   // ─── Queries paralelas ────────────────────────────────────────────────────
+  const leadsQuery = supabase
+    .from("leads")
+    .select("id, status, lead_tags(tag_id)")
+    .eq("organization_id", orgId);
+  if (validFrom) leadsQuery.gte("created_at", validFrom);
+  if (validTo) leadsQuery.lte("created_at", validTo);
+
+  const leadsRawQuery = supabase
+    .from("leads")
+    .select("source, status")
+    .eq("organization_id", orgId);
+  if (validFrom) leadsRawQuery.gte("created_at", validFrom);
+  if (validTo) leadsRawQuery.lte("created_at", validTo);
+
+  const dealsQuery = supabase
+    .from("deals")
+    .select("id, pipeline_id, stage_id, status, value")
+    .eq("organization_id", orgId);
+  if (validFrom) dealsQuery.gte("created_at", validFrom);
+  if (validTo) dealsQuery.lte("created_at", validTo);
+
+  const apptsQuery = supabase
+    .from("appointments")
+    .select("id, status, channel")
+    .eq("organization_id", orgId)
+    .is("deleted_at", null);
+  if (validFrom) apptsQuery.gte("start_at", validFrom);
+  if (validTo) apptsQuery.lte("start_at", validTo);
+
+  const campaignsQuery = supabase
+    .from("campaigns")
+    .select(
+      "id, name, status, total_target, total_sent, total_delivered, total_read, total_replied, created_at",
+    )
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (validFrom) campaignsQuery.gte("created_at", validFrom);
+  if (validTo) campaignsQuery.lte("created_at", validTo);
+
   const [
     { data: pipelines },
     { data: allDeals },
@@ -39,34 +93,16 @@ export default async function ReportsPage() {
       .select("id, name, pipeline_stages(id, name, sort_order)")
       .eq("organization_id", orgId)
       .order("created_at"),
-    supabase
-      .from("deals")
-      .select("id, pipeline_id, stage_id, status, value")
-      .eq("organization_id", orgId),
+    dealsQuery,
     supabase
       .from("tags")
       .select("id, name, color")
       .eq("organization_id", orgId)
       .order("name"),
-    supabase
-      .from("leads")
-      .select("id, status, lead_tags(tag_id)")
-      .eq("organization_id", orgId),
-    supabase.from("leads").select("source, status").eq("organization_id", orgId),
-    // Tabela legada — contadores denormalizados (total_sent, total_delivered…)
-    supabase
-      .from("campaigns")
-      .select(
-        "id, name, status, total_target, total_sent, total_delivered, total_read, total_replied, created_at",
-      )
-      .eq("organization_id", orgId)
-      .order("created_at", { ascending: false })
-      .limit(30),
-    supabase
-      .from("appointments")
-      .select("id, status, channel")
-      .eq("organization_id", orgId)
-      .is("deleted_at", null),
+    leadsQuery,
+    leadsRawQuery,
+    campaignsQuery,
+    apptsQuery,
   ]);
 
   // ─── Agregações ───────────────────────────────────────────────────────────
@@ -179,9 +215,30 @@ export default async function ReportsPage() {
   const hasAppts = totalAppts > 0;
   const isEmpty = !hasPipelines && !hasSources && !hasTags && !hasCampaigns && !hasAppts;
 
+  const periodLabel =
+    validFrom || validTo
+      ? `${validFrom ?? "início"} → ${validTo ? validTo.slice(0, 10) : "hoje"}`
+      : "Todos os períodos";
+
   return (
     <div className="space-y-6">
-      <PageTitle size="compact">Relatórios</PageTitle>
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <BarChart3 className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold leading-tight tracking-tight">Relatórios</h1>
+            <p className="text-sm text-muted-foreground">{periodLabel}</p>
+          </div>
+        </div>
+        <ReportsFilterBar from={validFrom} to={validTo ? validTo.slice(0, 10) : undefined} />
+      </div>
+      {/* Título visível apenas na impressão */}
+      <div className="hidden print:block">
+        <h1 className="text-2xl font-bold">Relatórios — {periodLabel}</h1>
+      </div>
 
       {isEmpty && (
         <Card>

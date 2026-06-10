@@ -20,10 +20,10 @@ import {
   Target,
   UserX,
   UserMinus,
+  LayoutDashboard,
 } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
-import { PageTitle } from "@persia/ui/typography";
 
 // ─── Period helpers ───────────────────────────────────────────────────────────
 
@@ -442,9 +442,14 @@ export default async function DashboardPage({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <PageTitle size="compact">Dashboard</PageTitle>
-          <p className="text-sm text-muted-foreground mt-1">{dateLabel}</p>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <LayoutDashboard className="size-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold leading-tight tracking-tight">Dashboard</h1>
+            <p className="text-sm text-muted-foreground">{dateLabel}</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PeriodSelector current={period} />

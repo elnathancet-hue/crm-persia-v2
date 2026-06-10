@@ -169,11 +169,16 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
         </Button>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Campanhas WhatsApp</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Gerencie envios, avisos para grupos, follow-ups automáticos e campanhas segmentadas com segurança.
-        </p>
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <Megaphone className="size-5" />
+        </div>
+        <div>
+          <h1 className="text-xl font-bold leading-tight tracking-tight">Campanhas</h1>
+          <p className="text-sm text-muted-foreground">
+            Gerencie envios, follow-ups automáticos e campanhas segmentadas.
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
