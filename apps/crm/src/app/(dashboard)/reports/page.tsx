@@ -31,6 +31,8 @@ export default async function ReportsPage() {
     { data: tags },
     { data: leadsForTags },
     { data: leadsRaw },
+    { data: campaigns },
+    { data: appointments },
   ] = await Promise.all([
     supabase
       .from("pipelines")
@@ -51,26 +53,21 @@ export default async function ReportsPage() {
       .select("id, status, lead_tags(tag_id)")
       .eq("organization_id", orgId),
     supabase.from("leads").select("source, status").eq("organization_id", orgId),
+    // Tabela legada — contadores denormalizados (total_sent, total_delivered…)
+    supabase
+      .from("campaigns")
+      .select(
+        "id, name, status, total_target, total_sent, total_delivered, total_read, total_replied, created_at",
+      )
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("appointments")
+      .select("id, status, channel")
+      .eq("organization_id", orgId)
+      .is("deleted_at", null),
   ]);
-
-  // crm_campaigns e crm_campaign_recipients não estão nos tipos gerados ainda
-  // (migration 088 aplicada mas `supabase gen types` não rodou). Cast necessário.
-  type CampaignRow = { id: string; name: string; status: string; created_at: string };
-  type RecipientRow = { campaign_id: string; status: string };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: campaigns } = (await (supabase as any)
-    .from("crm_campaigns")
-    .select("id, name, status, created_at")
-    .eq("organization_id", orgId)
-    .order("created_at", { ascending: false })
-    .limit(30)) as { data: CampaignRow[] | null };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: campaignRecipients } = (await (supabase as any)
-    .from("crm_campaign_recipients")
-    .select("campaign_id, status")
-    .eq("organization_id", orgId)) as { data: RecipientRow[] | null };
 
   // ─── Agregações ───────────────────────────────────────────────────────────
 
@@ -122,24 +119,50 @@ export default async function ReportsPage() {
     .sort((a, b) => b.total - a.total);
   const totalLeads = sourceSorted.reduce((s, r) => s + r.total, 0);
 
-  // 4. Campanhas: destinatários agrupados por status
-  const recipientsByCampaign = new Map<string, Record<string, number>>();
-  for (const r of campaignRecipients ?? []) {
-    const cur = recipientsByCampaign.get(r.campaign_id) ?? {};
-    cur[r.status] = (cur[r.status] || 0) + 1;
-    recipientsByCampaign.set(r.campaign_id, cur);
+  // 4. Agenda: contagem por status
+  const apptByStatus: Record<string, number> = {};
+  const apptByChannel: Record<string, number> = {};
+  for (const a of appointments ?? []) {
+    apptByStatus[a.status] = (apptByStatus[a.status] || 0) + 1;
+    const ch = a.channel ?? "não informado";
+    apptByChannel[ch] = (apptByChannel[ch] || 0) + 1;
   }
+  const totalAppts = (appointments ?? []).length;
 
   // ─── Labels ───────────────────────────────────────────────────────────────
   const campaignStatusLabels: Record<string, string> = {
     draft: "Rascunho",
-    validating: "Validando",
     scheduled: "Agendada",
-    running: "Rodando",
+    sending: "Enviando",
     paused: "Pausada",
     completed: "Concluída",
     cancelled: "Cancelada",
-    failed: "Falhou",
+  };
+
+  const apptStatusLabels: Record<string, string> = {
+    awaiting_confirmation: "Aguardando confirmação",
+    confirmed: "Confirmado",
+    completed: "Concluído",
+    cancelled: "Cancelado",
+    no_show: "Não compareceu",
+    rescheduled: "Reagendado",
+  };
+
+  const apptStatusColors: Record<string, string> = {
+    confirmed: "text-success",
+    completed: "text-success",
+    cancelled: "text-destructive",
+    no_show: "text-warning",
+    rescheduled: "text-muted-foreground",
+    awaiting_confirmation: "text-muted-foreground",
+  };
+
+  const channelLabels: Record<string, string> = {
+    whatsapp: "WhatsApp",
+    phone: "Telefone",
+    online: "Online",
+    in_person: "Presencial",
+    "não informado": "Não informado",
   };
 
   const fmtBRL = (v: number) =>
@@ -153,7 +176,8 @@ export default async function ReportsPage() {
   const hasSources = sourceSorted.length > 0;
   const hasTags = (tags ?? []).some((t) => tagStats.has(t.id));
   const hasCampaigns = (campaigns ?? []).length > 0;
-  const isEmpty = !hasPipelines && !hasSources && !hasTags && !hasCampaigns;
+  const hasAppts = totalAppts > 0;
+  const isEmpty = !hasPipelines && !hasSources && !hasTags && !hasCampaigns && !hasAppts;
 
   return (
     <div className="space-y-6">
@@ -163,8 +187,8 @@ export default async function ReportsPage() {
         <Card>
           <CardContent className="py-16 text-center">
             <p className="text-muted-foreground text-sm">
-              Nenhum dado para exibir ainda. Crie leads, tags, funis e campanhas
-              para ver os relatórios aqui.
+              Nenhum dado para exibir ainda. Crie leads, tags, funis, campanhas
+              e agendamentos para ver os relatórios aqui.
             </p>
           </CardContent>
         </Card>
@@ -493,7 +517,102 @@ export default async function ReportsPage() {
         </Card>
       )}
 
-      {/* ── 4. Desempenho de Campanhas ────────────────────────────────────── */}
+      {/* ── 4. Agenda ─────────────────────────────────────────────────────── */}
+      {hasAppts && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Agenda</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Por status */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-3">
+                  Por status
+                </p>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {Object.entries(apptByStatus)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([status, count]) => {
+                        const pct =
+                          totalAppts > 0
+                            ? Math.round((count / totalAppts) * 100)
+                            : 0;
+                        return (
+                          <tr
+                            key={status}
+                            className="border-b border-border/50"
+                          >
+                            <td className="py-2 pr-4">
+                              <span
+                                className={`font-medium ${apptStatusColors[status] ?? "text-foreground"}`}
+                              >
+                                {apptStatusLabels[status] ?? status}
+                              </span>
+                            </td>
+                            <td className="text-right py-2 px-3 tabular-nums font-semibold">
+                              {count}
+                            </td>
+                            <td className="text-right py-2 pl-3 tabular-nums text-muted-foreground">
+                              {pct}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    <tr className="border-t border-border">
+                      <td className="py-2 pr-4 font-semibold">Total</td>
+                      <td className="text-right py-2 px-3 tabular-nums font-bold">
+                        {totalAppts}
+                      </td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Por canal */}
+              {Object.keys(apptByChannel).length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-3">
+                    Por canal
+                  </p>
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {Object.entries(apptByChannel)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([channel, count]) => {
+                          const pct =
+                            totalAppts > 0
+                              ? Math.round((count / totalAppts) * 100)
+                              : 0;
+                          return (
+                            <tr
+                              key={channel}
+                              className="border-b border-border/50"
+                            >
+                              <td className="py-2 pr-4 font-medium">
+                                {channelLabels[channel] ?? channel}
+                              </td>
+                              <td className="text-right py-2 px-3 tabular-nums font-semibold">
+                                {count}
+                              </td>
+                              <td className="text-right py-2 pl-3 tabular-nums text-muted-foreground">
+                                {pct}%
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 5. Desempenho de Campanhas ────────────────────────────────────── */}
       {hasCampaigns && (
         <Card>
           <CardHeader>
@@ -511,36 +630,30 @@ export default async function ReportsPage() {
                       Status
                     </th>
                     <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">
-                      Destinatários
+                      Alvo
                     </th>
                     <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">
-                      Concluídos
+                      Enviado
                     </th>
                     <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">
-                      Parados †
+                      Entregue
                     </th>
                     <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">
-                      Falhos
+                      Lido
                     </th>
                     <th className="text-right py-2 pl-3 text-xs font-medium text-muted-foreground">
-                      Entrega
+                      Taxa env.
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {(campaigns ?? []).map((campaign) => {
-                    const r = recipientsByCampaign.get(campaign.id) ?? {};
-                    const total = Object.values(r).reduce(
-                      (a, b) => a + b,
-                      0,
-                    );
-                    const completed = r["completed"] ?? 0;
-                    const stopped = r["stopped"] ?? 0;
-                    const failed = r["failed"] ?? 0;
-                    const deliveryRate =
-                      total > 0
-                        ? Math.round(((completed + stopped) / total) * 100)
-                        : 0;
+                    const target = campaign.total_target ?? 0;
+                    const sent = campaign.total_sent ?? 0;
+                    const delivered = campaign.total_delivered ?? 0;
+                    const read = campaign.total_read ?? 0;
+                    const sendRate =
+                      target > 0 ? Math.round((sent / target) * 100) : 0;
                     return (
                       <tr
                         key={campaign.id}
@@ -551,32 +664,32 @@ export default async function ReportsPage() {
                         </td>
                         <td className="py-2.5 px-3">
                           <Badge variant="outline" className="text-xs">
-                            {campaignStatusLabels[campaign.status] ??
+                            {campaignStatusLabels[campaign.status ?? ""] ??
                               campaign.status}
                           </Badge>
                         </td>
                         <td className="text-right py-2.5 px-3 tabular-nums">
-                          {total || "—"}
+                          {target || "—"}
                         </td>
-                        <td className="text-right py-2.5 px-3 tabular-nums text-success font-medium">
-                          {completed || "—"}
+                        <td className="text-right py-2.5 px-3 tabular-nums text-primary font-medium">
+                          {sent || "—"}
                         </td>
-                        <td className="text-right py-2.5 px-3 tabular-nums text-warning">
-                          {stopped || "—"}
+                        <td className="text-right py-2.5 px-3 tabular-nums text-success">
+                          {delivered || "—"}
                         </td>
-                        <td className="text-right py-2.5 px-3 tabular-nums text-destructive">
-                          {failed || "—"}
+                        <td className="text-right py-2.5 px-3 tabular-nums text-muted-foreground">
+                          {read || "—"}
                         </td>
                         <td className="text-right py-2.5 pl-3 tabular-nums">
-                          {total > 0 ? (
+                          {target > 0 ? (
                             <span
                               className={
-                                deliveryRate >= 80
+                                sendRate >= 80
                                   ? "text-success font-semibold"
                                   : "text-muted-foreground"
                               }
                             >
-                              {deliveryRate}%
+                              {sendRate}%
                             </span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -587,10 +700,6 @@ export default async function ReportsPage() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-3 text-xs text-muted-foreground">
-                † Parado = lead respondeu antes de receber todas as mensagens
-                (stop_on_reply)
-              </p>
             </div>
           </CardContent>
         </Card>
