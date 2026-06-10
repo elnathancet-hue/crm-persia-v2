@@ -4,28 +4,19 @@ import * as React from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   Check,
-  CreditCard,
-  FilePlus,
-  Headphones,
+  Crown,
   Loader2,
   Plus,
   Sparkles,
-  TrendingUp,
-  Zap,
 } from "lucide-react";
-import {
-  AGENT_TEMPLATES,
-  DEFAULT_MODEL,
-  type AgentTemplate,
-  type AgentTemplateSlug,
-} from "@persia/shared/ai-agent";
+import { DEFAULT_MODEL } from "@persia/shared/ai-agent";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent } from "@persia/ui/card";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
+import { Switch } from "@persia/ui/switch";
 import { cn } from "@persia/ui/utils";
 import {
   Dialog,
@@ -43,69 +34,12 @@ import {
   SelectValue,
 } from "@persia/ui/select";
 
-// PR-AI-AGENT-WIZARD (mai/2026): substitui o Dialog single-form de "Novo
-// agente" por wizard em 3 steps. Razao:
-// - Cliente leigo via 1 form gigante com 4 campos + select de template
-//   (com descricao em prosa) — abandonava ou criava com "blank" por nao
-//   ler a descricao.
-// - 3 steps quebram a decisao em escolhas pequenas (Hick-Hyman): 1)
-//   visual de template, 2) nome, 3) modelo de IA.
-// - Templates viram cards visuais com icone + cor tematica em vez de
-//   linha de Select — recognition over recall.
-// - Step indicator (Modelo > Nome > IA) com check verde + linha conectora
-//   sinaliza progresso e permite voltar a qualquer momento.
-//
-// Server actions inalteradas: ao submeter, dispara o mesmo createAgent
-// com template_slug — backend ja materializa stages do template.
+// Wizard em 2 steps: 1) Nome + Principal, 2) IA + Resumo.
+// Templates removidos — cliente sempre começa do zero e configura
+// no canvas. Fluxos pré-montados podem ser reintroduzidos futuramente
+// via biblioteca de templates separada.
 
-// Visual por template — icone + acento de cor. Decoupled do shared
-// (que so tem dados semanticos: label, prompt, stages).
-const TEMPLATE_VISUALS: Record<
-  AgentTemplateSlug,
-  {
-    Icon: React.ComponentType<{ className?: string }>;
-    accent: string;
-    iconColor: string;
-  }
-> = {
-  blank: {
-    Icon: FilePlus,
-    accent: "from-muted to-muted",
-    iconColor: "bg-muted text-muted-foreground",
-  },
-  atendimento_whatsapp: {
-    Icon: Headphones,
-    accent: "from-primary/15 to-primary/5",
-    iconColor: "bg-primary/15 text-primary",
-  },
-  pre_venda: {
-    Icon: TrendingUp,
-    accent: "from-success/15 to-success/5",
-    iconColor: "bg-success-soft text-success-soft-foreground",
-  },
-  pos_venda_cobranca: {
-    Icon: CreditCard,
-    accent: "from-warning/15 to-warning/5",
-    iconColor: "bg-warning-soft text-warning-soft-foreground",
-  },
-  tira_duvidas_faq: {
-    Icon: BookOpen,
-    accent: "from-progress/15 to-progress/5",
-    iconColor: "bg-progress-soft text-progress-soft-foreground",
-  },
-  consultor_funil_completo: {
-    Icon: Zap,
-    accent: "from-primary/20 to-primary/5",
-    iconColor: "bg-primary/20 text-primary",
-  },
-  humana_saude_jordan: {
-    Icon: TrendingUp,
-    accent: "from-success/20 to-primary/5",
-    iconColor: "bg-success-soft text-success-soft-foreground",
-  },
-};
-
-type WizardStep = 1 | 2 | 3;
+type WizardStep = 1 | 2;
 
 const MODEL_OPTIONS = [
   {
@@ -134,7 +68,7 @@ export interface AgentCreationWizardSubmit {
   name: string;
   description: string;
   model: string;
-  templateSlug: AgentTemplateSlug;
+  isPrimary: boolean;
 }
 
 interface Props {
@@ -151,36 +85,31 @@ export function AgentCreationWizard({
   onSubmit,
 }: Props) {
   const [step, setStep] = React.useState<WizardStep>(1);
-  const [templateSlug, setTemplateSlug] =
-    React.useState<AgentTemplateSlug>("blank");
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [model, setModel] = React.useState<string>(DEFAULT_MODEL);
+  const [isPrimaryAgent, setIsPrimaryAgent] = React.useState(false);
 
   // Reset ao fechar — evita state stale na proxima abertura.
   React.useEffect(() => {
     if (!open) {
       setStep(1);
-      setTemplateSlug("blank");
       setName("");
       setDescription("");
       setModel(DEFAULT_MODEL);
+      setIsPrimaryAgent(false);
     }
   }, [open]);
 
   const trimmedName = name.trim();
   const nameValid = trimmedName.length >= 2;
-  const canAdvanceFromStep2 = nameValid;
-  const selectedTemplate = AGENT_TEMPLATES.find((t) => t.slug === templateSlug)!;
 
   const handleNext = () => {
-    if (step === 1) setStep(2);
-    else if (step === 2 && canAdvanceFromStep2) setStep(3);
+    if (step === 1 && nameValid) setStep(2);
   };
 
   const handleBack = () => {
     if (step === 2) setStep(1);
-    else if (step === 3) setStep(2);
   };
 
   const handleCreate = () => {
@@ -189,42 +118,40 @@ export function AgentCreationWizard({
       name: trimmedName,
       description: description.trim(),
       model,
-      templateSlug,
+      isPrimary: isPrimaryAgent,
     });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="border-b border-border bg-card p-5">
           <DialogTitle className="sr-only">Criar agente</DialogTitle>
           <DialogHero
             icon={<Sparkles className="size-5" />}
             title="Criar agente"
-            tagline={`Passo ${step} de 3`}
+            tagline={`Passo ${step} de 2`}
           />
           <StepIndicator step={step} />
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto p-5 min-h-0">
           {step === 1 && (
-            <Step1Template value={templateSlug} onChange={setTemplateSlug} />
-          )}
-          {step === 2 && (
-            <Step2Identity
-              template={selectedTemplate}
+            <Step1Identity
               name={name}
               description={description}
+              isPrimary={isPrimaryAgent}
               onNameChange={setName}
               onDescriptionChange={setDescription}
+              onIsPrimaryChange={setIsPrimaryAgent}
               nameInvalid={trimmedName.length > 0 && !nameValid}
             />
           )}
-          {step === 3 && (
-            <Step3Model
-              template={selectedTemplate}
+          {step === 2 && (
+            <Step2Model
               name={trimmedName}
               description={description.trim()}
+              isPrimary={isPrimaryAgent}
               model={model}
               onModelChange={setModel}
             />
@@ -248,11 +175,11 @@ export function AgentCreationWizard({
               </>
             )}
           </Button>
-          {step < 3 ? (
+          {step < 2 ? (
             <Button
               type="button"
               onClick={handleNext}
-              disabled={(step === 2 && !canAdvanceFromStep2) || isPending}
+              disabled={!nameValid || isPending}
               className="min-w-24"
             >
               Próximo
@@ -280,13 +207,9 @@ export function AgentCreationWizard({
 }
 
 function StepIndicator({ step }: { step: WizardStep }) {
-  // PR 17 UX (mai/2026): "Modelo" virou ambíguo (template VS LLM model).
-  // Step 1 agora é "Tipo de atendimento" — descreve melhor o que cliente
-  // está escolhendo (fluxo pré-montado pra cada caso de uso).
   const steps: Array<{ id: WizardStep; label: string }> = [
-    { id: 1, label: "Tipo de atendimento" },
-    { id: 2, label: "Nome" },
-    { id: 3, label: "IA" },
+    { id: 1, label: "Identidade" },
+    { id: 2, label: "IA" },
   ];
   return (
     <ol className="flex items-center gap-2 mt-3" aria-label="Progresso da criação">
@@ -328,110 +251,21 @@ function StepIndicator({ step }: { step: WizardStep }) {
   );
 }
 
-function Step1Template({
-  value,
-  onChange,
-}: {
-  value: AgentTemplateSlug;
-  onChange: (slug: AgentTemplateSlug) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <h3 className="font-semibold tracking-tight">
-          Que tipo de atendimento o agente vai fazer?
-        </h3>
-        <p className="text-xs text-muted-foreground mt-1">
-          Escolha o cenário mais parecido com o seu. Cada opção já vem com
-          um fluxo pré-montado pra acelerar o setup — você pode revisar e
-          refinar antes de ativar
-          depois.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {AGENT_TEMPLATES.map((tpl) => (
-          <TemplateCard
-            key={tpl.slug}
-            template={tpl}
-            selected={value === tpl.slug}
-            onSelect={() => onChange(tpl.slug)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TemplateCard({
-  template,
-  selected,
-  onSelect,
-}: {
-  template: AgentTemplate;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  const visual = TEMPLATE_VISUALS[template.slug];
-  const Icon = visual.Icon;
-  // PR-FLOW-PIVOT: template não tem mais `stages` array. V1 mostra label
-  // genérico — PRs subsequentes vão exibir contagem de nodes do flow_config.
-  const stagesLabel =
-    template.slug === "blank" ? "Flow vazio" : "Flow pronto";
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "relative text-left rounded-xl border-2 p-4 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-        selected
-          ? `border-primary shadow-md shadow-primary/10 bg-gradient-to-br ${visual.accent}`
-          : "border-border hover:border-primary/40 hover:shadow-sm bg-card",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <span
-          className={cn(
-            "size-10 rounded-xl flex items-center justify-center shrink-0",
-            visual.iconColor,
-          )}
-        >
-          <Icon className="size-5" />
-        </span>
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <p className="font-semibold text-sm tracking-tight leading-tight">
-              {template.label}
-            </p>
-            {selected ? (
-              <Check className="size-4 text-primary shrink-0" aria-hidden />
-            ) : null}
-          </div>
-          <p className="text-xs text-muted-foreground line-clamp-2">
-            {template.short_description}
-          </p>
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider pt-1">
-            {stagesLabel}
-          </p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function Step2Identity({
-  template,
+function Step1Identity({
   name,
   description,
+  isPrimary,
   onNameChange,
   onDescriptionChange,
+  onIsPrimaryChange,
   nameInvalid,
 }: {
-  template: AgentTemplate;
   name: string;
   description: string;
+  isPrimary: boolean;
   onNameChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
+  onIsPrimaryChange: (v: boolean) => void;
   nameInvalid: boolean;
 }) {
   return (
@@ -439,23 +273,9 @@ function Step2Identity({
       <div>
         <h3 className="font-semibold tracking-tight">Como vamos chamar?</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          Nome e descrição aparecem na sua lista de agentes. Não influenciam o
-          comportamento — só ajudam você a identificar.
+          Nome e descrição aparecem na sua lista de agentes — só pra te ajudar a identificar.
         </p>
       </div>
-
-      {template.slug !== "blank" ? (
-        <Card className="bg-muted/30 border-dashed">
-          <CardContent className="p-3 flex items-start gap-2 text-xs">
-            <Sparkles className="size-3.5 text-primary shrink-0 mt-0.5" />
-            <p className="text-muted-foreground">
-              Modelo escolhido:{" "}
-              <strong className="text-foreground">{template.label}</strong>.
-              Sugestão de descrição abaixo — ajuste se quiser.
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
 
       <div className="space-y-2">
         <Label htmlFor="agent-name">
@@ -489,27 +309,56 @@ function Step2Identity({
           id="agent-description"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
-          placeholder={template.short_description}
-          rows={3}
+          placeholder="Ex: Atende leads do WhatsApp e agenda reuniões"
+          rows={2}
         />
-        <p className="text-xs text-muted-foreground">
-          Lembrete pra você do que esse agente faz.
-        </p>
       </div>
+
+      {/* Principal toggle */}
+      <button
+        type="button"
+        onClick={() => onIsPrimaryChange(!isPrimary)}
+        className={cn(
+          "flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-all",
+          isPrimary
+            ? "border-primary bg-primary/5"
+            : "border-border hover:border-primary/40",
+        )}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <Crown className={cn("size-4 shrink-0", isPrimary ? "text-primary" : "text-muted-foreground")} />
+            <p className={cn("text-sm font-semibold", isPrimary ? "text-foreground" : "text-muted-foreground")}>
+              Agente principal
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Recebe a primeira mensagem de novos leads automaticamente.
+            Só um agente pode ser o principal — ao marcar este, o atual será substituído.
+          </p>
+        </div>
+        <Switch
+          checked={isPrimary}
+          onCheckedChange={onIsPrimaryChange}
+          aria-label="Marcar como agente principal"
+          // stopPropagation pra nao duplicar o click do button pai
+          onClick={(e) => e.stopPropagation()}
+        />
+      </button>
     </div>
   );
 }
 
-function Step3Model({
-  template,
+function Step2Model({
   name,
   description,
+  isPrimary,
   model,
   onModelChange,
 }: {
-  template: AgentTemplate;
   name: string;
   description: string;
+  isPrimary: boolean;
   model: string;
   onModelChange: (v: string) => void;
 }) {
@@ -520,15 +369,13 @@ function Step3Model({
       <div>
         <h3 className="font-semibold tracking-tight">Inteligência do agente</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          Qual nível de IA vai responder pelas conversas. Você pode trocar depois
-          em Regras.
+          Qual nível de IA vai responder pelas conversas. Você pode trocar depois em Configurações.
         </p>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="agent-model">Modelo de IA</Label>
         <Select value={model} onValueChange={(v) => v && onModelChange(v)}>
-
           <SelectTrigger id="agent-model" className="w-full">
             <SelectValue>{selectedModel.label}</SelectValue>
           </SelectTrigger>
@@ -551,30 +398,20 @@ function Step3Model({
           <dl className="grid grid-cols-[5rem_1fr] gap-x-3 gap-y-1.5 text-xs">
             <dt className="text-muted-foreground">Nome</dt>
             <dd className="font-medium text-foreground">
-              {name || (
-                <span className="italic text-muted-foreground/60">vazio</span>
-              )}
-            </dd>
-            <dt className="text-muted-foreground">Tipo de atendimento</dt>
-            <dd className="font-medium text-foreground">{template.label}</dd>
-            <dt className="text-muted-foreground">Fluxo</dt>
-            <dd className="font-medium text-foreground">
-              {template.slug === "blank"
-                ? "Vazio — você monta no canvas"
-                : "Pré-montado — você revisa antes de ativar"}
-            </dd>
-            <dt className="text-muted-foreground">IA</dt>
-            <dd className="font-medium text-foreground">
-              {selectedModel.label}
+              {name || <span className="italic text-muted-foreground/60">vazio</span>}
             </dd>
             {description ? (
               <>
                 <dt className="text-muted-foreground">Descrição</dt>
-                <dd className="text-muted-foreground line-clamp-2">
-                  {description}
-                </dd>
+                <dd className="text-muted-foreground line-clamp-2">{description}</dd>
               </>
             ) : null}
+            <dt className="text-muted-foreground">Principal</dt>
+            <dd className={cn("font-medium", isPrimary ? "text-primary" : "text-muted-foreground")}>
+              {isPrimary ? "Sim — recebe novos leads" : "Não"}
+            </dd>
+            <dt className="text-muted-foreground">IA</dt>
+            <dd className="font-medium text-foreground">{selectedModel.label}</dd>
           </dl>
         </CardContent>
       </Card>

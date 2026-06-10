@@ -78,7 +78,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
   };
 
   const handleCreate = (input: AgentCreationWizardSubmit) => {
-    const tpl = getAgentTemplate(input.templateSlug);
+    const tpl = getAgentTemplate("blank");
     startTransition(async () => {
       try {
         const created = await createAgent({
@@ -86,23 +86,28 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
           description: input.description || tpl.short_description,
           scope_type: "global",
           model: input.model,
-          // system_prompt vem do template — "blank" tem prompt base
-          // generico com regras anti-alucinacao; outros templates tem
-          // contexto adicional.
           system_prompt: tpl.system_prompt,
-          template_slug: input.templateSlug,
-          // PR-FLOW-PIVOT (mai/2026): único valor aceito é 'flow' (canvas
-          // visual via @xyflow/react). Substitui modelos legados
-          // stages/actions.
+          template_slug: "blank",
           behavior_mode: "flow",
         });
-        setAgents((prev) => [created, ...prev]);
+        // Se marcado como principal, chamar setPrimaryAgent em seguida.
+        if (input.isPrimary) {
+          try {
+            const updated = await setPrimaryAgent(created.id);
+            setAgents((prev) =>
+              [updated, ...prev].map((a) =>
+                a.id !== updated.id && a.is_primary ? { ...a, is_primary: false } : a,
+              ),
+            );
+          } catch {
+            // Criação ok, mas marcar como principal falhou — não bloquear.
+            toast.error("Agente criado, mas não foi possível marcá-lo como principal.");
+          }
+        } else {
+          setAgents((prev) => [created, ...prev]);
+        }
         setCreateOpen(false);
-        toast.success(
-          input.templateSlug === "blank"
-            ? "Agente criado"
-            : "Agente criado com flow pré-configurado",
-        );
+        toast.success("Agente criado");
         router.push(`/automations/agents/${created.id}`);
       } catch (err) {
         toast.error(
@@ -429,15 +434,6 @@ function AgentCard({
                 <Settings className="size-3.5" />
                 Configurar
               </DropdownMenuItem>
-              {!isPrimary && agent.status === "active" ? (
-                <DropdownMenuItem
-                  onClick={onSetPrimary}
-                  disabled={isPending}
-                >
-                  <Crown className="size-3.5" />
-                  Definir como principal
-                </DropdownMenuItem>
-              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={onDelete}
@@ -457,13 +453,27 @@ function AgentCard({
             saíram do bottom pra dentro do DropdownMenu acima.
             Bottom agora foca em CTA primário "Configurar" + modelo. */}
         <div className="flex items-center justify-between gap-2 pt-2 border-t">
-          <Link
-            href={`/automations/agents/${agent.id}`}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors h-8 px-3 text-xs font-medium"
-          >
-            <Settings className="size-3.5" />
-            Configurar
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/automations/agents/${agent.id}`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors h-8 px-3 text-xs font-medium"
+            >
+              <Settings className="size-3.5" />
+              Configurar
+            </Link>
+            {!isPrimary && agent.status === "active" ? (
+              <button
+                type="button"
+                onClick={onSetPrimary}
+                disabled={isPending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border hover:border-primary/60 hover:text-primary text-muted-foreground transition-colors h-8 px-3 text-xs font-medium disabled:opacity-50"
+                title="Tornar este agente o principal — ele passará a receber novos leads"
+              >
+                <Crown className="size-3.5" />
+                Tornar principal
+              </button>
+            ) : null}
+          </div>
           <span
             className="font-mono text-[10px] text-muted-foreground/70"
             title="Modelo de IA usado"
