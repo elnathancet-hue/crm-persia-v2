@@ -24,6 +24,7 @@ const confirmSchema = z.object({
 
 interface AppointmentRow {
   id: string;
+  organization_id: string;
   lead_id: string | null;
   title: string;
   start_at: string;
@@ -53,7 +54,7 @@ export const confirmAppointmentHandler: NativeHandler = async (context, input) =
   const { data: apptRow, error: apptError } = await db
     .from("appointments")
     .select(
-      "id, lead_id, title, start_at, end_at, duration_minutes, timezone, status, channel, location, meeting_url, service_id, user_id",
+      "id, organization_id, lead_id, title, start_at, end_at, duration_minutes, timezone, status, channel, location, meeting_url, service_id, user_id",
     )
     .eq("organization_id", context.organization_id)
     .eq("id", parsed.data.appointment_id)
