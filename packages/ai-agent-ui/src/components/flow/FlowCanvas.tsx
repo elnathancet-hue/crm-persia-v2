@@ -163,6 +163,9 @@ interface FlowCanvasProps {
    * passa agent.message_templates que já está disponível no client.
    * getFlowCatalogs sobrescreve com dados do DB quando retornar. */
   messageTemplates?: FlowCatalogMessageTemplate[];
+  /** Chamado quando o estado de mudanças não salvas muda.
+   * AgentEditor usa pra mostrar confirmação no botão "Voltar". */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function FlowCanvas(props: FlowCanvasProps) {
@@ -182,7 +185,7 @@ interface FlowSnapshot {
   edges: Edge[];
 }
 
-function FlowCanvasInner({ configId, fullscreen, messageTemplates }: FlowCanvasProps) {
+function FlowCanvasInner({ configId, fullscreen, messageTemplates, onDirtyChange }: FlowCanvasProps) {
   const actions = useAgentActions();
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [nodes, setNodes] = React.useState<Node[]>([]);
@@ -1071,7 +1074,8 @@ function FlowCanvasInner({ configId, fullscreen, messageTemplates }: FlowCanvasP
   }, [selectedNodeId]);
   React.useEffect(() => {
     dirtyRef.current = dirty;
-  }, [dirty]);
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   React.useEffect(() => {
     function isTypingInForm(target: EventTarget | null): boolean {

@@ -68,11 +68,18 @@ export function AIAgentNodeView({
       />
     ) : null;
 
-  // Handles distribuídos verticalmente ao redor de 50% (centro do card).
-  // Espaçamento proporcional à altura — 60% do card dividido por N handles.
-  // React Flow não suporta `bottom` em handles; usa sempre `top %`.
-  const totalHandles = 1 + instructions.length;
-  const handleSpacing = totalHandles > 1 ? 60 / totalHandles : 0;
+  // Handles ancorados em px absolutos no header do card (~68px de altura).
+  // Centro do header ≈ 34px do topo. Usar px em vez de `top %` evita
+  // que os handles flutuem para o meio do formulário quando o card
+  // expande (form pode ter 400px+, fazendo 50% cair em lugar errado).
+  //
+  // Default: centralizado no header (34px).
+  // Instructions: distribuídas na seção de conteúdo logo abaixo do header.
+  // Header ~68px + border 1px + py-2.5 10px = ~79px até o conteúdo.
+  // "Quando terminar" label ~16px + cada row ~20px.
+  const HEADER_CENTER_PX = 34;
+  const CONTENT_START_PX = 95; // após header + border + padding + label
+  const ROW_HEIGHT_PX = 20;
 
   return (
     <>
@@ -80,6 +87,7 @@ export function AIAgentNodeView({
         type="target"
         position={Position.Left}
         id="in"
+        style={{ top: HEADER_CENTER_PX }}
         className="!size-3 !bg-primary !border-2 !border-background"
       />
       <NodeShell
@@ -126,7 +134,7 @@ export function AIAgentNodeView({
         type="source"
         position={Position.Right}
         id="default"
-        style={{ top: `${50 - (instructions.length * handleSpacing) / 2}%` }}
+        style={{ top: instructions.length === 0 ? HEADER_CENTER_PX : CONTENT_START_PX - ROW_HEIGHT_PX }}
         className="!size-3 !bg-primary !border-2 !border-background"
       >
         <span className="absolute -right-14 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground whitespace-nowrap">
@@ -134,11 +142,9 @@ export function AIAgentNodeView({
         </span>
       </Handle>
       {/* Handles dinâmicos — 1 por instruction. ID == output_handle.
-          Label do handle mostra DESCRIÇÃO (legível) em vez de
-          output_handle (snake_case técnico). */}
+          Posicionados próximos à linha correspondente na lista. */}
       {instructions.map((ins, idx) => {
-        const topPct =
-          50 - (instructions.length * handleSpacing) / 2 + (idx + 1) * handleSpacing;
+        const topPx = CONTENT_START_PX + idx * ROW_HEIGHT_PX;
         const labelText = ins.description?.trim() || ins.output_handle;
         return (
           <Handle
@@ -146,7 +152,7 @@ export function AIAgentNodeView({
             type="source"
             position={Position.Right}
             id={ins.output_handle}
-            style={{ top: `${topPct}%` }}
+            style={{ top: topPx }}
             className="!size-3 !bg-success !border-2 !border-background"
           >
             <span className="absolute -right-2 translate-x-full -translate-y-1/2 text-[9px] font-semibold text-success whitespace-nowrap max-w-[140px] truncate">

@@ -212,6 +212,8 @@ export function AgentEditor({
   // useEffect abaixo.
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   const [flowFullscreen, setFlowFullscreen] = React.useState(false);
+  const [flowCanvasDirty, setFlowCanvasDirty] = React.useState(false);
+  const [flowLeaveConfirmOpen, setFlowLeaveConfirmOpen] = React.useState(false);
   React.useEffect(() => {
     try {
       const stored = window.localStorage.getItem(
@@ -667,7 +669,13 @@ export function AgentEditor({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => setFlowFullscreen(false)}
+              onClick={() => {
+                if (flowCanvasDirty) {
+                  setFlowLeaveConfirmOpen(true);
+                } else {
+                  setFlowFullscreen(false);
+                }
+              }}
               className="gap-1.5"
             >
               <ArrowLeft className="size-4" />
@@ -699,10 +707,35 @@ export function AgentEditor({
                 usage: t.usage,
                 mode: t.mode,
               }))}
+              onDirtyChange={setFlowCanvasDirty}
             />
           </div>
         </div>
       )}
+
+      {/* Confirmação ao sair do canvas com mudanças não salvas */}
+      <AlertDialog open={flowLeaveConfirmOpen} onOpenChange={setFlowLeaveConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sair sem salvar o fluxo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você fez mudanças no fluxo que ainda não foram salvas. Se sair agora, essas alterações serão perdidas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setFlowLeaveConfirmOpen(false);
+                setFlowCanvasDirty(false);
+                setFlowFullscreen(false);
+              }}
+            >
+              Sair sem salvar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <TesterSheet
         configId={agent.id}
