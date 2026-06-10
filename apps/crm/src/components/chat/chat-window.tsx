@@ -807,6 +807,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [forwardTargetIds, setForwardTargetIds] = useState<Set<string>>(new Set());
   const [forwardConversations, setForwardConversations] = useState<ConversationWithLead[]>([]);
   const [forwardSearch, setForwardSearch] = useState("");
+  const [mediaViewer, setMediaViewer] = useState<{ type: "image" | "video"; url: string } | null>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -1948,14 +1949,18 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                 </button>
                               )}
                               {msg.media_url && msg.type === "sticker" && (
-                                <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                                <button
+                                  type="button"
+                                  onClick={() => setMediaViewer({ type: "image", url: msg.media_url! })}
+                                  className="block focus:outline-none"
+                                >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
                                     src={msg.media_url}
                                     alt="Sticker"
                                     className="size-28 object-contain"
                                   />
-                                </a>
+                                </button>
                               )}
                               {msg.type === "image" && (
                                 msg._optimistic ? (
@@ -1971,10 +1976,14 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                     </div>
                                   </div>
                                 ) : msg.media_url ? (
-                                  <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaViewer({ type: "image", url: msg.media_url! })}
+                                    className="block max-w-[240px] cursor-zoom-in overflow-hidden rounded-xl mb-1 focus:outline-none"
+                                  >
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={msg.media_url} alt="" className="max-h-64 rounded-xl object-cover mb-1" />
-                                  </a>
+                                    <img src={msg.media_url} alt="" className="max-h-64 w-full object-cover" />
+                                  </button>
                                 ) : null
                               )}
                               {(msg.type === "audio" || msg.type === "ptt") && (
@@ -1997,9 +2006,20 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                     </div>
                                   </div>
                                 ) : msg.media_url ? (
-                                  <video controls className="max-h-64 rounded-xl mb-1">
-                                    <source src={msg.media_url} />
-                                  </video>
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaViewer({ type: "video", url: msg.media_url! })}
+                                    className="relative block max-w-[240px] cursor-pointer overflow-hidden rounded-xl mb-1 focus:outline-none"
+                                  >
+                                    <video className="max-h-64 w-full rounded-xl pointer-events-none">
+                                      <source src={msg.media_url} />
+                                    </video>
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors">
+                                      <div className="flex size-12 items-center justify-center rounded-full bg-black/60">
+                                        <Play className="size-6 text-white ml-1" fill="white" />
+                                      </div>
+                                    </div>
+                                  </button>
                                 ) : null
                               )}
                               {msg.type === "document" && (
@@ -2529,6 +2549,87 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Lightbox de mídia — estilo WhatsApp */}
+      {mediaViewer && (
+        <MediaViewer
+          type={mediaViewer.type}
+          url={mediaViewer.url}
+          onClose={() => setMediaViewer(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---- Media Viewer (lightbox estilo WhatsApp) ----
+
+function MediaViewer({
+  type,
+  url,
+  onClose,
+}: {
+  type: "image" | "video";
+  url: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95"
+      onClick={onClose}
+    >
+      {/* Botões de ação no canto superior direito */}
+      <div className="absolute right-0 top-0 z-10 flex items-center gap-2 p-3">
+        <a
+          href={url}
+          download
+          onClick={(e) => e.stopPropagation()}
+          className="flex size-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          title="Baixar"
+        >
+          <Download className="size-4" />
+        </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex size-9 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+          title="Fechar (Esc)"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      {/* Mídia — stopPropagation pra não fechar ao clicar sobre ela */}
+      <div
+        className="flex max-h-[90vh] max-w-[90vw] items-center justify-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {type === "image" ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt=""
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain"
+          />
+        ) : (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video
+            controls
+            autoPlay
+            className="max-h-[90vh] max-w-[90vw] rounded-lg"
+          >
+            <source src={url} />
+          </video>
+        )}
+      </div>
     </div>
   );
 }
