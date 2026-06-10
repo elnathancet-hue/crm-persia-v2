@@ -455,14 +455,21 @@ function GroupListPanel({
   unreadCounts: Record<string, number>;
   lastMessages: Record<string, GroupLastMsg>;
 }) {
-  const filtered = groups.filter((g) => {
-    const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory =
-      categoryFilter === "todos" ||
-      (categoryFilter === "nao-lidas" && (unreadCounts[g.id] ?? 0) > 0) ||
-      g.category === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
+  const filtered = groups
+    .filter((g) => {
+      const matchesSearch = g.name.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory =
+        categoryFilter === "todos" ||
+        (categoryFilter === "nao-lidas" && (unreadCounts[g.id] ?? 0) > 0) ||
+        g.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    })
+    // Re-ordena pelo timestamp da última mensagem — reage a updates do Realtime.
+    .sort((a, b) => {
+      const aAt = lastMessages[a.id]?.at ?? a.last_message_at ?? a.created_at;
+      const bAt = lastMessages[b.id]?.at ?? b.last_message_at ?? b.created_at;
+      return bAt < aAt ? -1 : bAt > aAt ? 1 : 0;
+    });
 
   return (
     <div className="flex flex-col h-full" style={{ background: "var(--chat-sidebar-bg)" }}>

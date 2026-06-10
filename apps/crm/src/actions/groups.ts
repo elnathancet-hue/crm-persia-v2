@@ -268,16 +268,24 @@ export async function getGroups() {
     }
   }
 
-  return (groups as any[]).map((g) => {
-    const lm = lastMsgByGroup.get(g.id as string);
-    return {
-      ...g,
-      last_message_text: lm?.text ?? null,
-      last_message_sender: lm?.sender_name ?? null,
-      last_message_direction: lm?.direction ?? null,
-      last_message_at: lm?.created_at ?? null,
-    };
-  });
+  return (groups as any[])
+    .map((g) => {
+      const lm = lastMsgByGroup.get(g.id as string);
+      return {
+        ...g,
+        last_message_text: lm?.text ?? null,
+        last_message_sender: lm?.sender_name ?? null,
+        last_message_direction: lm?.direction ?? null,
+        last_message_at: lm?.created_at ?? null,
+      };
+    })
+    // Ordena por última mensagem desc (grupos com msg recente primeiro).
+    // Fallback para created_at quando sem mensagens.
+    .sort((a, b) => {
+      const aAt: string = a.last_message_at ?? a.created_at;
+      const bAt: string = b.last_message_at ?? b.created_at;
+      return bAt < aAt ? -1 : bAt > aAt ? 1 : 0;
+    });
 }
 
 // ---- Sync groups from UAZAPI to DB ----
