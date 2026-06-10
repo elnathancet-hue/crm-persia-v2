@@ -2352,7 +2352,7 @@ const DealCard = React.memo(function DealCardImpl({
                       await actionsRef.findOrCreateConversationByLead(
                         deal.lead_id,
                       );
-                    window.location.href = `/chat?id=${conversationId}`;
+                    window.location.href = `/chat?c=${conversationId}`;
                   } catch (err) {
                     toast.error(
                       err instanceof Error
@@ -2461,75 +2461,6 @@ const DealCard = React.memo(function DealCardImpl({
           </div>
         )}
 
-        {/* PR-I: pill VALOR ESTIMADO (verde) — so renderiza quando ha
-            valor cadastrado OU usuario esta editando (pra permitir
-            adicionar valor depois). Quando valor=0 e nao editando, o
-            espaco fica limpo. Botao "+ Adicionar valor" sutil aparece
-            so no hover do card pra permitir cadastrar. */}
-        {(deal.value > 0 || editingField === "value") && (
-          <div className="mt-3">
-            {editingField === "value" && canEdit ? (
-              <div className="flex items-center gap-2 rounded-xl bg-success-soft px-3 py-2">
-                <CircleDollarSign className="size-4 shrink-0 text-success" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-bold uppercase tracking-wide text-success-soft-foreground/70">
-                    Valor estimado
-                  </div>
-                  <div className="flex items-center gap-1 text-sm font-bold text-success-soft-foreground">
-                    <span>R$</span>
-                    <InlineEdit
-                      initialValue={String(deal.value ?? 0)}
-                      type="number"
-                      ariaLabel="Editar valor"
-                      pending={editPending}
-                      onCommit={(v) => saveEdit("value", v)}
-                      onCancel={() => setEditingField(null)}
-                      className="flex-1 text-success-soft-foreground"
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded-xl bg-success-soft px-3 py-2 text-left transition-colors hover:bg-success-soft/70"
-                title={canEdit ? "Duplo-click para editar valor" : undefined}
-                onDoubleClick={(e) => {
-                  if (!canEdit) return;
-                  e.stopPropagation();
-                  setEditingField("value");
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <CircleDollarSign className="size-4 shrink-0 text-success" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[9px] font-bold uppercase tracking-wide text-success-soft-foreground/70">
-                    Valor estimado
-                  </div>
-                  <div className="text-sm font-bold text-success-soft-foreground">
-                    R$ {formatCurrency(deal.value)}
-                  </div>
-                </div>
-              </button>
-            )}
-          </div>
-        )}
-        {/* PR-I: link sutil "+ Adicionar valor" so quando valor=0,
-            visivel apenas no hover do card pra nao poluir. */}
-        {deal.value === 0 && canEdit && editingField !== "value" && (
-          <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              type="button"
-              className="text-[10px] font-medium text-muted-foreground hover:text-success transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingField("value");
-              }}
-            >
-              + Adicionar valor estimado
-            </button>
-          </div>
-        )}
 
         {/* PR-C: Pill RESPONSÁVEL (azul) — agora clicavel.
             Antes era read-only — agora abre DropdownMenu com lista de

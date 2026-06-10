@@ -81,12 +81,12 @@ const TABS: {
   // brasileiro que "Pipeline" (jargao tecnico). Key da URL preservada
   // como "pipeline" (?tab=pipeline) pra nao quebrar bookmarks.
   { key: "pipeline", label: "Funil", icon: Kanban },
+  { key: "produtos", label: "Produtos", icon: Package },
   { key: "leads", label: "Leads", icon: Users },
   { key: "grupos", label: "Grupos", icon: MessageSquare },
   { key: "segmentos", label: "Segmentação", icon: FilterIcon },
   { key: "tags", label: "Tags", icon: TagIcon },
   { key: "atividades", label: "Atividades", icon: Activity },
-  { key: "produtos", label: "Produtos", icon: Package },
 ];
 
 interface CrmShellProps {

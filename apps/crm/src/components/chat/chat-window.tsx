@@ -2193,7 +2193,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{title}</span>
                         <span className="block truncate text-xs text-muted-foreground">
-                          {item.last_message?.content || lead?.phone || "Conversa"}
+                          {item.last_message?.content
+                            ? item.last_message.content.replace(/[*_~`]/g, "")
+                            : lead?.phone || "Conversa"}
                         </span>
                       </span>
                     </Button>
