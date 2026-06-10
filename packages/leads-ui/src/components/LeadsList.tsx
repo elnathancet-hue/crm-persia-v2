@@ -527,7 +527,7 @@ export function LeadsList({
       render: (row) => {
         const name = row.name?.trim() || "Sem nome";
         return (
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 group/namecel">
             <LeadAvatar
               name={name}
               avatarUrl={row.avatar_url}
@@ -535,6 +535,20 @@ export function LeadsList({
               className="shadow-sm"
             />
             <span className="font-semibold text-sm text-foreground">{name}</span>
+            {onOpenConversation && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenConversation(row);
+                }}
+                className="ml-0.5 opacity-0 group-hover/namecel:opacity-100 transition-opacity rounded p-0.5 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                aria-label="Abrir conversa"
+                title="Abrir conversa"
+              >
+                <MessageCircle className="size-3.5" />
+              </button>
+            )}
           </div>
         );
       },

@@ -302,7 +302,7 @@ export function LeadList(props: Props) {
               const { conversationId } = await findOrCreateConversationByLead(
                 lead.id,
               );
-              router.push(`/chat?id=${conversationId}`);
+              router.push(`/chat?c=${conversationId}`);
             } catch (err) {
               console.error("[LeadList] open conversation failed:", err);
             }
