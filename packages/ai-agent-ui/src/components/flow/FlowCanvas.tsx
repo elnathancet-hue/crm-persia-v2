@@ -67,7 +67,7 @@ import {
 import { Button } from "@persia/ui/button";
 import { cn } from "@persia/ui/utils";
 import { useAgentActions } from "../../context";
-import type { FlowCatalogs } from "./catalog-types";
+import type { FlowCatalogs, FlowCatalogMessageTemplate } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
 import { findSidebarItem } from "./node-catalog";
@@ -158,6 +158,11 @@ interface FlowCanvasProps {
    * Usado pelo modo fullscreen do AgentEditor — o wrapper externo controla
    * a altura; aqui removemos sticky + height fixo pra não conflitar. */
   fullscreen?: boolean;
+  /** Seed imediato de templates de mensagem — picker mostra estes
+   * templates antes mesmo de getFlowCatalogs terminar. AgentEditor
+   * passa agent.message_templates que já está disponível no client.
+   * getFlowCatalogs sobrescreve com dados do DB quando retornar. */
+  messageTemplates?: FlowCatalogMessageTemplate[];
 }
 
 export function FlowCanvas(props: FlowCanvasProps) {
@@ -177,7 +182,7 @@ interface FlowSnapshot {
   edges: Edge[];
 }
 
-function FlowCanvasInner({ configId, fullscreen }: FlowCanvasProps) {
+function FlowCanvasInner({ configId, fullscreen, messageTemplates }: FlowCanvasProps) {
   const actions = useAgentActions();
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [nodes, setNodes] = React.useState<Node[]>([]);
@@ -195,7 +200,12 @@ function FlowCanvasInner({ configId, fullscreen }: FlowCanvasProps) {
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   // PR 21 (mai/2026): configSheetOpen removido — Sheet não é mais
   // renderizada. Forms inline dentro de cada node card.
-  const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
+  // jun/2026: inicializa com messageTemplates passados pelo AgentEditor
+  // pra que o picker mostre templates antes do getFlowCatalogs retornar.
+  const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(() => ({
+    ...EMPTY_FLOW_CATALOGS,
+    message_templates: messageTemplates ?? [],
+  }));
   const [catalogsLoading, setCatalogsLoading] = React.useState(false);
   const [catalogsLoaded, setCatalogsLoaded] = React.useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
@@ -338,7 +348,16 @@ function FlowCanvasInner({ configId, fullscreen }: FlowCanvasProps) {
     setCatalogsLoading(true);
     try {
       const next = await actions.getFlowCatalogs(configId);
-      setCatalogs(next);
+      // Se o DB retornou templates, usa eles. Se retornou vazio mas o
+      // AgentEditor passou messageTemplates como seed, preserva o seed
+      // (evita apagar templates visíveis enquanto DB estava desatualizado).
+      setCatalogs((prev) => ({
+        ...next,
+        message_templates:
+          next.message_templates.length > 0
+            ? next.message_templates
+            : prev.message_templates,
+      }));
     } catch (err) {
       const raw = err instanceof Error ? err.message : String(err);
       console.error("[FlowCanvas] getFlowCatalogs falhou:", err);

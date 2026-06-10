@@ -690,7 +690,16 @@ export function AgentEditor({
           </div>
           {/* Canvas ocupa todo o espaço restante */}
           <div className="flex flex-1 min-h-0">
-            <FlowCanvas configId={agent.id} fullscreen />
+            <FlowCanvas
+              configId={agent.id}
+              fullscreen
+              messageTemplates={(agent.message_templates ?? []).map((t) => ({
+                key: t.key,
+                name: t.name,
+                usage: t.usage,
+                mode: t.mode,
+              }))}
+            />
           </div>
         </div>
       )}
