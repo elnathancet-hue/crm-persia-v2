@@ -850,7 +850,7 @@ export function ConversationList({
                       <span className="truncate text-[13px] leading-5 text-muted-foreground">
                         {conv.last_message?.sender === "ai" && "IA: "}
                         {conv.last_message?.sender === "agent" && "Você: "}
-                        {truncate(conv.last_message?.content, 50) ||
+                        {truncate(conv.last_message?.content?.replace(/[*_~`]/g, ""), 50) ||
                           "Sem mensagens"}
                       </span>
                       <div className="flex shrink-0 items-center gap-1.5">
