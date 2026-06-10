@@ -117,6 +117,7 @@ import {
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
+import { MediaViewer } from "@/components/chat/media-viewer";
 import { uploadScheduledMessageMediaAction } from "@/actions/conversations";
 import { LeadContactPanel, type LeadContactData } from "@/components/chat/lead-contact-panel";
 import { cn } from "@/lib/utils";
@@ -792,6 +793,7 @@ function GroupChatPanel({
   const [loadingScheduled, setLoadingScheduled] = React.useState(false);
   const [hasMoreMessages, setHasMoreMessages] = React.useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = React.useState(false);
+  const [mediaViewer, setMediaViewer] = React.useState<{ type: "image" | "video"; url: string } | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const messagesScrollRef = React.useRef<HTMLDivElement>(null);
   const shouldAutoScroll = React.useRef(true);
@@ -1967,16 +1969,14 @@ function GroupChatPanel({
                         )}
                         {/* Media content — matches chat-window.tsx */}
                         {msg.media_url && msg.media_type === "sticker" && (
-                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                          <button
+                            type="button"
+                            onClick={() => setMediaViewer({ type: "image", url: msg.media_url! })}
+                            className="block focus:outline-none"
+                          >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={msg.media_url} alt="Sticker" className="size-28 object-contain" />
-                          </a>
-                        )}
-                        {msg.media_url && msg.media_type === "sticker" && (
-                          <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={msg.media_url} alt="Sticker" className="size-28 object-contain" />
-                          </a>
+                          </button>
                         )}
                         {msg.media_type === "image" && (
                           msg._optimistic ? (
@@ -1992,10 +1992,14 @@ function GroupChatPanel({
                               </div>
                             </div>
                           ) : msg.media_url ? (
-                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="block">
+                            <button
+                              type="button"
+                              onClick={() => setMediaViewer({ type: "image", url: msg.media_url! })}
+                              className="block w-full cursor-zoom-in overflow-hidden rounded-t-[7.5px] mb-1 focus:outline-none"
+                            >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={msg.media_url} alt="" className="max-h-64 w-full rounded-t-[7.5px] object-cover mb-1" />
-                            </a>
+                              <img src={msg.media_url} alt="" className="max-h-64 w-full object-cover" />
+                            </button>
                           ) : (
                             <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
                               <Image className="size-5 text-muted-foreground" />
@@ -2025,9 +2029,20 @@ function GroupChatPanel({
                               <span className="text-[13px] text-muted-foreground">Enviando vídeo…</span>
                             </div>
                           ) : msg.media_url ? (
-                            <video controls className="max-h-64 w-full rounded-t-[7.5px] mb-1">
-                              <source src={msg.media_url} />
-                            </video>
+                            <button
+                              type="button"
+                              onClick={() => setMediaViewer({ type: "video", url: msg.media_url! })}
+                              className="relative block w-full cursor-pointer overflow-hidden rounded-t-[7.5px] mb-1 focus:outline-none"
+                            >
+                              <video className="max-h-64 w-full rounded-t-[7.5px] pointer-events-none">
+                                <source src={msg.media_url} />
+                              </video>
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors">
+                                <div className="flex size-12 items-center justify-center rounded-full bg-black/60">
+                                  <Play className="size-6 text-white ml-1" fill="white" />
+                                </div>
+                              </div>
+                            </button>
                           ) : (
                             <div className="flex items-center gap-2 px-2.5 pt-2 mb-1">
                               <FileVideo className="size-5 text-muted-foreground" />
@@ -2844,6 +2859,15 @@ function GroupChatPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox de mídia — estilo WhatsApp */}
+      {mediaViewer && (
+        <MediaViewer
+          type={mediaViewer.type}
+          url={mediaViewer.url}
+          onClose={() => setMediaViewer(null)}
+        />
+      )}
     </div>
   );
 }
