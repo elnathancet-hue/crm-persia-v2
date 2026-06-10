@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { parseAndValidateWebhookUrl } from "@/lib/ai-agent/webhook-caller";
 
 function getSupabase() {
   return createClient(
@@ -44,8 +45,17 @@ export async function dispatchWebhook(
         continue;
       }
 
+      // Validate URL against SSRF before dispatching
+      let safeUrl: URL;
+      try {
+        safeUrl = parseAndValidateWebhookUrl(webhook.url);
+      } catch (err: any) {
+        console.error(`[Webhook] URL bloqueada (SSRF): ${webhook.url} — ${err.message}`);
+        continue;
+      }
+
       // Fire and forget - don't block the main flow
-      fetch(webhook.url, {
+      fetch(safeUrl.toString(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

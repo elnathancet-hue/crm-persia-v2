@@ -17,6 +17,8 @@
 //     pulamos direto pra tools/list. Se servidor exigir initialize
 //     (raro em V1), erro vai aparecer claro no UI
 
+import { parseAndValidateWebhookUrl } from "@/lib/ai-agent/webhook-caller";
+
 const PROTOCOL_VERSION = "2024-11-05";
 
 // ============================================================================
@@ -106,9 +108,12 @@ async function rpcCall<T>(
     }
   }
 
+  // Validate URL against SSRF before making the request
+  const safeUrl = parseAndValidateWebhookUrl(config.server_url);
+
   let res: Response;
   try {
-    res = await fetch(config.server_url, {
+    res = await fetch(safeUrl.toString(), {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
