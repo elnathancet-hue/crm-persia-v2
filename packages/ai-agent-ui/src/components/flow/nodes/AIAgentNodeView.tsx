@@ -43,6 +43,36 @@ export function AIAgentNodeView({
 }: Props) {
   const recentlyExecuted = useFlowTesterHighlight(id);
   const instructions = data.instructions ?? [];
+
+  // Mede posição vertical do centro de cada instruction card no DOM.
+  // Handles ficam alinhados com o card correspondente, independente de
+  // quantos campos existem acima no form inline.
+  const anchorRef = React.useRef<HTMLSpanElement>(null);
+  const [instructionTops, setInstructionTops] = React.useState<number[]>([]);
+  React.useEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const nodeEl = anchor.closest(".react-flow__node") as HTMLElement | null;
+    if (!nodeEl) return;
+    const measure = () => {
+      const cards = Array.from(
+        nodeEl.querySelectorAll<HTMLElement>("[data-instruction-idx]"),
+      );
+      const nodeRect = nodeEl.getBoundingClientRect();
+      setInstructionTops(
+        cards.map((card) => {
+          const rect = card.getBoundingClientRect();
+          return Math.round(rect.top - nodeRect.top + rect.height / 2);
+        }),
+      );
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(nodeEl);
+    return () => ro.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instructions.length]);
+
   // PR 23 (mai/2026): preview de prompt foi removido do card. Prompt
   // base vive em Configurações do agente (RulesTab) — mostrá-lo aqui
   // duplicava informação e confundia. Card agora mostra só label +
@@ -68,21 +98,13 @@ export function AIAgentNodeView({
       />
     ) : null;
 
-  // Handles ancorados em px absolutos, centralizados no header (~34px).
-  // O form inline é sempre visível, tornando o card muito alto (~600px).
-  // Usar top % fazia handles flutuar no meio do form. Usar px absolutos
-  // mas fixos na seção de conteúdo (~95-115px) também parecia "topo"
-  // numa altura de 600px. Solução: grupo de handles centrado no header,
-  // distribuído simetricamente ao redor de 34px com espaçamento fixo.
-  // Assim os handles ficam sempre no header independente da altura do card.
+  // Handle de entrada e handle padrão ficam no centro do header (~34px).
   const HEADER_CENTER_PX = 34;
-  const HANDLE_GAP_PX = 16;
-  const totalSources = 1 + instructions.length; // default + instruções
-  const groupHeight = (totalSources - 1) * HANDLE_GAP_PX;
-  const groupStartTop = HEADER_CENTER_PX - groupHeight / 2;
 
   return (
     <>
+      {/* Âncora invisível — usada pelo ResizeObserver pra achar o node wrapper */}
+      <span ref={anchorRef} className="sr-only" />
       <Handle
         type="target"
         position={Position.Left}
@@ -129,12 +151,12 @@ export function AIAgentNodeView({
         )}
       </NodeShell>
       {/* Handle default — sempre presente. IA cai aqui quando responde
-          texto sem chamar emit_event. */}
+          texto sem chamar emit_event. Fica no centro do header. */}
       <Handle
         type="source"
         position={Position.Right}
         id="default"
-        style={{ top: groupStartTop, transform: "translate(50%, -50%)" }}
+        style={{ top: HEADER_CENTER_PX, transform: "translate(50%, -50%)" }}
         className="!size-3 !bg-primary !border-2 !border-background"
       >
         <span className="absolute -right-14 -translate-y-1/2 text-[9px] font-semibold text-muted-foreground whitespace-nowrap">
@@ -142,9 +164,11 @@ export function AIAgentNodeView({
         </span>
       </Handle>
       {/* Handles dinâmicos — 1 por instruction. ID == output_handle.
-          Posicionados próximos à linha correspondente na lista. */}
+          top vem de instructionTops[] medido via ResizeObserver no DOM
+          (alinhado ao centro do card da instrução correspondente).
+          Fallback: HEADER_CENTER_PX + espaçamento simples até medição. */}
       {instructions.map((ins, idx) => {
-        const topPx = groupStartTop + (idx + 1) * HANDLE_GAP_PX;
+        const topPx = instructionTops[idx] ?? (HEADER_CENTER_PX + (idx + 1) * 20);
         const labelText = ins.description?.trim() || ins.output_handle;
         return (
           <Handle

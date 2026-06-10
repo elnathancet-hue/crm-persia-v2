@@ -688,6 +688,7 @@ export function AIAgentForm({ draft, setDraft, catalogs, catalogsLoading }: Cata
             {instructions.map((ins, idx) => (
               <div
                 key={ins.id}
+                data-instruction-idx={idx}
                 className="rounded-md border border-border bg-background p-2.5 space-y-2"
               >
                 <div className="flex items-center justify-between">
