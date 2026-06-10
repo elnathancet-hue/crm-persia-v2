@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
-import { createAppointment as createAppointmentShared } from "@persia/shared/agenda";
+import {
+  createAppointment as createAppointmentShared,
+  getDefaultAvailabilityRule,
+  isWithinAvailability,
+} from "@persia/shared/agenda";
 import { errorMessage, logError } from "@/lib/observability";
 import {
   buildEventFromAppointment,
@@ -152,10 +156,26 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
   if (!leadRow) return failureResult("lead nao encontrado");
 
   const lead = leadRow as LeadRow;
-  if (!lead.assigned_to) {
-    return failureResult(
-      "lead nao tem responsavel atribuido — defina um responsavel antes de agendar",
-    );
+
+  // Resolve responsavel: usa assigned_to do lead ou fallback pro primeiro
+  // admin/owner da org. Sem isso a IA falhava em leads sem atribuicao,
+  // mesmo quando o cliente quer que o gestor/admin seja o dono default.
+  let responsibleUserId = lead.assigned_to;
+  if (!responsibleUserId) {
+    const { data: adminMember } = await db
+      .from("organization_members")
+      .select("user_id")
+      .eq("organization_id", context.organization_id)
+      .in("role", ["owner", "admin"])
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!adminMember) {
+      return failureResult(
+        "lead nao tem responsavel e org nao tem admin/owner — atribua um responsavel ao lead",
+      );
+    }
+    responsibleUserId = adminMember.user_id as string;
   }
 
   const endMs = startMs + resolvedDuration * 60_000;
@@ -167,11 +187,32 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
   // migration futura se necessario).
   const timezone = "America/Sao_Paulo";
 
+  // Verifica horario comercial do responsavel. Se ele configurou
+  // availability_rules (ex: Seg-Sex 08:00-18:00), a IA NAO pode agendar
+  // fora desse janela. Sem regra cadastrada = sem restricao (libera tudo).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const agendaCtx = { db: db as any, orgId: context.organization_id };
+  const availabilityRule = await getDefaultAvailabilityRule(agendaCtx, responsibleUserId);
+  if (availabilityRule && !isWithinAvailability(availabilityRule, parsed.data.start_at, end_at)) {
+    const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+    const available = availabilityRule.days
+      .filter((d) => d.enabled && d.intervals.length > 0)
+      .map(
+        (d) =>
+          `${dayNames[d.day_of_week]}: ${d.intervals.map((i) => `${i.start}–${i.end}`).join(", ")}`,
+      )
+      .join(" | ");
+    return failureResult("horario fora da disponibilidade configurada", {
+      available_hours: available || "nenhum horario habilitado",
+      timezone: availabilityRule.timezone,
+    });
+  }
+
   if (context.dry_run) {
     return successResult(
       {
         lead_id: lead.id,
-        user_id: lead.assigned_to,
+        user_id: responsibleUserId,
         start_at: parsed.data.start_at,
         end_at,
         duration_minutes: resolvedDuration,
@@ -201,7 +242,7 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
         title: resolvedTitle,
         description: parsed.data.description ?? null,
         lead_id: lead.id,
-        user_id: lead.assigned_to,
+        user_id: responsibleUserId,
         // Linka ao agenda_services quando veio do tipo — pra
         // estatisticas/filtros de agenda virem corretos.
         service_id: appointmentType?.id ?? null,
@@ -287,7 +328,7 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
       {
         appointment_id: created.id,
         lead_id: lead.id,
-        user_id: lead.assigned_to,
+        user_id: responsibleUserId,
         start_at: created.start_at,
         end_at: created.end_at,
         duration_minutes: created.duration_minutes,
