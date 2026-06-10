@@ -10,7 +10,7 @@
 // correspondente.
 
 import * as React from "react";
-import { Handle, Position } from "@xyflow/react";
+import { Handle, Position, useReactFlow } from "@xyflow/react";
 import { BadgeCheck } from "lucide-react";
 import type { FlowAIAgentNode } from "@persia/shared/ai-agent";
 import { NodeShell } from "./node-shell";
@@ -43,13 +43,15 @@ export function AIAgentNodeView({
 }: Props) {
   const recentlyExecuted = useFlowTesterHighlight(id);
   const instructions = data.instructions ?? [];
+  const rf = useReactFlow();
 
   // Mede posição vertical do centro de cada instruction card no DOM.
-  // Handles ficam alinhados com o card correspondente, independente de
-  // quantos campos existem acima no form inline.
+  // getBoundingClientRect() retorna pixels do viewport (já escalados pelo
+  // zoom do canvas). Para obter pixels CSS (posição do handle), dividimos
+  // pelo zoom atual via rf.getViewport().zoom.
   const anchorRef = React.useRef<HTMLSpanElement>(null);
   const [instructionTops, setInstructionTops] = React.useState<number[]>([]);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const anchor = anchorRef.current;
     if (!anchor) return;
     const nodeEl = anchor.closest(".react-flow__node") as HTMLElement | null;
@@ -58,11 +60,14 @@ export function AIAgentNodeView({
       const cards = Array.from(
         nodeEl.querySelectorAll<HTMLElement>("[data-instruction-idx]"),
       );
+      if (cards.length === 0) return;
       const nodeRect = nodeEl.getBoundingClientRect();
+      const { zoom } = rf.getViewport();
       setInstructionTops(
         cards.map((card) => {
           const rect = card.getBoundingClientRect();
-          return Math.round(rect.top - nodeRect.top + rect.height / 2);
+          // Divide por zoom: converte pixels do viewport → pixels CSS do node
+          return Math.round((rect.top - nodeRect.top + rect.height / 2) / zoom);
         }),
       );
     };
@@ -71,7 +76,7 @@ export function AIAgentNodeView({
     ro.observe(nodeEl);
     return () => ro.disconnect();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instructions.length]);
+  }, [instructions.length, rf]);
 
   // PR 23 (mai/2026): preview de prompt foi removido do card. Prompt
   // base vive em Configurações do agente (RulesTab) — mostrá-lo aqui
