@@ -95,7 +95,9 @@ export async function signIn(formData: FormData): Promise<SignInResult> {
 
 export async function signOut() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // scope: 'local' remove apenas a sessão atual (cookie/storage).
+  // Outras sessões abertas em outros dispositivos/abas continuam ativas.
+  await supabase.auth.signOut({ scope: "local" });
   redirect("/login");
 }
 

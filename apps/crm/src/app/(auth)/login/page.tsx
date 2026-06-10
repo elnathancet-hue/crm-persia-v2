@@ -107,12 +107,7 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-medium">Senha *</Label>
-            <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Olá! Esqueci minha senha do PérsiaCRM. Pode me ajudar?")}`} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline transition-colors duration-150">
-              Esqueceu?
-            </a>
-          </div>
+          <Label htmlFor="password" className="text-sm font-medium">Senha *</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
@@ -127,7 +122,19 @@ export default function LoginPage() {
               onChange={() => passwordError && setPasswordError("")}
             />
           </div>
-          {passwordError && <p className="text-xs text-destructive mt-1">{passwordError}</p>}
+          <div className="flex items-center justify-between">
+            {passwordError
+              ? <p className="text-xs text-destructive">{passwordError}</p>
+              : <span />}
+            <a
+              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Olá! Esqueci minha senha do PérsiaCRM. Pode me ajudar?")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline transition-colors duration-150"
+            >
+              Esqueceu a senha?
+            </a>
+          </div>
         </div>
 
         <Button type="submit" className="w-full h-11 font-medium rounded-md" disabled={isPending}>
