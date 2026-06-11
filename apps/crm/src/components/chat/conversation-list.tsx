@@ -213,6 +213,8 @@ export function ConversationList({
   const debouncedSearchRef = useRef(search);
   const conversationsRef = useRef(conversations);
   const onSelectRef = useRef(onSelect);
+  const playNotificationRef = useRef<() => void>(() => {});
+  const desktopNotifyRef = useRef<(title: string, body: string) => void>(() => {});
   const {
     play: playNotification,
     enabled: soundEnabled,
@@ -231,6 +233,9 @@ export function ConversationList({
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
+
+  useEffect(() => { playNotificationRef.current = playNotification; }, [playNotification]);
+  useEffect(() => { desktopNotifyRef.current = desktopNotify; }, [desktopNotify]);
 
   const loadConversations = useCallback(
     async (searchTerm?: string) => {
@@ -305,6 +310,17 @@ export function ConversationList({
         },
         (payload) => {
           realtimeWorking = true;
+          const msg = payload.new as { sender?: string; conversation_id?: string; content?: string };
+          if (msg.sender && msg.sender !== "agent") {
+            playNotificationRef.current();
+            const conv = conversationsRef.current.find((c) => c.id === msg.conversation_id);
+            const lead = conv?.leads as { name?: string | null; phone?: string | null } | null | undefined;
+            const leadName = lead?.name ?? lead?.phone ?? "Nova mensagem";
+            const preview = typeof msg.content === "string" && msg.content.trim()
+              ? msg.content.slice(0, 80)
+              : "Nova mensagem";
+            desktopNotifyRef.current(leadName, preview);
+          }
           loadConversations();
         }
       )
@@ -321,7 +337,11 @@ export function ConversationList({
           loadConversations();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          realtimeWorking = false;
+        }
+      });
 
     // Polling fallback: 5s if Realtime not working
     const interval = setInterval(() => {

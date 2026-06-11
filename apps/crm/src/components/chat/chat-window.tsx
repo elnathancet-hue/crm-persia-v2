@@ -934,8 +934,15 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const toggleForwardMessage = useCallback((messageId: string) => {
     setForwardMessageIds((prev) => {
       const next = new Set(prev);
-      if (next.has(messageId)) next.delete(messageId);
-      else next.add(messageId);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        if (next.size >= 10) {
+          toast.warning("Máximo de 10 mensagens por encaminhamento");
+          return prev;
+        }
+        next.add(messageId);
+      }
       return next;
     });
   }, []);
@@ -943,8 +950,15 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const toggleForwardTarget = useCallback((targetId: string) => {
     setForwardTargetIds((prev) => {
       const next = new Set(prev);
-      if (next.has(targetId)) next.delete(targetId);
-      else next.add(targetId);
+      if (next.has(targetId)) {
+        next.delete(targetId);
+      } else {
+        if (next.size >= 20) {
+          toast.warning("Máximo de 20 destinos por encaminhamento");
+          return prev;
+        }
+        next.add(targetId);
+      }
       return next;
     });
   }, []);
@@ -1098,6 +1112,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   useEffect(() => {
     if (!conversationId) return;
     const supabase = createClient();
+    let realtimeOk = true;
 
     const channel = supabase
       .channel(`messages:${conversationId}`)
@@ -1117,7 +1132,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
               return [...prev, resolvedMsg];
             });
           });
-          shouldAutoScroll.current = true;
+          const scrollEl = messagesScrollRef.current;
+          shouldAutoScroll.current =
+            !scrollEl ||
+            scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 150;
         }
       )
       .on(
@@ -1136,13 +1154,30 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         }
       )
       .subscribe((status) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        if (status === "SUBSCRIBED") {
+          realtimeOk = true;
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           console.warn("[realtime] chat-window subscribe status:", status);
+          realtimeOk = false;
         }
       });
 
+    // Polling fallback: merge novas msgs quando realtime está morto
+    const pollInterval = setInterval(() => {
+      if (realtimeOk) return;
+      getMessages(conversationId, { limit: 10 }).then((result) => {
+        if (result.error || !result.data?.length) return;
+        setMessages((prev) => {
+          const ids = new Set(prev.map((m) => m.id));
+          const fresh = result.data!.filter((m) => !ids.has(m.id));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      });
+    }, 5000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [conversationId, withResolvedMediaUrl]);
 
@@ -2158,7 +2193,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
             <div>
               <p className="text-sm font-semibold text-foreground">Encaminhar mensagens</p>
               <p className="text-[11px] text-muted-foreground">
-                {forwardMessageIds.size} mensagem{forwardMessageIds.size === 1 ? "" : "s"} e {forwardTargetIds.size} conversa{forwardTargetIds.size === 1 ? "" : "s"} selecionada{forwardTargetIds.size === 1 ? "" : "s"}
+                {forwardMessageIds.size}/10 mensagem{forwardMessageIds.size === 1 ? "" : "s"} · {forwardTargetIds.size}/20 conversa{forwardTargetIds.size === 1 ? "" : "s"}
               </p>
             </div>
             <Button
