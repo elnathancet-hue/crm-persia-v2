@@ -210,6 +210,7 @@ export function ConversationList({
   const [pipelines, setPipelines] = useState<PipelineOption[]>([]);
   const [stages, setStages] = useState<StageOption[]>([]);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedSearchRef = useRef(search);
   const conversationsRef = useRef(conversations);
   const onSelectRef = useRef(onSelect);
@@ -251,6 +252,12 @@ export function ConversationList({
     },
     [orgId, filter]
   );
+
+  // Debounce: agrupa múltiplos eventos realtime em burst num único reload (150ms)
+  const debouncedLoad = useCallback(() => {
+    if (loadDebounceRef.current) clearTimeout(loadDebounceRef.current);
+    loadDebounceRef.current = setTimeout(() => loadConversations(), 150);
+  }, [loadConversations]);
 
   // Load tags and queues from DB
   useEffect(() => {
@@ -321,7 +328,7 @@ export function ConversationList({
               : "Nova mensagem";
             desktopNotifyRef.current(leadName, preview);
           }
-          loadConversations();
+          debouncedLoad();
         }
       )
       .on(
@@ -334,7 +341,7 @@ export function ConversationList({
         },
         () => {
           realtimeWorking = true;
-          loadConversations();
+          debouncedLoad();
         }
       )
       .subscribe((status) => {
@@ -353,7 +360,7 @@ export function ConversationList({
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [orgId, loadConversations]); // selectedId intencionalmente fora: nao e usado no effect
+  }, [orgId, debouncedLoad]); // selectedId intencionalmente fora: nao e usado no effect
 
   // Debounced search (300ms)
   useEffect(() => {

@@ -84,7 +84,6 @@ export function MessageInput({
   onClearReply,
 }: MessageInputProps) {
   const [content, setContent] = useState("");
-  const [sending, setSending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -274,8 +273,8 @@ export function MessageInput({
     }
   };
 
-  const handleSend = async () => {
-    if (sending || disabled) return;
+  const handleSend = () => {
+    if (disabled) return;
 
     // Send media if file is selected
     if (selectedFile) {
@@ -310,66 +309,77 @@ export function MessageInput({
         _localPreview: localPreview,
       });
 
-      try {
-        const formData = new FormData();
-        formData.append("conversationId", conversationId);
-        formData.append("file", file);
-        formData.append("type", mediaType);
-        if (caption) formData.append("caption", caption);
-        if (replyTo?.whatsapp_msg_id) formData.append("replyToWhatsAppMsgId", replyTo.whatsapp_msg_id);
-        if (replyTo?.id) formData.append("replyToMessageId", replyTo.id);
-        const { data, error } = await sendMediaViaWhatsApp(formData);
-        if (data) {
-          onReplaceMessage?.(tempId, data);
-        } else {
+      void (async () => {
+        try {
+          const formData = new FormData();
+          formData.append("conversationId", conversationId);
+          formData.append("file", file);
+          formData.append("type", mediaType);
+          if (caption) formData.append("caption", caption);
+          if (replyTo?.whatsapp_msg_id) formData.append("replyToWhatsAppMsgId", replyTo.whatsapp_msg_id);
+          if (replyTo?.id) formData.append("replyToMessageId", replyTo.id);
+          const { data, error } = await sendMediaViaWhatsApp(formData);
+          if (data) {
+            onReplaceMessage?.(tempId, data);
+          } else {
+            onReplaceMessage?.(tempId, null);
+            toast.error(`Falha ao enviar: ${error}`);
+          }
+        } catch (err) {
           onReplaceMessage?.(tempId, null);
-          toast.error(`Falha ao enviar: ${error}`);
+          toast.error(err instanceof Error ? err.message : "Erro ao processar arquivo");
         }
-      } catch (err) {
-        onReplaceMessage?.(tempId, null);
-        toast.error(err instanceof Error ? err.message : "Erro ao processar arquivo");
-      }
+      })();
 
       textareaRef.current?.focus();
       return;
     }
 
-    // Send text message
+    // Send text message — optimistic: bolha aparece instantaneamente,
+    // envio ao servidor acontece em background. Se falhar, remove a bolha
+    // e restaura o texto para o usuario reenviar.
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    // Optimistic clear: limpa o input imediatamente pra usuario poder
-    // digitar a proxima mensagem sem esperar o round-trip da API.
-    // Se falhar, restaura o texto com toast de erro.
     setContent("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
     onClearReply?.();
 
-    setSending(true);
-    const { data, error } = await sendMessageViaWhatsApp(
-      conversationId,
-      trimmed,
-      {
-        replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
-        replyToMessageId: replyTo?.id ?? undefined,
-      }
-    );
-
-    if (data) {
-      onMessageSent(data);
-    }
-
-    if (error) {
-      toast.error(`Falha ao enviar: ${error}`);
-      setContent(trimmed);
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
-    }
-
-    setSending(false);
-    // requestAnimationFrame garante que o focus acontece DEPOIS que React
-    // flushá o re-render do setSending(false) — evita o browser devolver
-    // foco ao botão Enviar (que acabou de ser re-habilitado).
+    const tempId = `optimistic-${Date.now()}`;
+    onMessageSent({
+      id: tempId,
+      conversation_id: conversationId,
+      organization_id: "",
+      lead_id: "",
+      sender: "agent",
+      sender_user_id: null,
+      content: trimmed,
+      type: "text",
+      media_url: null,
+      media_type: null,
+      whatsapp_msg_id: null,
+      status: "sending",
+      metadata: replyTo
+        ? { reply_to: { id: replyTo.id, whatsapp_msg_id: replyTo.whatsapp_msg_id, sender: replyTo.sender, content: replyTo.content } }
+        : null,
+      created_at: new Date().toISOString(),
+      _optimistic: true,
+      _localPreview: null,
+    });
     requestAnimationFrame(() => textareaRef.current?.focus());
+
+    void sendMessageViaWhatsApp(conversationId, trimmed, {
+      replyToWhatsAppMsgId: replyTo?.whatsapp_msg_id ?? undefined,
+      replyToMessageId: replyTo?.id ?? undefined,
+    }).then(({ data, error }) => {
+      if (data) {
+        onReplaceMessage?.(tempId, data);
+      } else {
+        onReplaceMessage?.(tempId, null);
+        toast.error(`Falha ao enviar: ${error}`);
+        setContent(trimmed);
+      }
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -578,7 +588,7 @@ export function MessageInput({
               type="button"
               variant="ghost"
               size="icon-sm"
-              disabled={disabled || sending}
+              disabled={disabled}
               className="size-10 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-[color:var(--chat-header-fg)]"
               aria-label="Mais opções"
             >
@@ -702,7 +712,7 @@ export function MessageInput({
               className="size-10 shrink-0 rounded-full hover:opacity-90"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
-              {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              <Send className="size-4" />
             </Button>
           </div>
         ) : content.trim() || selectedFile ? (
@@ -711,13 +721,13 @@ export function MessageInput({
             variant="default"
             size="icon-sm"
             onClick={handleSend}
-            disabled={sending || disabled || composerLocked}
+            disabled={disabled || composerLocked}
             title={composerLocked ? "Fora da janela de 24h — use um template" : "Enviar"}
             aria-label="Enviar mensagem"
             className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
             style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
           >
-            {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+            <Send className="size-4" />
           </Button>
         ) : (
           <Button
@@ -725,7 +735,7 @@ export function MessageInput({
             variant="default"
             size="icon-sm"
             onClick={handleStartRecording}
-            disabled={disabled || composerLocked || sending}
+            disabled={disabled || composerLocked}
             aria-label="Gravar áudio"
             className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
             style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}

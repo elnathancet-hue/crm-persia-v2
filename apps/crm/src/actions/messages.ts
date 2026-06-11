@@ -318,24 +318,27 @@ export async function sendMessageViaWhatsApp(
 ): Promise<{ data?: Message; error?: string }> {
   const { supabase, orgId, userId } = await requireRole("agent");
 
-  // 2. Get conversation + lead phone
-  const { data: conversation, error: convError } = await supabase
-    .from("conversations")
-    .select(
-      `
-      id,
-      lead_id,
-      organization_id,
-      channel,
-      leads (
+  // 2+3. Fetch conversation + reply snapshot em paralelo (sem dependência entre eles)
+  const [{ data: conversation, error: convError }, replySnapshot] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select(
+        `
         id,
-        phone
+        lead_id,
+        organization_id,
+        channel,
+        leads (
+          id,
+          phone
+        )
+      `
       )
-    `
-    )
-    .eq("id", conversationId)
-    .eq("organization_id", orgId)
-    .single();
+      .eq("id", conversationId)
+      .eq("organization_id", orgId)
+      .single(),
+    getReplySnapshot(supabase, orgId, conversationId, options?.replyToMessageId),
+  ]);
 
   if (convError || !conversation) {
     return { error: "Conversa nao encontrada" };
@@ -344,14 +347,7 @@ export async function sendMessageViaWhatsApp(
   const lead = (conversation as Record<string, unknown>).leads as Record<string, unknown> | null;
   const phone = lead?.phone as string | null;
 
-  // 3. Save message to DB with status='sending'
   const now = new Date().toISOString();
-  const replySnapshot = await getReplySnapshot(
-    supabase,
-    orgId,
-    conversationId,
-    options?.replyToMessageId,
-  );
 
   const { data: message, error: msgError } = await supabase
     .from("messages")
@@ -374,35 +370,36 @@ export async function sendMessageViaWhatsApp(
     return { error: msgError.message };
   }
 
-  // Update conversation last_message_at and reset unread
-  await supabase
-    .from("conversations")
-    .update({
-      last_message_at: now,
-      unread_count: 0,
-      updated_at: now,
-    })
-    .eq("id", conversationId);
+  // Pré-busca connection em paralelo com side-effects pós-insert
+  // (update conversation + autoPause + markHumanOwned são independentes entre si)
+  const connectionFetch = (phone && conversation.channel === "whatsapp")
+    ? supabase
+        .from("whatsapp_connections")
+        .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+        .eq("organization_id", conversation.organization_id)
+        .eq("status", "connected")
+        .limit(1)
+        .single()
+    : Promise.resolve<{ data: null; error: null }>({ data: null, error: null });
 
-  // PR-AI-AGENT-HUMAN-A: humano respondeu via /chat → pausa agente
-  // nativo (best-effort). Nao bloqueia envio se falhar.
-  await autoPauseNativeAgent(supabase, conversation.organization_id, conversationId);
-  await markConversationHumanOwnedAfterOperatorReply(
-    supabase,
-    conversation.organization_id,
-    conversationId,
-    userId,
-  );
+  // PR-AI-AGENT-HUMAN-A: side-effects pós-insert em paralelo
+  await Promise.all([
+    supabase
+      .from("conversations")
+      .update({ last_message_at: now, unread_count: 0, updated_at: now })
+      .eq("id", conversationId),
+    autoPauseNativeAgent(supabase, conversation.organization_id, conversationId),
+    markConversationHumanOwnedAfterOperatorReply(
+      supabase,
+      conversation.organization_id,
+      conversationId,
+      userId,
+    ),
+  ]);
 
-  // 4. Send via WhatsApp, propagating errors to the UI
+  // Send via WhatsApp
   if (phone && conversation.channel === "whatsapp") {
-    const { data: connection } = await supabase
-      .from("whatsapp_connections")
-      .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
-      .eq("organization_id", conversation.organization_id)
-      .eq("status", "connected")
-      .limit(1)
-      .single();
+    const { data: connection } = await connectionFetch;
 
     if (!connection) {
       await supabase.from("messages").update({ status: "failed" }).eq("id", message.id);
