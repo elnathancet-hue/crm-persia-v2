@@ -5,18 +5,32 @@ import { ConversationList } from "@/components/chat/conversation-list";
 import { ChatWindow } from "@/components/chat/chat-window";
 import { useOrganization } from "@/lib/hooks/use-organization";
 import { Loader2 } from "lucide-react";
+import type { ConversationWithLead } from "@/actions/conversations";
 
 interface ChatPageClientProps {
   initialConversationId?: string | null;
+  /** Passado pelo page.tsx SSR — elimina o spinner do useOrganization */
+  orgId?: string;
+  initialConversations?: ConversationWithLead[];
 }
 
-export function ChatPageClient({ initialConversationId = null }: ChatPageClientProps) {
+export function ChatPageClient({
+  initialConversationId = null,
+  orgId: propOrgId,
+  initialConversations,
+}: ChatPageClientProps) {
+  // useOrganization ainda roda para casos sem SSR (fallback) e para ter
+  // acesso ao objeto organization completo caso necessário no futuro.
   const { organization, loading } = useOrganization();
+
+  const effectiveOrgId = propOrgId ?? organization?.id;
+
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(initialConversationId);
 
-  if (loading) {
+  // Só bloqueia se não tiver orgId do servidor (fallback sem SSR).
+  if (!propOrgId && loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="size-6 animate-spin text-primary" />
@@ -24,7 +38,7 @@ export function ChatPageClient({ initialConversationId = null }: ChatPageClientP
     );
   }
 
-  if (!organization) {
+  if (!effectiveOrgId) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         Organização não encontrada
@@ -43,9 +57,10 @@ export function ChatPageClient({ initialConversationId = null }: ChatPageClientP
         }
       >
         <ConversationList
-          orgId={organization.id}
+          orgId={effectiveOrgId}
           selectedId={selectedConversationId}
           onSelect={setSelectedConversationId}
+          initialConversations={initialConversations}
         />
       </div>
 
@@ -59,7 +74,7 @@ export function ChatPageClient({ initialConversationId = null }: ChatPageClientP
       >
         <ChatWindow
           conversationId={selectedConversationId}
-          orgId={organization.id}
+          orgId={effectiveOrgId}
           onBack={() => setSelectedConversationId(null)}
         />
       </div>

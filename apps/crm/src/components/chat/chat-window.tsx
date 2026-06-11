@@ -1049,6 +1049,19 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         const page = normalizeMessagesPage(msgResult.data);
         setMessages(page.messages);
         setHasMoreMessages(page.hasMore);
+        // Resolve URLs chat-media: em background — chat fica interativo imediatamente.
+        const toResolve = page.messages.filter((m) => shouldResolveMediaUrl(m.media_url));
+        if (toResolve.length > 0 && !cancelled) {
+          Promise.all(toResolve.map((m) => withResolvedMediaUrl(m)))
+            .then((resolved) => {
+              if (cancelled) return;
+              setMessages((prev) => {
+                const byId = new Map(resolved.map((r) => [r.id, r]));
+                return prev.map((m) => byId.get(m.id) ?? m);
+              });
+            })
+            .catch(() => {}); // best-effort
+        }
       }
       setLoading(false);
 
@@ -1097,6 +1110,18 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
           const older = page.messages.filter((message) => !existingIds.has(message.id));
           return [...older, ...prev];
         });
+        // Resolve mídia das mensagens mais antigas em background.
+        const toResolveOlder = page.messages.filter((m) => shouldResolveMediaUrl(m.media_url));
+        if (toResolveOlder.length > 0) {
+          Promise.all(toResolveOlder.map((m) => withResolvedMediaUrl(m)))
+            .then((resolved) => {
+              setMessages((prev) => {
+                const byId = new Map(resolved.map((r) => [r.id, r]));
+                return prev.map((m) => byId.get(m.id) ?? m);
+              });
+            })
+            .catch(() => {}); // best-effort
+        }
         shouldAutoScroll.current = false;
         window.requestAnimationFrame(() => {
           if (!scrollEl) return;

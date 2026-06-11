@@ -83,6 +83,8 @@ export type ConversationWithLead = {
   ai_summary: string | null;
   unread_count: number;
   last_message_at: string | null;
+  last_message_content: string | null;
+  last_message_sender: string | null;
   closed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -98,6 +100,7 @@ export type ConversationWithLead = {
       tags: { id: string; name: string; color: string | null } | null;
     }>;
   };
+  /** Computed from last_message_content/sender/at — kept for UI compat */
   last_message?: {
     content: string | null;
     sender: string;
@@ -118,7 +121,9 @@ export async function getConversations(
   let query = supabase
     .from("conversations")
     .select(`
-      *,
+      id, organization_id, lead_id, channel, status, assigned_to, queue_id,
+      ai_summary, unread_count, last_message_at, last_message_content,
+      last_message_sender, closed_at, created_at, updated_at,
       leads!inner (
         id,
         name,
@@ -201,33 +206,20 @@ export async function getConversations(
     return { data: null, error: error.message };
   }
 
-  const conversationIds = (data || []).map((c: any) => c.id);
-
-  if (conversationIds.length > 0) {
-    const { data: messages } = await supabase
-      .from("messages")
-      .select("conversation_id, content, sender, created_at")
-      .in("conversation_id", conversationIds)
-      .order("created_at", { ascending: false });
-
-    const lastMessages = new Map<string, any>();
-    if (messages) {
-      for (const msg of messages) {
-        if (!lastMessages.has(msg.conversation_id)) {
-          lastMessages.set(msg.conversation_id, msg);
+  // Monta last_message a partir das colunas desnormalizadas (migration 117).
+  // Elimina a query secundária unbounded que buscava TODAS as msgs de todas as convs.
+  const enriched = (data || []).map((conv: any) => ({
+    ...conv,
+    last_message: conv.last_message_content != null || conv.last_message_sender != null
+      ? {
+          content: conv.last_message_content ?? null,
+          sender: conv.last_message_sender ?? "lead",
+          created_at: conv.last_message_at ?? conv.updated_at,
         }
-      }
-    }
+      : null,
+  }));
 
-    const enriched = (data || []).map((conv: any) => ({
-      ...conv,
-      last_message: lastMessages.get(conv.id) || null,
-    }));
-
-    return { data: enriched as ConversationWithLead[], error: null };
-  }
-
-  return { data: (data || []) as ConversationWithLead[], error: null };
+  return { data: enriched as ConversationWithLead[], error: null };
 }
 
 export async function getConversation(id: string) {

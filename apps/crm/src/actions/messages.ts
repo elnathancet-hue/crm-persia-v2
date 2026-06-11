@@ -216,12 +216,10 @@ export async function getMessages(
     return { data: null, error: error.message };
   }
 
-  // Return in chronological order
+  // Retorna em ordem cronológica.
+  // URLs chat-media: resolvidas lazily no cliente (chat-window) para não bloquear no signing.
   const sorted = (data || []).reverse();
-  const admin = createAdminClient();
-  const signedMessages = await withSignedChatMediaUrls(admin, sorted as Message[]);
-
-  return { data: signedMessages, error: null };
+  return { data: sorted as Message[], error: null };
 }
 
 export async function resolveMessageMediaUrl(

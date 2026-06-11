@@ -172,6 +172,8 @@ type ConversationListProps = {
   orgId: string;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Dados prefetchados pelo page.tsx SSR — evita spinner inicial */
+  initialConversations?: ConversationWithLead[];
 };
 
 function WhatsAppIcon({ className }: { className?: string }) {
@@ -186,13 +188,15 @@ export function ConversationList({
   orgId,
   selectedId,
   onSelect,
+  initialConversations,
 }: ConversationListProps) {
   const [conversations, setConversations] = useState<ConversationWithLead[]>(
-    []
+    initialConversations ?? []
   );
   const [filter, setFilter] = useState<ConversationFilter>("all");
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  // Se temos dados SSR, não mostra spinner: lista já está visível.
+  const [loading, setLoading] = useState(!initialConversations);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
