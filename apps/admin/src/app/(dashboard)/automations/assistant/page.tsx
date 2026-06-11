@@ -81,12 +81,12 @@ export default function AssistantPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => { setEditingId(a.id); setShowModal(true); }} aria-label="Editar" className="text-muted-foreground/60 hover:text-foreground p-1"><Pencil className="size-3.5" /></button>
-                    <button onClick={() => { if (confirm("Excluir?")) { deleteAssistant(a.id); load(); } }} aria-label="Excluir" className="text-muted-foreground/60 hover:text-red-500 p-1"><Trash2 className="size-3.5" /></button>
+                    <button onClick={() => { if (confirm("Excluir?")) { void deleteAssistant(a.id).then(() => load()); } }} aria-label="Excluir" className="text-muted-foreground/60 hover:text-red-500 p-1"><Trash2 className="size-3.5" /></button>
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-xs text-muted-foreground">Tom: {TONES.find(t => t.value === a.tone)?.label || a.tone}</span>
-                  <button onClick={() => { toggleAssistant(a.id, !a.is_active); load(); }} className={`text-xs px-2 py-0.5 rounded-full ${a.is_active ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
+                  <button onClick={() => { void toggleAssistant(a.id, !a.is_active).then(() => load()); }} className={`text-xs px-2 py-0.5 rounded-full ${a.is_active ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
                     {a.is_active ? "Ativo" : "Inativo"}
                   </button>
                 </div>

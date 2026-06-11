@@ -7,6 +7,7 @@ import { createOrganization, deleteOrganization } from "@/actions/admin";
 import { useFocusTrap } from "@/lib/hooks/use-focus-trap";
 import { useEscapeKey } from "@/lib/hooks/use-escape-key";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@persia/ui/alert-dialog";
 
 interface Org { id: string; name: string; niche: string | null; plan: string; category: string | null; created_at: string; organization_members: { count: number }[] }
 
@@ -38,6 +39,8 @@ export function ClientsList({ initialOrgs }: { initialOrgs: Org[] }) {
   const [cpfCnpj, setCpfCnpj] = React.useState("");
   const [services, setServices] = React.useState<Record<string, boolean>>(SERVICES_DEFAULTS);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = React.useState<{ id: string; name: string } | null>(null);
+  const [confirmInput, setConfirmInput] = React.useState("");
 
   const focusTrapRef = useFocusTrap(createOpen);
   useEscapeKey(createOpen, React.useCallback(() => setCreateOpen(false), []));
@@ -66,9 +69,19 @@ export function ClientsList({ initialOrgs }: { initialOrgs: Org[] }) {
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Erro"); } finally { setSaving(false); }
   }
 
-  async function handleDelete(id: string, orgName: string) {
-    if (!confirm(`Excluir "${orgName}" e TODOS os dados?`)) return;
-    try { await deleteOrganization(id); setOrgs((prev) => prev.filter((o) => o.id !== id)); toast.success("Removido"); } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Erro"); }
+  function handleDelete(id: string, orgName: string) {
+    setDeleteTarget({ id, name: orgName });
+    setConfirmInput("");
+  }
+
+  async function executeDelete() {
+    if (!deleteTarget || confirmInput !== deleteTarget.name) return;
+    try {
+      await deleteOrganization(deleteTarget.id);
+      setOrgs((prev) => prev.filter((o) => o.id !== deleteTarget.id));
+      toast.success("Removido");
+    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Erro"); }
+    finally { setDeleteTarget(null); setConfirmInput(""); }
   }
 
   const filtered = orgs.filter((o) => !search || o.name.toLowerCase().includes(search.toLowerCase()));
@@ -191,6 +204,37 @@ export function ClientsList({ initialOrgs }: { initialOrgs: Org[] }) {
             </div>
           </div>
         </div>
+      )}
+
+      {deleteTarget && (
+        <AlertDialog open onOpenChange={(open) => { if (!open) { setDeleteTarget(null); setConfirmInput(""); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir &ldquo;{deleteTarget.name}&rdquo;?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Esta ação remove <strong>TODOS os dados</strong> desta organização e não pode ser desfeita.{" "}
+                Digite <strong>{deleteTarget.name}</strong> para confirmar:
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <input
+              value={confirmInput}
+              onChange={(e) => setConfirmInput(e.target.value)}
+              placeholder={deleteTarget.name}
+              className="w-full h-9 rounded-md border border-border bg-muted px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              autoFocus
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={confirmInput !== deleteTarget.name}
+                onClick={executeDelete}
+                className="bg-destructive text-white hover:bg-destructive/90 disabled:opacity-40"
+              >
+                Excluir permanentemente
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </>
   );
