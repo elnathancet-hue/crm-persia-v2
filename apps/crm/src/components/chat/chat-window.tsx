@@ -1766,9 +1766,17 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   const hasReactions = msgReactions.length > 0;
                   const canModify = !isLead && !!msg.whatsapp_msg_id && msg.status !== "deleted";
 
-                  // Controls: 😊 + ⌄ — shown on group-hover
+                  // Controls: ↩ + 😊 + ⌄ — shown on group-hover, aligned to top of bubble
                   const msgControls = (
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-end mb-1">
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-start mt-1">
+                      {/* Reply button — visible on hover like WhatsApp */}
+                      <button
+                        onClick={() => setReplyTo(msg)}
+                        className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
+                        title="Responder"
+                      >
+                        <Reply className="size-4" />
+                      </button>
                       {/* Reaction picker trigger */}
                       <div className="relative">
                         <button
@@ -1922,8 +1930,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                         </div>
                       )}
 
-                      {/* Hover controls */}
-                      {msgControls}
+                      {/* Hover controls — agent: before bubble (flex-row-reverse puts it right) */}
+                      {!isLead && msgControls}
 
                       {/* Bubble column */}
                       <div className={cn("flex flex-col gap-0.5", isLead ? "items-start" : "items-end")}>
@@ -2228,6 +2236,8 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                           )}
                         </div>
                       </div>
+                      {/* Hover controls — lead: after bubble (flex-row puts it to the right) */}
+                      {isLead && msgControls}
                     </div>
                   );
                 })()}

@@ -170,22 +170,37 @@ async function markConversationHumanOwnedAfterOperatorReply(
   userId: string,
 ): Promise<void> {
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from("conversations")
-    .update({
-      assigned_to: userId,
-      status: "waiting_human",
-      updated_at: now,
-    })
-    .eq("id", conversationId)
-    .eq("organization_id", orgId)
-    .eq("assigned_to", "ai");
-
-  if (error) {
+  const [r1, r2] = await Promise.all([
+    // Case 1: IA estava respondendo → agente assume e marca como ativo
+    supabase
+      .from("conversations")
+      .update({ assigned_to: userId, status: "active", updated_at: now })
+      .eq("id", conversationId)
+      .eq("organization_id", orgId)
+      .eq("assigned_to", "ai"),
+    // Case 2: Conversa estava aguardando resposta humana → agente respondeu, limpa status
+    supabase
+      .from("conversations")
+      .update({ status: "active", updated_at: now })
+      .eq("id", conversationId)
+      .eq("organization_id", orgId)
+      .eq("status", "waiting_human")
+      .neq("assigned_to", "ai"),
+  ]);
+  if (r1.error) {
     logError("mark_conversation_human_owned_after_operator_reply_failed", {
       organization_id: orgId,
       conversation_id: conversationId,
-      error: errorMessage(error),
+      case: "ai_handoff",
+      error: errorMessage(r1.error),
+    });
+  }
+  if (r2.error) {
+    logError("mark_conversation_human_owned_after_operator_reply_failed", {
+      organization_id: orgId,
+      conversation_id: conversationId,
+      case: "clear_waiting",
+      error: errorMessage(r2.error),
     });
   }
 }
