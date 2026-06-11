@@ -5,6 +5,9 @@ import { withAuditedAdmin } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 import { FULL_PERMISSIONS, type OrgPermissions } from "@/lib/permissions";
 
+const ALLOWED_ROLES = ["admin", "agent", "viewer"] as const;
+type AllowedRole = typeof ALLOWED_ROLES[number];
+
 export async function createTeamMember(data: {
   firstName: string;
   lastName: string;
@@ -15,6 +18,9 @@ export async function createTeamMember(data: {
   permissions?: OrgPermissions;
 }) {
   const { orgId, userId } = await requireRole("admin");
+  if (!ALLOWED_ROLES.includes(data.role as AllowedRole)) {
+    throw new Error(`Role invalida: ${data.role}`);
+  }
 
   const result = await withAuditedAdmin(
     {
@@ -75,6 +81,9 @@ export async function createTeamMember(data: {
 
 export async function updateMemberRole(memberId: string, role: string) {
   const { orgId, userId } = await requireRole("admin");
+  if (!ALLOWED_ROLES.includes(role as AllowedRole)) {
+    throw new Error(`Role invalida: ${role}`);
+  }
 
   await withAuditedAdmin(
     {

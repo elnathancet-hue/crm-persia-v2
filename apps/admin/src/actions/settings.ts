@@ -367,7 +367,7 @@ export async function getWhatsAppStatus() {
   const { admin, orgId } = await requireSuperadminForOrg();
   const { data: connection } = await admin.from("whatsapp_connections").select("id, provider, instance_url, instance_token, phone_number, status").eq("organization_id", orgId).limit(1).single();
 
-  if (!connection) return { status: "not_configured", phone: null, instanceUrl: null };
+  if (!connection) return { status: "not_configured", phone: null };
 
   try {
     const provider = createProvider(connection);
@@ -390,10 +390,9 @@ export async function getWhatsAppStatus() {
     return {
       status: isConnected ? "connected" : "disconnected",
       phone: connection.phone_number,
-      instanceUrl: connection.instance_url,
     };
   } catch {
-    return { status: "unreachable", phone: connection.phone_number, instanceUrl: connection.instance_url };
+    return { status: "unreachable", phone: connection.phone_number };
   }
 }
 

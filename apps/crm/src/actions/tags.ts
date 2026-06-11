@@ -44,16 +44,14 @@ function makeOnLeadChanged(orgId: string) {
 // Queries
 // ============================================================================
 
-export async function getTags(orgId?: string) {
-  const ctx = await requireRole("agent");
-  const resolvedOrgId = orgId || ctx.orgId;
-  return listTags({ db: ctx.supabase, orgId: resolvedOrgId });
+export async function getTags() {
+  const { supabase, orgId } = await requireRole("agent");
+  return listTags({ db: supabase, orgId });
 }
 
-export async function getTagsWithCount(orgId?: string) {
-  const ctx = await requireRole("agent");
-  const resolvedOrgId = orgId || ctx.orgId;
-  return listTagsWithCount({ db: ctx.supabase, orgId: resolvedOrgId });
+export async function getTagsWithCount() {
+  const { supabase, orgId } = await requireRole("agent");
+  return listTagsWithCount({ db: supabase, orgId });
 }
 
 export async function getLeadTags(leadId: string) {

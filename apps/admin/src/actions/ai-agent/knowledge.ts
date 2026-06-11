@@ -199,6 +199,10 @@ export async function createDocument(
     const normalized = normalizeDocumentInput(input);
     await assertConfigBelongsToOrg(db, orgId, normalized.config_id);
 
+    if (!normalized.storage_path.startsWith(`${orgId}/`)) {
+      throw new Error("storage_path invalido: deve pertencer ao org atual");
+    }
+
     const metadata: KnowledgeSourceMetadata = {
       storage_path: normalized.storage_path,
       mime_type: normalized.mime_type,

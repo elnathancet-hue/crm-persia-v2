@@ -93,6 +93,7 @@ export async function updateCampaignStatus(campaignId: string, status: string) {
         .from("wa_templates")
         .select("status, name")
         .eq("id", campaign.template_id)
+        .eq("organization_id", orgId)
         .maybeSingle();
       if (!tpl || tpl.status !== "APPROVED") {
         return { error: `Template ${tpl?.name ?? ""} nao esta APPROVED (status atual: ${tpl?.status ?? "nao encontrado"}). Selecione outro template antes de ativar.` };

@@ -135,7 +135,11 @@ export async function duplicateFlow(id: string) {
 export async function deleteFlow(id: string) {
   const { supabase, orgId } = await requireRole("admin");
 
-  await supabase.from("flow_executions").delete().eq("flow_id", id);
+  // Validate ownership before touching any data.
+  const { data: flow } = await supabase.from("flows").select("id").eq("id", id).eq("organization_id", orgId).single();
+  if (!flow) throw new Error("Fluxo nao encontrado");
+
+  await supabase.from("flow_executions").delete().eq("flow_id", id).eq("organization_id", orgId);
   const { error } = await supabase.from("flows").delete().eq("id", id).eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);

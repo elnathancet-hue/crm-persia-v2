@@ -20,14 +20,13 @@ export async function getAssistants() {
 }
 
 // ---- Get single assistant (first one, for backward compat) ----
-export async function getAssistant(orgId?: string) {
-  const ctx = await requireRole("admin");
-  const resolvedOrgId = orgId || ctx.orgId;
+export async function getAssistant() {
+  const { supabase, orgId } = await requireRole("admin");
 
-  const { data, error } = await ctx.supabase
+  const { data, error } = await supabase
     .from("ai_assistants")
     .select("*")
-    .eq("organization_id", resolvedOrgId)
+    .eq("organization_id", orgId)
     .order("created_at", { ascending: true })
     .limit(1)
     .single();

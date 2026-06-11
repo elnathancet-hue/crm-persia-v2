@@ -76,7 +76,11 @@ export async function updateEmailCampaignStatus(id: string, status: string) {
 export async function deleteEmailCampaign(id: string) {
   const { supabase, orgId } = await requireRole("admin");
 
-  await supabase.from("email_sends").delete().eq("campaign_id", id);
+  // Validate ownership before touching any data.
+  const { data: campaign } = await supabase.from("email_campaigns").select("id").eq("id", id).eq("organization_id", orgId).single();
+  if (!campaign) throw new Error("Campanha nao encontrada");
+
+  await supabase.from("email_sends").delete().eq("campaign_id", id).eq("organization_id", orgId);
   const { error } = await supabase.from("email_campaigns").delete().eq("id", id).eq("organization_id", orgId);
 
   if (error) throw new Error(error.message);
