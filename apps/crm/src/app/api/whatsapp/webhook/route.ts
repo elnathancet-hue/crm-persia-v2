@@ -369,6 +369,15 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Build rich metadata for location and document messages so the UI
+        // can render map links and correct filenames.
+        const groupMsgMetadata: Record<string, unknown> | null =
+          msg.type === "location" && (msg.latitude != null || msg.longitude != null)
+            ? { latitude: msg.latitude, longitude: msg.longitude, name: msg.locationName ?? null, address: msg.locationAddress ?? null }
+            : msg.type === "document" && msg.mediaFileName
+              ? { file_name: msg.mediaFileName }
+              : null;
+
         await supabase.from("group_messages").insert({
           organization_id: matchedConn.organization_id,
           group_id: grp.id,
@@ -384,6 +393,7 @@ export async function POST(request: NextRequest) {
           whatsapp_msg_id: msg.messageId || null,
           media_type: msg.type && msg.type !== "text" ? msg.type : null,
           media_url: msg.mediaUrl || null,
+          metadata: groupMsgMetadata,
           created_at: messageCreatedAt,
         } as never);
 

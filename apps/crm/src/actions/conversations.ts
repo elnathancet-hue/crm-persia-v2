@@ -145,7 +145,9 @@ export async function getConversations(
   if (filter === "ai") {
     query = query.eq("assigned_to", "ai");
   } else if (filter === "waiting_human") {
-    query = query.eq("status", "waiting_human");
+    // Só mostra conversas onde o lead ainda aguarda resposta (unread > 0).
+    // Conversas já respondidas ficam com unread_count = 0 e saem do filtro.
+    query = query.eq("status", "waiting_human").gt("unread_count", 0);
   }
 
   if (search) {

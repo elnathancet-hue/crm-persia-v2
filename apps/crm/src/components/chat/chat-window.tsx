@@ -2089,19 +2089,26 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   </a>
                                 ) : null
                               )}
-                              {msg.type === "location" && Boolean(msg.metadata) && (
-                                <div className="flex flex-col gap-1 mb-1">
-                                  <a
-                                    href={`https://maps.google.com/?q=${(msg.metadata as any).latitude},${(msg.metadata as any).longitude}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-[13px] font-medium text-destructive hover:underline"
-                                  >
+                              {msg.type === "location" && (
+                                (msg.metadata as any)?.latitude != null ? (
+                                  <div className="flex flex-col gap-1 mb-1">
+                                    <a
+                                      href={`https://maps.google.com/?q=${(msg.metadata as any).latitude},${(msg.metadata as any).longitude}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 text-[13px] font-medium text-destructive hover:underline"
+                                    >
+                                      <MapPin className="size-4" />
+                                      {(msg.metadata as any).name || "Localização"}
+                                    </a>
+                                    {(msg.metadata as any).address && <p className="text-[11px] opacity-80">{(msg.metadata as any).address as string}</p>}
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 mb-1 text-[13px] font-medium">
                                     <MapPin className="size-4" />
-                                    {(msg.metadata as any).name || "Localização"}
-                                  </a>
-                                  {(msg.metadata as any).address && <p className="text-[11px] opacity-80">{(msg.metadata as any).address as string}</p>}
-                                </div>
+                                    <span>{msg.content || "Localização"}</span>
+                                  </div>
+                                )
                               )}
                               {msg.type === "contact" && Boolean(msg.metadata) && (
                                 <div className="flex items-center gap-2 mb-1 p-2 bg-black/5 rounded-md">

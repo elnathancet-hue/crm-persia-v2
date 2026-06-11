@@ -423,13 +423,29 @@ export class UazapiAdapter implements WhatsAppProvider {
     let locationName: string | undefined;
     let locationAddress: string | undefined;
     if (type === "location") {
-      const lat = raw.latitude ?? (raw.location as Record<string, unknown> | undefined)?.latitude;
-      const lng = raw.longitude ?? (raw.location as Record<string, unknown> | undefined)?.longitude;
-      if (typeof lat === "number") latitude = lat;
-      if (typeof lng === "number") longitude = lng;
-      const nameRaw = raw.name ?? (raw.location as Record<string, unknown> | undefined)?.name;
+      // UAZAPI v2 sends location in multiple shapes depending on version:
+      //  (a) root-level: { latitude, longitude, name, address }
+      //  (b) root-level degrees: { degreesLatitude, degreesLongitude }
+      //  (c) nested: { message: { locationMessage: { degreesLatitude, degreesLongitude, name, address } } }
+      //  (d) nested: { location: { latitude, longitude } }
+      // Values may be numbers or numeric strings — normalise to number.
+      const locMsg = (
+        (raw.message as Record<string, unknown> | undefined)
+          ?.locationMessage
+      ) as Record<string, unknown> | undefined;
+      const locObj = raw.location as Record<string, unknown> | undefined;
+
+      const latRaw = raw.latitude ?? raw.degreesLatitude ?? locObj?.latitude ?? locMsg?.degreesLatitude ?? locMsg?.latitude;
+      const lngRaw = raw.longitude ?? raw.degreesLongitude ?? locObj?.longitude ?? locMsg?.degreesLongitude ?? locMsg?.longitude;
+
+      if (typeof latRaw === "number") latitude = latRaw;
+      else if (typeof latRaw === "string" && latRaw) { const n = Number(latRaw); if (!isNaN(n)) latitude = n; }
+      if (typeof lngRaw === "number") longitude = lngRaw;
+      else if (typeof lngRaw === "string" && lngRaw) { const n = Number(lngRaw); if (!isNaN(n)) longitude = n; }
+
+      const nameRaw = raw.name ?? locObj?.name ?? locMsg?.name;
       if (typeof nameRaw === "string" && nameRaw) locationName = nameRaw;
-      const addrRaw = raw.address ?? (raw.location as Record<string, unknown> | undefined)?.address;
+      const addrRaw = raw.address ?? locObj?.address ?? locMsg?.address;
       if (typeof addrRaw === "string" && addrRaw) locationAddress = addrRaw;
     }
 

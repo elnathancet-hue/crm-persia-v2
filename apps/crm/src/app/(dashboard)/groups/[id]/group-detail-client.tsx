@@ -18,6 +18,7 @@ import {
   ImageIcon,
   Link2,
   Loader2,
+  MapPin,
   Megaphone,
   MessageCircle,
   MessageSquare,
@@ -196,6 +197,7 @@ interface GroupMessage {
   whatsapp_msg_id: string | null;
   reply_to_whatsapp_msg_id: string | null;
   is_pinned?: boolean;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
   /** Mensagem enviada localmente antes da confirmação do servidor */
   _optimistic?: boolean;
@@ -1183,12 +1185,33 @@ export function GroupDetailClient({
                           ) : msg.media_url ? (
                             <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-2.5 pt-2 hover:underline">
                               <File className="size-5 text-muted-foreground shrink-0" />
-                              <span className="text-[13px] truncate max-w-[180px]">Abrir documento</span>
+                              <span className="text-[13px] truncate max-w-[180px]">{(msg.metadata as any)?.file_name || msg.text || "Documento"}</span>
                             </a>
                           ) : (
                             <div className="flex items-center gap-2 px-2.5 pt-2">
                               <File className="size-5 text-muted-foreground" />
-                              <span className="text-[13px] text-muted-foreground">Documento</span>
+                              <span className="text-[13px] text-muted-foreground">{(msg.metadata as any)?.file_name || msg.text || "Documento"}</span>
+                            </div>
+                          )
+                        )}
+                        {msg.media_type === "location" && (
+                          (msg.metadata as any)?.latitude != null ? (
+                            <div className="flex flex-col gap-1 px-2.5 pt-2 mb-1">
+                              <a
+                                href={`https://maps.google.com/?q=${(msg.metadata as any).latitude},${(msg.metadata as any).longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-[13px] font-medium text-destructive hover:underline"
+                              >
+                                <MapPin className="size-4" />
+                                {(msg.metadata as any).name || "Localização"}
+                              </a>
+                              {(msg.metadata as any).address && <p className="text-[11px] opacity-80">{(msg.metadata as any).address as string}</p>}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 px-2.5 pt-2 mb-1 text-[13px] font-medium">
+                              <MapPin className="size-4" />
+                              <span>{msg.text || "Localização"}</span>
                             </div>
                           )
                         )}
