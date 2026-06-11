@@ -87,8 +87,9 @@ export function useDialogMutation<TInput, TOutput = unknown>(
   const [pending, startTransition] = useTransition();
 
   const run = useCallback(
-    (input: TInput) =>
-      new Promise<ActionResult<TOutput>>((resolve) => {
+    (input: TInput) => {
+      if (pending) return Promise.resolve({ error: "Aguarde..." } as ActionResult<TOutput>);
+      return new Promise<ActionResult<TOutput>>((resolve) => {
         startTransition(async () => {
           let result: ActionResult<TOutput>;
           try {
@@ -141,8 +142,9 @@ export function useDialogMutation<TInput, TOutput = unknown>(
 
           resolve(result);
         });
-      }),
-    [mutation, onOpenChange, successToast, errorToast, onSuccess, onError, toastId],
+      });
+    },
+    [pending, mutation, onOpenChange, successToast, errorToast, onSuccess, onError, toastId],
   );
 
   return { run, pending };
