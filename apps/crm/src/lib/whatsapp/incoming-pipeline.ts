@@ -339,13 +339,42 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
   // do segundo INSERT mata o request e o usuário não recebe resposta.
   // Build structured metadata for rich message types (location, contact)
   let incomingMetadata: Record<string, unknown> | null = null;
-  if (msg.type === "location" && (msg.latitude != null || msg.longitude != null)) {
+  if (msg.type === "location") {
+    const lat = msg.latitude ?? null;
+    const lng = msg.longitude ?? null;
     incomingMetadata = {
-      latitude: msg.latitude,
-      longitude: msg.longitude,
+      latitude: lat,
+      longitude: lng,
       name: msg.locationName ?? null,
       address: msg.locationAddress ?? null,
     };
+    // Reverse geocoding via Nominatim quando UAZAPI não envia name/address
+    if (!incomingMetadata.name && !incomingMetadata.address && lat != null && lng != null) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+          {
+            headers: {
+              "User-Agent": "Persia-CRM/1.0",
+              "Accept-Language": "pt-BR,pt;q=0.9",
+            },
+            signal: controller.signal,
+          }
+        );
+        clearTimeout(timer);
+        if (geoRes.ok) {
+          const geo = (await geoRes.json()) as Record<string, unknown>;
+          if (typeof geo.name === "string" && geo.name) incomingMetadata.name = geo.name;
+          if (typeof geo.display_name === "string" && geo.display_name) {
+            incomingMetadata.address = geo.display_name;
+          }
+        }
+      } catch {
+        // Geocoding falhou — coordenadas ainda disponíveis para o mapa
+      }
+    }
   } else if (msg.type === "contact" && msg.contactName) {
     incomingMetadata = {
       fullName: msg.contactName,
@@ -362,9 +391,10 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     organization_id: orgId,
     conversation_id: conversation.id,
     lead_id: lead.id,
-    // Localização não tem conteúdo de texto útil — o texto vindo do UAZAPI
-    // ("Localização", "📍 Localização") seria exibido junto ao card visual.
-    content: msg.type === "location" ? null : msg.text,
+    // Localização: content fixo "📍 Localização" → trigger 117 copia pra
+    // last_message_content → aparece no preview da lista. O chat-window suprime
+    // este texto ao renderizar o card visual (guard msg.type !== "location").
+    content: msg.type === "location" ? "📍 Localização" : msg.text,
     sender: "lead",
     type: msg.type,
     whatsapp_msg_id: msg.messageId,

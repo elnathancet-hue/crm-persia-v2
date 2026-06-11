@@ -2202,7 +2202,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                           {locName || (hasCoords ? `${lat!.toFixed(4)}, ${lng!.toFixed(4)}` : "Localização")}
                                         </p>
                                         {locAddr && (
-                                          <p className="truncate text-[10px] text-muted-foreground">{locAddr}</p>
+                                          <p className="line-clamp-2 text-[10px] text-muted-foreground leading-tight">{locAddr}</p>
                                         )}
                                       </div>
                                     </div>
