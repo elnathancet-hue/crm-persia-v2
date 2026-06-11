@@ -1029,9 +1029,11 @@ export function jidToPhone(jid: string): string {
 }
 
 /**
- * Converts phone to JID format
+ * Converts phone to JID format.
+ * If the input already contains '@' (e.g. @g.us group JID), returns as-is.
  */
 export function phoneToJid(phone: string): string {
+  if (phone.includes("@")) return phone;
   const clean = phone.replace(/\D/g, "");
   return `${clean}@s.whatsapp.net`;
 }

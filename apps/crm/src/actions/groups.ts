@@ -442,7 +442,7 @@ export async function updateGroup(
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   const jid = group.group_jid as string;
 
@@ -486,7 +486,7 @@ export async function getInviteLink(id: string) {
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   if (group.invite_link) return group.invite_link as string;
 
@@ -513,7 +513,7 @@ export async function resetInviteLink(id: string) {
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   const link = await provider.resetGroupInviteLink(group.group_jid as string);
 
@@ -563,7 +563,7 @@ export async function leaveGroup(id: string) {
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   await provider.leaveGroup(group.group_jid as string);
 
@@ -588,7 +588,7 @@ export async function getGroupParticipants(id: string) {
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   const info = await provider.getGroupInfo(group.group_jid as string, { force: true });
   return info.participants;
@@ -713,7 +713,7 @@ export async function manageParticipants(
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   const results = await provider.updateGroupParticipants(group.group_jid as string, action, phones);
   revalidatePath("/groups");
@@ -733,7 +733,7 @@ export async function sendInviteToLead(groupId: string, leadId: string) {
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   // Get lead
   const { data: lead } = await supabase
@@ -796,7 +796,7 @@ export async function sendMessageToGroup(
       .eq("organization_id", orgId)
       .single();
 
-    if (!group) return { sent: false, error: "Grupo nao encontrado" };
+    if (!group) return { sent: false, error: "Grupo não encontrado" };
 
     const result = await provider.sendText({
       phone: group.group_jid,
@@ -804,7 +804,7 @@ export async function sendMessageToGroup(
       replyTo: replyToWamid || undefined,
     });
 
-    await (supabase as any).from("group_messages").insert({
+    const { data: inserted } = await (supabase as any).from("group_messages").insert({
       organization_id: orgId,
       group_id: groupId,
       direction: "outbound",
@@ -812,9 +812,13 @@ export async function sendMessageToGroup(
       sender_name: null,
       whatsapp_msg_id: result.messageId || null,
       reply_to_whatsapp_msg_id: replyToWamid || null,
-    });
+    }).select(
+      "id, direction, text, sender_name, sender_jid, sender_phone, sender_lead_id, " +
+      "sender_membership_id, sender_identity_kind, sender_avatar_url, created_at, " +
+      "whatsapp_msg_id, media_url, media_type, reply_to_whatsapp_msg_id, is_pinned, status"
+    ).maybeSingle();
 
-    return { sent: true };
+    return { sent: true, message: inserted ?? null };
   } catch (err) {
     console.error("[sendMessageToGroup] error:", err instanceof Error ? err.message : String(err));
     return { sent: false, error: err instanceof Error ? err.message : "Erro ao enviar mensagem" };
@@ -850,7 +854,7 @@ export async function sendMediaToGroup(formData: FormData) {
       .eq("organization_id", orgId)
       .single();
 
-    if (!group) return { sent: false, error: "Grupo nao encontrado" };
+    if (!group) return { sent: false, error: "Grupo não encontrado" };
 
     const mimeType = file.type || "application/octet-stream";
     const fileName = file.name || `${mediaType}-${Date.now()}`;
@@ -910,7 +914,7 @@ export async function sendMediaToGroup(formData: FormData) {
     console.error("[sendMediaToGroup] error:", err instanceof Error ? err.message : String(err));
     return {
       sent: false,
-      error: err instanceof Error ? err.message : "Erro ao enviar midia",
+      error: err instanceof Error ? err.message : "Erro ao enviar mídia",
     };
   }
 }
@@ -932,7 +936,7 @@ export async function generateGroupMessageDraft(
     .eq("organization_id", orgId)
     .maybeSingle();
 
-  if (!group) return { suggestion: "", error: "Grupo nao encontrado" };
+  if (!group) return { suggestion: "", error: "Grupo não encontrado" };
 
   const { data: recentMessages } = await db
     .from("group_messages")
@@ -1036,7 +1040,7 @@ export async function reactToGroupMessage(
     .eq("organization_id", orgId)
     .single();
 
-  if (!group) throw new Error("Grupo nao encontrado");
+  if (!group) throw new Error("Grupo não encontrado");
 
   await provider.reactToMessage(group.group_jid, whatsappMsgId, emoji);
 }
@@ -2454,4 +2458,22 @@ export async function cancelScheduledGroupMessage(messageId: string) {
     .eq("status", "pending");
 
   if (error) throw new Error(error.message);
+}
+
+export async function markGroupRead(groupId: string) {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const { data: group } = await (supabase as any)
+      .from("whatsapp_groups")
+      .select("group_jid")
+      .eq("id", groupId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!group?.group_jid) return;
+    const provider = await getProvider(supabase, orgId);
+    // group_jid já tem @g.us — phoneToJid preserva JIDs com '@'
+    await provider.markChatRead(group.group_jid);
+  } catch {
+    // best-effort: falha silenciosa (ACK não é crítico)
+  }
 }

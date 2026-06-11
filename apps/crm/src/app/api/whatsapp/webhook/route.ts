@@ -378,10 +378,24 @@ export async function POST(request: NextRequest) {
               ? { file_name: msg.mediaFileName }
               : null;
 
+        // Dedup: evita double-save se UAZAPI re-entrega o mesmo evento.
+        if (msg.messageId) {
+          const { count } = await supabase
+            .from("group_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("group_id", grp.id as string)
+            .eq("whatsapp_msg_id", msg.messageId);
+          if (count && count > 0) {
+            return NextResponse.json({ ok: true, skipped: "group_duplicate" });
+          }
+        }
+
+        const groupMsgDirection = msg.isFromMe ? "outbound" : "inbound";
+
         await supabase.from("group_messages").insert({
           organization_id: matchedConn.organization_id,
           group_id: grp.id,
-          direction: "inbound",
+          direction: groupMsgDirection,
           text: msg.text,
           sender_name: msg.pushName || null,
           sender_jid: rawSenderJid || null,
@@ -399,7 +413,8 @@ export async function POST(request: NextRequest) {
 
         // Vincular remetente como membro do grupo (fire-and-forget).
         // Após vincular, atualizar identidade na mensagem se ainda incompleta.
-        if (rawSenderJid) {
+        // Mensagens fromMe são enviadas pelo dispositivo da org — não vincular como membro.
+        if (rawSenderJid && !msg.isFromMe) {
           const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
           linkGroupMembership({
             supabase,

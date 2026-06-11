@@ -114,6 +114,7 @@ import {
   scheduleGroupMessage,
   getScheduledGroupMessages,
   cancelScheduledGroupMessage,
+  markGroupRead,
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
@@ -173,6 +174,7 @@ interface GroupMessage {
   whatsapp_msg_id: string | null;
   media_url: string | null;
   media_type: string | null;
+  metadata?: Record<string, unknown> | null;
   reply_to_whatsapp_msg_id: string | null;
   is_pinned?: boolean | null;
   status?: string | null;
@@ -188,6 +190,9 @@ const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "💪"];
 
+// Paleta de cores para identificar remetentes em grupos.
+// Hex inline é intencional: cores dinâmicas por participante não podem ser
+// expressas como classes Tailwind (JIT exige classe estática).
 const SENDER_COLORS = [
   { bg: "#ec4899", fg: "#ffffff" },
   { bg: "#84cc16", fg: "#ffffff" },
@@ -690,6 +695,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
       <button
         type="button"
         onClick={togglePlay}
+        aria-label={playing ? "Pausar áudio" : "Reproduzir áudio"}
         className="size-10 shrink-0 rounded-full flex items-center justify-center transition-opacity hover:opacity-80"
         style={{
           background: isOutgoing ? "rgba(0,0,0,0.18)" : "var(--chat-send-bg)",
@@ -723,6 +729,7 @@ function AudioPlayer({ src, isOutgoing }: { src: string; isOutgoing: boolean }) 
           <button
             type="button"
             onClick={cycleRate}
+            aria-label={`Velocidade de reprodução: ${rate.toFixed(1).replace(".", ",")}x`}
             className="text-[10px] tabular-nums font-medium rounded-full px-1.5 py-0.5 hover:opacity-80"
             style={{ background: isOutgoing ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.08)" }}
           >
@@ -942,7 +949,12 @@ function GroupChatPanel({
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "group_messages", filter: `group_id=eq.${group.id}` },
-        (payload: { new: GroupMessage }) => {
+        (payload: { new: GroupMessage & { is_deleted?: boolean } }) => {
+          // Soft-delete: remove da lista em vez de mapear
+          if (payload.new.is_deleted) {
+            setMessages((prev) => prev.filter((m) => m.id !== payload.new.id));
+            return;
+          }
           enrichGroupMessagesWithLeads(supabase, group.id, [payload.new]).then(([message]) => {
             if (!message) return;
             setMessages((prev) =>
@@ -1063,24 +1075,43 @@ function GroupChatPanel({
     const text = chatInput.trim();
     if (!text) return;
     shouldAutoScroll.current = true;
-    setSendingMessage(true);
+    const replyingTo = replyTo;
+    const tempId = `optimistic-${Date.now()}`;
     setChatInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    const replyingTo = replyTo;
     setReplyTo(null);
+    setMessages((prev) => [...prev, {
+      id: tempId, direction: "outbound", text,
+      sender_name: null, sender_jid: null, sender_phone: null,
+      sender_lead_id: null, sender_membership_id: null,
+      sender_identity_kind: "unknown" as const, sender_avatar_url: null,
+      created_at: new Date().toISOString(), whatsapp_msg_id: null,
+      media_url: null, media_type: null,
+      reply_to_whatsapp_msg_id: replyingTo?.whatsapp_msg_id ?? null,
+      is_pinned: false, status: "sending", _optimistic: true, _localPreview: null,
+    }]);
+    setSendingMessage(true);
     try {
       const result = await sendMessageToGroup(group.id, text, replyingTo?.whatsapp_msg_id ?? null);
       if (result.error) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
         toast.error(result.error);
         setChatInput(text);
         setReplyTo(replyingTo);
+      } else if (result.message) {
+        setMessages((prev) => prev.map((m) => m.id === tempId ? (result.message as GroupMessage) : m));
+      } else {
+        // Sem retorno de mensagem: o realtime vai inserir o ID real; só remover o optimistic
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     } catch (err: any) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       toast.error(err.message || "Erro ao enviar mensagem");
       setChatInput(text);
       setReplyTo(replyingTo);
     } finally {
       setSendingMessage(false);
+      requestAnimationFrame(() => textareaRef.current?.focus());
     }
   }
 
@@ -1202,15 +1233,15 @@ function GroupChatPanel({
     if (!msg) return "Mensagem";
     if (msg.text?.trim()) return msg.text.trim();
     if (msg.media_type === "image") return "Imagem";
-    if (msg.media_type === "video") return "Video";
-    if (msg.media_type === "audio") return "Audio";
+    if (msg.media_type === "video") return "Vídeo";
+    if (msg.media_type === "audio") return "Áudio";
     if (msg.media_type === "document") return "Documento";
-    return "Midia";
+    return "Mídia";
   }
 
   function getSenderLabel(msg: GroupMessage | null | undefined): string {
     if (!msg) return "Mensagem";
-    if (msg.direction === "outbound") return "Voce";
+    if (msg.direction === "outbound") return "Você";
     return msg.sender_lead?.name ?? msg.sender_name ?? msg.sender_phone ?? "Participante";
   }
 
@@ -1572,7 +1603,7 @@ function GroupChatPanel({
           <p className="font-medium text-[15px] leading-5 truncate">{group.name}</p>
           <p className="text-[13px] leading-5 text-muted-foreground truncate">
             {group.participant_count} membros {"\u00B7"} {CATEGORY_LABELS[group.category] || group.category}
-            {group.is_announce && ` \u00B7 Anuncio`}
+            {group.is_announce && ` \u00B7 Anúncio`}
           </p>
         </div>
 
@@ -1732,7 +1763,7 @@ function GroupChatPanel({
               const senderSecondary =
                 senderLead?.phone ??
                 msg.sender_phone ??
-                (msg.sender_identity_kind === "lid" ? "Telefone nao disponivel" : null);
+                (msg.sender_identity_kind === "lid" ? "Telefone não disponível" : null);
               const repliedMessage = msg.reply_to_whatsapp_msg_id
                 ? messagesByWhatsAppId.get(msg.reply_to_whatsapp_msg_id) ?? null
                 : null;
@@ -1803,6 +1834,7 @@ function GroupChatPanel({
                             type="button"
                             className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
                             title="Reagir"
+                            aria-label="Reagir com emoji"
                             onClick={() => setReactingMsgId(reactingMsgId === msg.id ? null : msg.id)}
                           >
                             <Smile className="size-4" />
@@ -1820,6 +1852,7 @@ function GroupChatPanel({
                                   key={emoji}
                                   type="button"
                                   onClick={() => handleReact(msg, emoji)}
+                                  aria-label={`Reagir com ${emoji}`}
                                   className="text-[20px] leading-none hover:scale-125 transition-transform px-0.5"
                                 >
                                   {emoji}
@@ -1834,6 +1867,7 @@ function GroupChatPanel({
                         <DropdownMenuTrigger
                           className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-black/10 transition-colors"
                           title="Mais opções"
+                          aria-label="Mais opções da mensagem"
                         >
                           <ChevronDown className="size-4" />
                         </DropdownMenuTrigger>
@@ -2060,7 +2094,9 @@ function GroupChatPanel({
                             <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="mb-1 flex min-w-52 items-center gap-3 rounded-md border border-border/60 bg-background/60 p-3 text-foreground hover:bg-background/80">
                               <FileText className="size-8 shrink-0 text-primary" />
                               <span className="flex flex-col min-w-0">
-                                <span className="truncate text-[13px] font-medium">Documento</span>
+                                <span className="truncate text-[13px] font-medium">
+                                  {(msg.metadata?.file_name as string | undefined) || "Documento"}
+                                </span>
                                 <span className="block text-[10px] text-muted-foreground">Abrir documento</span>
                               </span>
                             </a>
@@ -2071,6 +2107,55 @@ function GroupChatPanel({
                             </div>
                           )
                         )}
+                        {msg.media_type === "location" && (() => {
+                          const lat = msg.metadata?.latitude as number | undefined;
+                          const lng = msg.metadata?.longitude as number | undefined;
+                          const locName = msg.metadata?.name as string | undefined;
+                          const locAddr = msg.metadata?.address as string | undefined;
+                          const hasCoords = lat != null && lng != null;
+                          let mapStyle: React.CSSProperties = { backgroundColor: "var(--muted)" };
+                          if (hasCoords) {
+                            const zoom = 15;
+                            const n = Math.pow(2, zoom);
+                            const latRad = (lat! * Math.PI) / 180;
+                            const xFrac = ((lng! + 180) / 360) * n;
+                            const yFrac = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+                            const xTile = Math.floor(xFrac);
+                            const yTile = Math.floor(yFrac);
+                            const xPx = Math.round((xFrac - xTile) * 256);
+                            const yPx = Math.round((yFrac - yTile) * 256);
+                            mapStyle = {
+                              backgroundImage: `url("https://a.tile.openstreetmap.org/${zoom}/${xTile}/${yTile}.png")`,
+                              backgroundSize: "256px 256px",
+                              backgroundPosition: `${110 - xPx}px ${60 - yPx}px`,
+                              backgroundRepeat: "no-repeat",
+                            };
+                          }
+                          const mapsUrl = hasCoords
+                            ? `https://www.google.com/maps?q=${lat},${lng}`
+                            : undefined;
+                          return (
+                            <a
+                              href={mapsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block mb-1 overflow-hidden rounded-md"
+                              aria-label="Abrir localização no mapa"
+                            >
+                              <div className="relative w-full h-[120px]" style={mapStyle}>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="size-5 rounded-full bg-destructive border-2 border-white shadow-md" />
+                                </div>
+                              </div>
+                              {(locName || locAddr) && (
+                                <div className="px-2.5 py-1.5">
+                                  {locName && <p className="text-[13px] font-medium leading-snug">{locName}</p>}
+                                  {locAddr && <p className="text-[11px] text-muted-foreground line-clamp-2">{locAddr}</p>}
+                                </div>
+                              )}
+                            </a>
+                          );
+                        })()}
                         {/* Text / caption + timestamp */}
                         <div className={msg.text ? "px-2.5 py-1.5 text-[14.2px] leading-5" : "px-2.5 pb-1.5 pt-0 text-[14.2px] leading-5"}>
                           {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
@@ -2425,7 +2510,7 @@ function GroupChatPanel({
                         setBackfillLoading(false);
                       }
                     }}
-                    title="Identificar leads pelos historico de mensagens"
+                    title="Identificar leads pelo histórico de mensagens"
                   >
                     {backfillLoading ? (
                       <Loader2 className="size-3.5 animate-spin" />
@@ -2472,7 +2557,7 @@ function GroupChatPanel({
                     ) : (
                       <RefreshCw className="size-3.5 mr-1.5" />
                     )}
-                    Identificar pelo historico
+                    Identificar pelo histórico
                   </Button>
                 </div>
               ) : (
@@ -2578,7 +2663,7 @@ function GroupChatPanel({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <Image className="size-5 text-muted-foreground" />
-                  <span className="text-sm font-medium">Midia, links e docs</span>
+                  <span className="text-sm font-medium">Mídia, links e docs</span>
                 </div>
                 <span className="text-sm text-muted-foreground">{mediaPreviewMessages.length}</span>
               </div>
@@ -3207,13 +3292,15 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
         { event: "INSERT", schema: "public", table: "group_messages" },
         (payload: { new: { group_id: string; direction: string; text: string | null; sender_name: string | null; created_at: string } }) => {
           const { group_id, direction, text, sender_name, created_at } = payload.new;
-          if (direction !== "inbound") return;
 
-          // Atualiza preview da última mensagem no painel lateral
+          // Atualiza preview para inbound e outbound
           setLastMessages((prev) => ({
             ...prev,
             [group_id]: { text, sender: sender_name, direction, at: created_at },
           }));
+
+          // Unread/toast só para mensagens recebidas
+          if (direction !== "inbound") return;
 
           // Só notifica/incrementa unread para grupos fora de foco
           if (group_id === selectedIdRef.current) return;
@@ -3243,6 +3330,8 @@ export function GroupsClient({ initialGroups }: { initialGroups: Group[] }) {
       delete next[id];
       return next;
     });
+    // ACK no WhatsApp — fire-and-forget
+    markGroupRead(id).catch(() => {});
   }
 
   async function handleSync() {
