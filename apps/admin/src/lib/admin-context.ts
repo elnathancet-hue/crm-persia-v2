@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import crypto from "crypto";
 
@@ -217,7 +218,7 @@ export async function clearAdminContext(): Promise<void> {
  * session — readAdminContext only validates the cookie itself plus, for
  * v2, that it was issued for the same browser session.
  */
-export async function readAdminContext(): Promise<{
+export const readAdminContext = cache(async function readAdminContext(): Promise<{
   orgId: string;
   userId: string;
 } | null> {
@@ -247,7 +248,7 @@ export async function readAdminContext(): Promise<{
   }
 
   return { orgId: payload.orgId, userId: payload.userId };
-}
+});
 
 /**
  * Reissue the current cookie as v2 if it's still v1 — call right after a

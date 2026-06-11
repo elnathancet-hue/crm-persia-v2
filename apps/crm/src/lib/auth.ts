@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import {
@@ -71,8 +72,11 @@ function pickActiveMembership(memberships: MembershipRow[]): MembershipRow | nul
  *   - multi-membership -> returns first (oldest), exposes all via `memberships`
  *
  * Caller can inspect `memberships` to render an org switcher.
+ *
+ * Wrapped in React cache() — deduplicates across parallel server actions
+ * within a single request tree (zero extra round-trips).
  */
-export async function getAuthContext() {
+export const getAuthContext = cache(async function getAuthContext() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -106,7 +110,7 @@ export async function getAuthContext() {
     permissions: active.permissions,
     memberships,
   };
-}
+});
 
 /**
  * Enforces a minimum role for the current user within their organization.

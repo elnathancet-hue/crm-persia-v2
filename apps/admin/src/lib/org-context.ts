@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { withAdmin, type AdminClient } from "@/lib/supabase-admin";
 import { readAdminContext } from "@/lib/admin-context";
 
@@ -41,6 +42,18 @@ export interface ResolveOrgOptions {
  * Always validates that the resolved orgId still exists in `organizations`
  * (cookies and member rows can outlive their org).
  */
+// Cached per-request: org existence validated once per orgId per render.
+const validateOrgExists = cache(async (orgId: string): Promise<boolean> => {
+  return withAdmin("validate_org_exists_cached", async (admin) => {
+    const { data } = await admin
+      .from("organizations")
+      .select("id")
+      .eq("id", orgId)
+      .maybeSingle();
+    return !!data;
+  });
+});
+
 export async function resolveOrgContext(
   opts: ResolveOrgOptions = {}
 ): Promise<OrgContext | null> {
@@ -89,13 +102,8 @@ export async function resolveOrgContext(
   }
 
   // Validate org still exists (cookie may outlive deleted org)
-  const { data: org } = await admin
-    .from("organizations")
-    .select("id")
-    .eq("id", orgId)
-    .maybeSingle();
-
-  if (!org) {
+  const orgExists = await validateOrgExists(orgId);
+  if (!orgExists) {
     if (opts.required) throw new Error("Organizacao do contexto nao encontrada");
     return null;
   }

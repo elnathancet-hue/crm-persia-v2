@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { createClient } from "@/lib/supabase-server";
 import { withAdmin, type AdminClient } from "@/lib/supabase-admin";
 import { readAdminContext } from "@/lib/admin-context";
@@ -32,7 +33,7 @@ interface SuperadminGuardResult {
  *   - user not in profiles
  *   - profile.is_superadmin = false
  */
-async function assertSuperadmin(): Promise<SuperadminGuardResult> {
+const assertSuperadmin = cache(async function assertSuperadmin(): Promise<SuperadminGuardResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -55,7 +56,7 @@ async function assertSuperadmin(): Promise<SuperadminGuardResult> {
   if (!profile?.is_superadmin) throw new Error("Acesso negado");
 
   return { admin, userId: user.id };
-}
+});
 
 /**
  * Validates that the given orgId exists. Pure DB check (uses service_role
