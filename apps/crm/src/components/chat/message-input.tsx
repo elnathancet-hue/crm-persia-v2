@@ -389,6 +389,24 @@ export function MessageInput({
     }
   };
 
+  // Ctrl+V de imagem: extrai do clipboard e usa como arquivo anexado.
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Imagem muito grande. O limite é 16 MB.");
+      return;
+    }
+    setSelectedFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setFilePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
   return (
     /* PR 39 (mai/2026): TooltipProvider envolve o input inteiro pra
        que cada ícone de ação (Sparkles, Paperclip, Template, Emoji)
@@ -667,6 +685,7 @@ export function MessageInput({
             adjustTextareaHeight();
           }}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={
             disabled
               ? "Conversa encerrada"

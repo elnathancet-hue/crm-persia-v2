@@ -711,6 +711,25 @@ export function GroupDetailClient({
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
   }
 
+  // Ctrl+V de imagem: extrai do clipboard e usa como arquivo anexado.
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("Imagem muito grande. O limite é 16 MB.");
+      return;
+    }
+    setAttachedFile(file);
+    setAttachedMediaType("image");
+    const reader = new FileReader();
+    reader.onload = () => setAttachedPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header — WhatsApp style */}
@@ -1413,6 +1432,7 @@ export function GroupDetailClient({
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={attachedFile ? "Legenda (opcional)..." : "Digite uma mensagem..."}
               className="max-h-28 min-h-[42px] flex-1 resize-none rounded-lg px-4 py-[11px] text-[15px] leading-5 outline-none"
               style={{
