@@ -454,13 +454,13 @@ export class UazapiAdapter implements WhatsAppProvider {
       const locObj = raw.location as Record<string, unknown> | undefined;
 
       const latRaw =
-        raw.latitude ?? raw.degreesLatitude ??
+        raw.latitude ?? raw.degreesLatitude ?? raw.lat ??
         locObj?.latitude ?? locObj?.degreesLatitude ??        // forma (d): raw.location.*
         locMsg?.degreesLatitude ?? locMsg?.latitude ??        // forma (c): raw.message.locationMessage.*
         msgObj?.degreesLatitude ?? msgObj?.latitude;          // forma (e): raw.message.*
 
       const lngRaw =
-        raw.longitude ?? raw.degreesLongitude ??
+        raw.longitude ?? raw.degreesLongitude ?? raw.lon ?? raw.lng ??
         locObj?.longitude ?? locObj?.degreesLongitude ??      // forma (d): raw.location.*
         locMsg?.degreesLongitude ?? locMsg?.longitude ??      // forma (c): raw.message.locationMessage.*
         msgObj?.degreesLongitude ?? msgObj?.longitude;        // forma (e): raw.message.*
@@ -470,18 +470,37 @@ export class UazapiAdapter implements WhatsAppProvider {
       if (typeof lngRaw === "number") longitude = lngRaw;
       else if (typeof lngRaw === "string" && lngRaw) { const n = Number(lngRaw); if (!isNaN(n)) longitude = n; }
 
-      // Log quando coordenadas nao foram encontradas -- ajuda debug em prod.
-      if (latitude == null && longitude == null) {
-        console.warn("[parseWebhook] location sem coordenadas", {
-          raw_keys: Object.keys(raw),
-          msgObj_keys: msgObj ? Object.keys(msgObj) : null,
-          locMsg_keys: locMsg ? Object.keys(locMsg) : null,
-        });
-      }
+      // Log completo do payload pra diagnosticar estrutura real do UAZAPI
+      console.log("[parseWebhook] location payload", {
+        messageType,
+        latitude,
+        longitude,
+        raw_keys: Object.keys(raw),
+        raw_latitude: raw.latitude,
+        raw_degreesLatitude: raw.degreesLatitude,
+        raw_lat: raw.lat,
+        raw_text: raw.text,
+        raw_name: raw.name,
+        raw_address: raw.address,
+        msgObj_keys: msgObj ? Object.keys(msgObj) : null,
+        locMsg_keys: locMsg ? Object.keys(locMsg) : null,
+        locMsg_degreesLatitude: locMsg?.degreesLatitude,
+        locMsg_latitude: locMsg?.latitude,
+        locMsg_name: locMsg?.name,
+        locMsg_address: locMsg?.address,
+        locObj_keys: locObj ? Object.keys(locObj) : null,
+      });
 
-      const nameRaw = raw.name ?? locObj?.name ?? locMsg?.name ?? msgObj?.name;
+      // name: tenta vários campos incluindo raw.text (UAZAPI às vezes usa isso pra nome do local)
+      const nameRaw =
+        raw.name ?? locObj?.name ?? locMsg?.name ?? msgObj?.name ??
+        locMsg?.comment ?? // algumas versões usam comment
+        (latitude != null ? raw.text : undefined); // text só vira nome se tiver coords (senão é legenda)
       if (typeof nameRaw === "string" && nameRaw) locationName = nameRaw;
-      const addrRaw = raw.address ?? locObj?.address ?? locMsg?.address ?? msgObj?.address;
+
+      const addrRaw =
+        raw.address ?? locObj?.address ?? locMsg?.address ?? msgObj?.address ??
+        raw.description ?? locMsg?.description;
       if (typeof addrRaw === "string" && addrRaw) locationAddress = addrRaw;
 
     }
