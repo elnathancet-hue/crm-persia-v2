@@ -210,7 +210,7 @@ function ConfirmSwitchModal({ org, onConfirm, onCancel }: { org: Org; onConfirm:
           <p className="text-xs text-muted-foreground mb-2">Conexoes</p>
           <div className="flex items-center justify-between text-sm">
             <span className="text-foreground">WhatsApp</span>
-            <span className="text-emerald-400 text-xs">Conectado ✓</span>
+            <span className="text-muted-foreground text-xs">—</span>
           </div>
         </div>
 
@@ -443,17 +443,6 @@ function EditClientModal({ org, onSaved, onClose }: { org: Org; onSaved: () => v
             />
           </div>
 
-          {/* Password */}
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Senha</label>
-            <input
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              type="password"
-              placeholder="Deixe vazio para manter"
-              className="w-full px-3 py-2 text-sm bg-muted border border-border rounded-lg text-foreground placeholder-muted-foreground/60 outline-none focus:border-primary"
-            />
-          </div>
 
           {/* Services */}
           <div>

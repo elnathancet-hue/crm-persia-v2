@@ -45,12 +45,12 @@ const MODEL_OPTIONS = [
   {
     value: "gpt-5-mini",
     label: "Padrão (recomendado)",
-    tagline: "Bom equilíbrio entre custo e qualidade. Comece por aqui.",
+    tagline: "Bom equilíbrio entre velocidade e qualidade. Comece por aqui.",
   },
   {
     value: "gpt-4o-mini",
     label: "Econômico",
-    tagline: "Mais rápido e barato. Bom pra fluxos simples.",
+    tagline: "Mais rápido e leve. Bom pra fluxos simples.",
   },
   {
     value: "gpt-4o",

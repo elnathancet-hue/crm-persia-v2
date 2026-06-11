@@ -8,12 +8,40 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { SegmentsList, SegmentsProvider } from "@persia/segments-ui";
+import { SegmentsList, SegmentsProvider, type SegmentCatalogs } from "@persia/segments-ui";
 import type { Segment } from "@persia/shared/crm";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { getSegments } from "@/actions/segments";
 import { adminSegmentsActions } from "@/features/segments/admin-segments-actions";
+
+
+const ADMIN_SEGMENT_CATALOGS: SegmentCatalogs = {
+  statuses: [
+    { value: "new", label: "Novo" },
+    { value: "contacted", label: "Contactado" },
+    { value: "qualified", label: "Qualificado" },
+    { value: "customer", label: "Cliente" },
+    { value: "lost", label: "Perdido" },
+  ],
+  sources: [
+    { value: "manual", label: "Manual" },
+    { value: "whatsapp", label: "WhatsApp" },
+    { value: "website", label: "Website" },
+    { value: "instagram", label: "Instagram" },
+    { value: "facebook", label: "Facebook" },
+    { value: "indicacao", label: "Indicação" },
+    { value: "outro", label: "Outro" },
+  ],
+  channels: [
+    { value: "whatsapp", label: "WhatsApp" },
+    { value: "email", label: "E-mail" },
+    { value: "telefone", label: "Telefone" },
+    { value: "instagram", label: "Instagram" },
+    { value: "facebook", label: "Facebook" },
+    { value: "outro", label: "Outro" },
+  ],
+};
 
 export default function SegmentsPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();
@@ -55,7 +83,7 @@ export default function SegmentsPage() {
         </p>
       </div>
       <SegmentsProvider actions={adminSegmentsActions}>
-        <SegmentsList initialSegments={segments} canManage />
+        <SegmentsList initialSegments={segments} canManage catalogs={ADMIN_SEGMENT_CATALOGS} />
       </SegmentsProvider>
     </div>
   );

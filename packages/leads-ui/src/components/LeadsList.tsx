@@ -1253,7 +1253,7 @@ export function LeadsList({
             })}
             <PaginationItem>
               <PaginationNext
-                text="Proximo"
+                text="Próximo"
                 onClick={() =>
                   handlePageChange(Math.min(totalPages, page + 1))
                 }

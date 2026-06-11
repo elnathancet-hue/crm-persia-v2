@@ -275,16 +275,24 @@ export function LeadInfoDrawer({
     Array<{ id: string; name: string; color: string }>
   >([]);
   const [tagPending, setTagPending] = React.useState<string | null>(null);
-  const currentTags = React.useMemo(
-    () =>
-      ((lead as { lead_tags?: Array<{ tag_id: string; tags: { id: string; name: string; color: string } | null }> })
-        .lead_tags ?? [])
-        .map((lt) => lt.tags)
-        .filter(
-          (t): t is { id: string; name: string; color: string } => !!t,
-        ),
-    [lead],
-  );
+  // B-N6: optimistic overrides so pills update instantly without waiting for
+  // parent to re-fetch. Reset whenever the lead prop changes.
+  const [optimisticAdded, setOptimisticAdded] = React.useState<string[]>([]);
+  const [optimisticRemoved, setOptimisticRemoved] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    setOptimisticAdded([]);
+    setOptimisticRemoved([]);
+  }, [lead.id]);
+  const currentTags = React.useMemo(() => {
+    const base = ((lead as { lead_tags?: Array<{ tag_id: string; tags: { id: string; name: string; color: string } | null }> })
+      .lead_tags ?? [])
+      .map((lt) => lt.tags)
+      .filter((t): t is { id: string; name: string; color: string } => !!t);
+    const afterRemove = base.filter((t) => !optimisticRemoved.includes(t.id));
+    const addedTags = orgTags
+      .filter((t) => optimisticAdded.includes(t.id) && !afterRemove.some((e) => e.id === t.id));
+    return [...afterRemove, ...addedTags];
+  }, [lead, optimisticAdded, optimisticRemoved, orgTags]);
   const currentTagIds = React.useMemo(
     () => new Set(currentTags.map((t) => t.id)),
     [currentTags],
@@ -327,6 +335,8 @@ export function LeadInfoDrawer({
       toast.error(result.error, { id: `lead-${lead.id}-tag-${tagId}` });
       return;
     }
+    setOptimisticAdded((prev) => [...prev, tagId]);
+    setOptimisticRemoved((prev) => prev.filter((id) => id !== tagId));
     toast.success("Tag adicionada", {
       id: `lead-${lead.id}-tag-${tagId}`,
       duration: 5000,
@@ -343,6 +353,8 @@ export function LeadInfoDrawer({
       toast.error(result.error, { id: `lead-${lead.id}-tag-${tagId}` });
       return;
     }
+    setOptimisticRemoved((prev) => [...prev, tagId]);
+    setOptimisticAdded((prev) => prev.filter((id) => id !== tagId));
     toast.success("Tag removida", {
       id: `lead-${lead.id}-tag-${tagId}`,
       duration: 5000,

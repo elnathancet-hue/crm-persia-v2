@@ -1098,53 +1098,11 @@ export function RulesTab({
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="debounce_window_seconds">
-                        Unificar mensagens proximas
-                      </Label>
-                      <HelpTooltip>
-                        Espera alguns segundos para juntar mensagens enviadas em
-                        sequencia, como "oi" + "tenho uma duvida". Assim o
-                        agente responde uma vez, com mais contexto.
-                      </HelpTooltip>
-                      {nextDebounceWindowMs === DEBOUNCE_WINDOW_MS_DEFAULT ? (
-                        <DefaultBadge />
-                      ) : null}
-                    </div>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      {Math.round(nextDebounceWindowMs / 1000)}s
-                    </span>
-                  </div>
-                  <PresetRail
-                    items={DEBOUNCE_PRESETS.map((preset) => ({
-                      label: preset.label,
-                      active: nextDebounceWindowMs === preset.valueMs,
-                      onClick: () =>
-                        setDebounceWindowMs(
-                          clampDebounceWindowMs(preset.valueMs),
-                        ),
-                    }))}
-                  />
-                  <Slider
-                    id="debounce_window_seconds"
-                    min={DEBOUNCE_WINDOW_MS_MIN / 1000}
-                    max={DEBOUNCE_WINDOW_MS_MAX / 1000}
-                    step={1}
-                    value={[Math.round(nextDebounceWindowMs / 1000)]}
-                    onValueChange={(value) =>
-                      setDebounceWindowMs(
-                        clampDebounceWindowMs(sliderValue(value, 0) * 1000),
-                      )
-                    }
-                    aria-label="Unificar mensagens proximas"
-                  />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>0s: responde na hora</span>
-                    <span>{DEBOUNCE_WINDOW_MS_MAX / 1000}s: espera mais contexto</span>
-                  </div>
-                </div>
+                <CapabilityRow
+                  icon={<MessageSquare className="size-4" />}
+                  title="Unificar mensagens próximas"
+                  description="O agente aguarda alguns segundos antes de responder, juntando mensagens enviadas em sequência para responder com mais contexto."
+                />
 
                 <CapabilityRow
                   icon={<Image className="size-4" />}

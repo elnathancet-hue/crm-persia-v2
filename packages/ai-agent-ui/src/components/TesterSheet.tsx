@@ -787,7 +787,7 @@ function labelForSkip(reason: TesterSkipReason): string {
     case "rate_limited":
       return "Rate limit atingido";
     case "cost_ceiling":
-      return "Teto de custo atingido";
+      return "Limite de uso atingido";
     default:
       return "Pipeline pulou";
   }

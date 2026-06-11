@@ -64,7 +64,7 @@ export const navigation: NavItem[] = [
     module: "agenda",
   },
   {
-    label: "Automacao",
+    label: "Automação",
     href: "/automations",
     icon: Zap,
     minRole: "admin",
@@ -90,7 +90,7 @@ export const navigation: NavItem[] = [
     module: "campaigns",
   },
   {
-    label: "Relatorio",
+    label: "Relatório",
     href: "/reports",
     icon: BarChart3,
     module: "reports",
