@@ -66,7 +66,14 @@ const DATE_PRESETS: { label: string; days: number }[] = [
 ];
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  // Retorna a data de hoje no horário de Brasília (UTC-3, sem DST desde 2019)
+  // para evitar que filtros de "Hoje" mostrem o dia seguinte após 21h BRT.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 function daysAgoISO(days: number): string {
   const d = new Date();

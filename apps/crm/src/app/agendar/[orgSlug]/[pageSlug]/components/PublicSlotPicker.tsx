@@ -12,8 +12,13 @@ interface PublicSlotPickerProps {
 }
 
 function fmtKey(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // Explicit timezone: server (UTC) and browser produce the same date string
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
 }
 
 function fmtLabel(d: Date): string {
@@ -21,6 +26,7 @@ function fmtLabel(d: Date): string {
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: "America/Sao_Paulo",
   }).format(d);
 }
 

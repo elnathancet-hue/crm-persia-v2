@@ -32,35 +32,51 @@ function parsePeriod(raw: string | undefined): PeriodValue {
   return "month";
 }
 
+// Brasil = UTC-3, sem horário de verão desde 2019.
+// Subtrair BRT_OFFSET_MS de Date.now() faz com que os métodos getUTC*()
+// retornem os campos do horário de Brasília.
+const BRT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+// Meia-noite BRT em UTC = 03:00 UTC do mesmo dia local
+function brtMidnight(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m, d, 3));
+}
+
 function getPeriodRanges(period: PeriodValue, now: Date) {
+  // Espera-se que now = new Date(Date.now() - BRT_OFFSET_MS),
+  // então getUTC*() retorna os valores do dia/hora em Brasília.
   let start: Date;
   let prevStart: Date;
   let prevEnd: Date;
 
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const d = now.getUTCDate();
+
   switch (period) {
     case "today": {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      prevStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      start = brtMidnight(y, m, d);
+      prevStart = brtMidnight(y, m, d - 1);
       prevEnd = new Date(start.getTime() - 1);
       break;
     }
     case "week": {
-      const dow = now.getDay() === 0 ? 6 : now.getDay() - 1; // Mon = 0
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
+      const dow = now.getUTCDay() === 0 ? 6 : now.getUTCDay() - 1; // Seg = 0
+      start = brtMidnight(y, m, d - dow);
       prevStart = new Date(start.getTime() - 7 * 86_400_000);
       prevEnd = new Date(start.getTime() - 1);
       break;
     }
     case "month": {
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      prevEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      start = brtMidnight(y, m, 1);
+      prevStart = brtMidnight(y, m - 1, 1);
+      prevEnd = new Date(start.getTime() - 1);
       break;
     }
     default: {
-      // 30d
-      start = new Date(now.getTime() - 30 * 86_400_000);
-      prevStart = new Date(now.getTime() - 60 * 86_400_000);
+      // 30d — relativo, sem alinhamento de meia-noite necessário
+      start = new Date(now.getTime() + BRT_OFFSET_MS - 30 * 86_400_000);
+      prevStart = new Date(now.getTime() + BRT_OFFSET_MS - 60 * 86_400_000);
       prevEnd = new Date(start.getTime() - 1);
       break;
     }
@@ -129,7 +145,8 @@ export default async function DashboardPage({
   const isAdmin =
     (member as { role?: string }).role === "admin" ||
     (member as { role?: string }).role === "owner";
-  const now = new Date();
+  // Deslocar por BRT_OFFSET_MS: getUTC*() passa a retornar hora/data de Brasília
+  const now = new Date(new Date().getTime() - BRT_OFFSET_MS);
 
   // Period from URL (?period=month is default)
   const { period: rawPeriod } = await searchParams;

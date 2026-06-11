@@ -4053,7 +4053,7 @@ function UpcomingAppointmentChip({
           ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
           : "border-primary/30 bg-primary/10 text-primary"
       }`}
-      title={`${appointment.title} — ${new Date(appointment.start_at).toLocaleString("pt-BR")}`}
+      title={`${appointment.title} — ${new Date(appointment.start_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`}
     >
       <CalendarClock className="size-3 shrink-0" aria-hidden />
       <span className="truncate">{label}</span>
