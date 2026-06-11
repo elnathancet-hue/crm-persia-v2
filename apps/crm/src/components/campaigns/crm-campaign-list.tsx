@@ -357,12 +357,6 @@ export function CrmCampaignList({ campaigns, segments, tags, pipelines, stages, 
                   value={whatsappStatus.connected ? "Conectada" : "Desconectada"}
                   ok={whatsappStatus.connected}
                 />
-                {whatsappStatus.provider && (
-                  <HealthRow
-                    label="Provider"
-                    value={whatsappStatus.provider === "meta" ? "Meta Cloud" : "UAZAPI"}
-                  />
-                )}
                 {whatsappStatus.phone && (
                   <HealthRow label="Número" value={whatsappStatus.phone} />
                 )}
