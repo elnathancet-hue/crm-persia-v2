@@ -2148,39 +2148,53 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                 const locName = (msg.metadata as any)?.name as string | null | undefined;
                                 const locAddr = (msg.metadata as any)?.address as string | null | undefined;
                                 const hasCoords = lat != null && lng != null;
-                                const mapsUrl = hasCoords
-                                  ? `https://maps.google.com/?q=${lat},${lng}`
-                                  : null;
+                                const mapsUrl = hasCoords ? `https://maps.google.com/?q=${lat},${lng}` : null;
+
+                                // OSM tile centrado na coordenada quando disponível
+                                let mapStyle: React.CSSProperties;
+                                if (hasCoords) {
+                                  const zoom = 15;
+                                  const n = Math.pow(2, zoom);
+                                  const latRad = (lat! * Math.PI) / 180;
+                                  const xFrac = ((lng! + 180) / 360) * n;
+                                  const yFrac = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n;
+                                  const xTile = Math.floor(xFrac);
+                                  const yTile = Math.floor(yFrac);
+                                  const xPx = Math.round((xFrac - xTile) * 256);
+                                  const yPx = Math.round((yFrac - yTile) * 256);
+                                  mapStyle = {
+                                    backgroundImage: `url("https://a.tile.openstreetmap.org/${zoom}/${xTile}/${yTile}.png")`,
+                                    backgroundSize: "256px 256px",
+                                    backgroundPosition: `${110 - xPx}px ${60 - yPx}px`,
+                                    backgroundRepeat: "no-repeat",
+                                  };
+                                } else {
+                                  mapStyle = {
+                                    backgroundImage:
+                                      "linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px)",
+                                    backgroundSize: "40px 40px, 40px 40px, 8px 8px, 8px 8px",
+                                    backgroundPosition: "-1px -1px, -1px -1px, -1px -1px, -1px -1px",
+                                  };
+                                }
+
                                 return (
                                   <div className="mb-1 w-[220px] overflow-hidden rounded-xl border border-black/10 shadow-sm">
-                                    {/* Map thumbnail — grid pattern simulating a map, links to Google Maps */}
                                     <a
-                                      href={mapsUrl ?? `https://maps.google.com/`}
+                                      href={mapsUrl ?? "https://maps.google.com/"}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="relative flex h-[120px] items-center justify-center overflow-hidden bg-success/10"
-                                      style={{
-                                        backgroundImage:
-                                          "linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px)",
-                                        backgroundSize: "40px 40px, 40px 40px, 8px 8px, 8px 8px",
-                                        backgroundPosition: "-1px -1px, -1px -1px, -1px -1px, -1px -1px",
-                                      }}
+                                      style={mapStyle}
                                     >
-                                      {/* Road-like lines */}
-                                      <div className="absolute inset-x-0 top-1/2 h-[6px] -translate-y-1/2 bg-white/60" />
-                                      <div className="absolute inset-y-0 left-1/2 w-[6px] -translate-x-1/2 bg-white/60" />
-                                      {/* Pin */}
                                       <div className="relative z-10 flex flex-col items-center drop-shadow-md">
                                         <MapPin className="size-9 text-destructive" fill="currentColor" strokeWidth={1.5} />
                                         <div className="size-1.5 rounded-full bg-destructive/40" />
                                       </div>
-                                      {/* "Open in Maps" hint */}
                                       <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] font-medium text-foreground/70 backdrop-blur-sm">
                                         <ExternalLink className="size-2.5" />
                                         Maps
                                       </div>
                                     </a>
-                                    {/* Info bar */}
                                     <div className="flex items-center gap-2 border-t border-black/5 bg-background/90 px-2.5 py-2">
                                       <MapPin className="size-3.5 shrink-0 text-destructive" />
                                       <div className="min-w-0 flex-1">
@@ -2228,7 +2242,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   <span className="font-medium text-sm">{(msg.metadata as any).text || "Enviar Localização"}</span>
                                 </div>
                               )}
-                              {msg.content && (
+                              {msg.content && msg.type !== "location" && (
                                 <p className="whitespace-pre-wrap break-words">{formatWhatsAppText(msg.content)}</p>
                               )}
                               {/* Time + "Editada" + status - WhatsApp style */}

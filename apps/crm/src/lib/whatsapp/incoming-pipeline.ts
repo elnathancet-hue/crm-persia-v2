@@ -362,7 +362,9 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     organization_id: orgId,
     conversation_id: conversation.id,
     lead_id: lead.id,
-    content: msg.text,
+    // Localização não tem conteúdo de texto útil — o texto vindo do UAZAPI
+    // ("Localização", "📍 Localização") seria exibido junto ao card visual.
+    content: msg.type === "location" ? null : msg.text,
     sender: "lead",
     type: msg.type,
     whatsapp_msg_id: msg.messageId,

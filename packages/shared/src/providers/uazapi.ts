@@ -417,6 +417,25 @@ export class UazapiAdapter implements WhatsAppProvider {
     else if (messageType.toLowerCase().includes("contact")) type = "contact";
     else if (messageType.toLowerCase().includes("sticker")) type = "sticker";
 
+    // Fallback: UAZAPI às vezes manda localização com messageType que não inclui "location"
+    // (ex: "conversation", "extendedTextMessage"). Se detectarmos coords no payload,
+    // reclassificamos para garantir que o card de localização seja salvo corretamente.
+    if (type === "text") {
+      const msgFallback = raw.message as Record<string, unknown> | undefined;
+      const locFallback = raw.location as Record<string, unknown> | undefined;
+      const locMsgFallback = msgFallback?.locationMessage as Record<string, unknown> | undefined;
+      const hasCoordsInPayload = !!(
+        (raw.latitude ?? raw.degreesLatitude) ??
+        (locFallback?.latitude ?? locFallback?.degreesLatitude) ??
+        (locMsgFallback?.degreesLatitude ?? locMsgFallback?.latitude) ??
+        (msgFallback?.degreesLatitude ?? msgFallback?.latitude)
+      );
+      if (hasCoordsInPayload) {
+        type = "location";
+        console.warn("[parseWebhook] tipo reclassificado para location por coordenadas no payload; messageType original:", messageType);
+      }
+    }
+
     // --- Location fields ---
     let latitude: number | undefined;
     let longitude: number | undefined;
