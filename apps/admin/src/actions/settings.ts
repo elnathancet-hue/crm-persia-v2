@@ -416,19 +416,25 @@ export async function addSuperadmin(email: string) {
     return { error: error instanceof Error ? error.message : "Muitas tentativas. Tente novamente em instantes." };
   }
 
-  // Look up by email via profiles — avoids listUsers() which caps at 50 by default
-  // and fails silently for accounts beyond that limit.
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id, is_superadmin")
-    .filter("email", "eq", email)
-    .maybeSingle();
-  if (!profile) return { error: "Usuario nao encontrado com este email" };
-  if (profile.is_superadmin) return { error: "Ja e superadmin" };
+  // Find user by email via paginated listUsers (profiles table has no email column).
+  let foundId: string | null = null;
+  let page = 1;
+  while (!foundId) {
+    const { data: authData } = await admin.auth.admin.listUsers({ page, perPage: 50 });
+    if (!authData?.users?.length) break;
+    const match = authData.users.find((u) => u.email === email);
+    if (match) { foundId = match.id; break; }
+    if (authData.users.length < 50) break;
+    page++;
+  }
+  if (!foundId) return { error: "Usuario nao encontrado com este email" };
 
-  const { error } = await admin.from("profiles").update({ is_superadmin: true }).eq("id", profile.id);
+  const { data: profile } = await admin.from("profiles").select("is_superadmin").eq("id", foundId).maybeSingle();
+  if (profile?.is_superadmin) return { error: "Ja e superadmin" };
+
+  const { error } = await admin.from("profiles").update({ is_superadmin: true }).eq("id", foundId);
   if (error) {
-    await auditFailure({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", entityId: profile.id, metadata: { email }, error });
+    await auditFailure({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", entityId: foundId, metadata: { email }, error });
     return { error: error.message };
   }
   await auditLog({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", metadata: { email } });
