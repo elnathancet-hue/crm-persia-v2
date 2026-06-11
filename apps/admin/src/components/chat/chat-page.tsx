@@ -1,16 +1,27 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useActiveOrg } from "@/lib/stores/client-store";
 import { ConversationList } from "@/components/chat/conversation-list";
 import { ChatWindow } from "@/components/chat/chat-window";
-import { MessageSquare } from "lucide-react";
+import { LeadInfoPanel } from "@/components/chat/lead-info-panel";
+import { Info, MessageSquare } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 export function ChatPage() {
   const { isManagingClient } = useActiveOrg();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
+  const [showLeadPanel, setShowLeadPanel] = useState(false);
+
+  const handleSelectConversation = (id: string | null) => {
+    setSelectedConversationId(id);
+    if (!id) {
+      setActiveLeadId(null);
+      setShowLeadPanel(false);
+    }
+  };
 
   if (!isManagingClient) {
     return <NoContextFallback />;
@@ -29,27 +40,40 @@ export function ChatPage() {
         <ErrorBoundary>
           <ConversationList
             selectedId={selectedConversationId}
-            onSelect={setSelectedConversationId}
+            onSelect={handleSelectConversation}
           />
         </ErrorBoundary>
       </div>
 
-      {/* Right: Chat Window */}
+      {/* Center: Chat Window */}
       <div
         className={
           selectedConversationId
-            ? "flex-1 h-full overflow-hidden flex flex-col"
+            ? "flex-1 h-full overflow-hidden flex flex-col min-w-0"
             : "hidden flex-1 h-full overflow-hidden md:flex md:flex-col"
         }
       >
         {selectedConversationId ? (
-          <ErrorBoundary
-            key={selectedConversationId}
-          >
-            <ChatWindow
-              conversationId={selectedConversationId}
-              onBack={() => setSelectedConversationId(null)}
-            />
+          <ErrorBoundary key={selectedConversationId}>
+            <div className="flex flex-col h-full relative">
+              {activeLeadId && (
+                <button
+                  onClick={() => setShowLeadPanel((v) => !v)}
+                  title="Info do lead"
+                  className={[
+                    "absolute top-3 right-12 z-10 size-7 flex items-center justify-center rounded-md transition-colors hidden lg:flex",
+                    showLeadPanel ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  ].join(" ")}
+                >
+                  <Info className="size-4" />
+                </button>
+              )}
+              <ChatWindow
+                conversationId={selectedConversationId}
+                onBack={() => handleSelectConversation(null)}
+                onLeadId={(id) => setActiveLeadId(id)}
+              />
+            </div>
           </ErrorBoundary>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground/60">
@@ -60,6 +84,15 @@ export function ChatPage() {
           </div>
         )}
       </div>
+
+      {showLeadPanel && activeLeadId && (
+        <div className="hidden lg:flex h-full">
+          <LeadInfoPanel
+            leadId={activeLeadId}
+            onClose={() => setShowLeadPanel(false)}
+          />
+        </div>
+      )}
     </div>
   );
 }

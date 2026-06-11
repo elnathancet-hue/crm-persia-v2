@@ -43,6 +43,7 @@ import { hashColor, getInitials } from "@/lib/utils";
 interface Props {
   conversationId: string;
   onBack: () => void;
+  onLeadId?: (leadId: string | null) => void;
 }
 
 type ConversationLead = {
@@ -78,7 +79,7 @@ function shouldResolveMediaUrl(mediaUrl: string | null): boolean {
   return mediaUrl.startsWith("chat-media:") || mediaUrl.includes("/storage/v1/object/public/chat-media/");
 }
 
-export function ChatWindow({ conversationId, onBack }: Props) {
+export function ChatWindow({ conversationId, onBack, onLeadId }: Props) {
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +118,10 @@ export function ChatWindow({ conversationId, onBack }: Props) {
       getMessages(conversationId),
     ]).then(([convResult, msgResult]) => {
       if (!isMountedRef.current) return;
-      if (convResult.data) setConversation(convResult.data as ConversationDetail);
+      if (convResult.data) {
+        setConversation(convResult.data as ConversationDetail);
+        onLeadId?.((convResult.data as ConversationDetail).leads?.id ?? null);
+      }
       if (msgResult.data) setMessages(msgResult.data);
       setLoading(false);
     }).catch(() => {

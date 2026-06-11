@@ -1,140 +1,590 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useActiveOrg } from "@/lib/stores/client-store";
-import { getReportStats, getLeadsTimeline, getMessagesTimeline } from "@/actions/reports";
-import { BarChart3, Loader2, MessageSquare, Users, Bot, Megaphone, TrendingUp } from "lucide-react";
-import dynamic from "next/dynamic";
+import { notFound } from "next/navigation";
+import { requireSuperadminForOrg } from "@/lib/auth";
+import { readAdminContext } from "@/lib/admin-context";
 import { NoContextFallback } from "@/components/no-context-fallback";
+import { ReportsFilterBar } from "@/components/reports/reports-filter-bar";
+import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import { Badge } from "@persia/ui/badge";
+import { BarChart3 } from "lucide-react";
 
-const AreaChart = dynamic(() => import("recharts").then(m => m.AreaChart), { ssr: false });
-const Area = dynamic(() => import("recharts").then(m => m.Area), { ssr: false });
-const BarChart = dynamic(() => import("recharts").then(m => m.BarChart), { ssr: false });
-const Bar = dynamic(() => import("recharts").then(m => m.Bar), { ssr: false });
-const XAxis = dynamic(() => import("recharts").then(m => m.XAxis), { ssr: false });
-const YAxis = dynamic(() => import("recharts").then(m => m.YAxis), { ssr: false });
-const Tooltip = dynamic(() => import("recharts").then(m => m.Tooltip), { ssr: false });
-const ResponsiveContainer = dynamic(() => import("recharts").then(m => m.ResponsiveContainer), { ssr: false });
-const CartesianGrid = dynamic(() => import("recharts").then(m => m.CartesianGrid), { ssr: false });
-const Legend = dynamic(() => import("recharts").then(m => m.Legend), { ssr: false });
+export const metadata = { title: "Relatórios" };
 
-export default function ReportsPage() {
-  const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
-  const [stats, setStats] = useState<any>(null);
-  const [leadsChart, setLeadsChart] = useState<any[]>([]);
-  const [msgsChart, setMsgsChart] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+type SearchParams = Promise<{ from?: string; to?: string }>;
 
-  useEffect(() => {
-    if (!isManagingClient) { setLoading(false); return; }
-    setLoading(true);
-    Promise.all([
-      getReportStats(),
-      getLeadsTimeline(30),
-      getMessagesTimeline(30),
-    ]).then(([s, leads, msgs]) => {
-      setStats(s);
-      setLeadsChart(leads);
-      setMsgsChart(msgs);
-      setLoading(false);
-    });
-  }, [activeOrgId]);
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const ctxCookie = await readAdminContext();
+  if (!ctxCookie) return <NoContextFallback />;
 
-  if (!isManagingClient) {
-    return <NoContextFallback />;
+  let ctx: Awaited<ReturnType<typeof requireSuperadminForOrg>>;
+  try {
+    ctx = await requireSuperadminForOrg();
+  } catch {
+    notFound();
+  }
+  const { admin, orgId } = ctx;
+
+  const { from, to } = await searchParams;
+
+  // Validate date format to prevent query injection
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const validFrom = from && iso.test(from) ? from : undefined;
+  const validTo = to && iso.test(to) ? `${to}T23:59:59` : undefined;
+
+  // ─── Queries paralelas ──────────────────────────────────────────────────────
+  const leadsQuery = admin
+    .from("leads")
+    .select("id, status, lead_tags(tag_id)")
+    .eq("organization_id", orgId);
+  if (validFrom) leadsQuery.gte("created_at", validFrom);
+  if (validTo) leadsQuery.lte("created_at", validTo);
+
+  const leadsRawQuery = admin
+    .from("leads")
+    .select("source, status")
+    .eq("organization_id", orgId);
+  if (validFrom) leadsRawQuery.gte("created_at", validFrom);
+  if (validTo) leadsRawQuery.lte("created_at", validTo);
+
+  const dealsQuery = admin
+    .from("deals")
+    .select("id, pipeline_id, stage_id, status, value")
+    .eq("organization_id", orgId);
+  if (validFrom) dealsQuery.gte("created_at", validFrom);
+  if (validTo) dealsQuery.lte("created_at", validTo);
+
+  const apptsQuery = admin
+    .from("appointments")
+    .select("id, status, channel")
+    .eq("organization_id", orgId)
+    .is("deleted_at", null);
+  if (validFrom) apptsQuery.gte("start_at", validFrom);
+  if (validTo) apptsQuery.lte("start_at", validTo);
+
+  const campaignsQuery = admin
+    .from("campaigns")
+    .select(
+      "id, name, status, total_target, total_sent, total_delivered, total_read, total_replied, created_at",
+    )
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (validFrom) campaignsQuery.gte("created_at", validFrom);
+  if (validTo) campaignsQuery.lte("created_at", validTo);
+
+  const [
+    { data: pipelines },
+    { data: allDeals },
+    { data: tags },
+    { data: leadsForTags },
+    { data: leadsRaw },
+    { data: campaigns },
+    { data: appointments },
+  ] = await Promise.all([
+    admin
+      .from("pipelines")
+      .select("id, name, pipeline_stages(id, name, sort_order)")
+      .eq("organization_id", orgId)
+      .order("created_at"),
+    dealsQuery,
+    admin
+      .from("tags")
+      .select("id, name, color")
+      .eq("organization_id", orgId)
+      .order("name"),
+    leadsQuery,
+    leadsRawQuery,
+    campaignsQuery,
+    apptsQuery,
+  ]);
+
+  // ─── Agregações ─────────────────────────────────────────────────────────────
+
+  // 1. Funil: deals agrupados por stage
+  const dealsByStage = new Map<
+    string,
+    { open: number; won: number; lost: number; value: number }
+  >();
+  for (const deal of allDeals ?? []) {
+    const cur = dealsByStage.get(deal.stage_id) ?? {
+      open: 0,
+      won: 0,
+      lost: 0,
+      value: 0,
+    };
+    if (deal.status === "won") cur.won++;
+    else if (deal.status === "lost") cur.lost++;
+    else cur.open++;
+    cur.value += Number(deal.value ?? 0);
+    dealsByStage.set(deal.stage_id, cur);
   }
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="size-6 animate-spin text-muted-foreground/60" /></div>;
+  // 2. Tags: contagem de leads por tag + status
+  const tagStats = new Map<string, Record<string, number>>();
+  for (const lead of leadsForTags ?? []) {
+    const st = (lead as { status: string | null }).status ?? "new";
+    for (const lt of ((lead as { lead_tags: { tag_id: string }[] }).lead_tags) ?? []) {
+      const cur = tagStats.get(lt.tag_id) ?? {};
+      cur[st] = (cur[st] || 0) + 1;
+      tagStats.set(lt.tag_id, cur);
+    }
+  }
 
-  const statCards = [
-    { label: "Leads", value: stats?.leads || 0, icon: Users, color: "text-blue-400", bg: "bg-blue-500/10" },
-    { label: "Conversas", value: stats?.conversations || 0, icon: MessageSquare, color: "text-purple-400", bg: "bg-purple-500/10" },
-    { label: "Conversas Fechadas", value: stats?.closedConversations || 0, icon: MessageSquare, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-    { label: "Mensagens", value: stats?.messages || 0, icon: MessageSquare, color: "text-amber-400", bg: "bg-amber-500/10" },
-    { label: "Mensagens IA", value: stats?.aiMessages || 0, icon: Bot, color: "text-cyan-400", bg: "bg-cyan-500/10" },
-    { label: "Campanhas", value: stats?.campaigns || 0, icon: Megaphone, color: "text-pink-400", bg: "bg-pink-500/10" },
-  ];
+  // 3. Origem: contagem por source + status
+  const sourceStats = new Map<string, Record<string, number>>();
+  for (const lead of leadsRaw ?? []) {
+    const src = (lead as { source: string | null }).source || "manual";
+    const st = (lead as { status: string | null }).status ?? "new";
+    const cur = sourceStats.get(src) ?? {};
+    cur[st] = (cur[st] || 0) + 1;
+    sourceStats.set(src, cur);
+  }
+  const sourceSorted = Array.from(sourceStats.entries())
+    .map(([src, stats]) => ({
+      src,
+      stats,
+      total: Object.values(stats).reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => b.total - a.total);
+  const totalLeads = sourceSorted.reduce((s, r) => s + r.total, 0);
 
-  const tooltipStyle = {
-    contentStyle: { background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, fontSize: 12 },
-    labelStyle: { color: "var(--muted-foreground)" },
+  // 4. Agenda
+  const apptByStatus: Record<string, number> = {};
+  const apptByChannel: Record<string, number> = {};
+  for (const a of appointments ?? []) {
+    const appt = a as { status: string; channel: string | null };
+    apptByStatus[appt.status] = (apptByStatus[appt.status] || 0) + 1;
+    const ch = appt.channel ?? "não informado";
+    apptByChannel[ch] = (apptByChannel[ch] || 0) + 1;
+  }
+  const totalAppts = (appointments ?? []).length;
+
+  // ─── Labels ─────────────────────────────────────────────────────────────────
+  const campaignStatusLabels: Record<string, string> = {
+    draft: "Rascunho",
+    scheduled: "Agendada",
+    sending: "Enviando",
+    paused: "Pausada",
+    completed: "Concluída",
+    cancelled: "Cancelada",
   };
+
+  const apptStatusLabels: Record<string, string> = {
+    awaiting_confirmation: "Aguardando confirmação",
+    confirmed: "Confirmado",
+    completed: "Concluído",
+    cancelled: "Cancelado",
+    no_show: "Não compareceu",
+    rescheduled: "Reagendado",
+  };
+
+  const apptStatusColors: Record<string, string> = {
+    confirmed: "text-success",
+    completed: "text-success",
+    cancelled: "text-destructive",
+    no_show: "text-warning",
+    rescheduled: "text-muted-foreground",
+    awaiting_confirmation: "text-muted-foreground",
+  };
+
+  const channelLabels: Record<string, string> = {
+    whatsapp: "WhatsApp",
+    phone: "Telefone",
+    online: "Online",
+    in_person: "Presencial",
+    "não informado": "Não informado",
+  };
+
+  const fmtBRL = (v: number) =>
+    v.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    });
+
+  const hasPipelines = (pipelines ?? []).length > 0;
+  const hasSources = sourceSorted.length > 0;
+  const hasTags = (tags ?? []).some((t) => tagStats.has(t.id));
+  const hasCampaigns = (campaigns ?? []).length > 0;
+  const hasAppts = totalAppts > 0;
+  const isEmpty = !hasPipelines && !hasSources && !hasTags && !hasCampaigns && !hasAppts;
+
+  const periodLabel =
+    validFrom || validTo
+      ? `${validFrom ?? "início"} → ${validTo ? validTo.slice(0, 10) : "hoje"}`
+      : "Todos os períodos";
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-foreground">Relatórios</h1>
-        <p className="text-sm text-muted-foreground">{activeOrgName} — Últimos 30 dias</p>
-      </div>
-
-      {/* Value card */}
-      <div className="bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/20 rounded-xl p-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
         <div className="flex items-center gap-3">
-          <TrendingUp className="size-8 text-primary" />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <BarChart3 className="size-5" />
+          </div>
           <div>
-            <p className="text-sm text-primary/80">Valor Total em Deals</p>
-            <p className="text-3xl font-bold text-foreground">
-              R$ {(stats?.dealValue || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </p>
+            <h1 className="text-xl font-bold leading-tight tracking-tight">Relatórios</h1>
+            <p className="text-sm text-muted-foreground">{periodLabel}</p>
           </div>
         </div>
+        <ReportsFilterBar from={validFrom} to={validTo ? validTo.slice(0, 10) : undefined} />
+      </div>
+      <div className="hidden print:block">
+        <h1 className="text-2xl font-bold">Relatórios — {periodLabel}</h1>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {statCards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div key={c.label} className="bg-card border border-border rounded-xl p-4">
-              <div className={`size-10 rounded-xl flex items-center justify-center mb-3 ${c.bg}`}>
-                <Icon className={`size-5 ${c.color}`} />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{c.value.toLocaleString("pt-BR")}</p>
-              <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+      {isEmpty && (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <p className="text-muted-foreground text-sm">
+              Nenhum dado para exibir ainda. O cliente precisa criar leads, tags,
+              funis, campanhas e agendamentos para ver os relatórios aqui.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 1. Funil de Vendas ───────────────────────────────────────────────── */}
+      {hasPipelines && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Funil de Vendas</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {(pipelines ?? []).map((pipeline) => {
+              const stages = [
+                ...((pipeline.pipeline_stages as {
+                  id: string;
+                  name: string;
+                  sort_order: number;
+                }[]) ?? []),
+              ].sort((a, b) => a.sort_order - b.sort_order);
+
+              const pipelineDeals = (allDeals ?? []).filter(
+                (d) => d.pipeline_id === pipeline.id,
+              );
+              const pipelineTotal = pipelineDeals.length;
+              const wonTotal = pipelineDeals.filter((d) => d.status === "won").length;
+              const convRate =
+                pipelineTotal > 0 ? Math.round((wonTotal / pipelineTotal) * 100) : 0;
+
+              return (
+                <div key={pipeline.id}>
+                  <div className="flex items-baseline gap-3 mb-3">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {pipeline.name}
+                    </h3>
+                    <span className="text-xs text-muted-foreground">
+                      {pipelineTotal} deal{pipelineTotal !== 1 ? "s" : ""} · {convRate}% conversão
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left py-2 pr-6 text-xs font-medium text-muted-foreground">Etapa</th>
+                          <th className="text-right py-2 px-4 text-xs font-medium text-muted-foreground">Em andamento</th>
+                          <th className="text-right py-2 px-4 text-xs font-medium text-muted-foreground">Ganhos</th>
+                          <th className="text-right py-2 px-4 text-xs font-medium text-muted-foreground">Perdidos</th>
+                          <th className="text-right py-2 pl-4 text-xs font-medium text-muted-foreground">Valor total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stages.map((stage) => {
+                          const s = dealsByStage.get(stage.id) ?? {
+                            open: 0,
+                            won: 0,
+                            lost: 0,
+                            value: 0,
+                          };
+                          const total = s.open + s.won + s.lost;
+                          if (total === 0) return null;
+                          return (
+                            <tr key={stage.id} className="border-b border-border/50 hover:bg-muted/30">
+                              <td className="py-2.5 pr-6 font-medium">{stage.name}</td>
+                              <td className="text-right py-2.5 px-4 tabular-nums">{s.open}</td>
+                              <td className="text-right py-2.5 px-4 tabular-nums text-success font-medium">{s.won}</td>
+                              <td className="text-right py-2.5 px-4 tabular-nums text-destructive">{s.lost}</td>
+                              <td className="text-right py-2.5 pl-4 tabular-nums text-muted-foreground">{fmtBRL(s.value)}</td>
+                            </tr>
+                          );
+                        })}
+                        {stages.every((stage) => {
+                          const s = dealsByStage.get(stage.id);
+                          return !s || s.open + s.won + s.lost === 0;
+                        }) && (
+                          <tr>
+                            <td colSpan={5} className="py-4 text-center text-xs text-muted-foreground">
+                              Nenhum deal neste funil ainda
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 2. Leads por Origem ──────────────────────────────────────────────── */}
+      {hasSources && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Leads por Origem</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 pr-6 text-xs font-medium text-muted-foreground">Origem</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Total</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">%</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Novo</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Contatado</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Qualificado</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Cliente</th>
+                    <th className="text-right py-2 pl-3 text-xs font-medium text-muted-foreground">Conv.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceSorted.map(({ src, stats, total }) => {
+                    const pct = totalLeads > 0 ? Math.round((total / totalLeads) * 100) : 0;
+                    const customers = stats["customer"] ?? 0;
+                    const convRate = total > 0 ? Math.round((customers / total) * 100) : 0;
+                    return (
+                      <tr key={src} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-2.5 pr-6 font-medium capitalize">{src}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums font-semibold">{total}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums text-muted-foreground">{pct}%</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums">{stats["new"] ?? 0}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums">{stats["contacted"] ?? 0}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums">{stats["qualified"] ?? 0}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums text-success font-semibold">{customers}</td>
+                        <td className="text-right py-2.5 pl-3 tabular-nums">
+                          <span className={convRate >= 10 ? "text-success font-semibold" : "text-muted-foreground"}>
+                            {convRate}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border">
+                    <td className="py-2.5 pr-6 font-semibold text-foreground">Total</td>
+                    <td className="text-right py-2.5 px-3 tabular-nums font-bold">{totalLeads}</td>
+                    <td colSpan={6} />
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-          );
-        })}
-      </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Leads Chart */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">Novos Leads por Dia</h2>
-        <div className="h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={leadsChart}>
-              <defs>
-                <linearGradient id="leadGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval="preserveStartEnd" />
-              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip {...tooltipStyle} />
-              <Area type="monotone" dataKey="leads" stroke="#3b82f6" fillOpacity={1} fill="url(#leadGrad)" strokeWidth={2} name="Leads" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      {/* ── 3. Leads por Tag ─────────────────────────────────────────────────── */}
+      {hasTags && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Leads por Tag</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 pr-6 text-xs font-medium text-muted-foreground">Tag</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Total</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Novo</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Contatado</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Qualificado</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Cliente</th>
+                    <th className="text-right py-2 pl-3 text-xs font-medium text-muted-foreground">Conv.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(tags ?? [])
+                    .map((tag) => ({
+                      tag,
+                      stats: tagStats.get(tag.id) ?? {},
+                      total: Object.values(tagStats.get(tag.id) ?? {}).reduce((a, b) => a + b, 0),
+                    }))
+                    .filter((r) => r.total > 0)
+                    .sort((a, b) => b.total - a.total)
+                    .map(({ tag, stats, total }) => {
+                      const customers = stats["customer"] ?? 0;
+                      const convRate = total > 0 ? Math.round((customers / total) * 100) : 0;
+                      return (
+                        <tr key={tag.id} className="border-b border-border/50 hover:bg-muted/30">
+                          <td className="py-2.5 pr-6">
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="size-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: (tag as { color: string | null }).color ?? "#3b82f6" }}
+                              />
+                              <span className="font-medium">{tag.name}</span>
+                            </span>
+                          </td>
+                          <td className="text-right py-2.5 px-3 tabular-nums font-semibold">{total}</td>
+                          <td className="text-right py-2.5 px-3 tabular-nums">{stats["new"] ?? 0}</td>
+                          <td className="text-right py-2.5 px-3 tabular-nums">{stats["contacted"] ?? 0}</td>
+                          <td className="text-right py-2.5 px-3 tabular-nums">{stats["qualified"] ?? 0}</td>
+                          <td className="text-right py-2.5 px-3 tabular-nums text-success font-semibold">{customers}</td>
+                          <td className="text-right py-2.5 pl-3 tabular-nums">
+                            <span className={convRate >= 10 ? "text-success font-semibold" : "text-muted-foreground"}>
+                              {convRate}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Messages Chart */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider mb-4">Mensagens por Dia (Humano vs IA)</h2>
-        <div className="h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={msgsChart}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval="preserveStartEnd" />
-              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip {...tooltipStyle} />
-              <Legend wrapperStyle={{ fontSize: 11, color: "var(--muted-foreground)" }} />
-              <Bar dataKey="humano" fill="#8b5cf6" radius={[2, 2, 0, 0]} name="Humano" />
-              <Bar dataKey="ia" fill="#22c55e" radius={[2, 2, 0, 0]} name="IA" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      {/* ── 4. Agenda ────────────────────────────────────────────────────────── */}
+      {hasAppts && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Agenda</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-3">Por status</p>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {Object.entries(apptByStatus)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([status, count]) => {
+                        const pct = totalAppts > 0 ? Math.round((count / totalAppts) * 100) : 0;
+                        return (
+                          <tr key={status} className="border-b border-border/50">
+                            <td className="py-2 pr-4">
+                              <span className={`font-medium ${apptStatusColors[status] ?? "text-foreground"}`}>
+                                {apptStatusLabels[status] ?? status}
+                              </span>
+                            </td>
+                            <td className="text-right py-2 px-3 tabular-nums font-semibold">{count}</td>
+                            <td className="text-right py-2 pl-3 tabular-nums text-muted-foreground">{pct}%</td>
+                          </tr>
+                        );
+                      })}
+                    <tr className="border-t border-border">
+                      <td className="py-2 pr-4 font-semibold">Total</td>
+                      <td className="text-right py-2 px-3 tabular-nums font-bold">{totalAppts}</td>
+                      <td />
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {Object.keys(apptByChannel).length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-3">Por canal</p>
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {Object.entries(apptByChannel)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([channel, count]) => {
+                          const pct = totalAppts > 0 ? Math.round((count / totalAppts) * 100) : 0;
+                          return (
+                            <tr key={channel} className="border-b border-border/50">
+                              <td className="py-2 pr-4 font-medium">
+                                {channelLabels[channel] ?? channel}
+                              </td>
+                              <td className="text-right py-2 px-3 tabular-nums font-semibold">{count}</td>
+                              <td className="text-right py-2 pl-3 tabular-nums text-muted-foreground">{pct}%</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 5. Desempenho de Campanhas ───────────────────────────────────────── */}
+      {hasCampaigns && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Desempenho de Campanhas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-2 pr-4 text-xs font-medium text-muted-foreground">Campanha</th>
+                    <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">Status</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Alvo</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Enviado</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Entregue</th>
+                    <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Lido</th>
+                    <th className="text-right py-2 pl-3 text-xs font-medium text-muted-foreground">Taxa env.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(campaigns ?? []).map((campaign) => {
+                    const c = campaign as {
+                      id: string;
+                      name: string;
+                      status: string | null;
+                      total_target: number | null;
+                      total_sent: number | null;
+                      total_delivered: number | null;
+                      total_read: number | null;
+                    };
+                    const target = c.total_target ?? 0;
+                    const sent = c.total_sent ?? 0;
+                    const delivered = c.total_delivered ?? 0;
+                    const read = c.total_read ?? 0;
+                    const sendRate = target > 0 ? Math.round((sent / target) * 100) : 0;
+                    return (
+                      <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="py-2.5 pr-4 font-medium max-w-[180px]">
+                          <span className="block truncate">{c.name}</span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <Badge variant="outline" className="text-xs">
+                            {campaignStatusLabels[c.status ?? ""] ?? c.status}
+                          </Badge>
+                        </td>
+                        <td className="text-right py-2.5 px-3 tabular-nums">{target || "—"}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums text-primary font-medium">{sent || "—"}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums text-success">{delivered || "—"}</td>
+                        <td className="text-right py-2.5 px-3 tabular-nums text-muted-foreground">{read || "—"}</td>
+                        <td className="text-right py-2.5 pl-3 tabular-nums">
+                          {target > 0 ? (
+                            <span className={sendRate >= 80 ? "text-success font-semibold" : "text-muted-foreground"}>
+                              {sendRate}%
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -269,6 +269,94 @@ export async function deleteAssistant(assistantId: string) {
   return { error: null };
 }
 
+// ============ API KEYS ============
+
+export async function listApiKeys() {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { data } = await (admin as any)
+    .from('api_keys')
+    .select('id, name, key_prefix, is_active, created_at, last_used_at')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false });
+  return data ?? [];
+}
+
+export async function revokeApiKey(keyId: string) {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { error } = await (admin as any)
+    .from('api_keys')
+    .update({ is_active: false })
+    .eq('id', keyId)
+    .eq('organization_id', orgId);
+  if (error) return { error: error.message };
+  revalidatePath('/settings/api-keys');
+  return { error: null };
+}
+
+// ============ GOOGLE CALENDAR ============
+
+export async function getGoogleCalendarStatus() {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { data, error } = await (admin as any)
+    .from('google_calendar_connections')
+    .select('id, email, is_active, calendar_id, created_at, updated_at')
+    .eq('organization_id', orgId)
+    .limit(1)
+    .maybeSingle();
+  if (error && !/could not find the table/i.test(error.message)) return null;
+  return data ?? null;
+}
+
+// ============ MCP SERVERS ============
+
+export async function listMcpServersAdmin() {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { data, error } = await (admin as any)
+    .from('mcp_server_connections')
+    .select('id, name, server_url, is_active, created_at')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false });
+  if (error && /could not find the table/i.test(error.message)) return [];
+  return data ?? [];
+}
+
+export async function deleteMcpServer(serverId: string) {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { error } = await (admin as any)
+    .from('mcp_server_connections')
+    .delete()
+    .eq('id', serverId)
+    .eq('organization_id', orgId);
+  if (error) return { error: error.message };
+  revalidatePath('/settings/mcp-servers');
+  return { error: null };
+}
+
+export async function toggleMcpServer(serverId: string, isActive: boolean) {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { error } = await (admin as any)
+    .from('mcp_server_connections')
+    .update({ is_active: isActive })
+    .eq('id', serverId)
+    .eq('organization_id', orgId);
+  if (error) return { error: error.message };
+  revalidatePath('/settings/mcp-servers');
+  return { error: null };
+}
+
+// ============ CAPTURE SOURCES ============
+
+export async function listCaptureSourcesAdmin() {
+  const { admin, orgId } = await requireSuperadminForOrg();
+  const { data, error } = await (admin as any)
+    .from('capture_sources')
+    .select('id, name, slug, is_active, pipeline_id, stage_id, created_at')
+    .eq('organization_id', orgId)
+    .order('created_at', { ascending: false });
+  if (error && /could not find the table/i.test(error.message)) return [];
+  return data ?? [];
+}
+
 // ============ WHATSAPP STATUS ============
 
 /**

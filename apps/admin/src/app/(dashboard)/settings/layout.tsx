@@ -4,8 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  Calendar,
+  Code2,
+  CreditCard,
+  Key,
   ListChecks,
   MessageCircle,
+  Radio,
   ShieldCheck,
   Users,
   Webhook,
@@ -18,6 +23,11 @@ const clientTabs = [
   { label: "Filas", href: "/settings/queues", icon: ListChecks },
   { label: "Webhooks", href: "/settings/webhooks", icon: Webhook },
   { label: "WhatsApp", href: "/settings/whatsapp", icon: MessageCircle },
+  { label: "Chaves de API", href: "/settings/api-keys", icon: Key },
+  { label: "Google Agenda", href: "/settings/google-calendar", icon: Calendar },
+  { label: "Servidores MCP", href: "/settings/mcp-servers", icon: Code2 },
+  { label: "Origens de Captura", href: "/settings/capture-sources", icon: Radio },
+  { label: "Plano", href: "/settings/billing", icon: CreditCard },
 ];
 
 const adminTabs = [

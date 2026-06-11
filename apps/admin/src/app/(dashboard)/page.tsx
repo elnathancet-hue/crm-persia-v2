@@ -1,25 +1,27 @@
 import { readAdminContext } from "@/lib/admin-context";
 import { withAdmin } from "@/lib/supabase-admin";
 import { getAdminStats, getOrganizations } from "@/actions/admin";
-import { getReportStats } from "@/actions/reports";
-import { BarChart3, Building2, Clock, DollarSign, Kanban, MessageSquare, Target, TrendingUp, Users, Zap } from "lucide-react";
+import { getReportStats, getRecentActivity } from "@/actions/reports";
+import { AlertTriangle, BarChart3, Building2, Clock, DollarSign, Kanban, MessageSquare, Target, TrendingUp, Users, Zap } from "lucide-react";
 import Link from "next/link";
 
 type OrganizationSummary = Awaited<ReturnType<typeof getOrganizations>>[number];
 type ClientReportStats = Awaited<ReturnType<typeof getReportStats>>;
+type RecentActivity = Awaited<ReturnType<typeof getRecentActivity>>;
 
 export default async function DashboardPage() {
   const adminContext = await readAdminContext();
 
   if (adminContext) {
-    const [stats, orgRes] = await Promise.all([
+    const [stats, orgRes, activity] = await Promise.all([
       getReportStats().catch(() => null as ClientReportStats | null),
       withAdmin("admin_page_org_name", async (admin) =>
         admin.from("organizations").select("name").eq("id", adminContext.orgId).single()
       ),
+      getRecentActivity().catch(() => ({ recentLeads: [], waitingConvs: [] } as RecentActivity)),
     ]);
     const orgName = (orgRes.data as { name?: string } | null)?.name || "Cliente";
-    return <ClientDashboardView stats={stats} orgName={orgName} />;
+    return <ClientDashboardView stats={stats} orgName={orgName} activity={activity} />;
   }
 
   const [stats, orgs] = await Promise.all([
@@ -90,7 +92,15 @@ function AdminDashboardView({
 
 // ============ CLIENT DASHBOARD ============
 
-function ClientDashboardView({ stats, orgName }: { stats: ClientReportStats | null; orgName: string }) {
+function ClientDashboardView({
+  stats,
+  orgName,
+  activity,
+}: {
+  stats: ClientReportStats | null;
+  orgName: string;
+  activity: RecentActivity;
+}) {
   const kpis = [
     { label: "Leads", value: stats?.totalLeads ?? 0, icon: Users, color: "text-progress bg-progress-soft" },
     { label: "Novos (30 dias)", value: stats?.newLeads30d ?? 0, icon: TrendingUp, color: "text-primary bg-primary/10" },
@@ -135,6 +145,79 @@ function ClientDashboardView({ stats, orgName }: { stats: ClientReportStats | nu
           </div>
         ))}
       </div>
+
+      {/* Alertas: conversas aguardando humano */}
+      {activity.waitingConvs.length > 0 && (
+        <div className="border border-warning/30 bg-warning/5 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="size-4 text-warning shrink-0" />
+            <p className="text-sm font-semibold text-warning">
+              {activity.waitingConvs.length} conversa{activity.waitingConvs.length !== 1 ? "s" : ""} aguardando atendimento humano
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            {activity.waitingConvs.map((conv) => {
+              const lead = (conv as { leads?: { name?: string; phone?: string } | null }).leads;
+              return (
+                <Link
+                  key={conv.id}
+                  href={`/chat?conversationId=${conv.id}`}
+                  className="flex items-center justify-between rounded-lg bg-card border border-border px-3 py-2 hover:border-warning/40 transition-colors"
+                >
+                  <span className="text-sm font-medium truncate">
+                    {lead?.name || lead?.phone || "Lead desconhecido"}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">Ver chat →</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Leads recentes */}
+      {activity.recentLeads.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Leads Recentes</h2>
+            <Link href="/crm" className="text-xs text-primary hover:underline">Ver todos</Link>
+          </div>
+          <div className="border border-border rounded-xl bg-card overflow-hidden">
+            {activity.recentLeads.map((lead, i) => {
+              const l = lead as {
+                id: string;
+                name: string | null;
+                phone: string | null;
+                status: string | null;
+                source: string | null;
+                created_at: string | null;
+              };
+              const statusColors: Record<string, string> = {
+                new: "text-muted-foreground",
+                contacted: "text-primary",
+                qualified: "text-progress",
+                customer: "text-success",
+              };
+              return (
+                <div
+                  key={l.id}
+                  className={`flex items-center justify-between px-4 py-3 ${i > 0 ? "border-t border-border/50" : ""} hover:bg-muted/30 transition-colors`}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{l.name || l.phone || "Sem nome"}</p>
+                    <p className="text-xs text-muted-foreground capitalize">
+                      {l.source || "manual"} · {l.created_at ? new Date(l.created_at).toLocaleDateString("pt-BR") : "—"}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-medium capitalize shrink-0 ml-3 ${statusColors[l.status ?? ""] ?? "text-muted-foreground"}`}>
+                    {l.status ?? "novo"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Link href="/chat" className="border border-border rounded-xl bg-card p-5 hover:border-primary/30 transition-colors">

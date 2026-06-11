@@ -116,6 +116,31 @@ export async function getLeadsTimeline(days: number = 30) {
   }));
 }
 
+export async function getRecentActivity() {
+  const { admin, orgId } = await requireSuperadminForOrg();
+
+  const [{ data: recentLeads }, { data: waitingConvs }] = await Promise.all([
+    admin
+      .from("leads")
+      .select("id, name, phone, status, source, created_at")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    admin
+      .from("conversations")
+      .select("id, status, created_at, lead_id, leads(name, phone)")
+      .eq("organization_id", orgId)
+      .eq("status", "waiting_human")
+      .order("updated_at", { ascending: true })
+      .limit(5),
+  ]);
+
+  return {
+    recentLeads: recentLeads ?? [],
+    waitingConvs: waitingConvs ?? [],
+  };
+}
+
 export async function getMessagesTimeline(days: number = 30) {
   const { admin, orgId } = await requireSuperadminForOrg();
   const since = new Date();
