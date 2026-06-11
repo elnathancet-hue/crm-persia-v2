@@ -30,6 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="pt-BR"
       className={`${inter.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* Previne flash light→dark ao recarregar — lê preferência antes do primeiro paint */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(localStorage.getItem('admin-theme')==='dark')document.documentElement.classList.add('dark');}catch(e){}})();` }} />
+      </head>
       <body className="min-h-full flex flex-col font-sans bg-background text-foreground">
         {children}
         <Toaster richColors position="top-right" closeButton />

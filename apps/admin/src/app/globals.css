@@ -11,6 +11,8 @@
 @source "../../../../packages/segments-ui/src";
 @source "../../../../packages/tags-ui/src";
 
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -22,14 +24,18 @@
   --font-heading: var(--font-heading, "DM Sans"), ui-sans-serif, system-ui, sans-serif;
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
   --color-border: var(--border);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   /* Regra global DS (mai/2026): destructive red 700 firme (match com texto pill Falha). */
-  --color-destructive: #A91B1B;
-  --color-destructive-foreground: #FFFFFF;
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-accent: var(--accent);
@@ -78,6 +84,23 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-badge-notification: var(--badge-notification);
+  --color-badge-notification-fg: var(--badge-notification-fg);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --spacing-card: 1.5rem;
+  --spacing-card-lg: 2rem;
+  --spacing-section: 2rem;
+  --spacing-stack: 1rem;
+  --spacing-form: 1rem;
+  --spacing-inline: 0.75rem;
 }
 
 :root {
@@ -86,15 +109,24 @@
   --foreground: #0D0D0D;
   --card: #F9FAFB;
   --card-foreground: #0D0D0D;
+  --popover: #FFFFFF;
+  --popover-foreground: #0D0D0D;
+  --secondary: #F3F4F6;
+  --secondary-foreground: #0D0D0D;
   --border: #E5E7EB;
   --muted: #F3F4F6;
   --muted-foreground: #6B7280;
   --primary: #3B82F6;
   --primary-foreground: #FFFFFF;
+  --destructive: hsl(0, 75%, 35%);
+  --destructive-foreground: #FFFFFF;
   --input: #D1D5DB;
   --ring: #3B82F6;
   --accent: #F3F4F6;
   --accent-foreground: #0D0D0D;
+  --badge-notification: hsl(0, 84%, 60%);
+  --badge-notification-fg: #FFFFFF;
+  --radius: 0.5rem;
   /* PR-T2: sidebar (light) — espelha apps/crm. Mesmo preto pro CRM
      cliente e admin manterem identidade unica. */
   --sidebar: hsl(0, 0%, 8%);                /* #141414 preto */
@@ -141,15 +173,23 @@
   --foreground: #F2F2F2;
   --card: #1A1A1A;
   --card-foreground: #F2F2F2;
+  --popover: #1A1A1A;
+  --popover-foreground: #F2F2F2;
+  --secondary: #262626;
+  --secondary-foreground: #F2F2F2;
   --border: #2E2E2E;
   --muted: #262626;
   --muted-foreground: #A6A6A6;
   --primary: #3B82F6;
   --primary-foreground: #FFFFFF;
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: #FFFFFF;
   --input: #2E2E2E;
   --ring: #3B82F6;
   --accent: #1A1A1A;
   --accent-foreground: #F2F2F2;
+  --badge-notification: hsl(0, 84%, 60%);
+  --badge-notification-fg: #FFFFFF;
   /* PR-T2: sidebar (dark) — deep navy + gold accent, espelha tema
      dark do CRM cliente. */
   --sidebar: hsl(230, 45%, 5%);
@@ -295,4 +335,6 @@ code, kbd, pre, samp {
 body.managing-client {
   --primary: #F59E0B;
   --ring: #F59E0B;
+  --sidebar-primary: #F59E0B;
+  --sidebar-ring: #F59E0B;
 }
