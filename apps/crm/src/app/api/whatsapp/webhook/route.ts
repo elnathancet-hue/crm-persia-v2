@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { phoneBR } from "@persia/shared/validation";
 import { errorMessage, getRequestId, logError, logInfo, logWarn } from "@/lib/observability";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { tryEnqueueForNativeAgent } from "@/lib/ai-agent/executor";
@@ -464,7 +465,93 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "group_message_saved" });
     }
 
-    // 4. UAZAPI-specific: fetch media URL via POST /message/download.
+    // 4b. Outbound message sent directly from the connected device (fromMe = true).
+    //     Mirror to `messages` with sender: "agent" so agents see both sides when
+    //     replying from their personal WhatsApp instead of the CRM.
+    //     Skip: lead creation, keyword flows, AI routing.
+    //     Dedup: CRM-sent messages are already in DB (whatsapp_msg_id set by
+    //     sendMessageViaWhatsApp) — detect and skip to avoid double-saving.
+    if (msg.isFromMe) {
+      try {
+        // Dedup: if we already have this whatsapp_msg_id, it was sent via CRM.
+        if (msg.messageId) {
+          const { data: existingMsg } = await supabase
+            .from("messages")
+            .select("id")
+            .eq("organization_id", matchedConn.organization_id)
+            .eq("whatsapp_msg_id", msg.messageId)
+            .maybeSingle();
+          if (existingMsg) {
+            return NextResponse.json({ ok: true, skipped: "duplicate" });
+          }
+        }
+
+        if (!msg.text && !msg.mediaUrl) {
+          return NextResponse.json({ ok: true, skipped: "fromMe_no_content" });
+        }
+
+        // Normalize phone (same logic as incoming-pipeline).
+        let phone = msg.phone;
+        try { phone = phoneBR.parse(msg.phone); } catch { /* use raw */ }
+
+        const { data: lead } = await supabase
+          .from("leads")
+          .select("id")
+          .eq("organization_id", matchedConn.organization_id)
+          .eq("phone", phone)
+          .maybeSingle();
+
+        if (!lead) {
+          return NextResponse.json({ ok: true, skipped: "fromMe_no_lead" });
+        }
+
+        const { data: conversation } = await supabase
+          .from("conversations")
+          .select("id")
+          .eq("organization_id", matchedConn.organization_id)
+          .eq("lead_id", lead.id)
+          .in("status", ["active", "waiting_human"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!conversation) {
+          return NextResponse.json({ ok: true, skipped: "fromMe_no_conversation" });
+        }
+
+        const now = new Date().toISOString();
+        await Promise.all([
+          supabase.from("messages").insert({
+            organization_id: matchedConn.organization_id,
+            conversation_id: conversation.id,
+            lead_id: lead.id,
+            content: msg.text,
+            sender: "agent",
+            type: msg.type,
+            whatsapp_msg_id: msg.messageId || null,
+            media_url: msg.mediaUrl || null,
+            media_type: msg.mediaMimeType || null,
+            status: "sent",
+          }),
+          supabase
+            .from("conversations")
+            .update({ last_message_at: now })
+            .eq("id", conversation.id),
+        ]);
+      } catch (err: unknown) {
+        // Best-effort: never fail the webhook response for fromMe mirroring.
+        logError("uazapi_webhook_from_me_failed", {
+          organization_id: matchedConn.organization_id,
+          request_id: requestId,
+          provider: provider.name,
+          route: "/api/whatsapp/webhook",
+          error: errorMessage(err),
+        });
+      }
+      return NextResponse.json({ ok: true, handled: "from_me" });
+    }
+
+    // 5. UAZAPI-specific: fetch media URL via POST /message/download.
     //    (UAZAPI does not include fileURL in the webhook for media messages.)
     const isMediaType = msg.type !== "text";
     if (isMediaType && !msg.mediaUrl && msg.messageId) {
@@ -489,7 +576,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 5. Native AI Agent router. Any miss or failure falls through to legacy.
+    // 6. Native AI Agent router. Any miss or failure falls through to legacy.
     const nativeOutcome = await tryEnqueueForNativeAgent({
       supabase,
       orgId: matchedConn.organization_id,
@@ -516,7 +603,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(nativeOutcome.response);
     }
 
-    // 6. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
+    // 7. Shared pipeline: dedup + lead + flows + conversation + msg + IA.
     const result = await processIncomingMessage({
       supabase,
       orgId: matchedConn.organization_id,

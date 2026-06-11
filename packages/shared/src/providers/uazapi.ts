@@ -401,8 +401,6 @@ export class UazapiAdapter implements WhatsAppProvider {
   parseWebhook(body: unknown): IncomingMessage | null {
     const raw = body as Record<string, unknown>;
 
-    if (raw.fromMe === true) return null;
-
     const chatid = String(raw.chatid || "");
     const phone = chatid.replace(/@s\.whatsapp\.net$/, "").replace(/@.*$/, "");
     if (!phone) return null;
