@@ -114,8 +114,10 @@ export async function processIncomingMessage(ctx: IncomingContext): Promise<Inco
     if (existing) return { ok: true, skipped: "duplicate message" };
   }
 
-  // Skip if no text AND no media
-  if (!msg.text && !msg.mediaUrl) {
+  // Skip if no content. Location and contact messages have no text/media but
+  // carry structured data (lat/lng, contact card) that must still be saved.
+  const hasStructuredContent = msg.type === "location" || msg.type === "contact";
+  if (!msg.text && !msg.mediaUrl && !hasStructuredContent) {
     return { ok: true, skipped: "no text or media" };
   }
 
