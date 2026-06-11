@@ -2,6 +2,8 @@ import { PageTitle } from "@persia/ui/typography";
 import { getEmailCampaigns } from "@/actions/email-campaigns";
 import { EmailPageClient } from "./email-client";
 
+export const metadata = { title: "E-mail" };
+
 export default async function EmailPage() {
   const campaigns = await getEmailCampaigns();
 

@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { WebhookClient } from "./webhook-client";
 
+export const metadata = { title: "Webhook IA" };
+
 export default async function WebhookPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

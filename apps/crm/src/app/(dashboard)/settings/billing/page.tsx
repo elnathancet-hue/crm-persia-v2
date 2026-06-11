@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { BillingPageClient } from "./billing-client";
 
+export const metadata = { title: "Plano — Configurações" };
+
 async function getBillingData() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

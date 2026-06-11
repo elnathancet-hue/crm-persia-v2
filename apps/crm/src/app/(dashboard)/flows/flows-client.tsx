@@ -201,7 +201,7 @@ export function FlowsPageClient({ initialFlows }: { initialFlows: Flow[] }) {
                 <TableCell>
                   <div className="flex gap-1">
                     <Link href={`/flows/${flow.id}`}>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" aria-label="Editar fluxo">
                         <Pencil className="size-3.5" />
                       </Button>
                     </Link>

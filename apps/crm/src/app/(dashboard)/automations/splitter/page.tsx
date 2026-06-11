@@ -1,6 +1,8 @@
 import { getAssistant } from "@/actions/ai";
 import { SplitterClient } from "./splitter-client";
 
+export const metadata = { title: "Picotador de Mensagens" };
+
 export default async function SplitterPage() {
   const assistant = await getAssistant();
 

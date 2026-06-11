@@ -81,8 +81,8 @@ import { FieldCard } from "./field-card";
 const ENTRY_TRIGGER_LABELS: Record<string, string> = {
   conversation_started: "Em qualquer mensagem do lead",
   keyword_match: "Quando lead mandar palavra-chave",
-  segment_entered: "Quando lead entrar em segmentação (em breve)",
-  pipeline_stage_entered: "Quando lead entrar em etapa do funil (em breve)",
+  segment_entered: "Quando lead entrar em segmentação",
+  pipeline_stage_entered: "Quando lead entrar em etapa do funil",
 };
 
 interface NodeConfigSheetProps {
@@ -322,10 +322,10 @@ export function EntryForm({
               Quando lead mandar palavra-chave
             </SelectItem>
             <SelectItem value="segment_entered">
-              Quando lead entrar em segmentação (em breve)
+              Quando lead entrar em segmentação
             </SelectItem>
             <SelectItem value="pipeline_stage_entered">
-              Quando lead entrar em etapa do funil (em breve)
+              Quando lead entrar em etapa do funil
             </SelectItem>
           </SelectContent>
         </Select>

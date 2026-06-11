@@ -2,6 +2,8 @@ import { PageTitle } from "@persia/ui/typography";
 import { getFlows } from "@/actions/flows";
 import { FlowsPageClient } from "./flows-client";
 
+export const metadata = { title: "Fluxos" };
+
 export default async function FlowsPage() {
   const flows = await getFlows();
 

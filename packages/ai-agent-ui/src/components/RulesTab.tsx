@@ -1027,7 +1027,7 @@ export function RulesTab({
                   onValueChange={(v) => v && setModel(v)}
                 >
                   <SelectTrigger id="model">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecionar modelo…" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="gpt-5-mini">
@@ -1658,7 +1658,7 @@ export function RulesTab({
                       }
                     >
                       <SelectTrigger id="validation-on-block">
-                        <SelectValue />
+                        <SelectValue placeholder="Selecionar ação…" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="rewrite">Reescrever com IA</SelectItem>
@@ -2506,7 +2506,7 @@ function SourceModal({
                 <Label className="text-xs font-medium">Tipo</Label>
                 <Select value={srcType} onValueChange={(v) => v && setSrcType(v as SourceType)}>
                   <SelectTrigger data-size="sm">
-                    <SelectValue />
+                    <SelectValue placeholder="Selecionar tipo…" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="json">JSON inline — dados embutidos no agente</SelectItem>
@@ -2605,7 +2605,7 @@ function SourceModal({
                   <Label className="text-xs font-medium">Categoria</Label>
                   <Select value={dataType} onValueChange={(v) => v && setDataType(v as JsonDataType)}>
                     <SelectTrigger data-size="sm">
-                      <SelectValue />
+                      <SelectValue placeholder="Selecionar categoria…" />
                     </SelectTrigger>
                     <SelectContent>
                       {JSON_DATA_TYPES.map((dt) => (
@@ -2837,8 +2837,8 @@ function ImportTemplatesModal({
               onValueChange={(v) => v && setMode(v as ImportMode)}
             >
               <SelectTrigger data-size="sm">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectValue placeholder="Selecionar modo…" />
+            </SelectTrigger>
               <SelectContent>
                 <SelectItem value="merge">Adicionar / atualizar por chave</SelectItem>
                 <SelectItem value="replace">Substituir todos os templates</SelectItem>

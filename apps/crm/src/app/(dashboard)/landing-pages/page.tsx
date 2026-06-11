@@ -2,6 +2,8 @@ import { PageTitle } from "@persia/ui/typography";
 import { getLandingPages } from "@/actions/landing-pages";
 import { LandingPagesClient } from "./landing-pages-client";
 
+export const metadata = { title: "Landing Pages" };
+
 export default async function LandingPagesPage() {
   const pages = await getLandingPages();
 

@@ -872,7 +872,7 @@ function SimulateEventPanel({
               disabled={disabled}
             >
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
+                <SelectValue placeholder="Selecionar gatilho…" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pipeline_stage_entered">

@@ -33,7 +33,7 @@ export interface NavItem {
 export const adminNavigation: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Clientes", href: "/clients", icon: Building2 },
-  { label: "Relatorios", href: "/reports", icon: BarChart3 },
+  { label: "Relatórios", href: "/reports", icon: BarChart3 },
   { label: "Auditoria", href: "/audit", icon: ShieldCheck },
   { label: "Config", href: "/settings/admin", icon: Settings },
 ];
@@ -41,7 +41,7 @@ export const adminNavigation: NavItem[] = [
 export const adminMobileItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Clientes", href: "/clients", icon: Building2 },
-  { label: "Relatorios", href: "/reports", icon: BarChart3 },
+  { label: "Relatórios", href: "/reports", icon: BarChart3 },
 ];
 
 // --- Client/Account Mode (full CRM sidebar) ---
@@ -53,19 +53,30 @@ export const clientNavigation: NavItem[] = [
   { label: "CRM", href: "/crm", icon: Kanban, serviceKey: "crm" },
   { label: "Agenda", href: "/agenda", icon: Calendar, serviceKey: "agenda" },
   {
-    label: "Automacao",
+    label: "Automação",
     href: "/automations",
     icon: Zap,
     serviceKey: "automations",
     children: [
+      { label: "Visão geral", href: "/automations" },
       { label: "Agente IA", href: "/automations/agents" },
       { label: "Biblioteca de mídia", href: "/automations/tools" },
       { label: "Tipos de agendamento", href: "/automations/appointments" },
+      { label: "Assistente", href: "/automations/assistant" },
     ],
   },
   { label: "Campanha", href: "/campaigns", icon: Megaphone, serviceKey: "campaigns" },
-  { label: "Relatorios", href: "/reports", icon: BarChart3, serviceKey: "reports" },
-  { label: "Config", href: "/settings", icon: Settings },
+  { label: "Relatórios", href: "/reports", icon: BarChart3, serviceKey: "reports" },
+  {
+    label: "Config",
+    href: "/settings",
+    icon: Settings,
+    children: [
+      { label: "Configurações", href: "/settings" },
+      { label: "Templates", href: "/settings/templates" },
+      { label: "IA", href: "/settings/ai" },
+    ],
+  },
 ];
 
 export const clientMobileItems: NavItem[] = [

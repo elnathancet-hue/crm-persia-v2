@@ -2353,6 +2353,7 @@ function GroupChatPanel({
             <Button
               size="icon"
               onClick={handleStopRecording}
+              aria-label="Parar gravação"
               className="size-10 shrink-0 rounded-full hover:opacity-90"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
@@ -2363,6 +2364,7 @@ function GroupChatPanel({
               size="icon"
               onClick={handleSendMessage}
               disabled={sendingMessage}
+              aria-label="Enviar mensagem"
               className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
@@ -2372,6 +2374,7 @@ function GroupChatPanel({
             <Button
               size="icon"
               onClick={handleStartRecording}
+              aria-label="Gravar áudio"
               className="size-10 shrink-0 rounded-full hover:opacity-90"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
@@ -2807,7 +2810,7 @@ function GroupChatPanel({
                         <div className="text-muted-foreground">{formatFullDateTime(s.scheduled_at)}</div>
                         {s.status === "error" && <div className="text-destructive">{s.error_message}</div>}
                       </div>
-                      <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => handleCancelScheduled(s.id)}>
+                      <Button variant="ghost" size="icon" aria-label="Cancelar agendamento" className="size-6 shrink-0" onClick={() => handleCancelScheduled(s.id)}>
                         <X className="size-3" />
                       </Button>
                     </div>

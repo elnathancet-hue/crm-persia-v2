@@ -8,6 +8,8 @@ import { getTags } from "@/actions/tags";
 import { getPipelines, getAllStagesForOrg } from "@/actions/crm";
 import { CrmCampaignList } from "@/components/campaigns/crm-campaign-list";
 
+export const metadata = { title: "Campanhas" };
+
 export default async function CampaignsPage({
   searchParams,
 }: {

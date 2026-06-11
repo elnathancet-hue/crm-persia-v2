@@ -1,6 +1,8 @@
 import { getAssistants } from "@/actions/ai";
 import { AssistantListClient } from "./assistant-list-client";
 
+export const metadata = { title: "Assistentes IA" };
+
 export default async function AssistantPage() {
   const assistants = await getAssistants();
 

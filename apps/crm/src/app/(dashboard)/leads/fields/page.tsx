@@ -3,6 +3,8 @@ import { getCustomFields } from "@/actions/custom-fields";
 import { CustomFieldsClient } from "./custom-fields-client";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
 
+export const metadata = { title: "Campos personalizados" };
+
 export default async function CustomFieldsPage() {
   await requireAdminPageAccess();
   const fields = await getCustomFields();

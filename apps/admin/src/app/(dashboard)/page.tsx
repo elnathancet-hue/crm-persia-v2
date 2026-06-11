@@ -1,5 +1,7 @@
 import { readAdminContext } from "@/lib/admin-context";
 import { withAdmin } from "@/lib/supabase-admin";
+
+export const metadata = { title: "Dashboard" };
 import { getAdminStats, getOrganizations } from "@/actions/admin";
 import { getReportStats, getRecentActivity } from "@/actions/reports";
 import { AlertTriangle, BarChart3, Building2, Clock, DollarSign, Kanban, MessageSquare, Target, TrendingUp, Users, Zap } from "lucide-react";

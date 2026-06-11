@@ -1418,6 +1418,7 @@ export function GroupDetailClient({
               size="icon"
               onClick={handleSendMessage}
               disabled={sendingMessage}
+              aria-label="Enviar mensagem"
               className="size-10 shrink-0 rounded-full hover:opacity-90 disabled:opacity-70"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >
@@ -1431,6 +1432,7 @@ export function GroupDetailClient({
             <Button
               size="icon"
               onClick={handleStartRecording}
+              aria-label="Gravar áudio"
               className="size-10 shrink-0 rounded-full hover:opacity-90"
               style={{ backgroundColor: "var(--chat-send-bg)", color: "var(--chat-send-fg)" }}
             >

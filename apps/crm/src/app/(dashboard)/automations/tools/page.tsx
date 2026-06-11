@@ -1,6 +1,8 @@
 import { getTools } from "@/actions/tools";
 import { ToolsClient } from "./tools-client";
 
+export const metadata = { title: "Biblioteca de mídia" };
+
 export default async function ToolsPage() {
   const tools = await getTools();
 

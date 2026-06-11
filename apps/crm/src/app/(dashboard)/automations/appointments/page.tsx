@@ -1,6 +1,8 @@
 import { getAppointmentTypes, getOrgMembersForSelect } from "@/actions/appointment-types";
 import { AppointmentTypesClient } from "./appointment-types-client";
 
+export const metadata = { title: "Tipos de agendamento" };
+
 export default async function AppointmentTypesPage() {
   const [types, members] = await Promise.all([
     getAppointmentTypes(),

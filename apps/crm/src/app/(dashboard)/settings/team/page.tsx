@@ -2,6 +2,8 @@ import { requireRole } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { TeamPageClient } from "./team-client";
 
+export const metadata = { title: "Equipe — Configurações" };
+
 async function getTeamData() {
   const { orgId } = await requireRole("admin");
 

@@ -1,6 +1,8 @@
 import { getAuditLogs, getAuditFilterOptions } from "@/actions/admin";
 import { AuditClient } from "./audit-client";
 
+export const metadata = { title: "Log de auditoria" };
+
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
