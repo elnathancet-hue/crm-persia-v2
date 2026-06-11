@@ -780,7 +780,7 @@ export function ConversationList({
               const isSelected = conv.id === selectedId;
               const isBulkSelected = selectedConversationIds.has(conv.id);
               const isAi = conv.assigned_to === "ai";
-              const isWaiting = conv.status === "waiting_human";
+              const isWaiting = conv.status === "waiting_human" && conv.unread_count > 0;
               const colorClass = hashColor(lead?.name);
               const leadTags = getLeadTags(lead);
 

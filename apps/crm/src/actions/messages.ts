@@ -178,14 +178,16 @@ async function markConversationHumanOwnedAfterOperatorReply(
       .eq("id", conversationId)
       .eq("organization_id", orgId)
       .eq("assigned_to", "ai"),
-    // Case 2: Conversa estava aguardando resposta humana → agente respondeu, limpa status
+    // Case 2: Conversa estava aguardando resposta humana → agente respondeu, limpa status.
+    // Não filtrar por assigned_to: .neq("assigned_to","ai") não bate com NULL em SQL,
+    // e quando IA pausa (assigned_to=null) o status nunca seria limpo.
+    // Caso 1 já trata assigned_to="ai" acima; aqui cobre null e UUID de agente.
     supabase
       .from("conversations")
       .update({ status: "active", updated_at: now })
       .eq("id", conversationId)
       .eq("organization_id", orgId)
-      .eq("status", "waiting_human")
-      .neq("assigned_to", "ai"),
+      .eq("status", "waiting_human"),
   ]);
   if (r1.error) {
     logError("mark_conversation_human_owned_after_operator_reply_failed", {
