@@ -436,15 +436,15 @@ export class UazapiAdapter implements WhatsAppProvider {
 
       const latRaw =
         raw.latitude ?? raw.degreesLatitude ??
-        locObj?.latitude ??
-        locMsg?.degreesLatitude ?? locMsg?.latitude ??
-        msgObj?.degreesLatitude ?? msgObj?.latitude; // forma (e): raw.message.degreesLatitude
+        locObj?.latitude ?? locObj?.degreesLatitude ??        // forma (d): raw.location.*
+        locMsg?.degreesLatitude ?? locMsg?.latitude ??        // forma (c): raw.message.locationMessage.*
+        msgObj?.degreesLatitude ?? msgObj?.latitude;          // forma (e): raw.message.*
 
       const lngRaw =
         raw.longitude ?? raw.degreesLongitude ??
-        locObj?.longitude ??
-        locMsg?.degreesLongitude ?? locMsg?.longitude ??
-        msgObj?.degreesLongitude ?? msgObj?.longitude; // forma (e): raw.message.degreesLongitude
+        locObj?.longitude ?? locObj?.degreesLongitude ??      // forma (d): raw.location.*
+        locMsg?.degreesLongitude ?? locMsg?.longitude ??      // forma (c): raw.message.locationMessage.*
+        msgObj?.degreesLongitude ?? msgObj?.longitude;        // forma (e): raw.message.*
 
       if (typeof latRaw === "number") latitude = latRaw;
       else if (typeof latRaw === "string" && latRaw) { const n = Number(latRaw); if (!isNaN(n)) latitude = n; }

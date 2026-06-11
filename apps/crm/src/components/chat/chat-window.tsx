@@ -67,6 +67,7 @@ import {
   Phone,
   Pin,
   MapPin,
+  ExternalLink,
   Contact,
   CreditCard,
   LocateFixed,
@@ -2141,27 +2142,59 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   </a>
                                 ) : null
                               )}
-                              {msg.type === "location" && (
-                                (msg.metadata as any)?.latitude != null ? (
-                                  <div className="flex flex-col gap-1 mb-1">
+                              {msg.type === "location" && (() => {
+                                const lat = (msg.metadata as any)?.latitude as number | null | undefined;
+                                const lng = (msg.metadata as any)?.longitude as number | null | undefined;
+                                const locName = (msg.metadata as any)?.name as string | null | undefined;
+                                const locAddr = (msg.metadata as any)?.address as string | null | undefined;
+                                const hasCoords = lat != null && lng != null;
+                                const mapsUrl = hasCoords
+                                  ? `https://maps.google.com/?q=${lat},${lng}`
+                                  : null;
+                                return (
+                                  <div className="mb-1 w-[220px] overflow-hidden rounded-xl border border-black/10 shadow-sm">
+                                    {/* Map thumbnail — grid pattern simulating a map, links to Google Maps */}
                                     <a
-                                      href={`https://maps.google.com/?q=${(msg.metadata as any).latitude},${(msg.metadata as any).longitude}`}
+                                      href={mapsUrl ?? `https://maps.google.com/`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-2 text-[13px] font-medium text-destructive hover:underline"
+                                      className="relative flex h-[120px] items-center justify-center overflow-hidden bg-success/10"
+                                      style={{
+                                        backgroundImage:
+                                          "linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px)",
+                                        backgroundSize: "40px 40px, 40px 40px, 8px 8px, 8px 8px",
+                                        backgroundPosition: "-1px -1px, -1px -1px, -1px -1px, -1px -1px",
+                                      }}
                                     >
-                                      <MapPin className="size-4" />
-                                      {(msg.metadata as any).name || "Localização"}
+                                      {/* Road-like lines */}
+                                      <div className="absolute inset-x-0 top-1/2 h-[6px] -translate-y-1/2 bg-white/60" />
+                                      <div className="absolute inset-y-0 left-1/2 w-[6px] -translate-x-1/2 bg-white/60" />
+                                      {/* Pin */}
+                                      <div className="relative z-10 flex flex-col items-center drop-shadow-md">
+                                        <MapPin className="size-9 text-destructive" fill="currentColor" strokeWidth={1.5} />
+                                        <div className="size-1.5 rounded-full bg-destructive/40" />
+                                      </div>
+                                      {/* "Open in Maps" hint */}
+                                      <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] font-medium text-foreground/70 backdrop-blur-sm">
+                                        <ExternalLink className="size-2.5" />
+                                        Maps
+                                      </div>
                                     </a>
-                                    {(msg.metadata as any).address && <p className="text-[11px] opacity-80">{(msg.metadata as any).address as string}</p>}
+                                    {/* Info bar */}
+                                    <div className="flex items-center gap-2 border-t border-black/5 bg-background/90 px-2.5 py-2">
+                                      <MapPin className="size-3.5 shrink-0 text-destructive" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-[12px] font-semibold leading-tight">
+                                          {locName || (hasCoords ? `${lat!.toFixed(4)}, ${lng!.toFixed(4)}` : "Localização")}
+                                        </p>
+                                        {locAddr && (
+                                          <p className="truncate text-[10px] text-muted-foreground">{locAddr}</p>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                ) : (
-                                  <div className="flex items-center gap-2 mb-1 text-[13px] font-medium">
-                                    <MapPin className="size-4" />
-                                    <span>{msg.content || "Localização"}</span>
-                                  </div>
-                                )
-                              )}
+                                );
+                              })()}
                               {msg.type === "contact" && Boolean(msg.metadata) && (
                                 <div className="flex items-center gap-2 mb-1 p-2 bg-black/5 rounded-md">
                                   <Contact className="size-6 text-primary" />
