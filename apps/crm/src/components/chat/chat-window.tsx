@@ -1151,16 +1151,25 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          withResolvedMediaUrl(newMsg).then((resolvedMsg) => {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === resolvedMsg.id)) return prev;
-              return [...prev, resolvedMsg];
-            });
-          });
           const scrollEl = messagesScrollRef.current;
           shouldAutoScroll.current =
             !scrollEl ||
             scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 150;
+          // Add message immediately so the bubble appears on all PCs without delay
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+          // Resolve media URL in background and swap in the signed URL when ready
+          if (shouldResolveMediaUrl(newMsg.media_url)) {
+            withResolvedMediaUrl(newMsg).then((resolvedMsg) => {
+              if (!shouldResolveMediaUrl(resolvedMsg.media_url)) {
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === resolvedMsg.id ? resolvedMsg : m))
+                );
+              }
+            }).catch(() => {});
+          }
         }
       )
       .on(
@@ -1174,8 +1183,13 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         (payload) => {
           const updated = payload.new as Message;
           withResolvedMediaUrl(updated).then((resolvedMsg) => {
-            setMessages((prev) => prev.map((m) => (m.id === resolvedMsg.id ? resolvedMsg : m)));
-          });
+            setMessages((prev) => {
+              const exists = prev.some((m) => m.id === resolvedMsg.id);
+              if (exists) return prev.map((m) => (m.id === resolvedMsg.id ? resolvedMsg : m));
+              // INSERT still processing (race on observer PC) — add the message
+              return [...prev, resolvedMsg];
+            });
+          }).catch(() => {});
         }
       )
       .subscribe((status) => {
@@ -1187,17 +1201,22 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
         }
       });
 
-    // Polling fallback: merge novas msgs quando realtime está morto
+    // Polling fallback: merge new msgs (with resolved media URLs) when realtime is dead
     const pollInterval = setInterval(() => {
       if (realtimeOk) return;
-      getMessages(conversationId, { limit: 10 }).then((result) => {
-        if (result.error || !result.data?.length) return;
-        setMessages((prev) => {
-          const ids = new Set(prev.map((m) => m.id));
-          const fresh = result.data!.filter((m) => !ids.has(m.id));
-          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+      getMessages(conversationId, { limit: 10 })
+        .then((result) => {
+          if (result.error || !result.data?.length) return;
+          return Promise.all(result.data.map((m) => withResolvedMediaUrl(m)));
+        })
+        .then((msgs) => {
+          if (!msgs) return;
+          setMessages((prev) => {
+            const ids = new Set(prev.map((m) => m.id));
+            const fresh = msgs.filter((m) => !ids.has(m.id));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
         });
-      });
     }, 5000);
 
     return () => {
