@@ -424,31 +424,48 @@ export class UazapiAdapter implements WhatsAppProvider {
     let locationAddress: string | undefined;
     if (type === "location") {
       // UAZAPI v2 sends location in multiple shapes depending on version:
-      //  (a) root-level: { latitude, longitude, name, address }
-      //  (b) root-level degrees: { degreesLatitude, degreesLongitude }
-      //  (c) nested: { message: { locationMessage: { degreesLatitude, degreesLongitude, name, address } } }
-      //  (d) nested: { location: { latitude, longitude } }
-      // Values may be numbers or numeric strings — normalise to number.
-      const locMsg = (
-        (raw.message as Record<string, unknown> | undefined)
-          ?.locationMessage
-      ) as Record<string, unknown> | undefined;
+      //  (a) root-level:             { latitude, longitude, name, address }
+      //  (b) root-level degrees:     { degreesLatitude, degreesLongitude }
+      //  (c) nested locationMessage: { message: { locationMessage: { degreesLatitude, ... } } }
+      //  (d) nested location obj:    { location: { latitude, longitude } }
+      //  (e) nested message direct:  { message: { degreesLatitude, degreesLongitude } }  <- forma mais comum no UAZAPI v2
+      // Values may be numbers or numeric strings -- normalise to number.
+      const msgObj = raw.message as Record<string, unknown> | undefined;
+      const locMsg = msgObj?.locationMessage as Record<string, unknown> | undefined;
       const locObj = raw.location as Record<string, unknown> | undefined;
 
-      const latRaw = raw.latitude ?? raw.degreesLatitude ?? locObj?.latitude ?? locMsg?.degreesLatitude ?? locMsg?.latitude;
-      const lngRaw = raw.longitude ?? raw.degreesLongitude ?? locObj?.longitude ?? locMsg?.degreesLongitude ?? locMsg?.longitude;
+      const latRaw =
+        raw.latitude ?? raw.degreesLatitude ??
+        locObj?.latitude ??
+        locMsg?.degreesLatitude ?? locMsg?.latitude ??
+        msgObj?.degreesLatitude ?? msgObj?.latitude; // forma (e): raw.message.degreesLatitude
+
+      const lngRaw =
+        raw.longitude ?? raw.degreesLongitude ??
+        locObj?.longitude ??
+        locMsg?.degreesLongitude ?? locMsg?.longitude ??
+        msgObj?.degreesLongitude ?? msgObj?.longitude; // forma (e): raw.message.degreesLongitude
 
       if (typeof latRaw === "number") latitude = latRaw;
       else if (typeof latRaw === "string" && latRaw) { const n = Number(latRaw); if (!isNaN(n)) latitude = n; }
       if (typeof lngRaw === "number") longitude = lngRaw;
       else if (typeof lngRaw === "string" && lngRaw) { const n = Number(lngRaw); if (!isNaN(n)) longitude = n; }
 
-      const nameRaw = raw.name ?? locObj?.name ?? locMsg?.name;
-      if (typeof nameRaw === "string" && nameRaw) locationName = nameRaw;
-      const addrRaw = raw.address ?? locObj?.address ?? locMsg?.address;
-      if (typeof addrRaw === "string" && addrRaw) locationAddress = addrRaw;
-    }
+      // Log quando coordenadas nao foram encontradas -- ajuda debug em prod.
+      if (latitude == null && longitude == null) {
+        console.warn("[parseWebhook] location sem coordenadas", {
+          raw_keys: Object.keys(raw),
+          msgObj_keys: msgObj ? Object.keys(msgObj) : null,
+          locMsg_keys: locMsg ? Object.keys(locMsg) : null,
+        });
+      }
 
+      const nameRaw = raw.name ?? locObj?.name ?? locMsg?.name ?? msgObj?.name;
+      if (typeof nameRaw === "string" && nameRaw) locationName = nameRaw;
+      const addrRaw = raw.address ?? locObj?.address ?? locMsg?.address ?? msgObj?.address;
+      if (typeof addrRaw === "string" && addrRaw) locationAddress = addrRaw;
+
+    }
     // --- Contact fields ---
     let contactName: string | undefined;
     let contactPhone: string | undefined;
