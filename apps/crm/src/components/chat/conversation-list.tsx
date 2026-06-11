@@ -333,7 +333,7 @@ export function ConversationList({
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [orgId, selectedId, loadConversations]);
+  }, [orgId, loadConversations]); // selectedId intencionalmente fora: nao e usado no effect
 
   // Debounced search (300ms)
   useEffect(() => {

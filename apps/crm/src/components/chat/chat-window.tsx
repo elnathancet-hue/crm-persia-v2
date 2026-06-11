@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, getConversations, uploadScheduledMessageMediaAction, type ConversationWithLead } from "@/actions/conversations";
 import { assignConversation, closeConversation, markConversationAsRead, generateConversationSummary, scheduleMessage, transferConversationToQueue } from "@/actions/conversations";
@@ -1257,6 +1257,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     });
   };
 
+  // Memoizados antes dos early returns para satisfazer Rules of Hooks
+  const pinnedMessage = useMemo(() => messages.find((m) => m.is_pinned) ?? null, [messages]);
+  const messagesById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+
   // Empty state
   if (!conversationId) {
     return (
@@ -1296,8 +1300,6 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
     (lead?.name as string | undefined),
   );
   const leadTags = getLeadTags(lead);
-  const pinnedMessage = messages.find((m) => m.is_pinned) ?? null;
-  const messagesById = new Map(messages.map((message) => [message.id, message]));
   const leadDisplayName = (lead?.name as string | undefined) || (lead?.phone as string | undefined) || null;
 
   const normalizedMessageSearch = messageSearch.trim().toLowerCase();
