@@ -63,7 +63,8 @@ export async function listToolsForAgent(orgId: string, configId: string): Promis
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as AgentTool[];
+  // Strip webhook_secret — never send HMAC key to the browser.
+  return (data ?? []).map((t: unknown) => ({ ...(t as AgentTool), webhook_secret: null })) as AgentTool[];
 }
 
 export async function createToolFromPreset(
@@ -119,7 +120,7 @@ export async function createToolFromPreset(
     });
 
     for (const path of agentPaths(input.config_id)) revalidatePath(path);
-    return data as AgentTool;
+    return { ...(data as AgentTool), webhook_secret: null };
   } catch (error) {
     await auditAdminAgentFailure({
       userId,
@@ -164,7 +165,7 @@ export async function createCustomTool(
     });
 
     for (const path of agentPaths(input.config_id)) revalidatePath(path);
-    return data as AgentTool;
+    return { ...(data as AgentTool), webhook_secret: null };
   } catch (error) {
     await auditAdminAgentFailure({
       userId,
@@ -241,7 +242,7 @@ export async function updateTool(
     });
 
     for (const path of agentPaths(existing.config_id)) revalidatePath(path);
-    return data as AgentTool;
+    return { ...(data as AgentTool), webhook_secret: null };
   } catch (error) {
     await auditAdminAgentFailure({
       userId,
@@ -330,7 +331,7 @@ export async function setNativeToolEnabled(
     });
 
     for (const path of agentPaths(input.config_id)) revalidatePath(path);
-    return result;
+    return { ...result, webhook_secret: null };
   } catch (error) {
     await auditAdminAgentFailure({
       userId,

@@ -16,7 +16,7 @@ export async function getOrgSettings() {
   return data;
 }
 
-export async function updateOrgSettings(updates: Record<string, unknown>) {
+export async function updateOrgSettings(updates: { name?: string; niche?: string; services?: Record<string, boolean>; }) {
   const { admin, orgId, userId } = await requireSuperadminForOrg();
   const { error } = await admin.from("organizations").update({ ...updates, updated_at: new Date().toISOString() }).eq("id", orgId);
   if (error) {
@@ -416,16 +416,19 @@ export async function addSuperadmin(email: string) {
     return { error: error instanceof Error ? error.message : "Muitas tentativas. Tente novamente em instantes." };
   }
 
-  const { data: users } = await admin.auth.admin.listUsers();
-  const user = users?.users?.find((u) => u.email === email);
-  if (!user) return { error: "Usuario nao encontrado com este email" };
+  // Look up by email via profiles — avoids listUsers() which caps at 50 by default
+  // and fails silently for accounts beyond that limit.
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id, is_superadmin")
+    .filter("email", "eq", email)
+    .maybeSingle();
+  if (!profile) return { error: "Usuario nao encontrado com este email" };
+  if (profile.is_superadmin) return { error: "Ja e superadmin" };
 
-  const { data: profile } = await admin.from("profiles").select("is_superadmin").eq("id", user.id).single();
-  if (profile?.is_superadmin) return { error: "Ja e superadmin" };
-
-  const { error } = await admin.from("profiles").update({ is_superadmin: true }).eq("id", user.id);
+  const { error } = await admin.from("profiles").update({ is_superadmin: true }).eq("id", profile.id);
   if (error) {
-    await auditFailure({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", entityId: user.id, metadata: { email }, error });
+    await auditFailure({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", entityId: profile.id, metadata: { email }, error });
     return { error: error.message };
   }
   await auditLog({ userId, orgId: null, action: "add_superadmin", entityType: "superadmin", metadata: { email } });

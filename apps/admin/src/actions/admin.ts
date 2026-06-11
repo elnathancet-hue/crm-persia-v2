@@ -1,5 +1,6 @@
 "use server";
 
+import { validateProviderUrl } from "@persia/shared/providers/uazapi-client";
 import { requireSuperadmin, requireSuperadminWithUser } from "@/lib/auth";
 import { setAdminContext, clearAdminContext, readAdminContext } from "@/lib/admin-context";
 import { auditFailure, auditLog } from "@/lib/audit";
@@ -140,14 +141,14 @@ export async function getOrganizationDetail(orgId: string) {
   const [leads, conversations, connections] = await Promise.all([
     admin.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
     admin.from("conversations").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
-    admin.from("whatsapp_connections").select("provider, instance_url, instance_token, phone_number, status").eq("organization_id", orgId).limit(1).single(),
+    admin.from("whatsapp_connections").select("provider, instance_url, phone_number, status").eq("organization_id", orgId).limit(1).single(),
   ]);
 
   return {
     org,
     members: enrichedMembers,
     stats: { leads: leads.count || 0, conversations: conversations.count || 0, whatsappStatus: connections.data?.status || "not_configured", whatsappPhone: connections.data?.phone_number || null },
-    whatsapp: connections.data ? { instanceUrl: connections.data.instance_url || "", instanceToken: connections.data.instance_token || "", phoneNumber: connections.data.phone_number || "", status: connections.data.status || "" } : null,
+    whatsapp: connections.data ? { instanceUrl: connections.data.instance_url || "", phoneNumber: connections.data.phone_number || "", status: connections.data.status || "" } : null,
   };
 }
 
@@ -178,9 +179,27 @@ export async function createOrganization(data: {
   return org;
 }
 
-export async function updateOrganization(orgId: string, data: Record<string, unknown>) {
-  const { admin, userId } = await requireSuperadminWithUser(orgId);
-  const { error } = await admin.from("organizations").update({ ...data, updated_at: new Date().toISOString() }).eq("id", orgId);
+export async function updateOrganization(
+  orgId: string,
+  data: {
+    name?: string;
+    niche?: string;
+    plan?: string;
+    category?: string;
+    services?: Record<string, boolean>;
+    logo_url?: string | null;
+  },
+) {
+  const { admin: adminClient, userId } = await requireSuperadminWithUser(orgId);
+  // Explicit whitelist — never spread client input directly to prevent mass assignment.
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (data.name !== undefined) patch.name = data.name;
+  if (data.niche !== undefined) patch.niche = data.niche;
+  if (data.plan !== undefined) patch.plan = data.plan;
+  if (data.category !== undefined) patch.category = data.category;
+  if (data.services !== undefined) patch.services = data.services;
+  if (data.logo_url !== undefined) patch.logo_url = data.logo_url;
+  const { error } = await adminClient.from("organizations").update(patch).eq("id", orgId);
   if (error) throw new Error(error.message);
   await auditLog({ userId, orgId, action: "update_organization", entityType: "organization", entityId: orgId, metadata: data });
   revalidatePath("/clients");
@@ -337,13 +356,19 @@ export async function getAuditFilterOptions(): Promise<{
 // ============ WHATSAPP ============
 
 export async function connectWhatsAppInstance(orgId: string, instanceUrl: string, instanceToken: string, phoneNumber?: string) {
-  const admin = await requireSuperadmin();
-  const { data: existing } = await admin.from("whatsapp_connections").select("id").eq("organization_id", orgId).limit(1).single();
+  const { admin: adminClient, userId } = await requireSuperadminWithUser();
+
+  // SSRF guard — instance_url must be public HTTPS (prevents pointing to internal infra).
+  validateProviderUrl(instanceUrl);
+
+  const { data: existing } = await adminClient.from("whatsapp_connections").select("id").eq("organization_id", orgId).limit(1).single();
 
   if (existing) {
-    await admin.from("whatsapp_connections").update({ instance_url: instanceUrl, instance_token: instanceToken, phone_number: phoneNumber || null, status: "connected", updated_at: new Date().toISOString() }).eq("id", existing.id);
+    await adminClient.from("whatsapp_connections").update({ instance_url: instanceUrl, instance_token: instanceToken, phone_number: phoneNumber || null, status: "connected", updated_at: new Date().toISOString() }).eq("id", existing.id);
   } else {
-    await admin.from("whatsapp_connections").insert({ organization_id: orgId, instance_url: instanceUrl, instance_token: instanceToken, phone_number: phoneNumber || null, status: "connected", provider: "uazapi" });
+    await adminClient.from("whatsapp_connections").insert({ organization_id: orgId, instance_url: instanceUrl, instance_token: instanceToken, phone_number: phoneNumber || null, status: "connected", provider: "uazapi" });
   }
+
+  await auditLog({ userId, orgId, action: "connect_whatsapp_instance", entityType: "whatsapp_connection", entityId: orgId, metadata: { instanceUrl } });
   revalidatePath(`/clients/${orgId}`);
 }

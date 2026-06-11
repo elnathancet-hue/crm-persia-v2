@@ -301,7 +301,43 @@ interface SenderResponse {
   [key: string]: unknown;
 }
 
+// ============ SSRF GUARD ============
+
+/**
+ * Valida que a URL do provider UAZAPI é segura para fetch server-side.
+ * Bloqueia: http://, localhost, IPs privados/link-local/metadata.
+ */
+export function validateProviderUrl(raw: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`URL inválida para provider UAZAPI: "${raw}"`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`Provider UAZAPI deve usar HTTPS (recebido: ${parsed.protocol})`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const PRIVATE = [
+    /^localhost$/,
+    /^127\./,
+    /^0\.0\.0\.0/,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^::1$/,
+    /^fc[0-9a-f]{2}:/i,
+    /^fd[0-9a-f]{2}:/i,
+  ];
+  if (PRIVATE.some((r) => r.test(host))) {
+    throw new Error(`Provider UAZAPI bloqueado: URL aponta para rede privada (${host})`);
+  }
+}
+
 // ============ CLIENT ============
+
+const PROVIDER_TIMEOUT_MS = 15_000;
 
 export class UazapiClient {
   private baseUrl: string;
@@ -309,6 +345,7 @@ export class UazapiClient {
   private adminToken?: string;
 
   constructor(config: UazapiConfig) {
+    validateProviderUrl(config.baseUrl);
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
     this.token = config.token;
     this.adminToken = config.adminToken;
@@ -327,7 +364,11 @@ export class UazapiClient {
       "Content-Type": "application/json",
     };
 
-    const options: RequestInit = { method, headers };
+    const options: RequestInit = {
+      method,
+      headers,
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    };
     if (body && method !== "GET") {
       options.body = JSON.stringify(body);
     }
@@ -357,7 +398,11 @@ export class UazapiClient {
       "Content-Type": "application/json",
     };
 
-    const options: RequestInit = { method, headers };
+    const options: RequestInit = {
+      method,
+      headers,
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    };
     if (body && method !== "GET") {
       options.body = JSON.stringify(body);
     }

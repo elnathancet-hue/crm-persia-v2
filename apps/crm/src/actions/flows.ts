@@ -108,6 +108,7 @@ export async function duplicateFlow(id: string) {
     .from("flows")
     .select("*")
     .eq("id", id)
+    .eq("organization_id", orgId)
     .single();
 
   if (fetchError || !original) throw new Error("Fluxo nao encontrado");

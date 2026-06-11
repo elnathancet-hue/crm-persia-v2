@@ -145,13 +145,17 @@ export function buildTemplateComponents(
     for (const btn of schema.buttons) {
       if (btn.params.length === 0) continue;
       const vals = values.buttons?.[btn.index] ?? [];
-      const parameters = btn.params.map((_, i) => ({
-        type: btn.subType === "URL" ? "text" : "payload",
-        text: vals[i] ?? "",
-      }));
+      const parameters = btn.params.map((_, i) =>
+        btn.subType === "URL"
+          ? { type: "text", text: vals[i] ?? "" }
+          : { type: "payload", payload: vals[i] ?? "" },
+      );
+      // OTP (authentication) templates use sub_type "copy_code", not "quick_reply".
+      const subType =
+        btn.subType === "URL" ? "url" : btn.subType === "OTP" ? "copy_code" : "quick_reply";
       out.push({
         type: "button",
-        sub_type: btn.subType === "URL" ? "url" : "quick_reply",
+        sub_type: subType,
         index: String(btn.index),
         parameters,
       });

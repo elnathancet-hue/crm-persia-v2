@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncAllMetaTemplatesForCron } from "@/actions/templates";
+import { syncAllMetaTemplatesForCron } from "@/lib/templates-cron";
 
 /**
  * Cron: sincroniza templates Meta para todas as orgs com conexao meta_cloud

@@ -1,4 +1,4 @@
-// Leads Kanban — mutations lead-centric (FASE 1).
+﻿// Leads Kanban — mutations lead-centric (FASE 1).
 //
 // PR-K-CENTRIC (mai/2026): Kanban opera em LEAD, nao mais em deal.
 // Essas funcoes substituem `moveDealKanban`, `bulkMoveDeals`,
@@ -73,7 +73,7 @@ export async function moveLeadToStage(
     .eq("organization_id", orgId)
     .maybeSingle();
 
-  if (stageErr) throw sanitizeMutationError(stageErr.message);
+  if (stageErr) throw sanitizeMutationError(stageErr);
   if (!stage) throw new Error("Etapa nao encontrada nesta organizacao");
 
   const { data: lead, error: leadErr } = await db
@@ -83,7 +83,7 @@ export async function moveLeadToStage(
     .eq("organization_id", orgId)
     .maybeSingle();
 
-  if (leadErr) throw sanitizeMutationError(leadErr.message);
+  if (leadErr) throw sanitizeMutationError(leadErr);
   if (!lead) throw new Error("Lead nao encontrado nesta organizacao");
 
   const stageRow = stage as { id: string; pipeline_id: string; name: string; outcome: string };
@@ -104,8 +104,9 @@ export async function moveLeadToStage(
     const { error: sortErr } = await db
       .from("leads")
       .update({ sort_order: sortOrder } as never)
-      .eq("id", leadId);
-    if (sortErr) throw sanitizeMutationError(sortErr.message);
+      .eq("id", leadId)
+      .eq("organization_id", orgId);
+    if (sortErr) throw sanitizeMutationError(sortErr);
     return;
   }
 
@@ -119,9 +120,10 @@ export async function moveLeadToStage(
   const { error: updateErr } = await db
     .from("leads")
     .update(updateData as never)
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .eq("organization_id", orgId);
 
-  if (updateErr) throw sanitizeMutationError(updateErr.message);
+  if (updateErr) throw sanitizeMutationError(updateErr);
 
   await logActivity(ctx, [
     {
@@ -189,9 +191,10 @@ export async function moveLeadToPipeline(
       sort_order: 0,
       updated_at: new Date().toISOString(),
     } as never)
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .eq("organization_id", orgId);
 
-  if (updateErr) throw sanitizeMutationError(updateErr.message);
+  if (updateErr) throw sanitizeMutationError(updateErr);
 
   await logActivity(ctx, [
     {
@@ -248,7 +251,7 @@ export async function bulkMoveLeads(
     .eq("pipeline_id", stageRow.pipeline_id)
     .select("id");
 
-  if (updateErr) throw sanitizeMutationError(updateErr.message);
+  if (updateErr) throw sanitizeMutationError(updateErr);
   const affectedIds = (affected as Array<{ id: string }> | null)?.map((r) => r.id) ?? [];
 
   await logActivity(
@@ -305,7 +308,7 @@ export async function bulkMarkLeadsAsLost(
     .eq("organization_id", orgId)
     .select("id");
 
-  if (updateErr) throw sanitizeMutationError(updateErr.message);
+  if (updateErr) throw sanitizeMutationError(updateErr);
   const affectedIds = (affected as Array<{ id: string }> | null)?.map((r) => r.id) ?? [];
 
   await logActivity(
@@ -349,7 +352,7 @@ export async function bulkMarkLeadsAsWon(
     .eq("organization_id", orgId)
     .select("id");
 
-  if (updateErr) throw sanitizeMutationError(updateErr.message);
+  if (updateErr) throw sanitizeMutationError(updateErr);
   const affectedIds = (affected as Array<{ id: string }> | null)?.map((r) => r.id) ?? [];
 
   await logActivity(

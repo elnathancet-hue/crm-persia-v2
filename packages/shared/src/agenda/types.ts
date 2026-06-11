@@ -105,6 +105,10 @@ export interface AgendaService {
   /** "#RRGGBB" ou null */
   color: string | null;
   is_active: boolean;
+  slug: string | null;
+  default_channel: string | null;
+  default_location: string | null;
+  default_meeting_url: string | null;
   created_at: string;
   updated_at: string;
 }

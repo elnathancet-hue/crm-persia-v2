@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditFailure, auditLog } from "@/lib/audit";
@@ -162,7 +162,8 @@ export async function executeCampaign(campaignId: string): Promise<{ sent: numbe
   let targetLeads = leads;
   if (campaign.target_tags && campaign.target_tags.length > 0) {
     const { data: taggedIds } = await admin.from("lead_tags")
-      .select("lead_id, tags!inner(name)")
+      .select("lead_id, tags!inner(name, organization_id)")
+      .eq("tags.organization_id", orgId)
       .in("tags.name", campaign.target_tags);
     const leadIdSet = new Set((taggedIds || []).map((t: { lead_id: string }) => t.lead_id));
     targetLeads = leads.filter((l) => leadIdSet.has(l.id));

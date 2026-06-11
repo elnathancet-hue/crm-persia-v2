@@ -1,4 +1,4 @@
-"use server";
+﻿"use server";
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
@@ -322,6 +322,17 @@ export async function createLeadInPipeline(input: {
   stageId: string;
 }): Promise<{ lead: { id: string } }> {
   const { admin, orgId } = await requireSuperadminForOrg();
+
+  // Validate pipeline and stage belong to this org.
+  const { data: stage } = await admin
+    .from("pipeline_stages")
+    .select("id, pipeline_id")
+    .eq("id", input.stageId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!stage) throw new Error("Etapa nao encontrada nesta organizacao");
+  if (stage.pipeline_id !== input.pipelineId) throw new Error("Etapa nao pertence ao funil informado");
+
   const created = await createLeadShared(
     { db: admin, orgId },
     {

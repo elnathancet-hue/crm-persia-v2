@@ -5,6 +5,21 @@ import { fromAny } from "@/lib/ai-agent/db";
 
 const REPORT_PAGE_SIZE = 1000;
 
+/** Paginated SUM of `value` column — avoids the PostgREST 1000-row cap. */
+async function paginatedDealSum(
+  queryFn: (from: number, to: number) => PromiseLike<{ data: Array<{ value: number | null }> | null }>,
+): Promise<number> {
+  let total = 0;
+  let from = 0;
+  while (true) {
+    const { data } = await queryFn(from, from + REPORT_PAGE_SIZE - 1);
+    for (const row of data ?? []) total += row.value ?? 0;
+    if ((data?.length ?? 0) < REPORT_PAGE_SIZE) break;
+    from += REPORT_PAGE_SIZE;
+  }
+  return total;
+}
+
 export async function getReportStats() {
   const { admin, orgId } = await requireSuperadminForOrg();
   const now = new Date();
@@ -23,10 +38,8 @@ export async function getReportStats() {
     campaigns,
     pipelines,
     automations,
-    deals,
     wonDeals,
     lostDeals,
-    wonDealsThisMonth,
   ] = await Promise.all([
     admin.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
     admin.from("leads").select("*", { count: "exact", head: true }).eq("organization_id", orgId).gte("created_at", thirtyDaysAgo),
@@ -39,17 +52,19 @@ export async function getReportStats() {
     fromAny(admin, "crm_campaigns").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
     admin.from("pipelines").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
     admin.from("agent_configs").select("*", { count: "exact", head: true }).eq("organization_id", orgId),
-    admin.from("deals").select("value").eq("organization_id", orgId),
     admin.from("deals").select("*", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "won"),
     admin.from("deals").select("*", { count: "exact", head: true }).eq("organization_id", orgId).eq("status", "lost"),
-    admin.from("deals").select("value").eq("organization_id", orgId).eq("status", "won").gte("closed_at", monthStart),
   ]);
 
-  const totalDealValue = (deals.data || []).reduce((sum: number, d: { value: number | null }) => sum + (d.value || 0), 0);
-  const revenueThisMonth = (wonDealsThisMonth.data || []).reduce(
-    (sum: number, d: { value: number | null }) => sum + (d.value || 0),
-    0,
-  );
+  // Paginated SUM — avoids PostgREST 1000-row cap that would give wrong totals.
+  const [totalDealValue, revenueThisMonth] = await Promise.all([
+    paginatedDealSum((from, to) =>
+      admin.from("deals").select("value").eq("organization_id", orgId).range(from, to),
+    ),
+    paginatedDealSum((from, to) =>
+      admin.from("deals").select("value").eq("organization_id", orgId).eq("status", "won").gte("closed_at", monthStart).range(from, to),
+    ),
+  ]);
   const wonCount = wonDeals.count || 0;
   const lostCount = lostDeals.count || 0;
   const closedDeals = wonCount + lostCount;

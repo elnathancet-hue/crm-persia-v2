@@ -290,14 +290,16 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
   // ------------ Actions ------------
 
   async markAsRead(messageIds: string[], _chatPhone: string): Promise<void> {
-    // Meta marks by message id, one at a time.
-    for (const id of messageIds) {
-      await this.graph<MetaSendResponse>("POST", "/messages", {
-        messaging_product: "whatsapp",
-        status: "read",
-        message_id: id,
-      }).catch(() => {});
-    }
+    // Meta marks by message id — fire in parallel and ignore individual failures.
+    await Promise.allSettled(
+      messageIds.map((id) =>
+        this.graph<MetaSendResponse>("POST", "/messages", {
+          messaging_product: "whatsapp",
+          status: "read",
+          message_id: id,
+        }),
+      ),
+    );
   }
 
   async markChatRead(_chatPhone: string): Promise<void> {
@@ -340,7 +342,7 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
   ): Promise<{ fileURL?: string; mimetype?: string; transcription?: string }> {
     // Meta flow: 1) GET /{media_id} → { url, mime_type }; 2) GET url (Authorization header) to download bytes.
     // Here we return the authenticated URL; the caller proxies download.
-    const meta = await this.graph<{ url?: string; mime_type?: string }>("GET", `/${messageId}`, undefined, true);
+    const meta = await this.graph<{ url?: string; mime_type?: string }>("GET", `/${encodeURIComponent(messageId)}`, undefined, true);
     return { fileURL: meta.url, mimetype: meta.mime_type };
   }
 
@@ -491,6 +493,7 @@ export class MetaCloudAdapter implements WhatsAppProvider, TemplateCapable {
         ...(body ? { "content-type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) throw new MetaCloudGraphError(res.status, await res.text());
     return (await res.json()) as T;

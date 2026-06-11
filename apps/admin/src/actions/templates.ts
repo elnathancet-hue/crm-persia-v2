@@ -2,7 +2,7 @@
 
 import { requireSuperadminForOrg } from "@/lib/auth";
 import { auditLog } from "@/lib/audit";
-import { withAdmin, type AdminClient } from "@/lib/supabase-admin";
+import { type AdminClient } from "@/lib/supabase-admin";
 import { createProvider } from "@/lib/whatsapp/providers";
 import { hasTemplates, type RemoteTemplate } from "@/lib/whatsapp/provider";
 import { parseTemplateParams, type MetaComponent, type ParamsSchema } from "@/lib/whatsapp/template-parser";
@@ -114,45 +114,8 @@ export async function listTemplates(filter: TemplateListFilter = {}): Promise<Te
   return (data ?? []) as unknown as TemplateRow[];
 }
 
-// ============ Cron helper (used by /api/cron/sync-templates) ============
-
-/**
- * Service-role sync para todas as conns meta_cloud conectadas.
- * Chamado pelo cron endpoint. Nao passa por auth do usuario.
- */
-export async function syncAllMetaTemplatesForCron(): Promise<{
-  checked: number;
-  synced: number;
-  errors: number;
-}> {
-  return withAdmin("cron_sync_meta_templates", async (admin) => {
-    const summary = { checked: 0, synced: 0, errors: 0 };
-
-    const { data: conns } = await admin
-      .from("whatsapp_connections")
-      .select("id, organization_id, provider, phone_number_id, waba_id, access_token, webhook_verify_token")
-      .eq("provider", "meta_cloud")
-      .eq("status", "connected");
-
-    for (const conn of conns ?? []) {
-      summary.checked++;
-      try {
-        const provider = createProvider(conn);
-        if (!hasTemplates(provider)) continue;
-        const remote = await provider.listRemoteTemplates();
-        summary.synced += await upsertTemplates(admin, conn.organization_id, conn.id, remote);
-      } catch (err) {
-        summary.errors++;
-        console.error(
-          `[templates cron] org=${conn.organization_id} sync failed:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-    }
-
-    return summary;
-  });
-}
+// syncAllMetaTemplatesForCron moved to @/lib/templates-cron — cannot be a
+// server action (unauthenticated cron function that bypasses per-user auth).
 
 // ============ internals ============
 

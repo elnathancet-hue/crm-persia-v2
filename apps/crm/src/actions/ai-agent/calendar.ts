@@ -78,7 +78,10 @@ export async function buildOAuthStartUrl(
   returnTo: string,
 ): Promise<{ url: string }> {
   await requireAgentRole("admin");
-  const safeReturn = returnTo.startsWith("/") ? returnTo : "/automations/agents";
+  const safeReturn =
+    returnTo.startsWith("/") && !returnTo.startsWith("//") && !returnTo.startsWith("/\\")
+      ? returnTo
+      : "/automations/agents";
   const params = new URLSearchParams({ return_to: safeReturn });
   return { url: `/api/oauth/google/start?${params.toString()}` };
 }

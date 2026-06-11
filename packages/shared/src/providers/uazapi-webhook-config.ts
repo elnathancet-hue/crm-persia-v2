@@ -61,15 +61,25 @@ export interface ConfigureUazapiWebhookOptions extends BuildUazapiWebhookConfigO
 }
 
 export async function configureUazapiWebhook(options: ConfigureUazapiWebhookOptions): Promise<Response> {
+  const { validateProviderUrl } = await import("./uazapi-client");
   const fetcher = options.fetchImpl ?? fetch;
   const baseUrl = options.baseUrl.replace(/\/$/, "");
 
-  return fetcher(`${baseUrl}/webhook`, {
+  validateProviderUrl(baseUrl);
+
+  const res = await fetcher(`${baseUrl}/webhook`, {
     method: "POST",
     headers: {
       token: options.token,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(buildUazapiWebhookConfig(options)),
+    signal: AbortSignal.timeout(15_000),
   });
+
+  if (!res.ok) {
+    throw new Error(`Falha ao configurar webhook UAZAPI: HTTP ${res.status}`);
+  }
+
+  return res;
 }

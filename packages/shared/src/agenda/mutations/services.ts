@@ -6,6 +6,7 @@ import type { AgendaMutationContext } from "../queries/context";
 const RETURN = `
   id, organization_id, name, description,
   duration_minutes, price_cents, color, is_active,
+  slug, default_channel, default_location, default_meeting_url,
   created_at, updated_at
 `;
 
@@ -16,6 +17,10 @@ export interface CreateAgendaServiceInput {
   price_cents?: number | null;
   color?: string | null;
   is_active?: boolean;
+  slug?: string | null;
+  default_channel?: string | null;
+  default_location?: string | null;
+  default_meeting_url?: string | null;
 }
 
 export async function createAgendaService(
@@ -33,6 +38,10 @@ export async function createAgendaService(
       price_cents: input.price_cents ?? null,
       color: input.color ?? null,
       is_active: input.is_active ?? true,
+      slug: input.slug ?? null,
+      default_channel: input.default_channel ?? null,
+      default_location: input.default_location ?? null,
+      default_meeting_url: input.default_meeting_url ?? null,
     })
     .select(RETURN)
     .single();
@@ -47,6 +56,10 @@ export interface UpdateAgendaServiceInput {
   price_cents?: number | null;
   color?: string | null;
   is_active?: boolean;
+  slug?: string | null;
+  default_channel?: string | null;
+  default_location?: string | null;
+  default_meeting_url?: string | null;
 }
 
 export async function updateAgendaService(
@@ -63,6 +76,10 @@ export async function updateAgendaService(
   if (input.price_cents !== undefined) patch.price_cents = input.price_cents;
   if (input.color !== undefined) patch.color = input.color;
   if (input.is_active !== undefined) patch.is_active = input.is_active;
+  if (input.slug !== undefined) patch.slug = input.slug;
+  if (input.default_channel !== undefined) patch.default_channel = input.default_channel;
+  if (input.default_location !== undefined) patch.default_location = input.default_location;
+  if (input.default_meeting_url !== undefined) patch.default_meeting_url = input.default_meeting_url;
 
   const { data, error } = await db
     .from("agenda_services")

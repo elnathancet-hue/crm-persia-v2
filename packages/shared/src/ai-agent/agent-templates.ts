@@ -546,5 +546,5 @@ export function getAgentTemplate(slug: AgentTemplateSlug): AgentTemplate {
 }
 
 export function isAgentTemplateSlug(value: unknown): value is AgentTemplateSlug {
-  return typeof value === "string" && value in TEMPLATES;
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(TEMPLATES, value);
 }

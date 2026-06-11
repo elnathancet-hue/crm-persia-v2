@@ -91,7 +91,11 @@ export async function buildOAuthStartUrl(
   // No admin, o redirect tem que voltar pro CRM (que tem o callback).
   // O bridge passa orgId + return_to no state JWT pra o callback saber
   // pra qual org gravar a conexao.
-  const safeReturn = returnTo.startsWith("/") ? returnTo : "/automations/agents";
+  // Block protocol-relative URLs (//evil.com/x) and backslash tricks (/\evil.com).
+  const safeReturn =
+    returnTo.startsWith("/") && !returnTo.startsWith("//") && !returnTo.startsWith("/\\")
+      ? returnTo
+      : "/automations/agents";
   const params = new URLSearchParams({
     return_to: safeReturn,
     org_id: orgId,

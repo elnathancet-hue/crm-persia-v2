@@ -65,7 +65,8 @@ export async function listToolsForAgent(configId: string): Promise<AgentTool[]> 
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as AgentTool[];
+  // Strip webhook_secret — never send HMAC key to the browser.
+  return (data ?? []).map((t: unknown) => ({ ...(t as AgentTool), webhook_secret: null })) as AgentTool[];
 }
 
 export async function createToolFromPreset(
@@ -126,7 +127,7 @@ export async function createCustomTool(input: CreateToolInput): Promise<AgentToo
 
   if (error || !data) throw new Error(error?.message || "Erro ao criar ferramenta");
   for (const path of agentPaths(input.config_id)) revalidatePath(path);
-  return data as AgentTool;
+  return { ...(data as AgentTool), webhook_secret: null };
 }
 
 export async function createCustomWebhookTool(
@@ -172,7 +173,7 @@ export async function createMcpTool(input: CreateMcpToolInput): Promise<AgentToo
 
   if (error || !data) throw new Error(error?.message || "Erro ao criar tool MCP");
   for (const path of agentPaths(input.config_id)) revalidatePath(path);
-  return data as AgentTool;
+  return { ...(data as AgentTool), webhook_secret: null };
 }
 
 export async function updateTool(toolId: string, input: UpdateToolInput): Promise<AgentTool> {
@@ -216,7 +217,7 @@ export async function updateTool(toolId: string, input: UpdateToolInput): Promis
 
   if (error || !data) throw new Error(error?.message || "Erro ao atualizar ferramenta");
   for (const path of agentPaths(existing.config_id)) revalidatePath(path);
-  return data as AgentTool;
+  return { ...(data as AgentTool), webhook_secret: null };
 }
 
 // PR-AGENT-INTEGRATION-2 (mai/2026): toggle por handler nativo. Cria
@@ -263,7 +264,7 @@ export async function setNativeToolEnabled(input: {
 
     if (error || !data) throw new Error(error?.message || "Erro ao atualizar");
     for (const path of agentPaths(input.config_id)) revalidatePath(path);
-    return data as AgentTool;
+    return { ...(data as AgentTool), webhook_secret: null };
   }
 
   // Cria nova com is_enabled vindo do toggle. Se cliente liga e depois
@@ -283,7 +284,7 @@ export async function setNativeToolEnabled(input: {
 
   if (error || !data) throw new Error(error?.message || "Erro ao criar");
   for (const path of agentPaths(input.config_id)) revalidatePath(path);
-  return data as AgentTool;
+  return { ...(data as AgentTool), webhook_secret: null };
 }
 
 export async function deleteTool(toolId: string): Promise<void> {

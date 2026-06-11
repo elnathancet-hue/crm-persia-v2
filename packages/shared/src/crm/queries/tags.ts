@@ -53,16 +53,21 @@ export async function listTagsWithCount(
   if (!tags || tags.length === 0) return [];
 
   const tagIds = (tags as { id: string }[]).map((t) => t.id);
-  const { data: leadTags, error: ltError } = await db
-    .from("lead_tags")
-    .select("tag_id")
-    .in("tag_id", tagIds);
 
-  if (ltError) throw new Error(ltError.message);
-
+  // Paginate lead_tags to avoid the PostgREST 1000-row cap (incorrect counts above).
+  const PAGE = 1000;
   const countMap: Record<string, number> = {};
-  for (const lt of (leadTags ?? []) as { tag_id: string }[]) {
-    countMap[lt.tag_id] = (countMap[lt.tag_id] ?? 0) + 1;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error: ltError } = await db
+      .from("lead_tags")
+      .select("tag_id")
+      .in("tag_id", tagIds)
+      .range(from, from + PAGE - 1);
+    if (ltError) throw new Error(ltError.message);
+    for (const lt of (data ?? []) as { tag_id: string }[]) {
+      countMap[lt.tag_id] = (countMap[lt.tag_id] ?? 0) + 1;
+    }
+    if ((data?.length ?? 0) < PAGE) break;
   }
 
   return (tags as Tag[]).map((tag) => ({

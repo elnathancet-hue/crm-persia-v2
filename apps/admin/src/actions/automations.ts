@@ -29,6 +29,7 @@ export async function getWebhookConfigs() {
 
 export async function getTools() {
   const { admin, orgId } = await requireSuperadminForOrg();
-  const { data } = await admin.from("integrations").select("*").eq("organization_id", orgId).order("created_at", { ascending: false });
+  // Explicit columns — never return credentials/config JSONB to browser.
+  const { data } = await admin.from("integrations").select("id, organization_id, type, name, is_active, created_at, updated_at").eq("organization_id", orgId).order("created_at", { ascending: false });
   return data || [];
 }

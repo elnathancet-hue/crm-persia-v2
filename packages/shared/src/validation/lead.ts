@@ -50,6 +50,12 @@ export const phoneBR = z
   .trim()
   .min(1, "Telefone obrigatório")
   .transform((raw) => {
+    const noDomain = raw.replace(/@[a-zA-Z0-9.]+$/, "").trim();
+    // Input already carries an international prefix (+X or 00X) — never rewrite DDI.
+    if (noDomain.startsWith("+") || noDomain.startsWith("00")) {
+      const digits = noDomain.replace(/\D/g, "");
+      return digits.length > 0 ? `+${digits}` : "";
+    }
     const digits = extractDigits(raw);
     if (digits.length === 0) return "";
     // Ja vem com 55 DDI? mantem
@@ -78,6 +84,11 @@ export const phoneBROptional = z
   .optional()
   .transform((raw) => {
     if (!raw || raw.length === 0) return undefined;
+    const noDomain = raw.replace(/@[a-zA-Z0-9.]+$/, "").trim();
+    if (noDomain.startsWith("+") || noDomain.startsWith("00")) {
+      const digits = noDomain.replace(/\D/g, "");
+      return digits.length > 0 ? `+${digits}` : undefined;
+    }
     const digits = extractDigits(raw);
     if (digits.length === 0) return undefined;
     if (digits.startsWith("55") && digits.length >= 12 && digits.length <= 13) {
