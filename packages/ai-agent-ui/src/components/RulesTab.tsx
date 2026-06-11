@@ -454,8 +454,9 @@ export function RulesTab({
   const newLeadStageDirty =
     newLeadStageId !== (agent.new_lead_stage_id ?? null);
   const nextDebounceWindowMs = clampDebounceWindowMs(debounceWindowMs);
-  const debounceDirty =
-    nextDebounceWindowMs !== clampDebounceWindowMs(agent.debounce_window_ms);
+  // debounceDirty removido: slider do cliente foi ocultado (PR #228 token economy).
+  // debounce_window_ms e gerenciado pelo backend; nao gera dirty na UI.
+  const debounceDirty = false;
 
   // PR-AI-AGENT-HUMAN-A: humanization dirty + sanitized comparados com
   // a versao normalizada do servidor (que tambem passa pelo helper).
