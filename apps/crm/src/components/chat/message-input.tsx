@@ -366,7 +366,10 @@ export function MessageInput({
     }
 
     setSending(false);
-    textareaRef.current?.focus();
+    // requestAnimationFrame garante que o focus acontece DEPOIS que React
+    // flushá o re-render do setSending(false) — evita o browser devolver
+    // foco ao botão Enviar (que acabou de ser re-habilitado).
+    requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

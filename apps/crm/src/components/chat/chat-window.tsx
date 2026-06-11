@@ -2194,12 +2194,15 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   const selected = forwardTargetIds.has(item.id);
 
                   return (
-                    <Button
+                    // div em vez de Button para evitar <button> aninhado dentro de <button>
+                    // (Radix Checkbox renderiza como <button>; nested buttons = HTML invalido)
+                    <div
                       key={item.id}
-                      type="button"
-                      variant="ghost"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => toggleForwardTarget(item.id)}
-                      className="h-auto w-full justify-start gap-3 rounded-md px-2 py-2 text-left"
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleForwardTarget(item.id); } }}
+                      className="flex h-auto w-full cursor-pointer items-center justify-start gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
                       <Checkbox
                         checked={selected}
@@ -2219,7 +2222,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                             : lead?.phone || "Conversa"}
                         </span>
                       </span>
-                    </Button>
+                    </div>
                   );
                 })}
               </div>
