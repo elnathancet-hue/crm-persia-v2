@@ -142,6 +142,11 @@ interface CrmShellProps {
   kanbanAgentSummaries?: KanbanAgentSummary[];
   /** Catálogo de produtos/serviços da org (migration 106). */
   orgProducts?: OrgProduct[];
+  /**
+   * Se false, o botão de chat no card do Kanban abre wa.me em vez de
+   * chat interno (omite findOrCreateConversationByLead das actions).
+   */
+  chatEnabled?: boolean;
 }
 
 export function CrmShell(props: CrmShellProps) {
@@ -156,6 +161,28 @@ export function CrmShell(props: CrmShellProps) {
   const canManageTags = props.canManageTags ?? true;
   const canManageSegments = props.canManageSegments ?? true;
   const canManageGroups = props.canManageGroups ?? false;
+  const chatEnabled = props.chatEnabled !== false; // default true
+
+  // Quando chat desabilitado, omite findOrCreateConversationByLead das
+  // actions — KanbanBoard degrada pra fallback wa.me automaticamente.
+  const kanbanActions = React.useMemo(() => {
+    if (!chatEnabled) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { findOrCreateConversationByLead: _omit, ...rest } = crmKanbanActions;
+      return rest as typeof crmKanbanActions;
+    }
+    return crmKanbanActions;
+  }, [chatEnabled]);
+
+  // Map de summaries do agente IA por lead (pra badge no Kanban +
+  // menu 3 pontos no LeadsList). Convertido de array pra Map uma vez.
+  const agentSummariesMap = React.useMemo(
+    () =>
+      new Map(
+        (props.kanbanAgentSummaries ?? []).map((s) => [s.lead_id, s]),
+      ),
+    [props.kanbanAgentSummaries],
+  );
 
   // PR-PIPETOOLS: a "biblioteca de funis" foi REMOVIDA — ela rouba foco
   // do Kanban (briefing). Agora na tab Pipeline:
@@ -222,7 +249,7 @@ export function CrmShell(props: CrmShellProps) {
 
   return (
     <LeadsProvider actions={crmLeadsActions}>
-    <KanbanProvider actions={crmKanbanActions}>
+    <KanbanProvider actions={kanbanActions}>
       <div className="space-y-6">
         {/* Header sticky (mai/2026): header + tabs fixos no topo enquanto
             o conteudo rola. Compensam o p-6 do <main> com margem negativa
@@ -289,6 +316,7 @@ export function CrmShell(props: CrmShellProps) {
             initialStats={props.leadsListData.initialStats}
             activeSegment={props.activeSegment ?? null}
             assignees={props.assignees}
+            agentSummaries={agentSummariesMap}
           />
         )}
         {activeTab === "segmentos" && canManageSegments && (

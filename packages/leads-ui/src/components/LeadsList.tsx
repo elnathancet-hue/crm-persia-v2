@@ -85,8 +85,11 @@ import {
   X,
   UserCog,
   Loader2,
+  Pause,
+  Play,
 } from "lucide-react";
 import type { LeadWithTags } from "@persia/shared/crm";
+import type { KanbanAgentSummary } from "@persia/shared/ai-agent";
 
 import { DataTable, type ColumnDef } from "./DataTable";
 import { LeadAvatar } from "./LeadAvatar";
@@ -216,6 +219,15 @@ export interface LeadsListProps {
    * segmento e perdido apos o SSR inicial.
    */
   segmentId?: string | null;
+  /**
+   * Summaries do agente IA por lead. Quando existir summary pra um lead,
+   * o menu ⋯ mostra "Pausar IA" ou "Reativar IA".
+   */
+  agentSummaries?: Map<string, KanbanAgentSummary>;
+  /** Pausar agente IA do lead. Chamado com o agent_conversation_id. */
+  onPauseAgent?: (agentConversationId: string) => Promise<void>;
+  /** Reativar agente IA do lead. Chamado com o agent_conversation_id. */
+  onResumeAgent?: (agentConversationId: string) => Promise<void>;
 }
 
 export function LeadsList({
@@ -237,6 +249,9 @@ export function LeadsList({
   onBulkDelete,
   onBulkAssign,
   segmentId,
+  agentSummaries,
+  onPauseAgent,
+  onResumeAgent,
 }: LeadsListProps) {
   const actions = useLeadsActions();
   const [leads, setLeads] = React.useState(initialLeads);
@@ -908,6 +923,41 @@ export function LeadsList({
                 Agendar
               </DropdownMenuItem>
             )}
+            {canEdit && (() => {
+              const summary = agentSummaries?.get(row.id);
+              if (!summary) return null;
+              if (summary.paused && onResumeAgent) {
+                return (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onResumeAgent(summary.agent_conversation_id).catch(
+                        () => {},
+                      );
+                    }}
+                  >
+                    <Play className="size-4" />
+                    Reativar IA
+                  </DropdownMenuItem>
+                );
+              }
+              if (!summary.paused && onPauseAgent) {
+                return (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPauseAgent(summary.agent_conversation_id).catch(
+                        () => {},
+                      );
+                    }}
+                  >
+                    <Pause className="size-4" />
+                    Pausar IA
+                  </DropdownMenuItem>
+                );
+              }
+              return null;
+            })()}
             {canEdit && handleEdit && (
               <DropdownMenuItem
                 onClick={(e) => {

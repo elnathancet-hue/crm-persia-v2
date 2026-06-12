@@ -54,6 +54,7 @@ export interface LeadAgentActivitySummary {
 // Kanban card. Sem nada alem do necessario pra render rapido + tooltip.
 export interface KanbanAgentSummary {
   lead_id: string;
+  agent_conversation_id: string;
   config_id: string;
   config_name: string;
   paused: boolean;

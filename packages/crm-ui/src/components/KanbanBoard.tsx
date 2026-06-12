@@ -89,6 +89,8 @@ import {
   // PR-KANBAN-UPCOMING (mai/2026): chip de appointment proximo no card
   CalendarClock,
   Bot,
+  Pause,
+  Play,
 } from "lucide-react";
 
 // Sprint 3c: formatRelativeShort local removido — agora usa
@@ -4037,6 +4039,34 @@ function AgentBadge({
   summary: import("@persia/shared/ai-agent").KanbanAgentSummary;
 }) {
   const isPaused = summary.paused;
+  const actions = useKanbanActions();
+  const [loading, setLoading] = React.useState(false);
+
+  const canToggle = isPaused
+    ? Boolean(actions.resumeLeadAgent)
+    : Boolean(actions.pauseLeadAgent);
+
+  const handleToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (loading) return;
+    setLoading(true);
+    try {
+      if (isPaused) {
+        await actions.resumeLeadAgent!(summary.agent_conversation_id);
+        toast.success("Agente IA reativado");
+      } else {
+        await actions.pauseLeadAgent!(summary.agent_conversation_id);
+        toast.success("Agente IA pausado");
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Erro ao atualizar IA",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <span
       className={`mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
@@ -4052,6 +4082,23 @@ function AgentBadge({
     >
       <Bot className="size-3 shrink-0" aria-hidden />
       <span className="truncate">{isPaused ? "IA pausada" : "IA ativa"}</span>
+      {canToggle && (
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={loading}
+          title={isPaused ? "Reativar IA" : "Pausar IA"}
+          className="ml-0.5 shrink-0 rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50"
+        >
+          {loading ? (
+            <span className="size-3 block animate-spin rounded-full border border-current border-t-transparent" />
+          ) : isPaused ? (
+            <Play className="size-3" aria-hidden />
+          ) : (
+            <Pause className="size-3" aria-hidden />
+          )}
+        </button>
+      )}
     </span>
   );
 }

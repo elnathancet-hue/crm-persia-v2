@@ -39,6 +39,21 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
   const { supabase, orgId, role } = await getAuthContext();
   if (!orgId) redirect("/login");
 
+  // Verifica se o servico de chat esta habilitado pra esta org.
+  // Usado pra degradar o botao de chat do Kanban pra wa.me quando false.
+  let chatEnabled = true;
+  try {
+    const { data: orgData } = await supabase
+      .from("organizations")
+      .select("services")
+      .eq("id", orgId)
+      .maybeSingle();
+    const services = (orgData?.services ?? {}) as Record<string, boolean>;
+    chatEnabled = services.chat !== false;
+  } catch {
+    // safe default: chat habilitado
+  }
+
   // Garante que existe pelo menos um pipeline (cria com stages padrao
   // na primeira visita). HOTFIX (#100): try/catch defensivo.
   let pipelines: Awaited<ReturnType<typeof listPipelines>> = [];
@@ -325,6 +340,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       upcomingAppointments={upcomingAppointments}
       kanbanAgentSummaries={kanbanAgentSummaries}
       orgProducts={orgProducts}
+      chatEnabled={chatEnabled}
       canManageGroups={role === "owner" || role === "admin"}
     />
   );

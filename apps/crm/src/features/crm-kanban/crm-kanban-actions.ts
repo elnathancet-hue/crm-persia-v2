@@ -35,6 +35,10 @@ import {
   searchLeadsForKanban,
 } from "@/actions/leads-kanban";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
+import {
+  pauseLeadAgent,
+  resumeLeadAgent,
+} from "@/actions/ai-agent/lead-status";
 
 export const crmKanbanActions: KanbanActions = {
   // ============ LEAD-CENTRIC (PR-K-CENTRIC mai/2026) ============
@@ -135,6 +139,10 @@ export const crmKanbanActions: KanbanActions = {
   },
   findOrCreateConversationByLead: (leadId) =>
     findOrCreateConversationByLead(leadId),
+
+  // ============ AI AGENT PAUSE/RESUME ============
+  pauseLeadAgent: (agentConversationId) => pauseLeadAgent(agentConversationId),
+  resumeLeadAgent: (agentConversationId) => resumeLeadAgent(agentConversationId),
 
   // Inline edit do card: atualiza nome/valor esperado do lead.
   // updateDeal (legado) era no-op no modelo lead-centric porque o id

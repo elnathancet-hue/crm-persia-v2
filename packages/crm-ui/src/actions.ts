@@ -234,6 +234,18 @@ export interface KanbanActions {
   ) => Promise<{ conversationId: string; created: boolean }>;
 
   /**
+   * Pausa o agente IA no lead (seta human_handoff_at). Opcional —
+   * UI esconde o botão quando undefined.
+   */
+  pauseLeadAgent?: (agentConversationId: string) => Promise<void>;
+
+  /**
+   * Reativa o agente IA no lead (limpa human_handoff_at). Opcional —
+   * UI esconde o botão quando undefined.
+   */
+  resumeLeadAgent?: (agentConversationId: string) => Promise<void>;
+
+  /**
    * mai/2026 — busca leads pra aba "Selecionar existente" do "+" do
    * Kanban. Casamento parcial (ILIKE) em nome/telefone/email + dados
    * de em que funil/etapa o lead esta hoje (pra UI mostrar contexto).

@@ -230,7 +230,7 @@ export async function getKanbanAgentSummariesByLeads(
   const { data, error } = await supabase
     .from("agent_conversations")
     .select(
-      "lead_id, config_id, human_handoff_at, last_interaction_at, agent_configs(name)",
+      "id, lead_id, config_id, human_handoff_at, last_interaction_at, agent_configs(name)",
     )
     .eq("organization_id", orgId)
     .in("lead_id", leadIds)
@@ -253,6 +253,7 @@ export async function getKanbanAgentSummariesByLeads(
 
     result.push({
       lead_id: leadId,
+      agent_conversation_id: row.id as string,
       config_id: row.config_id as string,
       config_name: agentConfigs?.name ?? "Agente IA",
       paused: Boolean(row.human_handoff_at),

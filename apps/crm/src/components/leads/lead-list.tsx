@@ -43,6 +43,11 @@ import {
   type LeadListItemStats,
 } from "@/actions/leads";
 import { findOrCreateConversationByLead } from "@/actions/conversations";
+import {
+  pauseLeadAgent,
+  resumeLeadAgent,
+} from "@/actions/ai-agent/lead-status";
+import type { KanbanAgentSummary } from "@persia/shared/ai-agent";
 
 interface Props {
   initialLeads: LeadWithTags[];
@@ -59,6 +64,8 @@ interface Props {
    * "Limpar" remove o filtro (limpa ?segment=... da URL).
    */
   activeSegment?: { id: string; name: string } | null;
+  /** Summaries do agente IA por lead (pra menu ⋯ Pausar/Reativar IA). */
+  agentSummaries?: Map<string, KanbanAgentSummary>;
 }
 
 export function LeadList(props: Props) {
@@ -321,6 +328,15 @@ export function LeadList(props: Props) {
             const result = await bulkDeleteLeads(leadIds);
             router.refresh();
             return result;
+          }}
+          agentSummaries={props.agentSummaries}
+          onPauseAgent={async (agentConversationId) => {
+            await pauseLeadAgent(agentConversationId);
+            router.refresh();
+          }}
+          onResumeAgent={async (agentConversationId) => {
+            await resumeLeadAgent(agentConversationId);
+            router.refresh();
           }}
           headerActions={
             <>
