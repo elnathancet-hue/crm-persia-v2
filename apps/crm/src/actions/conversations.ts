@@ -199,7 +199,7 @@ export async function getConversations(
     }
   }
 
-  const { data, error } = await query;
+  const { data, error } = await query.limit(300);
 
   if (error) {
     console.error("Error fetching conversations:", error);

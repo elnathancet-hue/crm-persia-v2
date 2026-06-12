@@ -157,10 +157,58 @@ export async function updateCaptureSource(
       if (!trimmed) return { ok: false, error: "Nome é obrigatório" };
       updates.name = trimmed;
     }
-    if (input.api_key_id !== undefined) updates.api_key_id = input.api_key_id;
-    if ("pipeline_id" in input) updates.pipeline_id = input.pipeline_id ?? null;
-    if ("stage_id" in input) updates.stage_id = input.stage_id ?? null;
-    if (input.tag_ids !== undefined) updates.tag_ids = input.tag_ids;
+
+    if (input.api_key_id !== undefined) {
+      const { data: keyCheck } = await db
+        .from("api_keys")
+        .select("id")
+        .eq("id", input.api_key_id)
+        .eq("organization_id", orgId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (!keyCheck) return { ok: false, error: "Chave de API inválida" };
+      updates.api_key_id = input.api_key_id;
+    }
+
+    if ("pipeline_id" in input) {
+      if (input.pipeline_id != null) {
+        const { data: pipeCheck } = await db
+          .from("pipelines")
+          .select("id")
+          .eq("id", input.pipeline_id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (!pipeCheck) return { ok: false, error: "Pipeline inválido" };
+      }
+      updates.pipeline_id = input.pipeline_id ?? null;
+    }
+
+    if ("stage_id" in input) {
+      if (input.stage_id != null) {
+        const { data: stageCheck } = await db
+          .from("pipeline_stages")
+          .select("id")
+          .eq("id", input.stage_id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (!stageCheck) return { ok: false, error: "Stage inválido" };
+      }
+      updates.stage_id = input.stage_id ?? null;
+    }
+
+    if (input.tag_ids !== undefined) {
+      if (input.tag_ids.length > 0) {
+        const { data: tagsCheck } = await db
+          .from("tags")
+          .select("id")
+          .in("id", input.tag_ids)
+          .eq("organization_id", orgId);
+        if (!tagsCheck || tagsCheck.length !== input.tag_ids.length)
+          return { ok: false, error: "Uma ou mais tags inválidas" };
+      }
+      updates.tag_ids = input.tag_ids;
+    }
+
     if (input.dedup_window_hours !== undefined) updates.dedup_window_hours = input.dedup_window_hours;
 
     const { error } = await db

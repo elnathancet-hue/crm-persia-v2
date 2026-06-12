@@ -210,16 +210,27 @@ async function fetchLeadsByIds(
       };
     };
   };
-  const { data, error } = await dbAny
-    .from("leads")
-    .select("id, name, phone")
-    .eq("organization_id", orgId)
-    .in("id", ids);
-  if (error) throw new StrictMatchError(`fetchLeads: ${error.message}`);
-  return ((data ?? []) as Array<{ id: string; phone: string | null; name: string | null }>).map((r) => ({
-    ...r,
-    chat_jid: null,
-  }));
+
+  // Chunka em lotes de 500 para não gerar URL gigante no .in() do PostgREST.
+  const CHUNK = 500;
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    chunks.push(ids.slice(i, i + CHUNK));
+  }
+
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await dbAny
+        .from("leads")
+        .select("id, name, phone")
+        .eq("organization_id", orgId)
+        .in("id", chunk);
+      if (error) throw new StrictMatchError(`fetchLeads: ${error.message}`);
+      return (data ?? []) as Array<{ id: string; phone: string | null; name: string | null }>;
+    }),
+  );
+
+  return results.flat().map((r) => ({ ...r, chat_jid: null }));
 }
 
 // ─── Group targets ────────────────────────────────────────────────────────────

@@ -51,11 +51,10 @@ export async function getBookingPageById(id: string): Promise<BookingPage | null
 export async function createBookingPage(
   input: Omit<CreateBookingPageInput, "user_id"> & { user_id?: string },
 ): Promise<BookingPage> {
-  const { supabase, orgId, userId } = await requireRole("agent");
-  const final: CreateBookingPageInput = {
-    ...input,
-    user_id: input.user_id ?? userId,
-  };
+  const { supabase, orgId, userId, role } = await requireRole("agent");
+  // Agent só pode criar páginas para si mesmo.
+  const target_user = role === "agent" ? userId : (input.user_id ?? userId);
+  const final: CreateBookingPageInput = { ...input, user_id: target_user };
   const created = await createShared(mctx(supabase, orgId, userId), final);
   revalidatePath("/agenda/paginas-de-agendamento");
   return created;
@@ -65,7 +64,18 @@ export async function updateBookingPage(
   id: string,
   input: UpdateBookingPageInput,
 ): Promise<BookingPage> {
-  const { supabase, orgId, userId } = await requireRole("agent");
+  const { supabase, orgId, userId, role } = await requireRole("agent");
+  // Agent só pode editar suas próprias páginas.
+  if (role === "agent") {
+    const { data: page } = await supabase
+      .from("booking_pages")
+      .select("user_id")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!page || (page as { user_id: string }).user_id !== userId)
+      throw new Error("Página não encontrada");
+  }
   const updated = await updateShared(mctx(supabase, orgId, userId), id, input);
   revalidatePath("/agenda/paginas-de-agendamento");
   return updated;
@@ -75,7 +85,18 @@ export async function duplicateBookingPage(
   id: string,
   new_slug: string,
 ): Promise<BookingPage> {
-  const { supabase, orgId, userId } = await requireRole("agent");
+  const { supabase, orgId, userId, role } = await requireRole("agent");
+  // Agent só pode duplicar suas próprias páginas.
+  if (role === "agent") {
+    const { data: page } = await supabase
+      .from("booking_pages")
+      .select("user_id")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!page || (page as { user_id: string }).user_id !== userId)
+      throw new Error("Página não encontrada");
+  }
   const duplicated = await duplicateShared(
     mctx(supabase, orgId, userId),
     id,

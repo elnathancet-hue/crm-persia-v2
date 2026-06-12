@@ -248,6 +248,43 @@ export async function submitPublicBooking(
   };
   if (page.status !== "active") throw new Error("Página não está ativa");
 
+  // M5 — validação de slot: verifica se o horário enviado realmente está
+  // disponível. Sem isso, qualquer horário (fora do expediente, já ocupado,
+  // passado) seria aceito.
+  const start_at = projectLocalToUtc(input.start_local, input.timezone);
+  const slotDate = input.start_local.slice(0, 10); // "YYYY-MM-DD"
+
+  const availRule = await getDefaultAvailabilityRule(
+    { db, orgId: page.organization_id },
+    page.user_id,
+  );
+  if (!availRule) throw new Error("Profissional sem horários configurados");
+
+  const slotDayStart = new Date(`${slotDate}T00:00:00Z`);
+  const slotDayEnd = new Date(slotDayStart);
+  slotDayEnd.setUTCDate(slotDayEnd.getUTCDate() + 2);
+  const existingForSlot = await listAppointments(
+    { db, orgId: page.organization_id },
+    {
+      from: slotDayStart.toISOString(),
+      to: slotDayEnd.toISOString(),
+      user_id: page.user_id,
+      kinds: ["appointment", "block"],
+      limit: 200,
+    },
+  );
+
+  const availableSlots = getAvailableSlots({
+    date: slotDate,
+    rule: availRule,
+    duration_minutes: page.duration_minutes,
+    buffer_minutes: page.buffer_minutes,
+    existing: existingForSlot,
+  });
+
+  const isValidSlot = availableSlots.some((s) => s.start_at === start_at);
+  if (!isValidSlot) throw new Error("Horário não disponível");
+
   const { data: orgRow } = await db
     .from("organizations")
     .select("name")
@@ -255,7 +292,7 @@ export async function submitPublicBooking(
     .maybeSingle();
   const orgName = (orgRow?.name as string | undefined) ?? "Sua agenda";
 
-  const start_at = projectLocalToUtc(input.start_local, input.timezone);
+  // start_at já foi computado e validado acima (slot check).
   const end_ms =
     new Date(start_at).getTime() + page.duration_minutes * 60_000;
   const end_at = new Date(end_ms).toISOString();

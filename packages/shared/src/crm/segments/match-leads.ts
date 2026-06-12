@@ -42,6 +42,7 @@ interface QueryBuilderLike {
   lte: (col: string, val: unknown) => QueryBuilderLike;
   is: (col: string, val: unknown) => QueryBuilderLike;
   in: (col: string, vals: unknown[]) => QueryBuilderLike;
+  limit: (n: number) => QueryBuilderLike;
   then: <T>(fn: (r: { data: unknown[] | null; error: { message: string } | null }) => T) => Promise<T>;
 }
 
@@ -179,7 +180,7 @@ async function resolveDirectCondition(
     default: return null;
   }
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) {
     // eslint-disable-next-line no-console
     console.error("[segments/match-leads] resolveDirect failed:", error.message);
@@ -207,7 +208,7 @@ async function resolveTagsCondition(
     .eq("organization_id", orgId) as unknown as QueryBuilderLike;
   const query = baseQuery.in("tag_id", tagIds);
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) {
     // eslint-disable-next-line no-console
     console.error("[segments/match-leads] resolveTags failed:", error.message);
@@ -229,7 +230,7 @@ async function resolveTagsCondition(
       .from("leads")
       .select("id")
       .eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allLeads, error: allError } = await allBaseQuery.then((r) => r);
+    const { data: allLeads, error: allError } = await allBaseQuery.limit(10000).then((r) => r);
     if (allError) {
       // eslint-disable-next-line no-console
       console.error("[segments/match-leads] resolveTags not_contains failed:", allError.message);
@@ -253,7 +254,7 @@ async function resolveDateCondition(
 
   if (op === "is_null") {
     // "nunca interagiu" pra last_interaction_at
-    const { data, error } = await baseQuery.is(field, null).then((r) => r);
+    const { data, error } = await baseQuery.is(field, null).limit(10000).then((r) => r);
     if (error) {
       // eslint-disable-next-line no-console
       console.error("[segments/match-leads] resolveDate is_null failed:", error.message);
@@ -277,7 +278,7 @@ async function resolveDateCondition(
     return null;
   }
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) {
     // eslint-disable-next-line no-console
     console.error("[segments/match-leads] resolveDate failed:", error.message);
@@ -391,7 +392,7 @@ async function resolveDirectConditionStrict(
     default: throw new StrictMatchError(`Campo "${field}": operador "${op}" inválido`);
   }
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) throw new StrictMatchError(`DB error em "${field}": ${error.message}`);
   return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
 }
@@ -411,7 +412,7 @@ async function resolveTagsConditionStrict(
     .eq("organization_id", orgId) as unknown as QueryBuilderLike;
   const query = baseQuery.in("tag_id", tagIds);
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) throw new StrictMatchError(`DB error em "tags": ${error.message}`);
 
   const matched = new Set(
@@ -424,7 +425,7 @@ async function resolveTagsConditionStrict(
 
   if (op === "not_contains") {
     const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allData, error: allErr } = await allQ.then((r) => r);
+    const { data: allData, error: allErr } = await allQ.limit(10000).then((r) => r);
     if (allErr) throw new StrictMatchError(`DB error em "tags" not_contains: ${allErr.message}`);
     const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
     return new Set(all.filter((id) => !matched.has(id)));
@@ -443,7 +444,7 @@ async function resolveDateConditionStrict(
   const baseQuery = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
 
   if (op === "is_null") {
-    const { data, error } = await baseQuery.is(field, null).then((r) => r);
+    const { data, error } = await baseQuery.is(field, null).limit(10000).then((r) => r);
     if (error) throw new StrictMatchError(`DB error em "${field}" is_null: ${error.message}`);
     return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
   }
@@ -463,7 +464,7 @@ async function resolveDateConditionStrict(
     throw new StrictMatchError(`Campo "${field}": operador "${op}" inválido`);
   }
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) throw new StrictMatchError(`DB error em "${field}": ${error.message}`);
   return new Set(((data ?? []) as { id: string }[]).map((r) => r.id));
 }
@@ -481,13 +482,13 @@ async function resolveDealConditionStrict(
     .eq("organization_id", orgId) as unknown as QueryBuilderLike;
 
   if (op === "is_null") {
-    const { data, error } = await baseQuery.eq("status", "open").then((r) => r);
+    const { data, error } = await baseQuery.eq("status", "open").limit(10000).then((r) => r);
     if (error) throw new StrictMatchError(`DB error em "${field}" is_null: ${error.message}`);
     const withOpenDeal = new Set(
       ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
     );
     const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allData, error: allErr } = await allQ.then((r) => r);
+    const { data: allData, error: allErr } = await allQ.limit(10000).then((r) => r);
     if (allErr) throw new StrictMatchError(`DB error em "allLeads" (deal is_null): ${allErr.message}`);
     const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
     return new Set(all.filter((id) => !withOpenDeal.has(id)));
@@ -508,7 +509,7 @@ async function resolveDealConditionStrict(
     throw new StrictMatchError(`Campo "${field}": operador "${op}" inválido`);
   }
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) throw new StrictMatchError(`DB error em "${field}": ${error.message}`);
   return new Set(
     ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
@@ -533,7 +534,7 @@ async function resolveDealCondition(
 
   // "Sem negócio aberto" — is_null no deal_status.
   if (op === "is_null") {
-    const { data, error } = await baseQuery.eq("status", "open").then((r) => r);
+    const { data, error } = await baseQuery.eq("status", "open").limit(10000).then((r) => r);
     if (error) {
       // eslint-disable-next-line no-console
       console.error("[segments/match-leads] resolveDeal is_null failed:", error.message);
@@ -544,7 +545,7 @@ async function resolveDealCondition(
     );
     // Todos os leads do org menos os que têm deal open.
     const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allData, error: allErr } = await allQ.then((r) => r);
+    const { data: allData, error: allErr } = await allQ.limit(10000).then((r) => r);
     if (allErr) {
       // eslint-disable-next-line no-console
       console.error("[segments/match-leads] resolveDeal allLeads failed:", allErr.message);
@@ -570,7 +571,7 @@ async function resolveDealCondition(
     return null;
   }
 
-  const { data, error } = await query.then((r) => r);
+  const { data, error } = await query.limit(10000).then((r) => r);
   if (error) {
     // eslint-disable-next-line no-console
     console.error("[segments/match-leads] resolveDeal failed:", error.message);

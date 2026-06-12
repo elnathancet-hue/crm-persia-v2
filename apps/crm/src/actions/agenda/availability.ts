@@ -78,14 +78,36 @@ export async function updateAvailabilityRule(
   id: string,
   input: UpdateAvailabilityRuleInput,
 ): Promise<AvailabilityRule> {
-  const { supabase, orgId, userId } = await requireRole("agent");
+  const { supabase, orgId, userId, role } = await requireRole("agent");
+  // Agent só pode editar suas próprias regras.
+  if (role === "agent") {
+    const { data: rule } = await supabase
+      .from("availability_rules")
+      .select("user_id")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!rule || (rule as { user_id: string }).user_id !== userId)
+      throw new Error("Regra não encontrada");
+  }
   const updated = await updateShared(mctx(supabase, orgId, userId), id, input);
   revalidatePath("/agenda/disponibilidade");
   return updated;
 }
 
 export async function deleteAvailabilityRule(id: string): Promise<void> {
-  const { supabase, orgId, userId } = await requireRole("agent");
+  const { supabase, orgId, userId, role } = await requireRole("agent");
+  // Agent só pode excluir suas próprias regras.
+  if (role === "agent") {
+    const { data: rule } = await supabase
+      .from("availability_rules")
+      .select("user_id")
+      .eq("id", id)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!rule || (rule as { user_id: string }).user_id !== userId)
+      throw new Error("Regra não encontrada");
+  }
   await deleteShared(mctx(supabase, orgId, userId), id);
   revalidatePath("/agenda/disponibilidade");
 }
