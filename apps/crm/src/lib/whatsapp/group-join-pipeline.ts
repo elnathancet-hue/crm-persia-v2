@@ -528,7 +528,7 @@ export async function processGroupWebhookEvent(
         // Etapa 8: disparar automações member_joined (e lead_identified se novo vínculo)
         const phone = normalizePhoneBR(jid);
         const eventKeyJoined = `member_joined:${group.id}:${jid}:${new Date().toISOString().slice(0, 10)}`;
-        const { runGroupAutomations } = await import("@/actions/groups");
+        const { runGroupAutomations } = await import("@/lib/groups/run-automations");
         runGroupAutomations(orgId, group.id as string, "member_joined", eventKeyJoined, {
           leadId: result.lead?.id ?? undefined,
           phone: phone ?? undefined,
@@ -569,7 +569,7 @@ export async function processGroupWebhookEvent(
               });
             // Etapa 8: disparar automação member_left
             const eventKeyLeft = `member_left:${group.id}:${phone}:${new Date().toISOString().slice(0, 10)}`;
-            const { runGroupAutomations } = await import("@/actions/groups");
+            const { runGroupAutomations } = await import("@/lib/groups/run-automations");
             runGroupAutomations(orgId, group.id as string, "member_left", eventKeyLeft, {
               phone,
               jid,

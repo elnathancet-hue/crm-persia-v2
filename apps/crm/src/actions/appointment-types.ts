@@ -154,16 +154,22 @@ export async function updateAppointmentType(
 ): Promise<void> {
   const { supabase, orgId } = await requireRole("admin");
 
-  const updates: Record<string, unknown> = {
-    ...input,
-    updated_at: new Date().toISOString(),
-  };
-  // Re-slug quando nome muda. Cliente pode renomear "Consulta inicial"
-  // pra "Primeira consulta" e o slug fica "primeira-consulta".
-  if (input.name) {
+  // Whitelist explícita — evita mass assignment via `...input` spread.
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) {
+    // Re-slug quando nome muda.
     updates.name = input.name.trim();
     updates.slug = slugify(input.name);
   }
+  if (input.description !== undefined)         updates.description = input.description;
+  if (input.duration_minutes !== undefined)    updates.duration_minutes = input.duration_minutes;
+  if (input.default_channel !== undefined)     updates.default_channel = input.default_channel;
+  if (input.default_location !== undefined)    updates.default_location = input.default_location;
+  if (input.default_meeting_url !== undefined) updates.default_meeting_url = input.default_meeting_url;
+  if (input.default_user_id !== undefined)     updates.default_user_id = input.default_user_id;
+  if (input.price_cents !== undefined)         updates.price_cents = input.price_cents;
+  if (input.color !== undefined)               updates.color = input.color;
+  if (input.is_active !== undefined)           updates.is_active = input.is_active;
 
   const { error } = await supabase
     .from("agenda_services")

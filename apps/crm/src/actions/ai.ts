@@ -94,12 +94,24 @@ export async function updateAssistant(
 ) {
   const { supabase, orgId } = await requireRole("admin");
 
+  // Whitelist explícita — evita mass assignment caso o payload serializado
+  // carregue chaves extras (organization_id, id, etc.).
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (data.name !== undefined)               patch.name = data.name;
+  if (data.prompt !== undefined)             patch.prompt = data.prompt;
+  if (data.description !== undefined)        patch.description = data.description;
+  if (data.category !== undefined)           patch.category = data.category;
+  if (data.welcome_msg !== undefined)        patch.welcome_msg = data.welcome_msg;
+  if (data.off_hours_msg !== undefined)      patch.off_hours_msg = data.off_hours_msg;
+  if (data.schedule !== undefined)           patch.schedule = data.schedule;
+  if (data.tone !== undefined)               patch.tone = data.tone;
+  if (data.model !== undefined)              patch.model = data.model;
+  if (data.is_active !== undefined)          patch.is_active = data.is_active;
+  if (data.message_splitting !== undefined)  patch.message_splitting = data.message_splitting;
+
   const { error } = await supabase
     .from("ai_assistants")
-    .update({
-      ...data,
-      updated_at: new Date().toISOString(),
-    })
+    .update(patch as never)
     .eq("id", id)
     .eq("organization_id", orgId);
 

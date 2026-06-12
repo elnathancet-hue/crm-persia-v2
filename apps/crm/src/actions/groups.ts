@@ -1817,13 +1817,19 @@ export async function recordGroupJoin(input: {
   // Normalize phone using the shared pipeline helper (handles 9° dígito)
   const phone = input.phone ? normalizePhoneBR(input.phone) : null;
 
-  // Fetch group name for activity description
   const db = adminClient as any;
-  const { data: group } = await db
-    .from("whatsapp_groups")
-    .select("name")
-    .eq("id", input.groupId)
-    .maybeSingle();
+
+  // Valida ownership antes de qualquer escrita — ação pública (smart link).
+  // Sem isso, qualquer pessoa com um UUID de grupo alheio poderia injetar
+  // leads/memberships em qualquer org da plataforma.
+  const [{ data: ownedGroup }, { data: ownedCampaign }] = await Promise.all([
+    db.from("whatsapp_groups").select("id, name").eq("id", input.groupId).eq("organization_id", input.organizationId).maybeSingle(),
+    db.from("group_campaigns").select("id").eq("id", input.campaignId).eq("organization_id", input.organizationId).maybeSingle(),
+  ]);
+  if (!ownedGroup) throw new Error("Grupo não encontrado");
+  if (!ownedCampaign) throw new Error("Campanha não encontrada");
+
+  // ownedGroup.name já foi buscado na validação de ownership acima.
 
   // Verifica se já é membro ativo ANTES do upsert para evitar duplo-incremento
   // (mesma pessoa clicando o link duas vezes → upsert só atualiza, não insere).
@@ -1844,7 +1850,7 @@ export async function recordGroupJoin(input: {
     supabase: adminClient,
     orgId: input.organizationId,
     groupId: input.groupId,
-    groupName: (group?.name as string | null) ?? "Grupo",
+    groupName: (ownedGroup.name as string | null) ?? "Grupo",
     participantJid: phone ?? input.phone ?? "",
     participantName: input.name?.trim() || null,
     source: "smart_link",
@@ -2208,42 +2214,9 @@ export async function deleteGroupAutomation(automationId: string): Promise<void>
   revalidatePath("/crm");
 }
 
-// runGroupAutomations — chamado fire-and-forget do webhook.
-// Usa admin client para acessar group_automation_logs (sem RLS pública).
-export async function runGroupAutomations(
-  orgId: string,
-  groupId: string,
-  trigger: GroupAutomationTrigger,
-  eventKey: string,
-  context: { leadId?: string; phone?: string; jid?: string },
-): Promise<void> {
-  const adminDb = createAdminClient() as any;
-
-  const { data: automations } = await adminDb
-    .from("group_automations")
-    .select("id, action_type, action_payload")
-    .eq("organization_id", orgId)
-    .eq("group_id", groupId)
-    .eq("trigger", trigger)
-    .eq("is_active", true);
-
-  if (!automations || automations.length === 0) return;
-
-  await Promise.allSettled(
-    automations.map(async (auto: any) => {
-      // Idempotency: try to insert log; if UNIQUE violation → already ran → skip
-      const { error: logErr } = await adminDb
-        .from("group_automation_logs")
-        .insert({ automation_id: auto.id, event_key: eventKey });
-      if (logErr) return; // duplicate key = skip
-
-      if (auto.action_type === "add_tag" && context.leadId && auto.action_payload?.tag_id) {
-        const { addTagToLead } = await import("@persia/shared/crm");
-        await addTagToLead({ db: adminDb, orgId }, context.leadId, auto.action_payload.tag_id);
-      }
-    }),
-  );
-}
+// runGroupAutomations foi movido para lib/groups/run-automations.ts
+// para não virar endpoint público de server action.
+// Importar de lá diretamente.
 
 // ── bulkAddTagToGroupLeads ─────────────────────────────────────────────────────
 // Etapa 6: aplica uma tag em massa a múltiplos leads de um grupo.
