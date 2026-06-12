@@ -20,25 +20,22 @@ export async function processFollowUps(): Promise<{
   const supabase = getSupabase();
   const now = new Date().toISOString();
 
-  // Find executions that are waiting and due to resume
-  const { data: executions, error } = await supabase
+  // Filtra no banco pelo campo JSONB metadata->>'resume_at' <= now,
+  // evitando buscar todas as "waiting" e descartar no cliente.
+  // Ordena por resume_at pra processar as mais atrasadas primeiro.
+  const { data: dueExecutions, error } = await supabase
     .from("flow_executions")
     .select("id, metadata")
     .eq("status", "waiting")
-    .order("started_at", { ascending: true })
-    .limit(50); // Process max 50 at a time
+    .not("metadata->resume_at", "is", null)
+    .lte("metadata->resume_at", now)
+    .order("metadata->resume_at", { ascending: true })
+    .limit(50);
 
-  if (error || !executions) {
+  if (error || !dueExecutions) {
     console.error("[FollowUp] Error fetching executions:", error?.message);
     return { processed: 0, errors: 1 };
   }
-
-  // Filter to only those whose resume_at has passed
-  const dueExecutions = executions.filter((exec) => {
-    const resumeAt = exec.metadata?.resume_at;
-    if (!resumeAt) return false;
-    return new Date(resumeAt) <= new Date(now);
-  });
 
   let processed = 0;
   let errors = 0;

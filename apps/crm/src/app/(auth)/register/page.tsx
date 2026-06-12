@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition, useState } from "react";
-import { signUp } from "@/actions/auth";
+import { signUp, type SignUpResult } from "@/actions/auth";
 import { Button } from "@persia/ui/button";
 import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
@@ -32,11 +32,8 @@ export default function RegisterPage() {
     setError("");
     formData.set("niche", niche);
     startTransition(async () => {
-      try {
-        await signUp(formData);
-      } catch (e: any) {
-        setError(e.message || "Erro ao criar conta");
-      }
+      const result: SignUpResult = await signUp(formData);
+      if (result?.error) setError(result.error);
     });
   }
 

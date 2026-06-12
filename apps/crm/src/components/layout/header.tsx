@@ -116,7 +116,7 @@ export function Header() {
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <Link href="/profile" className="flex items-center w-full">
+              <Link href="/settings" className="flex items-center w-full">
                 <User className="mr-2 size-4" />
                 Meu Perfil
               </Link>

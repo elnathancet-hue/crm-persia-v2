@@ -12,6 +12,7 @@
 
 import * as React from "react";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@persia/ui/button";
 import {
   Dialog,
@@ -57,10 +58,11 @@ export function CreateKanbanDialog({ open, onOpenChange, onCreated }: Props) {
           onCreated(created.id);
           onOpenChange(false);
           setName("");
+        } else {
+          toast.error("Não foi possível criar o funil. Tente novamente.");
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[CreateKanbanDialog] createPipeline:", err);
+        toast.error("Erro ao criar funil. Tente novamente.");
       }
     });
   };

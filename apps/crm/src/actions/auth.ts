@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-export async function signUp(formData: FormData) {
+// PR-B10-followup: mesma correcao aplicada ao signIn — retornar { error }
+// em vez de throw. React 19 trata throw em server action como crash
+// nao-tratado; o try/catch no cliente nao captura. Padrao: retornar shape.
+export type SignUpResult = { error: string } | void;
+
+export async function signUp(formData: FormData): Promise<SignUpResult> {
   const supabase = await createClient();
 
   const email = formData.get("email") as string;
@@ -22,15 +27,24 @@ export async function signUp(formData: FormData) {
     },
   });
 
-  if (authError) throw new Error(authError.message);
-  if (!authData.user) throw new Error("Erro ao criar usuario");
+  if (authError) {
+    const message =
+      authError.message.toLowerCase().includes("already registered") ||
+      authError.message.toLowerCase().includes("already been registered")
+        ? "Este e-mail já está cadastrado. Tente fazer login."
+        : authError.message;
+    return { error: message };
+  }
+  if (!authData.user) return { error: "Erro ao criar usuário. Tente novamente." };
 
   // 2. Create organization
-  const slug = company
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    + "-" + Math.random().toString(36).substring(2, 6);
+  const slug =
+    company
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") +
+    "-" +
+    Math.random().toString(36).substring(2, 6);
 
   const { data: org, error: orgError } = await supabase
     .from("organizations")
@@ -42,7 +56,7 @@ export async function signUp(formData: FormData) {
     .select()
     .single();
 
-  if (orgError) throw new Error(orgError.message);
+  if (orgError) return { error: "Erro ao criar organização. Tente novamente." };
 
   // 3. Add user as owner
   await supabase.from("organization_members").insert({

@@ -1693,6 +1693,7 @@ export function KanbanBoard({
                           leads={leads}
                           onCreated={handleDealCreated}
                           buttonColor="currentColor"
+                          triggerId={`add-deal-${stage.id}`}
                         />
                       )
                     )}
@@ -1802,12 +1803,14 @@ export function KanbanBoard({
                     <button
                       type="button"
                       disabled={!canEdit}
-                      onClick={() =>
-                        canEdit &&
-                        document
-                          .getElementById(`add-deal-${stage.id}`)
-                          ?.click()
-                      }
+                      onClick={() => {
+                        if (!canEdit) return;
+                        if (actions.createLeadWithDeal) {
+                          setAddLeadStage({ id: stage.id, name: stage.name });
+                        } else {
+                          document.getElementById(`add-deal-${stage.id}`)?.click();
+                        }
+                      }}
                       className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/50 bg-card/40 px-4 py-10 text-muted-foreground transition-all hover:border-primary/40 hover:bg-primary/5 hover:text-primary disabled:cursor-default disabled:opacity-60 disabled:hover:border-border/50 disabled:hover:bg-card/40 disabled:hover:text-muted-foreground"
                     >
                       <span className="inline-flex size-8 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
@@ -3291,12 +3294,14 @@ function AddDealDialog({
   leads,
   onCreated,
   buttonColor,
+  triggerId,
 }: {
   pipelineId: string;
   stageId: string;
   leads: KanbanLead[];
   onCreated: (deal: Deal) => void;
   buttonColor: string;
+  triggerId?: string;
 }) {
   const actions = useKanbanActions();
   const [open, setOpen] = React.useState(false);
@@ -3370,7 +3375,7 @@ function AddDealDialog({
         setTitleInput("");
         setValueInput("");
       } catch (err) {
-        console.error("Erro ao criar negocio:", err);
+        toast.error("Erro ao criar negócio. Tente novamente.");
       }
     });
   }
@@ -3380,6 +3385,7 @@ function AddDealDialog({
       <DialogTrigger
         render={
           <button
+            id={triggerId}
             type="button"
             className="inline-flex items-center justify-center size-7 rounded-md transition-colors hover:bg-black/10"
             style={{ color: buttonColor }}
@@ -4054,9 +4060,10 @@ function UpcomingAppointmentChip({
           : "border-primary/30 bg-primary/10 text-primary"
       }`}
       title={`${appointment.title} — ${new Date(appointment.start_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`}
+      suppressHydrationWarning
     >
       <CalendarClock className="size-3 shrink-0" aria-hidden />
-      <span className="truncate">{label}</span>
+      <span className="truncate" suppressHydrationWarning>{label}</span>
     </span>
   );
 }
