@@ -3,8 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, Save, Loader2, Users, MessageSquare, Phone, Smartphone, CheckCircle2, XCircle } from "lucide-react";
-import { updateOrganization, connectWhatsAppInstance } from "@/actions/admin";
+import { updateOrganization, connectWhatsAppInstance, setProductTier, type ProductTier } from "@/actions/admin";
 import { toast } from "sonner";
+
+const TIERS: { key: ProductTier; emoji: string; label: string; desc: string }[] = [
+  { key: "ai_simple", emoji: "🥉", label: "Pérsia IA",  desc: "IA + Agenda + Funil" },
+  { key: "crm",       emoji: "🥈", label: "Pérsia CRM", desc: "+ Chat + Relatórios" },
+  { key: "growth",    emoji: "🥇", label: "Growth",     desc: "Acesso completo" },
+];
 
 const SERVICES_LIST = [
   { key: "chat", label: "Chat Live" },
@@ -23,9 +29,11 @@ export function ClientDetail({ data }: { data: any }) {
   const [name, setName] = React.useState(org.name || "");
   const [niche, setNiche] = React.useState(org.niche || "");
   const [plan, setPlan] = React.useState(org.plan || "trial");
+  const [tier, setTier] = React.useState<ProductTier>((org.product_tier as ProductTier) || "growth");
   const [category, setCategory] = React.useState(org.category || "empresa");
   const [services, setServices] = React.useState<Record<string, boolean>>(org.services || {});
   const [saving, setSaving] = React.useState(false);
+  const [tierSaving, setTierSaving] = React.useState(false);
 
   const [waUrl, setWaUrl] = React.useState(whatsapp?.instanceUrl || "");
   const [waToken, setWaToken] = React.useState(whatsapp?.instanceToken || "");
@@ -36,6 +44,25 @@ export function ClientDetail({ data }: { data: any }) {
     setSaving(true);
     try { await updateOrganization(org.id, { name, niche, plan, category, services }); toast.success("Salvo!"); }
     catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Erro"); } finally { setSaving(false); }
+  }
+
+  async function handleSetTier(newTier: ProductTier) {
+    setTierSaving(true);
+    const res = await setProductTier(org.id, newTier);
+    if (res.ok) {
+      setTier(newTier);
+      // Sync services checkboxes com o preset do tier
+      const TIER_SERVICES: Record<ProductTier, Record<string, boolean>> = {
+        ai_simple: { chat: false, crm: true, leads: true, groups: false, agenda: true, automations: true, campaigns: false, reports: false },
+        crm:       { chat: true,  crm: true, leads: true, groups: false, agenda: true, automations: true, campaigns: false, reports: true  },
+        growth:    { chat: true,  crm: true, leads: true, groups: true,  agenda: true, automations: true, campaigns: true,  reports: true  },
+      };
+      setServices(TIER_SERVICES[newTier]);
+      toast.success(`Tier alterado para ${newTier}`);
+    } else {
+      toast.error(res.error);
+    }
+    setTierSaving(false);
   }
 
   async function handleConnectWa() {
@@ -101,6 +128,32 @@ export function ClientDetail({ data }: { data: any }) {
             <select value={plan} onChange={(e) => setPlan(e.target.value)} className="w-full h-9 rounded-md border border-border bg-muted px-3 text-sm mt-1">
               <option value="trial">Trial</option><option value="starter">Starter</option><option value="pro">Pro</option><option value="scale">Scale</option>
             </select></div>
+        </div>
+      </div>
+
+      {/* Tier de produto */}
+      <div className="border border-border rounded-xl bg-card p-6 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">Plano de Produto</h2>
+          {tierSaving && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {TIERS.map((t) => (
+            <button
+              key={t.key}
+              disabled={tierSaving}
+              onClick={() => handleSetTier(t.key)}
+              className={`flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-colors disabled:opacity-50 ${
+                tier === t.key
+                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                  : "border-border hover:bg-muted/50"
+              }`}
+            >
+              <span className="text-xl">{t.emoji}</span>
+              <span className="text-sm font-semibold">{t.label}</span>
+              <span className="text-xs text-muted-foreground">{t.desc}</span>
+            </button>
+          ))}
         </div>
       </div>
 

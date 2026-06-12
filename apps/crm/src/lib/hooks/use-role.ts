@@ -33,7 +33,7 @@ const ROLE_HIERARCHY: Record<OrgRole, number> = {
  *   isAgent = agent+  (owner OR admin OR agent)
  */
 export function useRole() {
-  const { membership, loading } = useOrganization();
+  const { membership, loading, orgServices } = useOrganization();
   const role = (membership?.role as OrgRole) || null;
   const permissions = ((membership as any)?.permissions as OrgPermissions) ?? FULL_PERMISSIONS;
 
@@ -46,6 +46,9 @@ export function useRole() {
     module: PermissionModule,
     action: PermissionAction = "read",
   ): boolean {
+    // Bloquear se a org desabilitou o módulo via tier de produto.
+    // null = serviços ainda carregando = não bloquear (evita flicker).
+    if (orgServices !== null && orgServices[module] === false) return false;
     return hasPermission(permissions, module, action);
   }
 

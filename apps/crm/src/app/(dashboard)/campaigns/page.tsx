@@ -1,4 +1,5 @@
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
+import { requireService } from "@/lib/auth-service";
 import {
   listCampaignGroups, listCrmCampaigns,
   getWhatsAppConnectionStatus, getCrmCampaignDetails
@@ -15,6 +16,7 @@ export default async function CampaignsPage({
 }: {
   searchParams: Promise<{ edit?: string | string[] | undefined }>;
 }) {
+  await requireService("campaigns");
   await requireAdminPageAccess();
 
   const resolvedSearchParams = await searchParams;

@@ -7,6 +7,61 @@ import { auditFailure, auditLog } from "@/lib/audit";
 import { assertRateLimit } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
 
+// ============ PRODUCT TIER ============
+
+export type ProductTier = "ai_simple" | "crm" | "growth";
+
+/** Serviços habilitados por tier — fonte de verdade do admin. */
+const TIER_SERVICES: Record<ProductTier, Record<string, boolean>> = {
+  ai_simple: {
+    chat: false, crm: true, leads: true, groups: false,
+    agenda: true, automations: true, campaigns: false, reports: false,
+  },
+  crm: {
+    chat: true, crm: true, leads: true, groups: false,
+    agenda: true, automations: true, campaigns: false, reports: true,
+  },
+  growth: {
+    chat: true, crm: true, leads: true, groups: true,
+    agenda: true, automations: true, campaigns: true, reports: true,
+  },
+};
+
+/**
+ * Define o tier de produto de uma organização.
+ * Atualiza product_tier E services (preset do tier) atomicamente.
+ * O admin pode ajustar services individualmente depois via updateOrganization.
+ */
+export async function setProductTier(
+  orgId: string,
+  tier: ProductTier,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const { admin: adminClient, userId } = await requireSuperadminWithUser(orgId);
+    const { error } = await adminClient
+      .from("organizations")
+      .update({
+        product_tier: tier,
+        services: TIER_SERVICES[tier],
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", orgId);
+    if (error) return { ok: false, error: error.message };
+    await auditLog({
+      userId,
+      orgId,
+      action: "set_product_tier",
+      entityType: "organization",
+      entityId: orgId,
+      metadata: { tier },
+    });
+    revalidatePath(`/clients/${orgId}`);
+    return { ok: true };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro ao definir tier" };
+  }
+}
+
 // ============ ADMIN CONTEXT ============
 
 /**
@@ -106,7 +161,7 @@ export async function getAdminStats() {
 
 export async function getOrganizations() {
   const admin = await requireSuperadmin();
-  const { data } = await admin.from("organizations").select("id, name, slug, category, plan, logo_url, services, created_at, organization_members(count)").order("created_at", { ascending: false }).limit(200);
+  const { data } = await admin.from("organizations").select("id, name, slug, category, plan, product_tier, logo_url, services, created_at, organization_members(count)").order("created_at", { ascending: false }).limit(200);
   return data || [];
 }
 
@@ -185,6 +240,7 @@ export async function updateOrganization(
     name?: string;
     niche?: string;
     plan?: string;
+    product_tier?: ProductTier;
     category?: string;
     services?: Record<string, boolean>;
     logo_url?: string | null;
@@ -196,6 +252,7 @@ export async function updateOrganization(
   if (data.name !== undefined) patch.name = data.name;
   if (data.niche !== undefined) patch.niche = data.niche;
   if (data.plan !== undefined) patch.plan = data.plan;
+  if (data.product_tier !== undefined) patch.product_tier = data.product_tier;
   if (data.category !== undefined) patch.category = data.category;
   if (data.services !== undefined) patch.services = data.services;
   if (data.logo_url !== undefined) patch.logo_url = data.logo_url;

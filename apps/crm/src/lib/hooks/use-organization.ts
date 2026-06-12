@@ -39,5 +39,10 @@ export function useOrganization() {
     load();
   }, []);
 
-  return { organization, membership, loading };
+  // Serviços habilitados pela org (tier de produto). null enquanto carrega.
+  const orgServices = organization
+    ? ((organization as any).services as Record<string, boolean> | null) ?? null
+    : null;
+
+  return { organization, membership, loading, orgServices };
 }

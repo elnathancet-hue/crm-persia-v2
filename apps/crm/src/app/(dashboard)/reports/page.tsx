@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireService } from "@/lib/auth-service";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
 import { Badge } from "@persia/ui/badge";
 import { BarChart3 } from "lucide-react";
@@ -13,6 +14,7 @@ export default async function ReportsPage({
 }: {
   searchParams: SearchParams;
 }) {
+  await requireService("reports");
   const { from, to } = await searchParams;
   const supabase = await createClient();
   const {

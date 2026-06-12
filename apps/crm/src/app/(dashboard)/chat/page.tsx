@@ -1,5 +1,6 @@
 import { ChatPageClient } from "@/components/chat/chat-page-client";
 import { requireRole } from "@/lib/auth";
+import { requireService } from "@/lib/auth-service";
 import { getConversations } from "@/actions/conversations";
 
 export const metadata = {
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export default async function ChatPage({ searchParams }: Props) {
+  await requireService("chat");
   const { c } = await searchParams;
 
   // Prefetch no servidor: elimina o duplo waterfall client-side

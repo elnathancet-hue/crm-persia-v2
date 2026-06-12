@@ -3397,6 +3397,7 @@ export type Database = {
           niche: string | null
           onboarding_completed: boolean | null
           plan: string | null
+          product_tier: string | null
           services: Json | null
           settings: Json | null
           slug: string
@@ -3415,6 +3416,7 @@ export type Database = {
           niche?: string | null
           onboarding_completed?: boolean | null
           plan?: string | null
+          product_tier?: string | null
           services?: Json | null
           settings?: Json | null
           slug: string
@@ -3433,6 +3435,7 @@ export type Database = {
           niche?: string | null
           onboarding_completed?: boolean | null
           plan?: string | null
+          product_tier?: string | null
           services?: Json | null
           settings?: Json | null
           slug?: string
