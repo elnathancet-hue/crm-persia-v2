@@ -454,8 +454,13 @@ export function RulesTab({
   const newLeadStageDirty =
     newLeadStageId !== (agent.new_lead_stage_id ?? null);
   const nextDebounceWindowMs = clampDebounceWindowMs(debounceWindowMs);
+  // Compara o valor RAW do servidor (sem clamp) com o próximo valor.
+  // Se o DB tem NULL (rows antigas), clamp retornaria 10000 = igual ao default
+  // do slider, fazendo debounceDirty = false mesmo que o usuário queira gravar
+  // explicitamente. Usando (agent.debounce_window_ms ?? -1) forçamos dirty
+  // sempre que o DB tem NULL e o usuário selecionou qualquer valor concreto.
   const debounceDirty =
-    nextDebounceWindowMs !== clampDebounceWindowMs(agent.debounce_window_ms);
+    nextDebounceWindowMs !== clampDebounceWindowMs(agent.debounce_window_ms ?? -1);
 
   // PR-AI-AGENT-HUMAN-A: humanization dirty + sanitized comparados com
   // a versao normalizada do servidor (que tambem passa pelo helper).
