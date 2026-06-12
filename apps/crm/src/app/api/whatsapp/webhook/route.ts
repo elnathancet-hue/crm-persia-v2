@@ -14,7 +14,8 @@ import {
   logUazapiWebhookDiagnostics,
 } from "@/lib/whatsapp/uazapi-webhook-diagnostics";
 import { validateUazapiWebhookSignature } from "@/lib/whatsapp/uazapi-webhook-verifier";
-import { processGroupWebhookEvent } from "@/lib/whatsapp/group-join-pipeline";
+import { processGroupWebhookEvent, linkGroupMembership, normalizePhoneBR } from "@/lib/whatsapp/group-join-pipeline";
+import { isCachedGroupAvatarUrl, isCachedLeadAvatarUrl, cacheGroupMemberAvatarFromUrl, getAndCacheContactAvatar } from "@/lib/lead-avatar-cache";
 
 function getSupabase() {
   return createClient(
@@ -131,13 +132,25 @@ export async function POST(request: NextRequest) {
       process.env.UAZAPI_WEBHOOK_ALLOW_OWNER_PHONE_FALLBACK,
     );
 
-    const { data: connections } = await supabase
+    // Otimização: filtrar pela conexão específica via token (ponto indexado) em vez de
+    // buscar todas as conexões e fazer find() em JS. Reduz I/O em ~N× onde N = número
+    // de orgs. Se o token não estiver presente no payload (raro), cai no fallback por
+    // phone_number; só busca tudo se nenhum identificador estiver disponível.
+    const connectionsBase = supabase
       .from("whatsapp_connections")
       .select(
         "organization_id, provider, instance_url, instance_token, phone_number, phone_number_id, waba_id, access_token, webhook_verify_token",
       )
       .eq("status", "connected")
       .eq("provider", "uazapi");
+
+    const { data: connections } = await (
+      webhookToken
+        ? connectionsBase.eq("instance_token", webhookToken)
+        : ownerPhone
+          ? connectionsBase.eq("phone_number", ownerPhone)
+          : connectionsBase
+    );
 
     let matchedBy: ReturnType<typeof getUazapiConnectionMatchMethod> = "none";
     const matchedConn = connections?.find((c) => {
@@ -324,7 +337,6 @@ export async function POST(request: NextRequest) {
         let senderMembershipId: string | null = null;
 
         if (senderPhoneJid) {
-          const { normalizePhoneBR } = await import("@/lib/whatsapp/group-join-pipeline");
           senderPhone = normalizePhoneBR(senderPhoneJid);
           if (senderPhone) {
             // Prioridade: membership cached → lead cached
@@ -337,7 +349,6 @@ export async function POST(request: NextRequest) {
             if (mem) {
               senderMembershipId = (mem.id as string) || null;
               senderLeadId = (mem.lead_id as string) || null;
-              const { isCachedGroupAvatarUrl, isCachedLeadAvatarUrl } = await import("@/lib/lead-avatar-cache");
               if (mem.avatar_url && (isCachedGroupAvatarUrl(mem.avatar_url) || isCachedLeadAvatarUrl(mem.avatar_url))) {
                 senderAvatarUrl = mem.avatar_url;
               } else if (mem.lead_id) {
@@ -415,7 +426,6 @@ export async function POST(request: NextRequest) {
         // Após vincular, atualizar identidade na mensagem se ainda incompleta.
         // Mensagens fromMe são enviadas pelo dispositivo da org — não vincular como membro.
         if (rawSenderJid && !msg.isFromMe) {
-          const { linkGroupMembership } = await import("@/lib/whatsapp/group-join-pipeline");
           linkGroupMembership({
             supabase,
             orgId: matchedConn.organization_id,
@@ -445,7 +455,6 @@ export async function POST(request: NextRequest) {
 
               // Buscar avatar em background se ainda sem cache.
               if (!senderAvatarUrl && (senderPhone || rawSenderJid)) {
-                const { cacheGroupMemberAvatarFromUrl, getAndCacheContactAvatar } = await import("@/lib/lead-avatar-cache");
                 const { avatarUrl, updated } = senderPhone
                   ? await getAndCacheContactAvatar({
                     organizationId: matchedConn.organization_id,
