@@ -132,6 +132,7 @@ export async function createAppointmentType(
     throw new Error(error.message);
   }
   revalidatePath("/automations/appointments");
+  revalidatePath("/agenda");
   return data as AppointmentType;
 }
 
@@ -184,6 +185,7 @@ export async function updateAppointmentType(
     throw new Error(error.message);
   }
   revalidatePath("/automations/appointments");
+  revalidatePath("/agenda");
 }
 
 export async function deleteAppointmentType(id: string): Promise<void> {
@@ -197,4 +199,5 @@ export async function deleteAppointmentType(id: string): Promise<void> {
 
   if (error) throw new Error(error.message);
   revalidatePath("/automations/appointments");
+  revalidatePath("/agenda");
 }

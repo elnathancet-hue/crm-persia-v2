@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  Briefcase,
   CalendarDays,
   Clock as ClockIcon,
   LayoutGrid,
@@ -15,6 +16,7 @@ export type AgendaTab =
   | "list"
   | "availability"
   | "booking-pages"
+  | "services"
   | "settings";
 
 interface AgendaTabsProps {
@@ -35,6 +37,7 @@ const TABS: TabDef[] = [
   { id: "calendar", label: "Calendário", icon: CalendarDays },
   { id: "availability", label: "Disponibilidade", icon: ClockIcon },
   { id: "booking-pages", label: "Páginas", icon: LinkIcon },
+  { id: "services", label: "Serviços", icon: Briefcase },
   { id: "settings", label: "Ajustes", icon: SettingsIcon },
 ];
 

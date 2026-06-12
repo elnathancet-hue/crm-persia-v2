@@ -79,7 +79,6 @@ export const navigation: NavItem[] = [
     children: [
       { label: "Agente IA", href: "/automations/agents" },
       { label: "Biblioteca de mídia", href: "/automations/tools" },
-      { label: "Tipos de agendamento", href: "/automations/appointments" },
     ],
   },
   {

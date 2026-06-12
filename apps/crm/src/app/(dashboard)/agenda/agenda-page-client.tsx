@@ -31,6 +31,7 @@ import type {
   AvailabilityRule,
 } from "@persia/shared/agenda";
 import { crmAgendaActions } from "@/features/agenda/crm-actions";
+import { AgendaServicesTab } from "./agenda-services-tab";
 import { searchLeadsForAgenda } from "@/actions/agenda/lead-search";
 import {
   createReminderConfig,
@@ -222,6 +223,8 @@ export function AgendaPageClient({
         {activeTab === "booking-pages" && (
           <AgendaBookingPagesList orgSlug={orgSlug} services={services} />
         )}
+
+        {activeTab === "services" && <AgendaServicesTab />}
 
         {activeTab === "settings" && (
           <AgendaSettingsTab actions={settingsActions} />

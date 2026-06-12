@@ -109,6 +109,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
   const [defaultUserId, setDefaultUserId] = React.useState<string | null>(null);
 
   function openCreate() {
+    setEditingId(null);
     setName("");
     setDescription("");
     setDuration("30");
@@ -133,31 +134,63 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
   }
   async function handleSave() {
     if (!name.trim()) {
-      toast.error("Informe o nome do tipo de agendamento");
+      toast.error("Informe o nome do serviço");
       return;
     }
     const minutes = parseInt(duration, 10);
     if (!Number.isFinite(minutes) || minutes < 5 || minutes > 1440) {
-      toast.error("Duracao deve estar entre 5 e 1440 minutos");
+      toast.error("Duração deve estar entre 5 e 1440 minutos");
       return;
     }
 
     setSaving(true);
     try {
-      const created = await createAppointmentType({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        duration_minutes: minutes,
-        default_channel: channel ?? undefined,
-        default_location: location.trim() || undefined,
-        default_meeting_url: meetingUrl.trim() || undefined,
-        default_user_id: defaultUserId,
-      });
-      setTypes((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
-      toast.success("Tipo de agendamento criado");
+      if (editingId) {
+        await updateAppointmentType(editingId, {
+          name: name.trim(),
+          description: description.trim() || null,
+          duration_minutes: minutes,
+          default_channel: channel ?? undefined,
+          default_location: location.trim() || null,
+          default_meeting_url: meetingUrl.trim() || null,
+          default_user_id: defaultUserId,
+        });
+        setTypes((prev) =>
+          prev
+            .map((t) =>
+              t.id === editingId
+                ? {
+                    ...t,
+                    name: name.trim(),
+                    description: description.trim() || null,
+                    duration_minutes: minutes,
+                    default_channel: channel,
+                    default_location: location.trim() || null,
+                    default_meeting_url: meetingUrl.trim() || null,
+                    default_user_id: defaultUserId,
+                  }
+                : t,
+            )
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
+        toast.success("Serviço atualizado");
+      } else {
+        const created = await createAppointmentType({
+          name: name.trim(),
+          description: description.trim() || undefined,
+          duration_minutes: minutes,
+          default_channel: channel ?? undefined,
+          default_location: location.trim() || undefined,
+          default_meeting_url: meetingUrl.trim() || undefined,
+          default_user_id: defaultUserId,
+        });
+        setTypes((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+        toast.success("Serviço criado");
+      }
+      setEditingId(null);
       setDialogOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao criar");
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
     } finally {
       setSaving(false);
     }
@@ -178,7 +211,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
     try {
       await deleteAppointmentType(id);
       setTypes((prev) => prev.filter((t) => t.id !== id));
-      toast.success("Tipo removido");
+      toast.success("Serviço removido");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao remover");
     }
@@ -200,7 +233,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar tipo..."
+            placeholder="Buscar serviço..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -208,7 +241,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
         </div>
         <Button onClick={openCreate} className="ml-auto">
           <Plus className="size-4" />
-          Novo tipo
+          Novo serviço
         </Button>
       </div>
 
@@ -219,14 +252,14 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
             <div className="size-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
               <CalendarClock className="size-7 text-muted-foreground/60" />
             </div>
-            <p className="text-base font-semibold">Nenhum tipo cadastrado</p>
+            <p className="text-base font-semibold">Nenhum serviço cadastrado</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-md text-center">
-              Sem tipos cadastrados, a IA não consegue agendar de forma padronizada — ela vai inventar
+              Sem serviços cadastrados, a IA não consegue agendar de forma padronizada — ela vai inventar
               títulos e durações diferentes a cada conversa.
             </p>
             <Button className="mt-4" onClick={openCreate}>
               <Plus className="size-4" />
-              Criar primeiro tipo
+              Criar primeiro serviço
             </Button>
           </CardContent>
         </Card>
@@ -340,10 +373,10 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
       )}
 
       {/* Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Editar tipo de agendamento" : "Novo tipo de agendamento"}</DialogTitle>
+            <DialogTitle>{editingId ? "Editar serviço" : "Novo serviço"}</DialogTitle>
             <DialogDescription>
               Define um padrão para a IA agendar (nome, duração, canal). Em vez de inventar a cada conversa.
             </DialogDescription>
