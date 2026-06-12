@@ -958,7 +958,7 @@ export async function generateGroupMessageDraft(
       const sender = message.direction === "outbound"
         ? "Operador"
         : message.sender_name || "Participante";
-      return `${sender}: ${message.text || message.media_type || "Midia"}`;
+      return `${sender}: ${message.text || message.media_type || "Mídia"}`;
     })
     .join("\n");
 
@@ -966,15 +966,15 @@ export async function generateGroupMessageDraft(
     const { chatCompletion } = await import("@/lib/ai/openai");
     const suggestion = await chatCompletion(
       [
-        "Voce e um assistente de atendimento para WhatsApp em grupos.",
-        "Gere uma resposta curta, clara e natural em portugues do Brasil.",
-        "Nao use saudacoes longas, nao invente dados e nao envie markdown.",
+        "Você é um assistente de atendimento para WhatsApp em grupos.",
+        "Gere uma resposta curta, clara e natural em português do Brasil.",
+        "Não use saudações longas, não invente dados e não envie markdown.",
       ].join(" "),
       [{
         role: "user",
         content: [
           `Grupo: ${group.name || "Grupo"} (${group.category || "geral"})`,
-          history ? `Historico recente:\n${history}` : "Historico recente: vazio",
+          history ? `Histórico recente:\n${history}` : "Histórico recente: vazio",
           `Pedido do operador: ${trimmed}`,
         ].join("\n\n"),
       }],
@@ -1030,7 +1030,7 @@ export async function reactToGroupMessage(
   whatsappMsgId: string,
   emoji: string,
 ) {
-  const { supabase, orgId } = await requireRole("admin");
+  const { supabase, orgId, userId } = await requireRole("admin");
   const provider = await getProvider(supabase, orgId);
 
   const { data: group } = await supabase
@@ -1043,6 +1043,30 @@ export async function reactToGroupMessage(
   if (!group) throw new Error("Grupo não encontrado");
 
   await provider.reactToMessage(group.group_jid, whatsappMsgId, emoji);
+
+  // Persistir reação no DB para sobreviver ao reload e ser visível a todos os operadores.
+  const db = supabase as any;
+  const { data: msg } = await db
+    .from("group_messages")
+    .select("id, metadata")
+    .eq("group_id", groupId)
+    .eq("whatsapp_msg_id", whatsappMsgId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (msg) {
+    const currentReactions: Record<string, string> = (msg.metadata as any)?.reactions ?? {};
+    const newReactions = emoji ? { ...currentReactions, [userId]: emoji } : (() => {
+      const r = { ...currentReactions };
+      delete r[userId];
+      return r;
+    })();
+    await db
+      .from("group_messages")
+      .update({ metadata: { ...(msg.metadata ?? {}), reactions: newReactions } })
+      .eq("id", msg.id)
+      .eq("organization_id", orgId);
+  }
 }
 
 // ---- Pin / unpin group message ----

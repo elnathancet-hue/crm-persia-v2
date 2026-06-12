@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   Paperclip,
   Pin,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -115,6 +116,7 @@ import {
   getScheduledGroupMessages,
   cancelScheduledGroupMessage,
   markGroupRead,
+  editGroupMessage,
   type GroupCampaign,
   type GroupLeadMember,
 } from "@/actions/groups";
@@ -775,6 +777,8 @@ function GroupChatPanel({
   const [attachedPreview, setAttachedPreview] = React.useState<string | null>(null);
   const [attachedMediaType, setAttachedMediaType] = React.useState<"image" | "video" | "audio" | "document">("document");
   const [reactingMsgId, setReactingMsgId] = React.useState<string | null>(null);
+  const [editingMsgId, setEditingMsgId] = React.useState<string | null>(null);
+  const [editText, setEditText] = React.useState("");
   const [replyTo, setReplyTo] = React.useState<GroupMessage | null>(null);
   const [messageSearch, setMessageSearch] = React.useState("");
   const [deleteDialogMsg, setDeleteDialogMsg] = React.useState<GroupMessage | null>(null);
@@ -918,9 +922,33 @@ function GroupChatPanel({
       });
   }, [group.id]);
 
-  // Realtime subscription
+  // Realtime subscription + polling fallback se o canal cair
   React.useEffect(() => {
     const supabase = createClient();
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let realtimeWorking = true;
+
+    function startPolling() {
+      if (pollInterval) return;
+      pollInterval = setInterval(async () => {
+        // Busca as últimas 20 mensagens e faz merge sem sobrescrever o estado
+        const { messages: latest } = await getGroupMessages(group.id, {}).catch(() => ({ messages: [] as GroupMessage[], hasMore: false }));
+        if (latest.length === 0) return;
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = (latest as GroupMessage[]).filter((m) => !existingIds.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          return [...prev, ...newMsgs].sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          );
+        });
+      }, 5000);
+    }
+
+    function stopPolling() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
     const channel = supabase
       .channel(`group_messages:${group.id}`)
       .on(
@@ -967,8 +995,21 @@ function GroupChatPanel({
           });
         },
       )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "CLOSED") {
+          if (realtimeWorking) {
+            realtimeWorking = false;
+            startPolling();
+          }
+        } else if (status === "SUBSCRIBED") {
+          realtimeWorking = true;
+          stopPolling();
+        }
+      });
+    return () => {
+      stopPolling();
+      supabase.removeChannel(channel);
+    };
   }, [group.id]);
 
   // Scroll to bottom on initial load / new outbound messages
@@ -1248,10 +1289,38 @@ function GroupChatPanel({
   async function handleReact(msg: GroupMessage, emoji: string) {
     if (!msg.whatsapp_msg_id) return;
     setReactingMsgId(null);
+    // Optimistic: merge emoji em metadata.reactions["me"] para refletir antes do server
+    const prevMetadata = msg.metadata;
+    setMessages((prev) => prev.map((m) => {
+      if (m.id !== msg.id) return m;
+      const reactions: Record<string, string> = { ...((m.metadata as any)?.reactions ?? {}), me: emoji };
+      return { ...m, metadata: { ...(m.metadata ?? {}), reactions } };
+    }));
     try {
       await reactToGroupMessage(group.id, msg.whatsapp_msg_id, emoji);
     } catch {
+      // Reverter optimistic em caso de erro
+      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, metadata: prevMetadata } : m));
       toast.error("Erro ao enviar reação");
+    }
+  }
+
+  function handleStartEdit(msg: GroupMessage) {
+    setEditingMsgId(msg.id);
+    setEditText(msg.text ?? "");
+  }
+
+  async function handleConfirmEdit(msg: GroupMessage) {
+    const text = editText.trim();
+    if (!text || !msg.whatsapp_msg_id) { setEditingMsgId(null); return; }
+    try {
+      await editGroupMessage(group.id, msg.id, msg.whatsapp_msg_id, text);
+      setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, text } : m));
+      toast.success("Mensagem editada");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao editar mensagem");
+    } finally {
+      setEditingMsgId(null);
     }
   }
 
@@ -1884,6 +1953,15 @@ function GroupChatPanel({
                               <DropdownMenuSeparator />
                             </>
                           )}
+                          {isOutbound && msg.text && msg.whatsapp_msg_id && (
+                            <>
+                              <DropdownMenuItem onClick={() => handleStartEdit(msg)}>
+                                <Pencil className="size-4" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           <DropdownMenuItem onClick={() => { setBulkSelectMode(true); setSelectedMsgIds(new Set([msg.id])); }}>
                             <Square className="size-4" />
                             Selecionar
@@ -2158,7 +2236,27 @@ function GroupChatPanel({
                         })()}
                         {/* Text / caption + timestamp */}
                         <div className={msg.text ? "px-2.5 py-1.5 text-[14.2px] leading-5" : "px-2.5 pb-1.5 pt-0 text-[14.2px] leading-5"}>
-                          {msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>}
+                          {editingMsgId === msg.id ? (
+                            <div className="flex flex-col gap-1">
+                              <textarea
+                                autoFocus
+                                value={editText}
+                                onChange={(e) => setEditText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleConfirmEdit(msg); }
+                                  if (e.key === "Escape") setEditingMsgId(null);
+                                }}
+                                rows={2}
+                                className="w-full resize-none rounded bg-black/10 px-2 py-1 text-[14px] leading-5 outline-none"
+                              />
+                              <div className="flex justify-end gap-1">
+                                <button type="button" onClick={() => setEditingMsgId(null)} className="text-[11px] opacity-60 hover:opacity-90 px-2">Cancelar</button>
+                                <button type="button" onClick={() => handleConfirmEdit(msg)} className="text-[11px] font-medium hover:opacity-80 px-2">Salvar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            msg.text && <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                          )}
                           <span
                             className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-0.5"
                             style={{ color: "var(--chat-timestamp)" }}

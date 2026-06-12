@@ -50,12 +50,14 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
     )
     .eq("organization_id", member.organization_id)
     .eq("group_id", id)
-    .order("created_at", { ascending: true })
+    .eq("is_deleted", false)
+    .order("created_at", { ascending: false })
     .limit(50);
 
   // Resolve chat-media: refs to signed URLs before passing as props.
+  // Reverse para mostrar as mais recentes no final (descending → ascending display).
   const resolvedMessages = await Promise.all(
-    (messages || []).map(async (msg: Record<string, unknown>) => {
+    ((messages || []).reverse() as Record<string, unknown>[]).map(async (msg: Record<string, unknown>) => {
       const mediaUrl = msg.media_url as string | null;
       if (!mediaUrl?.startsWith("chat-media:")) return msg;
       const path = mediaUrl.slice("chat-media:".length).replace(/^\/+/, "");
