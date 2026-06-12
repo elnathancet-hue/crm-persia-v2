@@ -67,6 +67,7 @@ import {
 import { Button } from "@persia/ui/button";
 import { cn } from "@persia/ui/utils";
 import { useAgentActions } from "../../context";
+import { useFlowNodeLabelRegistrar } from "../flow-tester-context";
 import type { FlowCatalogs, FlowCatalogMessageTemplate } from "./catalog-types";
 import { EMPTY_FLOW_CATALOGS } from "./catalog-types";
 import { FlowSidebar, FLOW_DRAG_KEY } from "./FlowSidebar";
@@ -188,6 +189,7 @@ interface FlowSnapshot {
 function FlowCanvasInner({ configId, fullscreen, messageTemplates, onDirtyChange }: FlowCanvasProps) {
   const actions = useAgentActions();
   const { screenToFlowPosition, fitView } = useReactFlow();
+  const registerNodeLabels = useFlowNodeLabelRegistrar();
   const [nodes, setNodes] = React.useState<Node[]>([]);
   const [edges, setEdges] = React.useState<Edge[]>([]);
   const [viewport, setViewport] = React.useState({ x: 0, y: 0, zoom: 1 });
@@ -211,7 +213,7 @@ function FlowCanvasInner({ configId, fullscreen, messageTemplates, onDirtyChange
   }));
   const [catalogsLoading, setCatalogsLoading] = React.useState(false);
   const [catalogsLoaded, setCatalogsLoaded] = React.useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
   // PR 31 (mai/2026): visual feedback do drag-to-connect e drag-from-sidebar.
   //   - isConnecting: true enquanto cliente segura mouse num handle source
   //     e arrasta procurando target. CSS aplica pulse em todos handles
@@ -282,6 +284,17 @@ function FlowCanvasInner({ configId, fullscreen, messageTemplates, onDirtyChange
       cancelled = true;
     };
   }, [actions, configId]);
+
+  // Publica mapa id→label no FlowTesterContext sempre que nodes mudam,
+  // pra que o Tester mostre nomes legíveis em vez de UUIDs crus.
+  React.useEffect(() => {
+    const map = new Map<string, string>();
+    for (const node of nodes) {
+      const data = node.data as { label?: string } | undefined;
+      if (data?.label) map.set(node.id, data.label);
+    }
+    registerNodeLabels(map);
+  }, [nodes, registerNodeLabels]);
 
   // -- Edits --
   const onNodesChange: OnNodesChange = React.useCallback(

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { WebhookClient } from "./webhook-client";
+import { LegacyBanner } from "@/components/legacy-banner";
 
 export const metadata = { title: "Webhook IA" };
 
@@ -31,6 +32,7 @@ export default async function WebhookPage() {
           Conecte uma IA externa via webhook para processar mensagens
         </p>
       </div>
+      <LegacyBanner featureName="Webhook IA" />
       <WebhookClient
         orgId={(member as any).organization_id}
         initialWebhookUrl={webhookUrl}

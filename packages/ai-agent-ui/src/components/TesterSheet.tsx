@@ -47,7 +47,7 @@ import {
 } from "@persia/ui/sheet";
 import { useAgentActions } from "../context";
 import { EMPTY_FLOW_CATALOGS, type FlowCatalogs } from "./flow/catalog-types";
-import { useFlowTesterPublisher } from "./flow-tester-context";
+import { useFlowTesterPublisher, useNodeLabel } from "./flow-tester-context";
 
 // PR-AI-AGENT-TESTER-FAITHFUL (mai/2026): Tester com 2 modos.
 //   Modo "Conversa fiel" (default ON quando testAgentLive existe):
@@ -527,16 +527,17 @@ function SystemBanner({ turn }: { turn: SystemTurn }) {
 }
 
 function StepsBlock({ turn }: { turn: StepsTurn }) {
+  const nodeLabel = useNodeLabel(turn.next_node_id);
   const transition =
     turn.next_node_id && turn.next_node_id !== turn.started_stage_id
-      ? { node_id: turn.next_node_id }
+      ? { node_id: turn.next_node_id, label: nodeLabel }
       : null;
   return (
     <div className="flex flex-col items-start gap-1.5 ml-1">
       {transition ? (
         <div className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
           <span aria-hidden>→</span>
-          Avançou para node: {transition.node_id}
+          Avançou para: {transition.label}
         </div>
       ) : null}
       {turn.steps.length > 0 ? (

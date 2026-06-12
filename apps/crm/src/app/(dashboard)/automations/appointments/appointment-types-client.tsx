@@ -44,6 +44,16 @@ import {
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
+import {
   createAppointmentType,
   deleteAppointmentType,
   updateAppointmentType,
@@ -83,6 +93,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
 
   // Form state
   const [name, setName] = React.useState("");
@@ -266,7 +277,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           variant="destructive"
-                          onClick={() => handleDelete(type.id)}
+                          onClick={() => setDeleteConfirmId(type.id)}
                         >
                           <Trash2 className="size-4" />
                           Excluir
@@ -432,6 +443,23 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir tipo de agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A IA não conseguirá mais usar este tipo. Agendamentos existentes não são afetados, mas novos não poderão usar este padrão.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (deleteConfirmId) { handleDelete(deleteConfirmId); setDeleteConfirmId(null); } }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -5,6 +5,7 @@ import { useActiveOrg } from "@/lib/stores/client-store";
 import { getTools } from "@/actions/automations";
 import { Wrench, Loader2, ExternalLink } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
+import { toast } from "sonner";
 
 export default function ToolsPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
@@ -14,7 +15,7 @@ export default function ToolsPage() {
   useEffect(() => {
     if (!isManagingClient) { setLoading(false); return; }
     setLoading(true);
-    getTools().then((d) => { setTools(d); setLoading(false); });
+    getTools().then((d) => { setTools(d); }).catch(() => { toast.error("Erro ao carregar ferramentas"); }).finally(() => setLoading(false));
   }, [activeOrgId]);
 
   if (!isManagingClient) {

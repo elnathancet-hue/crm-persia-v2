@@ -33,6 +33,10 @@ interface FlowTesterContextValue {
   lastReachedAt: number;
   /** TesterSheet chama isso após cada run pra publicar onde parou. */
   setLastReachedNode: (nodeId: string | null) => void;
+  /** FlowCanvas registra {id → label} pra que o Tester exiba nomes
+   * legíveis em vez de UUIDs crus. */
+  nodeLabels: Map<string, string>;
+  setNodeLabels: (labels: Map<string, string>) => void;
 }
 
 const FlowTesterContext = React.createContext<FlowTesterContextValue | null>(
@@ -48,6 +52,9 @@ export function FlowTesterProvider({ children }: ProviderProps) {
     lastReachedNodeId: string | null;
     lastReachedAt: number;
   }>({ lastReachedNodeId: null, lastReachedAt: 0 });
+  const [nodeLabels, setNodeLabels] = React.useState<Map<string, string>>(
+    () => new Map(),
+  );
 
   const setLastReachedNode = React.useCallback(
     (nodeId: string | null) => {
@@ -56,13 +63,20 @@ export function FlowTesterProvider({ children }: ProviderProps) {
     [],
   );
 
+  const setNodeLabelsStable = React.useCallback(
+    (labels: Map<string, string>) => setNodeLabels(labels),
+    [],
+  );
+
   const value = React.useMemo<FlowTesterContextValue>(
     () => ({
       lastReachedNodeId: state.lastReachedNodeId,
       lastReachedAt: state.lastReachedAt,
       setLastReachedNode,
+      nodeLabels,
+      setNodeLabels: setNodeLabelsStable,
     }),
-    [state, setLastReachedNode],
+    [state, setLastReachedNode, nodeLabels, setNodeLabelsStable],
   );
 
   return (
@@ -70,6 +84,31 @@ export function FlowTesterProvider({ children }: ProviderProps) {
       {children}
     </FlowTesterContext.Provider>
   );
+}
+
+/**
+ * Hook usado pelo FlowCanvas pra registrar o mapa id → label dos nodes
+ * carregados. TesterSheet usa isso pra mostrar nomes legíveis.
+ */
+export function useFlowNodeLabelRegistrar(): (labels: Map<string, string>) => void {
+  const ctx = React.useContext(FlowTesterContext);
+  const noop = React.useCallback(() => {}, []);
+  if (!ctx) return noop;
+  return ctx.setNodeLabels;
+}
+
+/**
+ * Hook usado por TesterSheet pra resolver id → label legível.
+ * Retorna o label se disponível, ou um identificador curto como fallback.
+ */
+export function useNodeLabel(nodeId: string | null | undefined): string {
+  const ctx = React.useContext(FlowTesterContext);
+  if (!nodeId) return "";
+  const label = ctx?.nodeLabels.get(nodeId);
+  if (label) return label;
+  // Fallback: mostra os primeiros 8 chars do UUID depois de "node-"
+  const short = nodeId.replace(/^node-/, "").slice(0, 8);
+  return `#${short}`;
 }
 
 /**

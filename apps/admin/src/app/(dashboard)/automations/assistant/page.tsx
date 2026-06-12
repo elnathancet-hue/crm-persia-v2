@@ -36,7 +36,7 @@ export default function AssistantPage() {
   function load() {
     if (!isManagingClient) return;
     setLoading(true);
-    getAssistants().then((d) => { setAssistants(d); setLoading(false); });
+    getAssistants().then((d) => { setAssistants(d); }).catch((err: any) => { toast.error(err?.message || "Erro ao carregar assistentes"); }).finally(() => setLoading(false));
   }
 
   useEffect(() => { load(); }, [activeOrgId]);

@@ -4,12 +4,15 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
+  Bell,
   Bot,
+  CalendarCheck,
   CheckCircle2,
   Circle,
   Clock,
   FlaskConical,
   GitBranch,
+  HelpCircle,
   History,
   ListOrdered,
   Maximize2,
@@ -55,7 +58,10 @@ import { FlowTesterProvider } from "./flow-tester-context";
 import { FlowCanvas } from "./flow/FlowCanvas";
 import { PlaceholderTab } from "./PlaceholderTab";
 import { AuditTab } from "./AuditTab";
+import { CalendarConnectionsCard } from "./CalendarConnectionsCard";
+import { FAQTab } from "./FAQTab";
 import { FollowupTab } from "./FollowupTab";
+import { NotificationsTab } from "./NotificationsTab";
 import { TesterSheet } from "./TesterSheet";
 import type { AgentActions } from "../actions";
 import { useAgentActions } from "../context";
@@ -82,6 +88,9 @@ type AgentSectionId =
   | "stages"
   | "tools"
   | "followups"
+  | "notifications"
+  | "faq"
+  | "calendar"
   | "audit";
 
 function buildSidebarGroups(_opts: {
@@ -106,10 +115,19 @@ function buildSidebarGroups(_opts: {
       ],
     },
     {
+      id: "knowledge",
+      label: "Conhecimento",
+      items: [
+        { id: "faq", label: "FAQ", icon: HelpCircle },
+      ],
+    },
+    {
       id: "actions",
       label: "Ações",
       items: [
         { id: "followups", label: "Follow-up", icon: Clock },
+        { id: "notifications", label: "Notificações", icon: Bell },
+        { id: "calendar", label: "Google Calendar", icon: CalendarCheck },
       ],
     },
     {
@@ -638,6 +656,27 @@ export function AgentEditor({
               onChange={setFollowups}
             />
           )}
+          {activeSection === "notifications" && (
+            <NotificationsTab
+              configId={agent.id}
+              templates={notificationTemplates}
+              onChange={setNotificationTemplates}
+              onRefresh={refreshNotificationTemplates}
+            />
+          )}
+          {activeSection === "faq" && (
+            <FAQTab
+              configId={agent.id}
+              sources={knowledgeSources}
+              onChange={setKnowledgeSources}
+              onRefresh={refreshKnowledgeSources}
+            />
+          )}
+          {activeSection === "calendar" && (
+            <CalendarConnectionsCard
+              returnTo={`/automations/agents/${agent.id}`}
+            />
+          )}
           {activeSection === "audit" && <AuditTab configId={agent.id} />}
         </main>
       </div>
@@ -905,6 +944,8 @@ function PublishingChecklist({
     );
   }
 
+  const hasPrompt = Boolean(agent.system_prompt?.trim());
+
   return (
     <div className="-mx-6 px-6 py-3 bg-muted/30 border-b border-border/60">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -913,16 +954,18 @@ function PublishingChecklist({
             Para publicar:
           </span>
           <ChecklistChip
+            done={hasPrompt}
+            icon={Settings2}
+            label="Prompt configurado"
+          />
+          <ChecklistChip
             done={false}
             icon={PlayCircle}
             label="Ativar agente"
-            actionLabel="Ativar"
-            onAction={onActivate}
+            actionLabel={hasPrompt ? "Ativar" : undefined}
+            onAction={hasPrompt ? onActivate : undefined}
             isPending={isPending}
           />
-          <span className="text-xs text-muted-foreground">
-            Fluxo e entradas podem ser ajustados depois.
-          </span>
         </div>
         {saveAction ? <div className="shrink-0">{saveAction}</div> : null}
       </div>

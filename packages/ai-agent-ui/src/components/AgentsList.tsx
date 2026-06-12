@@ -224,6 +224,7 @@ export function AgentsList({ initialAgents, nativeEnabled }: Props) {
         onOpenChange={setCreateOpen}
         isPending={isPending}
         onSubmit={handleCreate}
+        defaultIsPrimary={agents.length === 0}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

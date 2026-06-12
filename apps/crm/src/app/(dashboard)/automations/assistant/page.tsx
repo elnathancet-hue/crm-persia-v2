@@ -1,5 +1,6 @@
 import { getAssistants } from "@/actions/ai";
 import { AssistantListClient } from "./assistant-list-client";
+import { LegacyBanner } from "@/components/legacy-banner";
 
 export const metadata = { title: "Assistentes IA" };
 
@@ -14,6 +15,7 @@ export default async function AssistantPage() {
           Crie assistentes especializados para apoiar agentes no atendimento
         </p>
       </div>
+      <LegacyBanner featureName="Assistentes IA" />
       <AssistantListClient initialAssistants={assistants as never} />
     </div>
   );

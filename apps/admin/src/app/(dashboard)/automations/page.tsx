@@ -1,35 +1,52 @@
-import { Bot, FolderOpen, Sparkles, Webhook } from "lucide-react";
+import type React from "react";
+import { Bot, CalendarClock, FolderOpen, Sparkles, Webhook } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
 import { Card, CardContent } from "@persia/ui/card";
 import Link from "next/link";
 
 export const metadata = { title: "Automações" };
 
-const automationLinks = [
+const automationLinks: Array<{
+  title: string;
+  description: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge: string | null;
+}> = [
   {
-    title: "Agente IA Nativo",
+    title: "Agente IA",
     description: "Configure etapas, regras, limites e ferramentas do agente nativo para a conta selecionada",
     href: "/automations/agents",
     icon: Sparkles,
-    badge: "Novo",
+    badge: null,
   },
   {
-    title: "Assistentes IA",
-    description: "Crie assistentes especializados para apoiar agentes no atendimento",
-    href: "/automations/assistant",
-    icon: Bot,
+    title: "Tipos de Agendamento",
+    description: "Cadastre serviços que o agente IA pode agendar — nome, duração e canal padrão",
+    href: "/automations/appointments",
+    icon: CalendarClock,
+    badge: null,
   },
   {
-    title: "Webhook IA",
-    description: "Conecte sua IA externa via webhook para a conta que estiver em contexto",
-    href: "/automations/webhook",
-    icon: Webhook,
-  },
-  {
-    title: "Tools",
+    title: "Arquivos",
     description: "Banco de imagens, PDFs e documentos para enviar nas automações",
     href: "/automations/tools",
     icon: FolderOpen,
+    badge: null,
+  },
+  {
+    title: "Assistentes IA",
+    description: "Sistema legado — use o Agente IA para novos projetos",
+    href: "/automations/assistant",
+    icon: Bot,
+    badge: "Legado",
+  },
+  {
+    title: "Webhook IA",
+    description: "Sistema legado — conecta IA externa via webhook (n8n)",
+    href: "/automations/webhook",
+    icon: Webhook,
+    badge: "Legado",
   },
 ];
 

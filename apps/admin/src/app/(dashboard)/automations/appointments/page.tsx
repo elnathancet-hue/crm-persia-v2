@@ -4,10 +4,10 @@ import { Input } from "@persia/ui/input";
 import { Label } from "@persia/ui/label";
 import {
   createAppointmentType,
-  deleteAppointmentType,
   getAppointmentTypes,
   toggleAppointmentType,
 } from "@/actions/appointment-types";
+import { AppointmentDeleteButton } from "./delete-button";
 
 export const metadata = { title: "Tipos de agendamento" };
 
@@ -106,11 +106,7 @@ export default async function AppointmentTypesPage() {
                         {type.is_active ? "Desativar" : "Ativar"}
                       </Button>
                     </form>
-                    <form action={deleteAppointmentType.bind(null, type.id)}>
-                      <Button type="submit" variant="destructive" size="sm">
-                        Excluir
-                      </Button>
-                    </form>
+                    <AppointmentDeleteButton id={type.id} />
                   </div>
                 </td>
               </tr>

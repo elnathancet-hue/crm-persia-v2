@@ -33,6 +33,7 @@ import {
 } from "@persia/ui/table";
 import { Card, CardContent } from "@persia/ui/card";
 import { createFlow, deleteFlow, duplicateFlow, updateFlow } from "@/actions/flows";
+import { toast } from "sonner";
 
 interface Flow {
   id: string;
@@ -82,8 +83,8 @@ export function FlowsPageClient({ initialFlows }: { initialFlows: Flow[] }) {
         setFlows((prev) => [{ ...newFlow, executions_count: 0 } as Flow, ...prev]);
       }
       setCreateOpen(false);
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao criar fluxo");
     } finally {
       setSaving(false);
     }
@@ -96,8 +97,8 @@ export function FlowsPageClient({ initialFlows }: { initialFlows: Flow[] }) {
       if (dup) {
         setFlows((prev) => [{ ...dup, executions_count: 0 } as Flow, ...prev]);
       }
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao duplicar fluxo");
     } finally {
       setSaving(false);
     }
@@ -110,8 +111,8 @@ export function FlowsPageClient({ initialFlows }: { initialFlows: Flow[] }) {
       setFlows((prev) =>
         prev.map((f) => (f.id === flow.id ? { ...f, is_active: !f.is_active } : f))
       );
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao alterar status do fluxo");
     } finally {
       setSaving(false);
     }
@@ -130,8 +131,8 @@ export function FlowsPageClient({ initialFlows }: { initialFlows: Flow[] }) {
       setFlows((prev) => prev.filter((f) => f.id !== deletingFlow.id));
       setDeleteOpen(false);
       setDeletingFlow(null);
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao excluir fluxo");
     } finally {
       setSaving(false);
     }

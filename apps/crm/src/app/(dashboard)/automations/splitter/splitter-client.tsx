@@ -8,6 +8,7 @@ import { Label } from "@persia/ui/label";
 import { Switch } from "@persia/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
 import { updateAssistant } from "@/actions/ai";
+import { toast } from "sonner";
 
 interface MessageSplitting {
   enabled: boolean;
@@ -46,8 +47,8 @@ export function SplitterClient({ initialAssistant }: SplitterClientProps) {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar configuração");
     } finally {
       setSaving(false);
     }

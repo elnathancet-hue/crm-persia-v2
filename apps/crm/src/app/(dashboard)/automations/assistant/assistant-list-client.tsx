@@ -46,6 +46,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
 import { ToneSelector } from "@/components/ai/tone-selector";
 import { createAssistant, updateAssistant, deleteAssistant, testAssistant } from "@/actions/ai";
 import { toast } from "sonner";
@@ -105,6 +115,7 @@ export function AssistantListClient({ initialAssistants }: { initialAssistants: 
   }
 
   // Test
+  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
   const [testOpen, setTestOpen] = React.useState(false);
   const [testId, setTestId] = React.useState<string | null>(null);
   const [testMsg, setTestMsg] = React.useState("");
@@ -174,7 +185,9 @@ export function AssistantListClient({ initialAssistants }: { initialAssistants: 
     try {
       await updateAssistant(a.id, { is_active: !a.is_active });
       setAssistants((prev) => prev.map((x) => (x.id === a.id ? { ...x, is_active: !x.is_active } : x)));
-    } catch {}
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao alterar status");
+    }
   }
 
   async function handleTest() {
@@ -256,7 +269,7 @@ export function AssistantListClient({ initialAssistants }: { initialAssistants: 
                           {a.is_active ? <PowerOff className="size-4" /> : <Power className="size-4" />}
                           {a.is_active ? "Desativar" : "Ativar"}
                         </DropdownMenuItem>
-                        <DropdownMenuItem variant="destructive" onClick={() => handleDelete(a.id)}>
+                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmId(a.id)}>
                           <Trash2 className="size-4" />
                           Excluir
                         </DropdownMenuItem>
@@ -397,6 +410,23 @@ export function AssistantListClient({ initialAssistants }: { initialAssistants: 
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir assistente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O assistente e suas configurações serão removidos permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (deleteConfirmId) { handleDelete(deleteConfirmId); setDeleteConfirmId(null); } }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

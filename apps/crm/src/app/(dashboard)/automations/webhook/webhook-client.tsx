@@ -8,6 +8,7 @@ import { Label } from "@persia/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@persia/ui/card";
 import { Badge } from "@persia/ui/badge";
 import { updateOrgSettings } from "@/actions/organization";
+import { toast } from "sonner";
 
 interface WebhookClientProps {
   orgId: string;
@@ -28,8 +29,8 @@ export function WebhookClient({ orgId, initialWebhookUrl }: WebhookClientProps) 
       await updateOrgSettings({ n8n_webhook_url: webhookUrl.trim() || null });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      // silently fail
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao salvar URL do webhook");
     } finally {
       setSaving(false);
     }

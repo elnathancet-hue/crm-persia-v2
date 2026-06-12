@@ -44,7 +44,9 @@ export function FlowSidebar({
   onAdd,
 }: FlowSidebarProps) {
   const [search, setSearch] = React.useState("");
-  const [openCats, setOpenCats] = React.useState<Set<string>>(new Set());
+  const [openCats, setOpenCats] = React.useState<Set<string>>(
+    () => new Set(FLOW_SIDEBAR_CATEGORIES.map((c) => c.id)),
+  );
 
   const toggleCat = (id: string) => {
     setOpenCats((prev) => {

@@ -43,6 +43,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@persia/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@persia/ui/alert-dialog";
 import { createTool, updateTool, deleteTool } from "@/actions/tools";
 import { toast } from "sonner";
 
@@ -83,6 +93,7 @@ function detectCategory(mimeType: string): string {
 
 export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
   const [tools, setTools] = React.useState<Tool[]>(initialTools);
+  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -117,7 +128,7 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
       fd.set("file", selectedFile);
       const newTool = await createTool(fd);
       if (newTool) setTools((prev) => [newTool as Tool, ...prev]);
-      toast.success("Tool adicionada!");
+      toast.success("Arquivo adicionado!");
       setUploadOpen(false);
     } catch (err: any) {
       toast.error(err.message || "Erro no upload");
@@ -130,7 +141,7 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
     try {
       await deleteTool(id);
       setTools((prev) => prev.filter((t) => t.id !== id));
-      toast.success("Tool removida");
+      toast.success("Arquivo removido");
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover");
     }
@@ -140,7 +151,9 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
     try {
       await updateTool(tool.id, { is_active: !tool.is_active });
       setTools((prev) => prev.map((t) => (t.id === tool.id ? { ...t, is_active: !t.is_active } : t)));
-    } catch {}
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao alterar status");
+    }
   }
 
   function copyApiUrl(tool: Tool) {
@@ -162,7 +175,7 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar tool..."
+            placeholder="Buscar arquivo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9"
@@ -182,7 +195,7 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
         </Select>
         <Button onClick={openUpload} className="ml-auto">
           <Plus className="size-4" />
-          Nova Tool
+          Novo arquivo
         </Button>
       </div>
 
@@ -200,13 +213,13 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
             <div className="size-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
               <FileText className="size-7 text-muted-foreground/60" />
             </div>
-            <p className="text-base font-semibold">Nenhuma tool</p>
+            <p className="text-base font-semibold">Nenhum arquivo</p>
             <p className="text-sm text-muted-foreground mt-1">
               Adicione imagens, PDFs e documentos para usar nas automacoes
             </p>
             <Button className="mt-4" onClick={openUpload}>
               <Plus className="size-4" />
-              Adicionar primeira tool
+              Adicionar primeiro arquivo
             </Button>
           </CardContent>
         </Card>
@@ -265,7 +278,7 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
                           {tool.is_active ? <PowerOff className="size-4" /> : <Power className="size-4" />}
                           {tool.is_active ? "Desativar" : "Ativar"}
                         </DropdownMenuItem>
-                        <DropdownMenuItem variant="destructive" onClick={() => handleDelete(tool.id)}>
+                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmId(tool.id)}>
                           <Trash2 className="size-4" />
                           Excluir
                         </DropdownMenuItem>
@@ -294,7 +307,7 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
       <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Nova Tool</DialogTitle>
+            <DialogTitle>Novo arquivo</DialogTitle>
             <DialogDescription>
               Adicione um arquivo que podera ser enviado pela IA ou pelo agente
             </DialogDescription>
@@ -361,6 +374,23 @@ export function ToolsClient({ initialTools }: { initialTools: Tool[] }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir arquivo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O arquivo será removido da biblioteca e do storage. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (deleteConfirmId) { handleDelete(deleteConfirmId); setDeleteConfirmId(null); } }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

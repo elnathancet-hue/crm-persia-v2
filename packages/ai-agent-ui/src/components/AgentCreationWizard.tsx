@@ -76,6 +76,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   isPending: boolean;
   onSubmit: (input: AgentCreationWizardSubmit) => void;
+  /** Quando true, o toggle "Principal" começa marcado — útil ao criar o 1º agente. */
+  defaultIsPrimary?: boolean;
 }
 
 export function AgentCreationWizard({
@@ -83,12 +85,13 @@ export function AgentCreationWizard({
   onOpenChange,
   isPending,
   onSubmit,
+  defaultIsPrimary = false,
 }: Props) {
   const [step, setStep] = React.useState<WizardStep>(1);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [model, setModel] = React.useState<string>(DEFAULT_MODEL);
-  const [isPrimaryAgent, setIsPrimaryAgent] = React.useState(false);
+  const [isPrimaryAgent, setIsPrimaryAgent] = React.useState(defaultIsPrimary);
 
   // Reset ao fechar — evita state stale na proxima abertura.
   React.useEffect(() => {
@@ -97,9 +100,9 @@ export function AgentCreationWizard({
       setName("");
       setDescription("");
       setModel(DEFAULT_MODEL);
-      setIsPrimaryAgent(false);
+      setIsPrimaryAgent(defaultIsPrimary);
     }
-  }, [open]);
+  }, [open, defaultIsPrimary]);
 
   const trimmedName = name.trim();
   const nameValid = trimmedName.length >= 2;

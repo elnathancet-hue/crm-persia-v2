@@ -1,6 +1,7 @@
 import { PageTitle } from "@persia/ui/typography";
 import { getFlows } from "@/actions/flows";
 import { FlowsPageClient } from "./flows-client";
+import { LegacyBanner } from "@/components/legacy-banner";
 
 export const metadata = { title: "Fluxos" };
 
@@ -15,6 +16,7 @@ export default async function FlowsPage() {
           Crie fluxos para automatizar ações com seus leads
         </p>
       </div>
+      <LegacyBanner featureName="Fluxos de Automação" />
       <FlowsPageClient initialFlows={flows || []} />
     </div>
   );

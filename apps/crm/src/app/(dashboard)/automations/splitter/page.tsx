@@ -1,5 +1,6 @@
 import { getAssistant } from "@/actions/ai";
 import { SplitterClient } from "./splitter-client";
+import { LegacyBanner } from "@/components/legacy-banner";
 
 export const metadata = { title: "Picotador de Mensagens" };
 
@@ -14,6 +15,7 @@ export default async function SplitterPage() {
           Divida respostas longas da IA em mensagens curtas e naturais no WhatsApp
         </p>
       </div>
+      <LegacyBanner featureName="Picotador de Mensagens" />
       <SplitterClient initialAssistant={assistant as never} />
     </div>
   );

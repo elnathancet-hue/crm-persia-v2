@@ -16,7 +16,7 @@ export default function WebhookAutomationPage() {
   useEffect(() => {
     if (!isManagingClient) { setLoading(false); return; }
     setLoading(true);
-    getWebhookConfigs().then((d) => { setWebhooks(d); setLoading(false); });
+    getWebhookConfigs().then((d) => { setWebhooks(d); }).catch(() => { toast.error("Erro ao carregar webhooks"); }).finally(() => setLoading(false));
   }, [activeOrgId]);
 
   function copyToClipboard(text: string, id: string) {
