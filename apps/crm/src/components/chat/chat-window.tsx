@@ -810,6 +810,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [forwardConversations, setForwardConversations] = useState<ConversationWithLead[]>([]);
   const [forwardSearch, setForwardSearch] = useState("");
   const [mediaViewer, setMediaViewer] = useState<{ type: "image" | "video"; url: string } | null>(null);
+  const [expandedMsgIds, setExpandedMsgIds] = useState<Set<string>>(new Set());
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -2242,9 +2243,37 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                                   <span className="font-medium text-sm">{(msg.metadata as any).text || "Enviar Localização"}</span>
                                 </div>
                               )}
-                              {msg.content && msg.type !== "location" && (
-                                <p className="whitespace-pre-wrap break-words">{formatWhatsAppText(msg.content)}</p>
-                              )}
+                              {msg.content && msg.type !== "location" && (() => {
+                                const LONG = 400;
+                                const isLong = msg.content.length > LONG;
+                                const isExpanded = expandedMsgIds.has(msg.id);
+                                return (
+                                  <div>
+                                    <p className={cn(
+                                      "whitespace-pre-wrap break-words",
+                                      isLong && !isExpanded && "line-clamp-10",
+                                    )}>
+                                      {formatWhatsAppText(msg.content)}
+                                    </p>
+                                    {isLong && (
+                                      <button
+                                        type="button"
+                                        className="mt-1 text-xs font-medium text-primary hover:underline"
+                                        onClick={() =>
+                                          setExpandedMsgIds((prev) => {
+                                            const next = new Set(prev);
+                                            if (isExpanded) next.delete(msg.id);
+                                            else next.add(msg.id);
+                                            return next;
+                                          })
+                                        }
+                                      >
+                                        {isExpanded ? "Ver menos" : "Ver mais"}
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                               {/* Time + "Editada" + status - WhatsApp style */}
                               <span
                                 className="text-[10px] float-right ml-2 mt-1 inline-flex items-center gap-1"
