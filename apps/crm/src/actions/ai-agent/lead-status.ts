@@ -78,11 +78,24 @@ export async function getLeadAgentStatus(
 export async function pauseLeadAgent(agentConversationId: string): Promise<void> {
   const { supabase, orgId } = await requireRole("agent");
 
+  const { data: current } = await supabase
+    .from("agent_conversations")
+    .select("ai_control_epoch")
+    .eq("organization_id", orgId)
+    .eq("id", agentConversationId)
+    .maybeSingle();
+
+  const currentEpoch =
+    (current as { ai_control_epoch?: number } | null)?.ai_control_epoch ?? 0;
+  const now = new Date().toISOString();
+
   const { error } = await supabase
     .from("agent_conversations")
     .update({
-      human_handoff_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      human_handoff_at: now,
+      human_handoff_reason: "manual_pause",
+      ai_control_epoch: currentEpoch + 1,
+      updated_at: now,
     })
     .eq("organization_id", orgId)
     .eq("id", agentConversationId);
@@ -98,16 +111,40 @@ export async function pauseLeadAgent(agentConversationId: string): Promise<void>
 export async function resumeLeadAgent(agentConversationId: string): Promise<void> {
   const { supabase, orgId } = await requireRole("agent");
 
+  const { data: current } = await supabase
+    .from("agent_conversations")
+    .select("ai_control_epoch, crm_conversation_id")
+    .eq("organization_id", orgId)
+    .eq("id", agentConversationId)
+    .maybeSingle();
+
+  type CurrentRow = { ai_control_epoch?: number; crm_conversation_id?: string } | null;
+  const currentEpoch = (current as CurrentRow)?.ai_control_epoch ?? 0;
+  const conversationId = (current as CurrentRow)?.crm_conversation_id ?? null;
+  const now = new Date().toISOString();
+
   const { error } = await supabase
     .from("agent_conversations")
     .update({
       human_handoff_at: null,
-      updated_at: new Date().toISOString(),
+      human_handoff_reason: null,
+      ai_control_epoch: currentEpoch + 1,
+      updated_at: now,
     })
     .eq("organization_id", orgId)
     .eq("id", agentConversationId);
 
   if (error) throw new Error(error.message);
+
+  // Sincroniza ownership da conversa de volta pra IA
+  if (conversationId) {
+    await supabase
+      .from("conversations")
+      .update({ assigned_to: "ai", updated_at: now })
+      .eq("organization_id", orgId)
+      .eq("id", conversationId);
+  }
+
   revalidatePath("/crm");
 }
 
