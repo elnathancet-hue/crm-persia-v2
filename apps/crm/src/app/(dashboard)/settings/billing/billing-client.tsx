@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Crown, Zap, Rocket, Building2 } from "lucide-react";
+import { Check, Crown, Zap, Rocket } from "lucide-react";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
@@ -18,71 +18,50 @@ interface PlanInfo {
 
 const PLANS: PlanInfo[] = [
   {
-    id: "trial",
-    name: "Trial",
-    price: "Grátis",
-    description: "Experimente por 14 dias",
+    id: "ai_simple",
+    name: "IA + Funil",
+    price: "R$ 97/mês",
+    description: "IA, Agenda e Pipeline de vendas",
     icon: Zap,
     features: [
-      "Até 100 leads",
-      "1 usuário",
-      "Chat WhatsApp básico",
-      "1 pipeline",
+      "Agente IA para WhatsApp",
+      "Agenda de compromissos",
+      "Pipeline de vendas (Kanban)",
+      "Leads ilimitados",
+      "2 usuários",
       "Relatórios básicos",
     ],
   },
   {
-    id: "starter",
-    name: "Starter",
-    price: "R$ 97/mês",
-    description: "Para pequenos negócios",
-    icon: Rocket,
-    features: [
-      "Até 1.000 leads",
-      "3 usuários",
-      "Chat WhatsApp completo",
-      "3 pipelines",
-      "Campanhas WhatsApp",
-      "Chatbot IA básico",
-      "Relatórios avançados",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Pro",
+    id: "crm",
+    name: "CRM",
     price: "R$ 197/mês",
-    description: "Para equipes em crescimento",
-    icon: Crown,
+    description: "IA + Chat WhatsApp individual",
+    icon: Rocket,
     highlighted: true,
     features: [
-      "Até 10.000 leads",
-      "10 usuários",
-      "Chat WhatsApp completo",
-      "Pipelines ilimitados",
-      "Campanhas WhatsApp e Email",
-      "Chatbot IA avançado",
-      "Fluxos de automação",
-      "Landing pages",
+      "Tudo do IA + Funil",
+      "Chat WhatsApp individual",
+      "Histórico completo de conversas",
+      "5 usuários",
+      "Relatórios avançados",
       "Campos personalizados",
-      "API e Webhooks",
-      "Suporte prioritário",
     ],
   },
   {
-    id: "scale",
-    name: "Scale",
+    id: "growth",
+    name: "Growth",
     price: "R$ 497/mês",
-    description: "Para grandes operações",
-    icon: Building2,
+    description: "Acesso completo à plataforma",
+    icon: Crown,
     features: [
-      "Leads ilimitados",
+      "Tudo do CRM",
+      "Grupos WhatsApp",
+      "Campanhas WhatsApp em massa",
       "Usuários ilimitados",
-      "Tudo do Pro",
       "Multi-instância WhatsApp",
-      "White label",
-      "Integração personalizada",
-      "SLA garantido",
-      "Gerente de conta dedicado",
+      "API e Webhooks",
+      "Suporte prioritário",
     ],
   },
 ];
@@ -121,9 +100,9 @@ export function BillingPageClient({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-lg">
-                    {currentPlanInfo?.name || currentPlan}
+                    {currentPlanInfo?.name || (currentPlan === "trial" ? "Trial" : currentPlan)}
                   </h3>
-                  <Badge>{currentPlanInfo?.price || currentPlan}</Badge>
+                  <Badge>{currentPlanInfo?.price || "Grátis"}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {orgName}
@@ -139,7 +118,7 @@ export function BillingPageClient({
       </Card>
 
       {/* Plan Comparison */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {PLANS.map((plan) => {
           const isCurrent = plan.id === currentPlan;
           const Icon = plan.icon;

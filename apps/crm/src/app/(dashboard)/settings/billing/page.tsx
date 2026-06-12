@@ -23,7 +23,7 @@ async function getBillingData() {
 
   const org = (member as any)?.organizations;
   return {
-    plan: org?.plan || "trial",
+    plan: org?.product_tier || org?.plan || "trial",
     name: org?.name || "",
     created_at: org?.created_at || "",
   };
