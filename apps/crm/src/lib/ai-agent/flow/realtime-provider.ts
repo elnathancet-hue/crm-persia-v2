@@ -10,6 +10,7 @@
 // enviada por humano. Falhas de DB são best-effort (log + segue) —
 // o WhatsApp já foi entregue, perder o registro local é o menor mal.
 
+import OpenAI from "openai";
 import type { WhatsAppProvider } from "@persia/shared/whatsapp";
 import type { HumanizationConfig } from "@persia/shared/ai-agent";
 import type { AgentDb } from "../db";
@@ -38,29 +39,77 @@ export interface CreateRealtimeProviderOptions {
 }
 
 // ============================================================================
-// Split helper — divide msg longa em chunks respeitando quebras naturais
+// Split helpers — divide msg longa em partes naturais
 // ============================================================================
 //
-// Prioridade de quebra: \n\n (parágrafo) > \n (linha) > ". " (frase) > " "
-// (palavra) > hard cut. Garante que ninguém cortou no meio de palavra.
+// Estratégia primária: LLM (gpt-4o-mini) com tags <MSG>...</MSG>, igual ao
+// fluxo n8n de referência do cliente. Zero risco de cortar no meio de palavra
+// ou frase porque o modelo entende semântica.
+//
+// Fallback: divisão determinística com prioridade de quebra:
+//   \n\n > \n > ". " > " " > hard cut
+//
+// Bug histórico corrigido (jun/2026): o código anterior usava `||` com os
+// resultados de `lastIndexOf`. Como `lastIndexOf` retorna -1 quando não
+// encontra, e -1 é TRUTHY em JS, a cadeia `||` parava no primeiro -1
+// (retornado por `lastIndexOf("\n\n")`), ignorando os outros separadores.
+// Isso causava hard cut na posição thresholdChars, cortando palavras.
+// Fix: loop explícito com `pos > 0` para ignorar -1 e 0.
 
-function splitMessage(text: string, thresholdChars: number): string[] {
+function splitMessageDeterministic(text: string, thresholdChars: number): string[] {
   if (text.length <= thresholdChars) return [text];
   const chunks: string[] = [];
   let remaining = text;
   while (remaining.length > thresholdChars) {
-    const window = remaining.slice(0, thresholdChars);
-    const splitAt =
-      window.lastIndexOf("\n\n") ||
-      window.lastIndexOf("\n") ||
-      window.lastIndexOf(". ") ||
-      window.lastIndexOf(" ");
+    const win = remaining.slice(0, thresholdChars);
+    let splitAt = -1;
+    for (const sep of ["\n\n", "\n", ". ", " "]) {
+      const pos = win.lastIndexOf(sep);
+      if (pos > 0) { splitAt = pos; break; }
+    }
     const cut = splitAt > thresholdChars * 0.5 ? splitAt : thresholdChars;
     chunks.push(remaining.slice(0, cut).trim());
     remaining = remaining.slice(cut).trim();
   }
   if (remaining.length > 0) chunks.push(remaining);
   return chunks;
+}
+
+async function splitMessageWithLLM(
+  text: string,
+  thresholdChars: number,
+): Promise<string[]> {
+  if (text.length <= thresholdChars) return [text];
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (apiKey) {
+    try {
+      const openai = new OpenAI({ apiKey });
+      const res = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        max_tokens: 1024,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Divida o texto em mensagens naturais de WhatsApp. " +
+              "Retorne SOMENTE as mensagens usando o delimitador <MSG> e </MSG>. " +
+              "NÃO retorne JSON. NÃO use markdown. NÃO escreva nada fora das tags. " +
+              "Exemplo: <MSG>Mensagem 1</MSG><MSG>Mensagem 2</MSG>",
+          },
+          { role: "user", content: text },
+        ],
+      });
+      const raw = res.choices[0]?.message?.content ?? "";
+      const matches = [...raw.matchAll(/<MSG>([\s\S]*?)<\/MSG>/g)];
+      const messages = matches.map((m) => (m[1] ?? "").trim()).filter(Boolean);
+      if (messages.length > 0) return messages;
+    } catch (err) {
+      console.error("[realtime-provider] LLM split falhou, usando fallback:", err);
+    }
+  }
+
+  return splitMessageDeterministic(text, thresholdChars);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -153,7 +202,7 @@ export function createRealtimeProvider(
           const chunks =
             opts.humanization.split_enabled &&
             message.length > opts.humanization.split_threshold_chars
-              ? splitMessage(message, opts.humanization.split_threshold_chars)
+              ? await splitMessageWithLLM(message, opts.humanization.split_threshold_chars)
               : [message];
           const delayMs = Math.max(
             0,
