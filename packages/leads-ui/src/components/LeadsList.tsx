@@ -210,6 +210,12 @@ export interface LeadsListProps {
     leadIds: string[],
     userId: string | null,
   ) => Promise<{ updated_count: number }>;
+  /**
+   * Segmento ativo aplicado como filtro persistente em todos os fetches
+   * client-side (paginacao, busca, ordenacao). Sem isso, o filtro de
+   * segmento e perdido apos o SSR inicial.
+   */
+  segmentId?: string | null;
 }
 
 export function LeadsList({
@@ -230,6 +236,7 @@ export function LeadsList({
   onScheduleAppointment,
   onBulkDelete,
   onBulkAssign,
+  segmentId,
 }: LeadsListProps) {
   const actions = useLeadsActions();
   const [leads, setLeads] = React.useState(initialLeads);
@@ -332,6 +339,8 @@ export function LeadsList({
             params.tags && params.tags.length > 0 ? params.tags : undefined,
           page: params.page || 1,
           limit: 20,
+          // Mantém filtro de segmento em todos os fetches client-side
+          ...(segmentId ? { segmentId } : {}),
           // PR-L4: orderBy opcional
           ...(params.orderColumn
             ? {

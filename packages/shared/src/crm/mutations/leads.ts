@@ -34,6 +34,8 @@ export interface UpdateLeadInput extends Partial<CreateLeadInput> {
   notes?: string | null;
   /** Resumo da conversa (gerado por IA ou editado manualmente). */
   conversation_summary?: string | null;
+  /** Valor esperado do negócio (coluna expected_value no Kanban). */
+  expected_value?: number | null;
 }
 
 export interface CreatedLead {
@@ -164,6 +166,11 @@ export async function updateLead(
   if (input.notes !== undefined) updateData.notes = input.notes || null;
   if (input.conversation_summary !== undefined)
     updateData.conversation_summary = input.conversation_summary || null;
+  if (input.expected_value !== undefined)
+    updateData.expected_value =
+      input.expected_value != null && Number.isFinite(input.expected_value)
+        ? input.expected_value
+        : null;
 
   const { data, error } = await db
     .from("leads")

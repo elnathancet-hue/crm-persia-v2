@@ -23,6 +23,7 @@ import {
   addTagToLead,
   assignLead,
   removeTagFromLead,
+  updateLead,
 } from "@/actions/leads";
 import {
   bulkMarkLeadsAsLost,
@@ -134,4 +135,16 @@ export const crmKanbanActions: KanbanActions = {
   },
   findOrCreateConversationByLead: (leadId) =>
     findOrCreateConversationByLead(leadId),
+
+  // Inline edit do card: atualiza nome/valor esperado do lead.
+  // updateDeal (legado) era no-op no modelo lead-centric porque o id
+  // do card e o leadId, nao um id da tabela deals.
+  updateLeadCard: async (leadId, data) => {
+    await updateLead(leadId, {
+      ...(data.name !== undefined ? { name: data.name } : {}),
+      ...(data.expected_value !== undefined
+        ? { expected_value: data.expected_value }
+        : {}),
+    });
+  },
 };

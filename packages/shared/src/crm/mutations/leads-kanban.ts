@@ -47,6 +47,68 @@ async function logActivity(
     });
 }
 
+// Move um grupo de leads pra etapa terminal (falha | bem_sucedido)
+// do pipeline atual de cada lead. Best-effort: falha nao interrompe
+// a mutation principal.
+async function moveToTerminalStage(
+  ctx: CrmMutationContext,
+  leadIds: string[],
+  outcome: "falha" | "bem_sucedido",
+  now: string,
+): Promise<void> {
+  if (leadIds.length === 0) return;
+  const { db, orgId } = ctx;
+
+  const { data: leadRows } = await db
+    .from("leads")
+    .select("id, stage_id")
+    .in("id", leadIds)
+    .eq("organization_id", orgId);
+
+  const typedLeads = (leadRows as Array<{ id: string; stage_id: string | null }> | null) ?? [];
+  const currentStageIds = [...new Set(typedLeads.map((l) => l.stage_id).filter((s): s is string => !!s))];
+  if (currentStageIds.length === 0) return;
+
+  const { data: stageRows } = await db
+    .from("pipeline_stages")
+    .select("id, pipeline_id")
+    .in("id", currentStageIds);
+
+  const typedStages = (stageRows as Array<{ id: string; pipeline_id: string }> | null) ?? [];
+  const pipelineIds = [...new Set(typedStages.map((s) => s.pipeline_id))];
+  if (pipelineIds.length === 0) return;
+
+  const { data: terminalRows } = await db
+    .from("pipeline_stages")
+    .select("id, pipeline_id")
+    .in("pipeline_id", pipelineIds)
+    .eq("outcome", outcome);
+
+  const typedTerminal = (terminalRows as Array<{ id: string; pipeline_id: string }> | null) ?? [];
+  const stageByStageId = new Map(typedStages.map((s) => [s.id, s.pipeline_id]));
+  const terminalByPipeline = new Map(typedTerminal.map((s) => [s.pipeline_id, s.id]));
+
+  const leadsByStage = new Map<string, string[]>();
+  for (const lead of typedLeads) {
+    if (!lead.stage_id) continue;
+    const pipelineId = stageByStageId.get(lead.stage_id);
+    if (!pipelineId) continue;
+    const terminalStageId = terminalByPipeline.get(pipelineId);
+    if (!terminalStageId || lead.stage_id === terminalStageId) continue;
+    const group = leadsByStage.get(terminalStageId) ?? [];
+    group.push(lead.id);
+    leadsByStage.set(terminalStageId, group);
+  }
+
+  for (const [terminalStageId, ids] of leadsByStage.entries()) {
+    await db
+      .from("leads")
+      .update({ stage_id: terminalStageId, updated_at: now } as never)
+      .in("id", ids)
+      .eq("organization_id", orgId);
+  }
+}
+
 // ============================================================
 // moveLeadToStage — drag-drop do Kanban
 // ============================================================
@@ -297,7 +359,6 @@ export async function bulkMarkLeadsAsLost(
   const lossNote = input.loss_note ? input.loss_note.trim() : null;
   const now = new Date().toISOString();
 
-  // Status='lost' direto. Trigger nao dispara aqui (nao muda stage_id).
   const { data: affected, error: updateErr } = await db
     .from("leads")
     .update({
@@ -310,6 +371,10 @@ export async function bulkMarkLeadsAsLost(
 
   if (updateErr) throw sanitizeMutationError(updateErr);
   const affectedIds = (affected as Array<{ id: string }> | null)?.map((r) => r.id) ?? [];
+
+  // Move leads pra etapa terminal "falha" do pipeline atual pra eles
+  // aparecerem na coluna "Perdidos" do Kanban.
+  await moveToTerminalStage(ctx, affectedIds, "falha", now);
 
   await logActivity(
     ctx,
@@ -354,6 +419,10 @@ export async function bulkMarkLeadsAsWon(
 
   if (updateErr) throw sanitizeMutationError(updateErr);
   const affectedIds = (affected as Array<{ id: string }> | null)?.map((r) => r.id) ?? [];
+
+  // Move leads pra etapa terminal "bem_sucedido" do pipeline atual pra eles
+  // aparecerem na coluna "Ganhos" do Kanban.
+  await moveToTerminalStage(ctx, affectedIds, "bem_sucedido", now);
 
   await logActivity(
     ctx,

@@ -214,6 +214,16 @@ export interface KanbanActions {
   assignLead?: (leadId: string, userId: string | null) => Promise<void>;
   addTagToLead?: (leadId: string, tagId: string) => Promise<void>;
   removeTagFromLead?: (leadId: string, tagId: string) => Promise<void>;
+
+  /**
+   * Edita nome/valor do card de lead inline (duplo-click no título ou valor).
+   * Substitui o updateDeal legacy que era no-op no modelo lead-centric porque
+   * o id do card é o leadId, não um dealId da tabela deals.
+   */
+  updateLeadCard?: (
+    leadId: string,
+    data: { name?: string | null; expected_value?: number | null },
+  ) => Promise<void>;
   /**
    * Find or create conversation by lead. Retorna o conversationId
    * (existente ou novo). UI usa pra navegar pro chat interno no

@@ -279,6 +279,7 @@ export function LeadList(props: Props) {
           initialStats={props.initialStats}
           assignees={props.assignees ?? []}
           canEdit={isAgent}
+          segmentId={props.activeSegment?.id ?? null}
           onRowClick={(lead) => setInfoDrawerLead(lead)}
           // Frente A (unificação): ⋮ → Editar/Excluir agora abrem o
           // mesmo LeadInfoDrawer que clicar na linha. Resolve:
@@ -295,7 +296,7 @@ export function LeadList(props: Props) {
           }}
           onCreateDeal={(lead) => {
             // Navega pro Kanban no funil padrao (deal sera criado lá)
-            router.push(`/crm?leadId=${lead.id}`);
+            router.push(`/crm?lead=${lead.id}`);
           }}
           onOpenConversation={async (lead) => {
             try {

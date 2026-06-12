@@ -36,7 +36,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
   // .single() throwa quando o user e membro de >1 org (caso real do
   // superadmin testando varias contas), o que disparava redirect pra
   // /login mesmo com sessao valida.
-  const { supabase, orgId } = await getAuthContext();
+  const { supabase, orgId, role } = await getAuthContext();
   if (!orgId) redirect("/login");
 
   // Garante que existe pelo menos um pipeline (cria com stages padrao
@@ -325,6 +325,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       upcomingAppointments={upcomingAppointments}
       kanbanAgentSummaries={kanbanAgentSummaries}
       orgProducts={orgProducts}
+      canManageGroups={role === "owner" || role === "admin"}
     />
   );
 }

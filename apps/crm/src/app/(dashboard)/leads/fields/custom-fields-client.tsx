@@ -275,7 +275,7 @@ export function CustomFieldsClient({
             </DialogTitle>
             <DialogDescription>
               {editingField
-                ? "Altere as configuracoes do campo"
+                ? "Altere as configurações do campo"
                 : "Defina um campo extra para seus leads"}
             </DialogDescription>
           </DialogHeader>
@@ -331,10 +331,10 @@ export function CustomFieldsClient({
             </div>
             {fieldType === "select" && (
               <div className="space-y-2">
-                <Label htmlFor="cf-options">Opcoes (separadas por virgula)</Label>
+                <Label htmlFor="cf-options">Opções (separadas por vírgula)</Label>
                 <Input
                   id="cf-options"
-                  placeholder="Ex: Opcao 1, Opcao 2, Opcao 3"
+                  placeholder="Ex: Opção 1, Opção 2, Opção 3"
                   value={options}
                   onChange={(e) => setOptions(e.target.value)}
                 />

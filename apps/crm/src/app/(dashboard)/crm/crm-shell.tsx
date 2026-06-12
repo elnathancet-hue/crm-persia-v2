@@ -128,6 +128,7 @@ interface CrmShellProps {
   canCreateFunil?: boolean;
   canManageTags?: boolean;
   canManageSegments?: boolean;
+  canManageGroups?: boolean;
   /**
    * PR-KANBAN-UPCOMING (mai/2026): proximos agendamentos por lead (~48h).
    * Server fetcha e passa pra CrmClient -> KanbanBoard renderiza chip.
@@ -154,6 +155,7 @@ export function CrmShell(props: CrmShellProps) {
   const canCreateFunil = props.canCreateFunil ?? true;
   const canManageTags = props.canManageTags ?? true;
   const canManageSegments = props.canManageSegments ?? true;
+  const canManageGroups = props.canManageGroups ?? false;
 
   // PR-PIPETOOLS: a "biblioteca de funis" foi REMOVIDA — ela rouba foco
   // do Kanban (briefing). Agora na tab Pipeline:
@@ -192,6 +194,10 @@ export function CrmShell(props: CrmShellProps) {
     if (next !== "pipeline") {
       params.delete("pipeline");
     }
+    // Limpa deep-link de lead/segmento pra nova tab nao herdar contexto
+    // da tab anterior (ex: abrir Leads com ?lead=X e depois ir pra Tags).
+    params.delete("lead");
+    params.delete("segment");
     const qs = params.toString();
     router.push(qs ? `/crm?${qs}` : "/crm", { scroll: false });
   };
@@ -210,6 +216,7 @@ export function CrmShell(props: CrmShellProps) {
   const visibleTabs = TABS.filter((tab) => {
     if (tab.key === "tags" && !canManageTags) return false;
     if (tab.key === "segmentos" && !canManageSegments) return false;
+    if (tab.key === "grupos" && !canManageGroups) return false;
     return true;
   });
 

@@ -1509,7 +1509,7 @@ export function KanbanBoard({
               <Move className="size-3.5" />
               Mover etapa
             </Button>
-            {orgTags.length > 0 && (
+            {orgTags.length > 0 && actions.bulkApplyTagsToLeads && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1555,7 +1555,7 @@ export function KanbanBoard({
               <X className="size-3.5" />
               Marcar perdido
             </Button>
-            {canEdit && (
+            {canEdit && actions.bulkDeleteLeadsFromKanban && (
               <Button
                 size="sm"
                 variant="destructive"
@@ -2131,7 +2131,13 @@ const DealCard = React.memo(function DealCardImpl({
           setEditingField(null);
           return;
         }
-        await actionsRef.updateDeal(deal.id, { title: trimmed });
+        if (actionsRef.updateLeadCard) {
+          // Lead-centric: card.id == leadId; atualiza lead.name
+          await actionsRef.updateLeadCard(deal.id, { name: trimmed });
+        } else {
+          // Fallback legado (admin com modelo deal)
+          await actionsRef.updateDeal(deal.id, { title: trimmed });
+        }
         onUpdate(deal.id, { title: trimmed });
       } else {
         const parsed = Number(raw.replace(",", "."));
@@ -2143,7 +2149,12 @@ const DealCard = React.memo(function DealCardImpl({
           setEditingField(null);
           return;
         }
-        await actionsRef.updateDeal(deal.id, { value: parsed });
+        if (actionsRef.updateLeadCard) {
+          // Lead-centric: card.value == lead.expected_value
+          await actionsRef.updateLeadCard(deal.id, { expected_value: parsed });
+        } else {
+          await actionsRef.updateDeal(deal.id, { value: parsed });
+        }
         onUpdate(deal.id, { value: parsed });
       }
       setEditingField(null);

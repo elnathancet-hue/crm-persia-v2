@@ -127,7 +127,7 @@ export function AgendaPageClient({
 
   const callbacks = useMemo<AgendaCallbacks>(
     () => ({
-      onOpenLead: (leadId: string) => router.push(`/leads/${leadId}`),
+      onOpenLead: (leadId: string) => router.push(`/crm?tab=leads&lead=${leadId}`),
       onOpenChat: (leadId: string) => router.push(`/chat?lead=${leadId}`),
       onAppointmentChange: () => refetch(),
       searchLeads: (query: string, limit?: number) =>

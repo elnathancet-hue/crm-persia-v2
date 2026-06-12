@@ -15,18 +15,24 @@ import { permanentRedirect } from "next/navigation";
 
 export const metadata = { title: "Configurações do Funil" };
 
-export default function CrmSettingsLegacyPage({
-  searchParams: _searchParams,
+export default async function CrmSettingsLegacyPage({
+  searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // Mapeia tabs legadas pra estrutura nova:
-  //   ?tab=funis      → /crm (Pipeline tab) — usuario edita via "Editar estrutura"
+  //   ?tab=funis      → /crm
   //   ?tab=etiquetas  → /crm?tab=tags
   //   ?tab=segmentos  → /crm?tab=segmentos
   //   ?tab=motivos    → /crm (motivos foram removidos)
-  // Por simplicidade, redireciona TUDO pra /crm na raiz; quem
-  // precisar de uma sub-tab especifica chega la 1 clique depois.
-  void _searchParams;
-  permanentRedirect("/crm");
+  const params = await searchParams;
+  const legacyTab = typeof params.tab === "string" ? params.tab : null;
+  const tabMap: Record<string, string> = {
+    etiquetas: "tags",
+    segmentos: "segmentos",
+    atividades: "atividades",
+    leads: "leads",
+  };
+  const newTab = legacyTab ? tabMap[legacyTab] : null;
+  permanentRedirect(newTab ? `/crm?tab=${newTab}` : "/crm");
 }

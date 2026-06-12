@@ -183,7 +183,7 @@ function ParticipantRow({
           {p.isSuperAdmin && <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-tight"><Crown className="size-2.5 mr-0.5" />Dono</Badge>}
           {p.isAdmin && !p.isSuperAdmin && <Badge variant="secondary" className="text-[10px] px-1 py-0 leading-tight"><ShieldCheck className="size-2.5 mr-0.5" />Admin</Badge>}
           {p.lead && <Badge variant="default" className="text-[10px] px-1 py-0 leading-tight">Lead</Badge>}
-          {!p.lead && p.identityKind === "phone" && <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight">Nao id.</Badge>}
+          {!p.lead && p.identityKind === "phone" && <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight">Não id.</Badge>}
           {p.identityKind === "lid" && <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight text-muted-foreground"><UserX className="size-2.5 mr-0.5" />LID</Badge>}
         </div>
         <p className="text-xs text-muted-foreground truncate">
@@ -248,7 +248,7 @@ function ParticipantRow({
             variant="ghost"
             size="icon-xs"
             disabled
-            title="Telefone nao disponivel pela API"
+            title="Telefone não disponível pela API"
           >
             <Phone className="size-3.5 opacity-30" />
           </Button>
@@ -1092,7 +1092,7 @@ export function GroupsTab() {
                 <>
                   {participants.length} total &middot;{" "}
                   {participants.filter((p) => p.lead).length} leads &middot;{" "}
-                  {participants.filter((p) => !p.lead && p.identityKind === "phone").length} nao identificados &middot;{" "}
+                  {participants.filter((p) => !p.lead && p.identityKind === "phone").length} não identificados &middot;{" "}
                   {participants.filter((p) => p.identityKind === "lid").length} sem telefone
                 </>
               )}
@@ -1143,7 +1143,7 @@ export function GroupsTab() {
                 <TabsList className="shrink-0">
                   <TabsTrigger value="todos">Todos ({participants.length})</TabsTrigger>
                   <TabsTrigger value="leads">Leads ({participants.filter((p) => p.lead).length})</TabsTrigger>
-                  <TabsTrigger value="nao_id">Nao id. ({participants.filter((p) => !p.lead && p.identityKind === "phone").length})</TabsTrigger>
+                  <TabsTrigger value="nao_id">Não id. ({participants.filter((p) => !p.lead && p.identityKind === "phone").length})</TabsTrigger>
                   <TabsTrigger value="admins">Admins ({participants.filter((p) => p.isAdmin || p.isSuperAdmin).length})</TabsTrigger>
                 </TabsList>
                 {(["todos", "leads", "nao_id", "admins"] as const).map((tab) => {
