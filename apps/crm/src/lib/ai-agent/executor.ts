@@ -563,36 +563,73 @@ export async function tryEnqueueForNativeAgent(
     }
     const inboundMessageId = (msgRow as { id: string }).id;
 
-    // 8b. Transcrição de áudio via UAZAPI (best-effort).
-    // Se a mensagem for áudio e tivermos um messageId do WhatsApp, pedimos ao
-    // UAZAPI pra baixar e transcrever. Resultado substitui o placeholder
-    // "[audio recebido]" tanto em inboundText (contexto IA) quanto na coluna
-    // messages.content (histórico de chat). Falha silenciosa: log + segue com
-    // placeholder original pra não derrubar o fluxo por indisponibilidade de
-    // transcrição.
-    if (msg.type === "audio" && msg.messageId) {
+    // 8b. Enriquecimento de mídia via UAZAPI + OpenAI (best-effort).
+    //
+    // Áudio / Vídeo: UAZAPI transcreve a trilha de áudio (transcribe: true +
+    //   openai_apikey). Resultado substitui o placeholder "[audio recebido]" /
+    //   "[video recebido]" no contexto IA e em messages.content.
+    //
+    // Imagem: UAZAPI baixa e retorna fileURL; OpenAI vision (gpt-4o-mini)
+    //   descreve o conteúdo. Substitui "[imagem recebida]".
+    //
+    // Falha silenciosa em todos os casos: logError + segue com placeholder.
+    if (msg.messageId && (msg.type === "audio" || msg.type === "video" || msg.type === "image")) {
       try {
-        const transcribeResult = await input.provider.downloadMedia(
-          msg.messageId,
-          {
+        if (msg.type === "audio" || msg.type === "video") {
+          const result = await input.provider.downloadMedia(msg.messageId, {
             transcribe: true,
             openaiApiKey: process.env.OPENAI_API_KEY,
-          },
-        );
-        if (transcribeResult.transcription) {
-          inboundText = transcribeResult.transcription;
-          // Atualiza a mensagem já inserida com o texto transcrito.
-          await db
-            .from("messages")
-            .update({ content: transcribeResult.transcription })
-            .eq("id", inboundMessageId);
+          });
+          if (result.transcription) {
+            inboundText = result.transcription;
+            await db
+              .from("messages")
+              .update({ content: result.transcription })
+              .eq("id", inboundMessageId);
+          }
+        } else {
+          // image: baixa pra pegar fileURL, depois descreve via vision
+          const result = await input.provider.downloadMedia(msg.messageId, {
+            generateMp3: false,
+          });
+          if (result.fileURL && process.env.OPENAI_API_KEY) {
+            const openaiVision = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+            const vision = await openaiVision.chat.completions.create({
+              model: "gpt-4o-mini",
+              max_tokens: 300,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: "Descreva brevemente o que está nesta imagem em português. Seja direto e objetivo.",
+                    },
+                    {
+                      type: "image_url",
+                      image_url: { url: result.fileURL, detail: "low" },
+                    },
+                  ],
+                },
+              ],
+            });
+            const description = vision.choices[0]?.message?.content?.trim();
+            if (description) {
+              inboundText = `[imagem recebida] ${description}`;
+              await db
+                .from("messages")
+                .update({ content: description })
+                .eq("id", inboundMessageId);
+            }
+          }
         }
-      } catch (transcribeErr) {
-        logError("ai_agent_audio_transcription_failed", {
+      } catch (mediaErr) {
+        logError("ai_agent_media_enrichment_failed", {
           ...logCtx,
           lead_id: leadId,
           inbound_message_id: inboundMessageId,
-          error: errorMessage(transcribeErr),
+          media_type: msg.type,
+          error: errorMessage(mediaErr),
         });
       }
     }
