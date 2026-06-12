@@ -6,9 +6,11 @@ import { revalidatePath } from "next/cache";
 export async function getFlows() {
   const { supabase, orgId } = await requireRole("admin");
 
+  // Busca flows + contagem de execuções numa query só via embedded count
+  // do PostgREST — elimina o segundo SELECT de flow_executions.
   const { data: flows, error } = await supabase
     .from("flows")
-    .select("*")
+    .select("*, flow_executions(count)")
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
 
@@ -16,20 +18,10 @@ export async function getFlows() {
 
   if (!flows || flows.length === 0) return [];
 
-  const flowIds = flows.map((f: any) => f.id);
-  const { data: executions } = await supabase
-    .from("flow_executions")
-    .select("flow_id")
-    .in("flow_id", flowIds);
-
-  const countMap: Record<string, number> = {};
-  (executions || []).forEach((e: any) => {
-    countMap[e.flow_id] = (countMap[e.flow_id] || 0) + 1;
-  });
-
-  return flows.map((flow: any) => ({
+  return (flows as any[]).map((flow) => ({
     ...flow,
-    executions_count: countMap[flow.id] || 0,
+    executions_count: (flow.flow_executions as [{ count: number }] | null)?.[0]?.count ?? 0,
+    flow_executions: undefined,
   }));
 }
 

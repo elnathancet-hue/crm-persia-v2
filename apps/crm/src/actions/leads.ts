@@ -385,20 +385,24 @@ export async function getLeadsListStats(
       .eq("status", "open")
       .in("lead_id", leadIds)
       .order("created_at", { ascending: false }),
-    // ACTIVITIES (todas, agrupa client-side)
+    // ACTIVITIES — cap em 1000 (leadIds max 200, típico 20; evita scan
+    // ilimitado em leads com histórico longo — contagem pode ficar
+    // subestimada acima do cap, aceitável para stats de lista).
     supabase
       .from("lead_activities")
       .select("lead_id, description, created_at")
       .eq("organization_id", orgId)
       .in("lead_id", leadIds)
-      .order("created_at", { ascending: false }),
-    // CONVERSATIONS (todas, agrupa client-side)
+      .order("created_at", { ascending: false })
+      .limit(1000),
+    // CONVERSATIONS — cap em 500 (a maioria dos leads tem 1-2 convs).
     supabase
       .from("conversations")
       .select("lead_id, last_message_at")
       .eq("organization_id", orgId)
       .in("lead_id", leadIds)
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(500),
   ]);
 
   // Agrupa deals por lead_id (1 lead pode ter N deals abertos)

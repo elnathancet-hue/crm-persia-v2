@@ -17,10 +17,13 @@ export async function getEmailCampaigns() {
   if (!campaigns || campaigns.length === 0) return [];
 
   const campaignIds = campaigns.map((c: any) => c.id);
+  // Cap em 10 000 rows — evita full scan em orgs com campanhas grandes.
+  // Acima do cap os contadores ficam subestimados (melhor que timeout).
   const { data: sends } = await supabase
     .from("email_sends")
     .select("campaign_id, status")
-    .in("campaign_id", campaignIds);
+    .in("campaign_id", campaignIds)
+    .limit(10000);
 
   const statsMap: Record<string, { sent: number; opened: number; clicked: number }> = {};
   (sends || []).forEach((s: any) => {

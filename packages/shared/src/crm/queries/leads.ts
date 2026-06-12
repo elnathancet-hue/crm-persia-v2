@@ -172,8 +172,14 @@ export async function listLeads(
   }
   if (assigneeIds && assigneeIds.length > 0) {
     // Sentinela "__none__" = leads sem responsavel (assigned_to IS NULL).
+    // Sanitiza IDs contra UUID regex antes de interpolar no .or() —
+    // evita PostgREST filter injection (um id malformado como
+    // "x),id.not.is.null" injetaria condições extras no grupo OR).
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (assigneeIds.includes("__none__")) {
-      const realIds = assigneeIds.filter((id) => id !== "__none__");
+      const realIds = assigneeIds
+        .filter((id) => id !== "__none__")
+        .filter((id) => UUID_RE.test(id));
       if (realIds.length > 0) {
         // OR explicit: assigned_to IN (realIds) OR assigned_to IS NULL
         query = query.or(
@@ -183,7 +189,7 @@ export async function listLeads(
         query = query.is("assigned_to", null);
       }
     } else {
-      query = query.in("assigned_to", assigneeIds);
+      query = query.in("assigned_to", assigneeIds.filter((id) => UUID_RE.test(id)));
     }
   }
   if (sources && sources.length > 0) {

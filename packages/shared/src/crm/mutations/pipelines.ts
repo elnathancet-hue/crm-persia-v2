@@ -63,22 +63,20 @@ export async function createPipeline(
   const created = pipeline as Pipeline;
 
   if (withDefaultStages) {
-    for (let i = 0; i < DEFAULT_STAGES.length; i++) {
-      const { error: stageErr } = await db.from("pipeline_stages").insert({
+    // Bulk insert: 1 round-trip ao invés de 6 INSERTs sequenciais.
+    const { error: stagesErr } = await db.from("pipeline_stages").insert(
+      DEFAULT_STAGES.map((s, i) => ({
         pipeline_id: created.id,
         organization_id: orgId,
-        name: DEFAULT_STAGES[i].name,
+        name: s.name,
         sort_order: i,
-        color: DEFAULT_STAGES[i].color,
-        outcome: DEFAULT_STAGES[i].outcome,
-      });
-      if (stageErr) {
-        // eslint-disable-next-line no-console
-        console.error(
-          `[createPipeline] falhou ao criar stage default "${DEFAULT_STAGES[i].name}":`,
-          stageErr.message,
-        );
-      }
+        color: s.color,
+        outcome: s.outcome,
+      })),
+    );
+    if (stagesErr) {
+      // eslint-disable-next-line no-console
+      console.error("[createPipeline] falhou ao criar stages default:", stagesErr.message);
     }
   }
 
