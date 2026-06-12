@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { requireService } from "@/lib/auth-service";
 import { GroupDetailClient } from "./group-detail-client";
 
 export default async function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireService("groups");
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

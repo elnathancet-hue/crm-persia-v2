@@ -1,10 +1,12 @@
 import React from "react";
 import { notFound } from "next/navigation";
 import { requireAdminPageAccess } from "@/lib/guards/require-admin";
+import { requireService } from "@/lib/auth-service";
 import { getCrmCampaignDetails, getCampaignRecipients, getCampaignEvents } from "@/actions/crm-campaigns";
 import { CrmCampaignCockpit } from "@/components/campaigns/crm-campaign-cockpit";
 
 export default async function CampaignDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireService("campaigns");
   await requireAdminPageAccess();
   const { id } = await params;
 

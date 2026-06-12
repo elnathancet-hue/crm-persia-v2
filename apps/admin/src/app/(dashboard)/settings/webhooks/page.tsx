@@ -9,7 +9,6 @@ import { Webhook, Plus, Loader2, Trash2, X, Copy, Check } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { toast } from "sonner";
 
-export const metadata = { title: "Webhooks" };
 
 export default function WebhooksPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();

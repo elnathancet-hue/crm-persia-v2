@@ -6,7 +6,6 @@ import { getAdminStats } from "@/actions/admin";
 import { ShieldCheck, Loader2, Users, MessageSquare, Contact, Bot, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
-export const metadata = { title: "Superadmins" };
 
 export default function AdminPage() {
   const [superadmins, setSuperadmins] = useState<any[]>([]);

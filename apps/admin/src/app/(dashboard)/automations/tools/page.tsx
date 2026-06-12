@@ -7,8 +7,6 @@ import { Wrench, Loader2, ExternalLink } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { toast } from "sonner";
 
-export const metadata = { title: "Biblioteca de Mídia" };
-
 export default function ToolsPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
   const [tools, setTools] = useState<any[]>([]);

@@ -25,7 +25,6 @@ function isContextError(error: string | undefined): boolean {
     error.includes("sessao diferente");
 }
 
-export const metadata = { title: "Equipe" };
 
 export default function TeamPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();

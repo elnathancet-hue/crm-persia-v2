@@ -26,7 +26,6 @@ function isContextError(error: string | undefined): boolean {
     error.includes("sessao diferente");
 }
 
-export const metadata = { title: "WhatsApp" };
 
 export default function WhatsAppPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();

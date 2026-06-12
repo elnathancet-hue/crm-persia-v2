@@ -23,8 +23,6 @@ function slugify(text: string): string {
   return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
-export const metadata = { title: "Campos Personalizados" };
-
 export default function CustomFieldsPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
   const [fields, setFields] = useState<any[]>([]);

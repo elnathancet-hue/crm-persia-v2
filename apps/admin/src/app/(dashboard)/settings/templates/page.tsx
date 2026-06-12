@@ -36,7 +36,6 @@ const STATUS_COLOR: Record<string, string> = {
   DISABLED: "text-muted-foreground bg-card",
 };
 
-export const metadata = { title: "Templates de Mensagem" };
 
 export default function TemplatesPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();

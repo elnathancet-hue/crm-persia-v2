@@ -43,7 +43,6 @@ const ADMIN_SEGMENT_CATALOGS: SegmentCatalogs = {
   ],
 };
 
-export const metadata = { title: "Segmentos" };
 
 export default function SegmentsPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();
