@@ -7,6 +7,7 @@ import {
   Clock,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Trash2,
   Power,
   PowerOff,
@@ -94,6 +95,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
   const [saving, setSaving] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
+  const [editingId, setEditingId] = React.useState<string | null>(null);
 
   // Form state
   const [name, setName] = React.useState("");
@@ -117,6 +119,18 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
     setDialogOpen(true);
   }
 
+
+  function openEdit(type: AppointmentType) {
+    setEditingId(type.id);
+    setName(type.name);
+    setDescription(type.description ?? "");
+    setDuration(String(type.duration_minutes));
+    setChannel(type.default_channel ?? null);
+    setLocation(type.default_location ?? "");
+    setMeetingUrl(type.default_meeting_url ?? "");
+    setDefaultUserId(type.default_user_id ?? null);
+    setDialogOpen(true);
+  }
   async function handleSave() {
     if (!name.trim()) {
       toast.error("Informe o nome do tipo de agendamento");
@@ -267,6 +281,10 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openEdit(type)}>
+                          <Pencil className="size-4" />
+                          Editar
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleToggle(type)}>
                           {type.is_active ? (
                             <PowerOff className="size-4" />
@@ -325,7 +343,7 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Novo tipo de agendamento</DialogTitle>
+            <DialogTitle>{editingId ? "Editar tipo de agendamento" : "Novo tipo de agendamento"}</DialogTitle>
             <DialogDescription>
               Define um padrão para a IA agendar (nome, duração, canal). Em vez de inventar a cada conversa.
             </DialogDescription>
@@ -437,8 +455,8 @@ export function AppointmentTypesClient({ initialTypes, members }: Props) {
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
             <Button onClick={handleSave} disabled={saving || !name.trim()}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              {saving ? "Salvando..." : "Criar"}
+              {saving ? <Loader2 className="size-4 animate-spin" /> : editingId ? <Pencil className="size-4" /> : <Plus className="size-4" />}
+              {saving ? "Salvando..." : editingId ? "Salvar" : "Criar"}
             </Button>
           </DialogFooter>
         </DialogContent>

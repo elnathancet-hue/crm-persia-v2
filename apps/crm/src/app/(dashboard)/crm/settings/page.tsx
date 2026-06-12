@@ -13,6 +13,8 @@
 
 import { permanentRedirect } from "next/navigation";
 
+export const metadata = { title: "Configurações do Funil" };
+
 export default function CrmSettingsLegacyPage({
   searchParams: _searchParams,
 }: {

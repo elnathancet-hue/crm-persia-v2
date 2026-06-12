@@ -1,11 +1,16 @@
 import { getAssistant } from "@/actions/ai";
+import { listAgents } from "@/actions/ai-agent/configs";
 import { SplitterClient } from "./splitter-client";
 import { LegacyBanner } from "@/components/legacy-banner";
 
 export const metadata = { title: "Picotador de Mensagens" };
 
 export default async function SplitterPage() {
-  const assistant = await getAssistant();
+  const [assistant, agents] = await Promise.all([
+    getAssistant(),
+    listAgents().catch(() => [] as Awaited<ReturnType<typeof listAgents>>),
+  ]);
+  const hasNativeAgent = agents.some((a) => a.status === "active");
 
   return (
     <div className="space-y-6">
@@ -16,7 +21,7 @@ export default async function SplitterPage() {
         </p>
       </div>
       <LegacyBanner featureName="Picotador de Mensagens" />
-      <SplitterClient initialAssistant={assistant as never} />
+      <SplitterClient initialAssistant={assistant as never} hasNativeAgent={hasNativeAgent} />
     </div>
   );
 }

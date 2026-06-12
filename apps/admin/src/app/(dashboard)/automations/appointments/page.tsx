@@ -8,6 +8,7 @@ import {
   toggleAppointmentType,
 } from "@/actions/appointment-types";
 import { AppointmentDeleteButton } from "./delete-button";
+import { AppointmentEditButton } from "./edit-button";
 
 export const metadata = { title: "Tipos de agendamento" };
 
@@ -106,6 +107,13 @@ export default async function AppointmentTypesPage() {
                         {type.is_active ? "Desativar" : "Ativar"}
                       </Button>
                     </form>
+                    <AppointmentEditButton
+                      id={type.id}
+                      name={type.name}
+                      description={type.description ?? null}
+                      durationMinutes={type.duration_minutes}
+                      defaultChannel={type.default_channel ?? null}
+                    />
                     <AppointmentDeleteButton id={type.id} />
                   </div>
                 </td>

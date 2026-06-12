@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Braces, ChevronDown, Pencil } from "lucide-react";
+import { Braces, ChevronDown, LayoutList, Pencil } from "lucide-react";
 import { Label } from "@persia/ui/label";
 import { Textarea } from "@persia/ui/textarea";
 import { Button } from "@persia/ui/button";
@@ -24,6 +24,13 @@ const VARIABLES = [
   { label: "Telefone do lead", value: "{{lead.phone}}" },
   { label: "E-mail do lead", value: "{{lead.email}}" },
 ] as const;
+
+const SECTIONS: Array<{ label: string; template: string }> = [
+  { label: "Persona",  template: "## Persona\nVocê é [descreva o papel, ex: atendente especialista em...]\n\n" },
+  { label: "Missão",   template: "## Missão\n[Descreva o objetivo principal, ex: ajudar clientes a agendar, responder dúvidas sobre...]\n\n" },
+  { label: "Regras",   template: "## Regras\n- [Regra 1, ex: Nunca mencione concorrentes]\n- [Regra 2, ex: Encaminhe para humano quando...]\n\n" },
+  { label: "Estilo",   template: "## Estilo\n[Tom de comunicação, ex: Informal e amigável, use emojis com moderação, respostas curtas...]\n\n" },
+];
 
 export function PromptBuilderSection({ value, onChange }: Props) {
   const [isEditing, setIsEditing] = React.useState(false);
@@ -62,6 +69,12 @@ export function PromptBuilderSection({ value, onChange }: Props) {
     });
   }
 
+  function insertSection(template: string) {
+    const prefix = value && !value.endsWith("\n\n") ? "\n\n" : "";
+    onChange(value + prefix + template);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
   return (
     <div className="space-y-2">
       <div className="space-y-0.5">
@@ -84,8 +97,8 @@ export function PromptBuilderSection({ value, onChange }: Props) {
               className="font-mono text-sm pr-32"
               placeholder="Você é um atendente..."
             />
-            {/* Botão Variáveis — canto superior direito do textarea */}
-            <div className="absolute top-2 right-2">
+            {/* Botões Variáveis + Seções — canto superior direito do textarea */}
+            <div className="absolute top-2 right-2 flex flex-col gap-1">
               <DropdownMenu
                 onOpenChange={(open) => {
                   variablesOpenRef.current = open;
@@ -105,6 +118,26 @@ export function PromptBuilderSection({ value, onChange }: Props) {
                       <code className="ml-2 text-xs text-muted-foreground font-mono">
                         {v.value}
                       </code>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu
+                onOpenChange={(open) => {
+                  variablesOpenRef.current = open;
+                }}
+              >
+                <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shadow-xs">
+                  <LayoutList className="size-3" />
+                  Seções
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-36">
+                  {SECTIONS.map((s) => (
+                    <DropdownMenuItem
+                      key={s.label}
+                      onClick={() => insertSection(s.template)}
+                    >
+                      {s.label}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>

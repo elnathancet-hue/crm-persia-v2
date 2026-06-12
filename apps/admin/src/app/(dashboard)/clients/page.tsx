@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { getOrganizations } from "@/actions/admin";
 import { ClientsList } from "./clients-list";
 
+export const metadata = { title: "Contas" };
+
 export default function ClientsPage() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

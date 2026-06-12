@@ -16,6 +16,7 @@
 // FlowCanvas atualizar o state local + marcar dirty.
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Bell,
   BadgeCheck,
@@ -655,7 +656,7 @@ export function AIAgentForm({ draft, setDraft, catalogs, catalogsLoading }: Cata
                   : t.name,
               })),
           ],
-          emptyLabel: "Nenhum template criado. Adicione em Configurações → Templates.",
+          emptyLabel: (<>Nenhum template. <Link href="/settings/templates" className="text-primary underline">Configurações → Templates</Link></>),
           placeholder: "Selecione um template (opcional)",
         })}
       </FieldCard>
@@ -893,7 +894,7 @@ export function ActionForm({
                 value: s.slug,
                 label: `${s.name} (${s.duration_minutes}min)`,
               })),
-              emptyLabel: "Nenhum tipo de agendamento. Configure em Agenda → Tipos.",
+              emptyLabel: (<>Nenhum tipo. <Link href="/automations/appointments" className="text-primary underline">Agenda → Tipos</Link></>),
               placeholder: "A IA decide no momento",
             })}
           </FieldCard>
@@ -1148,7 +1149,7 @@ function renderSimpleSelect(props: {
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
-  emptyLabel: string;
+  emptyLabel: React.ReactNode;
   placeholder: string;
 }) {
   if (props.loading) {
@@ -1318,7 +1319,7 @@ interface CatalogSelectProps {
   value: string;
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
-  emptyLabel: string;
+  emptyLabel: React.ReactNode;
   placeholder: string;
 }
 

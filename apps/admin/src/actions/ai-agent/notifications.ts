@@ -362,7 +362,7 @@ async function assertTemplateLimit(
 function normalizeCreateInput(
   input: CreateNotificationTemplateInput,
 ): CreateNotificationTemplateInput {
-  if (!input.config_id) throw new Error("config_id e obrigatorio");
+  if (!input.config_id) throw new Error("config_id é obrigatório");
   const name = input.name?.trim();
   validateName(name);
   const description = input.description?.trim();
@@ -442,12 +442,12 @@ function validateDescription(
     description.length < NOTIFICATION_TEMPLATE_DESCRIPTION_MIN_CHARS
   ) {
     throw new Error(
-      `Descricao muito curta (min ${NOTIFICATION_TEMPLATE_DESCRIPTION_MIN_CHARS}). Descreva quando o agente deve usar esse template.`,
+      `Descrição muito curta (min ${NOTIFICATION_TEMPLATE_DESCRIPTION_MIN_CHARS}). Descreva quando o agente deve usar esse template.`,
     );
   }
   if (description.length > NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS) {
     throw new Error(
-      `Descricao muito longa (max ${NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS})`,
+      `Descrição muito longa (max ${NOTIFICATION_TEMPLATE_DESCRIPTION_MAX_CHARS})`,
     );
   }
 }
@@ -462,7 +462,7 @@ function validateTargetAddress(
   address: string | undefined,
 ): string {
   const trimmed = address?.trim();
-  if (!trimmed) throw new Error("Destino e obrigatorio");
+  if (!trimmed) throw new Error("Destino é obrigatório");
   if (type === "phone") {
     const digits = trimmed.replace(/\D/g, "");
     if (digits.length < NOTIFICATION_PHONE_MIN_DIGITS) {
@@ -483,7 +483,7 @@ function validateTargetAddress(
 
 function validateBody(body: string | undefined): string {
   const trimmed = body?.trim();
-  if (!trimmed) throw new Error("Corpo do template e obrigatorio");
+  if (!trimmed) throw new Error("Corpo do template é obrigatório");
   if (trimmed.length > NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH) {
     throw new Error(
       `Corpo muito longo (max ${NOTIFICATION_TEMPLATE_BODY_MAX_LENGTH})`,

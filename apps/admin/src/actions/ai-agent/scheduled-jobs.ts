@@ -298,8 +298,8 @@ async function assertTemplateBelongsToConfig(
 function normalizeCreateInput(
   input: CreateScheduledJobInput,
 ): CreateScheduledJobInput {
-  if (!input.config_id) throw new Error("config_id e obrigatorio");
-  if (!input.template_id) throw new Error("template_id e obrigatorio");
+  if (!input.config_id) throw new Error("config_id é obrigatório");
+  if (!input.template_id) throw new Error("template_id é obrigatório");
   const name = input.name?.trim();
   validateName(name);
   const cron = validateCron(input.cron_expr);

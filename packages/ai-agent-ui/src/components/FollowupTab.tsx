@@ -235,15 +235,15 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
               <Bot className="size-3.5" />
-              Automacao de conversa
+              Automação de conversa
             </div>
             <div className="space-y-1">
               <h2 className="text-xl font-semibold tracking-tight">
-                Follow-up automatico
+                Follow-up automático
               </h2>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                Configure uma sequencia para quando o lead nao responder depois
-                da ultima mensagem da empresa. Se o lead responder, a fila e
+                Configure uma sequência para quando o lead não responder depois
+                da última mensagem da empresa. Se o lead responder, a fila é
                 cancelada automaticamente.
               </p>
             </div>
@@ -260,10 +260,10 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             value={String(sorted.filter((f) => f.is_enabled).length)}
           />
           <MetricCard
-            label="Janela padrao"
+            label="Janela padrão"
             value={`${FOLLOWUP_DEFAULT_SEND_WINDOW_START}-${FOLLOWUP_DEFAULT_SEND_WINDOW_END}`}
           />
-          <MetricCard label="Protecao" value="Cancela se lead responder" />
+          <MetricCard label="Proteção" value="Cancela se lead responder" />
         </div>
       </div>
 
@@ -274,7 +274,7 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             <h3 className="font-semibold">Sequencia configurada</h3>
           </div>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            As etapas rodam em ordem. Cada conversa so avanca para a proxima
+            As etapas rodam em ordem. Cada conversa só avança para a próxima
             etapa se continuar sem resposta do lead.
           </p>
         </div>
@@ -542,8 +542,8 @@ export function FollowupTab({ configId, followups, templates, onChange }: Props)
             <DialogDescription>
               {deleteTarget ? (
                 <>
-                  A etapa <strong>{deleteTarget.name}</strong> nao sera mais
-                  enviada. Conversas historicas continuam registradas.
+                  A etapa <strong>{deleteTarget.name}</strong> não será mais
+                  enviada. Conversas históricas continuam registradas.
                 </>
               ) : null}
             </DialogDescription>
@@ -596,7 +596,7 @@ function EmptyFollowups({ onCreate }: { onCreate: () => void }) {
         <div className="max-w-md space-y-1">
           <p className="font-semibold text-sm">Crie a primeira etapa</p>
           <p className="text-xs text-muted-foreground">
-            Use uma sequencia simples, como 24h, 48h e 72h sem resposta.
+            Use uma sequência simples, como 24h, 48h e 72h sem resposta.
             Cada envio revalida o estado da conversa antes de sair.
           </p>
         </div>

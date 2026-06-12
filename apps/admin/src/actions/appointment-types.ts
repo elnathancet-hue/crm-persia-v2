@@ -50,7 +50,7 @@ export async function createAppointmentType(formData: FormData): Promise<void> {
   const duration = Number(formData.get("duration_minutes") ?? 30);
   const channel = String(formData.get("default_channel") ?? "") || null;
 
-  if (!name) throw new Error("Nome obrigatorio");
+  if (!name) throw new Error("Nome obrigatório");
   if (!Number.isFinite(duration) || duration < 5 || duration > 1440) {
     throw new Error("Duracao deve estar entre 5 e 1440 minutos");
   }
@@ -94,6 +94,33 @@ export async function deleteAppointmentType(id: string): Promise<void> {
   const { error } = await admin
     .from("agenda_services")
     .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId);
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/automations/appointments");
+}
+
+export async function updateAppointmentType(
+  id: string,
+  input: {
+    name?: string;
+    description?: string;
+    duration_minutes?: number;
+    default_channel?: AppointmentType["default_channel"];
+  },
+): Promise<void> {
+  const { admin, orgId } = await requireSuperadminForOrg();
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) updates.name = input.name;
+  if (input.description !== undefined) updates.description = input.description || null;
+  if (input.duration_minutes !== undefined) updates.duration_minutes = input.duration_minutes;
+  if (input.default_channel !== undefined) updates.default_channel = input.default_channel;
+
+  const { error } = await admin
+    .from("agenda_services")
+    .update(updates as never)
     .eq("id", id)
     .eq("organization_id", orgId);
 

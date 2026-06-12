@@ -21,7 +21,7 @@ export function NoContextFallback() {
       </div>
       <div>
         <p className="text-sm font-medium text-foreground">Nenhuma conta selecionada</p>
-        <p className="text-xs text-muted-foreground mt-1">Selecione uma conta no painel lateral para acessar esta pagina.</p>
+        <p className="text-xs text-muted-foreground mt-1">Selecione uma conta no painel lateral para acessar esta página.</p>
       </div>
     </div>
   );

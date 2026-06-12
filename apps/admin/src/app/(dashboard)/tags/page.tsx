@@ -14,6 +14,8 @@ import { NoContextFallback } from "@/components/no-context-fallback";
 import { getTagsWithCount } from "@/actions/tags";
 import { adminTagsActions } from "@/features/tags/admin-tags-actions";
 
+export const metadata = { title: "Tags" };
+
 export default function TagsPage() {
   const { activeOrgId, isManagingClient } = useActiveOrg();
   const [tags, setTags] = useState<TagWithCount[]>([]);

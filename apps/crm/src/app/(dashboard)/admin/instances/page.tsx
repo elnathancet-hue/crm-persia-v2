@@ -1,5 +1,7 @@
 import { InstancesClient } from "./instances-client";
 
+export const metadata = { title: "Instâncias" };
+
 export default function AdminInstancesPage() {
   return (
     <div className="space-y-6">

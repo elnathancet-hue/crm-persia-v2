@@ -21,6 +21,8 @@ const TONES = [
   { value: "casual", label: "Casual" },
 ];
 
+export const metadata = { title: "Configurações IA" };
+
 export default function AIPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
   const [assistants, setAssistants] = useState<any[]>([]);

@@ -7,6 +7,8 @@ import { Webhook, Loader2, Copy, Check, ExternalLink } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { toast } from "sonner";
 
+export const metadata = { title: "Webhook IA" };
+
 export default function WebhookAutomationPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
   const [webhooks, setWebhooks] = useState<any[]>([]);

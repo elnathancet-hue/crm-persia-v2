@@ -271,8 +271,8 @@ export async function uploadDocument(
   const file = formData.get("file");
   const title = (formData.get("title") as string | null)?.trim();
 
-  if (!(file instanceof File)) throw new Error("Arquivo obrigatorio");
-  if (!title) throw new Error("Titulo obrigatorio");
+  if (!(file instanceof File)) throw new Error("Arquivo obrigatório");
+  if (!title) throw new Error("Título obrigatório");
 
   if (file.size > DOCUMENT_UPLOAD_MAX_BYTES) {
     throw new Error(
@@ -474,8 +474,8 @@ function normalizeFAQInput(input: CreateFAQInput): CreateFAQInput {
   const question = input.question?.trim();
   const answer = input.answer?.trim();
 
-  if (!input.config_id) throw new Error("config_id e obrigatorio");
-  if (!title) throw new Error("Titulo e obrigatorio");
+  if (!input.config_id) throw new Error("config_id é obrigatório");
+  if (!title) throw new Error("Título é obrigatório");
   if (!question || question.length < FAQ_QUESTION_MIN_CHARS) {
     throw new Error(`Pergunta muito curta (min ${FAQ_QUESTION_MIN_CHARS})`);
   }
@@ -537,9 +537,9 @@ function normalizeFAQPatch(input: UpdateFAQInput): {
 
 function normalizeDocumentInput(input: CreateDocumentInput): CreateDocumentInput {
   const title = input.title?.trim();
-  if (!input.config_id) throw new Error("config_id e obrigatorio");
-  if (!title) throw new Error("Titulo e obrigatorio");
-  if (!input.storage_path) throw new Error("storage_path e obrigatorio");
+  if (!input.config_id) throw new Error("config_id é obrigatório");
+  if (!title) throw new Error("Título é obrigatório");
+  if (!input.storage_path) throw new Error("storage_path é obrigatório");
   if (!DOCUMENT_ALLOWED_MIME_TYPES.includes(input.mime_type)) {
     throw new Error("Mime type nao permitido");
   }

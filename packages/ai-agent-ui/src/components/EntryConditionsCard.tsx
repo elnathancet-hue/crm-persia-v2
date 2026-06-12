@@ -232,7 +232,7 @@ export function EntryConditionsCard({ configId, isPrimary = false }: Props) {
                 Agente sem entrada configurada
               </p>
               <p className="mt-0.5 text-xs text-warning-soft-foreground/80">
-                Sem uma regra, este agente nao recebe leads novos. Adicione uma
+                Sem uma regra, este agente não recebe leads novos. Adicione uma
                 entrada para ele participar do roteamento.
               </p>
             </div>

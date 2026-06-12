@@ -9,6 +9,8 @@ import { toast } from "sonner";
 
 const NICHE_OPTIONS = ["Estética", "Educação", "Saúde", "Imobiliária", "Varejo", "Serviços", "Tecnologia", "Alimentação", "Outro"];
 
+export const metadata = { title: "Configurações" };
+
 export default function OrgSettingsPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
   const [org, setOrg] = useState<any>(null);

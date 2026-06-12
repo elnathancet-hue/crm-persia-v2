@@ -16,6 +16,8 @@ const DISTRIBUTION_LABELS: Record<string, string> = {
   manual: "Manual",
 };
 
+export const metadata = { title: "Filas de Atendimento" };
+
 export default function QueuesPage() {
   const { activeOrgId, activeOrgName, isManagingClient } = useActiveOrg();
   const [queues, setQueues] = useState<any[]>([]);
