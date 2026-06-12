@@ -85,6 +85,7 @@ export type ConversationWithLead = {
   last_message_at: string | null;
   last_message_content: string | null;
   last_message_sender: string | null;
+  last_message_type: string | null;
   closed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -100,11 +101,12 @@ export type ConversationWithLead = {
       tags: { id: string; name: string; color: string | null } | null;
     }>;
   };
-  /** Computed from last_message_content/sender/at — kept for UI compat */
+  /** Computed from last_message_content/sender/at/type — kept for UI compat */
   last_message?: {
     content: string | null;
     sender: string;
     created_at: string;
+    type: string | null;
   } | null;
 };
 
@@ -123,7 +125,7 @@ export async function getConversations(
     .select(`
       id, organization_id, lead_id, channel, status, assigned_to, queue_id,
       ai_summary, unread_count, last_message_at, last_message_content,
-      last_message_sender, closed_at, created_at, updated_at,
+      last_message_sender, last_message_type, closed_at, created_at, updated_at,
       leads!inner (
         id,
         name,
@@ -210,11 +212,12 @@ export async function getConversations(
   // Elimina a query secundária unbounded que buscava TODAS as msgs de todas as convs.
   const enriched = (data || []).map((conv: any) => ({
     ...conv,
-    last_message: conv.last_message_content != null || conv.last_message_sender != null
+    last_message: conv.last_message_content != null || conv.last_message_sender != null || conv.last_message_type != null
       ? {
           content: conv.last_message_content ?? null,
           sender: conv.last_message_sender ?? "lead",
           created_at: conv.last_message_at ?? conv.updated_at,
+          type: conv.last_message_type ?? null,
         }
       : null,
   }));

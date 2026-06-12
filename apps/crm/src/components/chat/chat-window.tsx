@@ -1893,7 +1893,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
                   return (
                     <div
                       className={cn(
-                        "group flex max-w-[85%] gap-1",
+                        "group flex max-w-[72%] gap-1",
                         isLead ? "flex-row" : "ml-auto flex-row-reverse"
                       )}
                     >
