@@ -285,12 +285,14 @@ export class UazapiAdapter implements WhatsAppProvider {
   async downloadMedia(messageId: string, opts?: {
     transcribe?: boolean;
     generateMp3?: boolean;
+    openaiApiKey?: string;
   }): Promise<{ fileURL?: string; mimetype?: string; transcription?: string }> {
     return this.client.downloadMedia({
       id: messageId,
       return_link: true,
       transcribe: opts?.transcribe ?? false,
       generate_mp3: opts?.generateMp3 ?? true,
+      openai_apikey: opts?.openaiApiKey,
     });
   }
 

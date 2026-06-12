@@ -315,6 +315,7 @@ export interface WhatsAppProvider {
   downloadMedia(messageId: string, opts?: {
     transcribe?: boolean;
     generateMp3?: boolean;
+    openaiApiKey?: string;
   }): Promise<{ fileURL?: string; mimetype?: string; transcription?: string }>;
 
   // CRM Sync

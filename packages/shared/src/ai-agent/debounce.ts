@@ -18,14 +18,15 @@
 //   - MIN = 0  : permite "responde imediatamente, sem agregar". Útil pra
 //                fluxos transacionais (cobrança, OTP) que precisam responder
 //                a cada mensagem sem esperar.
-//   - MAX = 40_000 (40s) : dá folga pra leads que digitam em pedaços muito
-//                curtos. Custo: lead espera até 40s pelo "Visualizado" do
+//   - MAX = 60_000 (60s) : dá folga pra leads que digitam em pedaços muito
+//                curtos. Custo: lead espera até 60s pelo "Visualizado" do
 //                bot. Vale em horário comercial pra reduzir runs/dia.
+//                Expandido de 40 s → 60 s em jun/2026 (migration 120).
 //   - DEFAULT = 10_000 : não mexido, é o valor que ficou bom em prod.
-// O CHECK constraint no banco (migration 034) bate com este range.
+// O CHECK constraint no banco (migrations 034 + 120) bate com este range.
 export const DEBOUNCE_WINDOW_MS_DEFAULT = 10_000;
 export const DEBOUNCE_WINDOW_MS_MIN = 0;
-export const DEBOUNCE_WINDOW_MS_MAX = 40_000;
+export const DEBOUNCE_WINDOW_MS_MAX = 60_000;
 
 // Shape of a pending_messages row (PR5.5 migration 019).
 export interface PendingMessage {

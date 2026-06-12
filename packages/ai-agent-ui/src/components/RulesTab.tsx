@@ -454,9 +454,8 @@ export function RulesTab({
   const newLeadStageDirty =
     newLeadStageId !== (agent.new_lead_stage_id ?? null);
   const nextDebounceWindowMs = clampDebounceWindowMs(debounceWindowMs);
-  // debounceDirty removido: slider do cliente foi ocultado (PR #228 token economy).
-  // debounce_window_ms e gerenciado pelo backend; nao gera dirty na UI.
-  const debounceDirty = false;
+  const debounceDirty =
+    nextDebounceWindowMs !== clampDebounceWindowMs(agent.debounce_window_ms);
 
   // PR-AI-AGENT-HUMAN-A: humanization dirty + sanitized comparados com
   // a versao normalizada do servidor (que tambem passa pelo helper).
@@ -1099,11 +1098,34 @@ export function RulesTab({
                   </p>
                 </div>
 
-                <CapabilityRow
-                  icon={<MessageSquare className="size-4" />}
-                  title="Unificar mensagens próximas"
-                  description="O agente aguarda alguns segundos antes de responder, juntando mensagens enviadas em sequência para responder com mais contexto."
-                />
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <span className="mt-0.5 shrink-0 text-muted-foreground">
+                      <MessageSquare className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-snug">
+                        Unificar mensagens próximas
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        O agente aguarda antes de responder, juntando mensagens
+                        enviadas em sequência. Ajuste o tempo de espera abaixo.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0">
+                    <NumberStepper
+                      id="debounce_window_seconds"
+                      label="Tempo de espera"
+                      value={Math.round(debounceWindowMs / 1000)}
+                      min={10}
+                      max={60}
+                      step={5}
+                      suffix="s"
+                      onChange={(s) => setDebounceWindowMs(s * 1000)}
+                    />
+                  </div>
+                </div>
 
                 <CapabilityRow
                   icon={<Image className="size-4" />}

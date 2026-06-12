@@ -324,7 +324,7 @@ export async function tryEnqueueForNativeAgent(
     };
   }
   const primaryAgent = primaryRow as RoutingAgentRow;
-  const inboundText = buildInboundTextForAgent(msg);
+  let inboundText = buildInboundTextForAgent(msg);
   const messageContent = normalizeInboundMessageContent(msg);
 
   // 3. Skip apenas payload realmente vazio. Midia-only entra com uma
@@ -562,6 +562,40 @@ export async function tryEnqueueForNativeAgent(
       throw new Error(`message_insert_failed: ${msgErr?.message ?? "unknown"}`);
     }
     const inboundMessageId = (msgRow as { id: string }).id;
+
+    // 8b. Transcrição de áudio via UAZAPI (best-effort).
+    // Se a mensagem for áudio e tivermos um messageId do WhatsApp, pedimos ao
+    // UAZAPI pra baixar e transcrever. Resultado substitui o placeholder
+    // "[audio recebido]" tanto em inboundText (contexto IA) quanto na coluna
+    // messages.content (histórico de chat). Falha silenciosa: log + segue com
+    // placeholder original pra não derrubar o fluxo por indisponibilidade de
+    // transcrição.
+    if (msg.type === "audio" && msg.messageId) {
+      try {
+        const transcribeResult = await input.provider.downloadMedia(
+          msg.messageId,
+          {
+            transcribe: true,
+            openaiApiKey: process.env.OPENAI_API_KEY,
+          },
+        );
+        if (transcribeResult.transcription) {
+          inboundText = transcribeResult.transcription;
+          // Atualiza a mensagem já inserida com o texto transcrito.
+          await db
+            .from("messages")
+            .update({ content: transcribeResult.transcription })
+            .eq("id", inboundMessageId);
+        }
+      } catch (transcribeErr) {
+        logError("ai_agent_audio_transcription_failed", {
+          ...logCtx,
+          lead_id: leadId,
+          inbound_message_id: inboundMessageId,
+          error: errorMessage(transcribeErr),
+        });
+      }
+    }
 
     // 9. Resolve agent_conversation. Idempotente por (lead_id,
     // crm_conversation_id) — não temos UNIQUE constraint mas usamos
