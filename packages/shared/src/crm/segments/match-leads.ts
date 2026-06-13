@@ -31,6 +31,7 @@ interface MinimalDb {
       eq: (col: string, val: unknown) => unknown;
     };
   };
+  rpc?: (fn: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 }
 
 interface QueryBuilderLike {
@@ -225,19 +226,19 @@ async function resolveTagsCondition(
   }
 
   if (op === "not_contains") {
-    // Pra "nao contem", precisamos: todos os leads do org MENOS os matched
-    const allBaseQuery = db
-      .from("leads")
-      .select("id")
-      .eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allLeads, error: allError } = await allBaseQuery.limit(10000).then((r) => r);
-    if (allError) {
+    // RPC NOT EXISTS — evita carregar todos os leads em memória.
+    if (!db.rpc) {
       // eslint-disable-next-line no-console
-      console.error("[segments/match-leads] resolveTags not_contains failed:", allError.message);
+      console.error("[segments/match-leads] resolveTags not_contains: db.rpc indisponível");
       return null;
     }
-    const all = ((allLeads ?? []) as { id: string }[]).map((r) => r.id);
-    return new Set(all.filter((id) => !matched.has(id)));
+    const { data: rpcData, error: rpcErr } = await db.rpc("match_leads_not_tagged", { p_org_id: orgId, p_tag_ids: tagIds });
+    if (rpcErr) {
+      // eslint-disable-next-line no-console
+      console.error("[segments/match-leads] resolveTags not_contains failed:", rpcErr.message);
+      return null;
+    }
+    return new Set((Array.isArray(rpcData) ? rpcData as { id: string }[] : []).map((r) => r.id));
   }
 
   return null;
@@ -424,11 +425,11 @@ async function resolveTagsConditionStrict(
   if (op === "contains") return matched;
 
   if (op === "not_contains") {
-    const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allData, error: allErr } = await allQ.limit(10000).then((r) => r);
-    if (allErr) throw new StrictMatchError(`DB error em "tags" not_contains: ${allErr.message}`);
-    const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
-    return new Set(all.filter((id) => !matched.has(id)));
+    // RPC NOT EXISTS — evita carregar todos os leads em memória.
+    if (!db.rpc) throw new StrictMatchError('Campo "tags" not_contains: db.rpc indisponível');
+    const { data: rpcData, error: rpcErr } = await db.rpc("match_leads_not_tagged", { p_org_id: orgId, p_tag_ids: tagIds });
+    if (rpcErr) throw new StrictMatchError(`DB error em "tags" not_contains: ${rpcErr.message}`);
+    return new Set((Array.isArray(rpcData) ? rpcData as { id: string }[] : []).map((r) => r.id));
   }
 
   throw new StrictMatchError(`Campo "tags": operador "${op}" inválido`);
@@ -482,16 +483,11 @@ async function resolveDealConditionStrict(
     .eq("organization_id", orgId) as unknown as QueryBuilderLike;
 
   if (op === "is_null") {
-    const { data, error } = await baseQuery.eq("status", "open").limit(10000).then((r) => r);
-    if (error) throw new StrictMatchError(`DB error em "${field}" is_null: ${error.message}`);
-    const withOpenDeal = new Set(
-      ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
-    );
-    const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allData, error: allErr } = await allQ.limit(10000).then((r) => r);
-    if (allErr) throw new StrictMatchError(`DB error em "allLeads" (deal is_null): ${allErr.message}`);
-    const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
-    return new Set(all.filter((id) => !withOpenDeal.has(id)));
+    // RPC NOT EXISTS — evita carregar todos os leads em memória.
+    if (!db.rpc) throw new StrictMatchError(`Campo "${field}" is_null: db.rpc indisponível`);
+    const { data: rpcData, error: rpcErr } = await db.rpc("match_leads_without_open_deal", { p_org_id: orgId });
+    if (rpcErr) throw new StrictMatchError(`DB error em "${field}" is_null: ${rpcErr.message}`);
+    return new Set((Array.isArray(rpcData) ? rpcData as { id: string }[] : []).map((r) => r.id));
   }
 
   if (!rawValue) throw new StrictMatchError(`Campo "${field}": valor obrigatório`);
@@ -532,27 +528,20 @@ async function resolveDealCondition(
     .select("lead_id")
     .eq("organization_id", orgId) as unknown as QueryBuilderLike;
 
-  // "Sem negócio aberto" — is_null no deal_status.
+  // "Sem negócio aberto" — is_null no deal_status. RPC NOT EXISTS evita carregar todos os leads.
   if (op === "is_null") {
-    const { data, error } = await baseQuery.eq("status", "open").limit(10000).then((r) => r);
-    if (error) {
+    if (!db.rpc) {
       // eslint-disable-next-line no-console
-      console.error("[segments/match-leads] resolveDeal is_null failed:", error.message);
+      console.error("[segments/match-leads] resolveDeal is_null: db.rpc indisponível");
       return null;
     }
-    const withOpenDeal = new Set(
-      ((data ?? []) as { lead_id: string }[]).map((r) => r.lead_id),
-    );
-    // Todos os leads do org menos os que têm deal open.
-    const allQ = db.from("leads").select("id").eq("organization_id", orgId) as unknown as QueryBuilderLike;
-    const { data: allData, error: allErr } = await allQ.limit(10000).then((r) => r);
-    if (allErr) {
+    const { data: rpcData, error: rpcErr } = await db.rpc("match_leads_without_open_deal", { p_org_id: orgId });
+    if (rpcErr) {
       // eslint-disable-next-line no-console
-      console.error("[segments/match-leads] resolveDeal allLeads failed:", allErr.message);
+      console.error("[segments/match-leads] resolveDeal is_null failed:", rpcErr.message);
       return null;
     }
-    const all = ((allData ?? []) as { id: string }[]).map((r) => r.id);
-    return new Set(all.filter((id) => !withOpenDeal.has(id)));
+    return new Set((Array.isArray(rpcData) ? rpcData as { id: string }[] : []).map((r) => r.id));
   }
 
   if (!rawValue) return null;
