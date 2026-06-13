@@ -29,21 +29,21 @@ const groups = [
   {
     label: "Empresa",
     items: [
-      { label: "Organização",  href: "/settings",          icon: Building2 },
-      { label: "Equipe",       href: "/settings/team",     icon: Users },
-      { label: "Filas",        href: "/settings/queues",   icon: GitBranch },
-      { label: "Plano",        href: "/settings/billing",  icon: CreditCard },
+      { label: "Configuração do Perfil", href: "/settings",          icon: Building2 },
+      { label: "Gestão de usuários",     href: "/settings/team",     icon: Users },
+      { label: "Filas",                  href: "/settings/queues",   icon: GitBranch },
+      { label: "Plano",                  href: "/settings/billing",  icon: CreditCard },
     ],
   },
   {
     label: "Integração",
     items: [
-      { label: "Canais",         href: "/settings/whatsapp",         icon: MessageSquare },
+      { label: "WhatsApp",       href: "/settings/whatsapp",         icon: MessageSquare },
       { label: "Google",         href: "/settings/google-calendar",  icon: Calendar },
       { label: "Webhook",        href: "/settings/webhooks",         icon: Webhook },
       { label: "Servidores API", href: "/settings/mcp-servers",      icon: Server },
       { label: "API",            href: "/settings/api-keys",         icon: Key },
-      { label: "Captura",        href: "/settings/capture-sources",  icon: Magnet },
+      { label: "Formulário",     href: "/settings/capture-sources",  icon: Magnet },
     ],
   },
 ];
