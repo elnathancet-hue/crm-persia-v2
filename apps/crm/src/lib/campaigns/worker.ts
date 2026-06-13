@@ -114,12 +114,13 @@ export async function processDueCampaignJobs(opts: WorkerOptions = {}): Promise<
 
   let sent = 0, failed = 0, skipped = 0;
 
-  // Caches scoped ao tick: evita re-query de campaign/step repetidos
+  // Caches scoped ao tick: evita re-query de campaign/step/conn repetidos
   const campaignCache = new Map<string, CampaignRow | null>();
   const stepCache = new Map<string, StepRow | null>();
+  const connCache = new Map<string, ConnectionRow | null>();
 
   for (const job of (jobs ?? []) as JobRow[]) {
-    const result = await processJob(supabase as never, job, workerId, campaignCache, stepCache);
+    const result = await processJob(supabase as never, job, workerId, campaignCache, stepCache, connCache);
     if (result === "sent") sent++;
     else if (result === "failed") failed++;
     else if (result === "skipped") skipped++;
@@ -137,6 +138,7 @@ async function processJob(
   workerId: string,
   campaignCache: Map<string, CampaignRow | null>,
   stepCache: Map<string, StepRow | null>,
+  connCache: Map<string, ConnectionRow | null>,
 ): Promise<"sent" | "failed" | "skipped" | "locked" | "rescheduled"> {
   // Lock atômico: só atualiza se ainda queued
   const { data: locked, error: lockErr } = await supabase
@@ -236,14 +238,18 @@ async function processJob(
       return "skipped";
     }
 
-    // Buscar conexão WhatsApp
-    const { data: conn } = await supabase
-      .from("whatsapp_connections")
-      .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
-      .eq("organization_id", c.organization_id)
-      .eq("status", "connected")
-      .limit(1)
-      .maybeSingle();
+    // Buscar conexão WhatsApp (com cache por org dentro do tick)
+    if (!connCache.has(c.organization_id)) {
+      const { data: connData } = await supabase
+        .from("whatsapp_connections")
+        .select("provider, instance_url, instance_token, phone_number_id, waba_id, access_token, webhook_verify_token")
+        .eq("organization_id", c.organization_id)
+        .eq("status", "connected")
+        .limit(1)
+        .maybeSingle();
+      connCache.set(c.organization_id, (connData as ConnectionRow | null) ?? null);
+    }
+    const conn = connCache.get(c.organization_id) ?? null;
 
     if (!conn) {
       return await retryOrFail(supabase, job, "WhatsApp não conectado");
