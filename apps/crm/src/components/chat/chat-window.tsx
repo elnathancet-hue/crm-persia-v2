@@ -811,6 +811,7 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   const [forwardSearch, setForwardSearch] = useState("");
   const [mediaViewer, setMediaViewer] = useState<{ type: "image" | "video"; url: string } | null>(null);
   const [expandedMsgIds, setExpandedMsgIds] = useState<Set<string>>(new Set());
+  const [realtimeDown, setRealtimeDown] = useState(false);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
@@ -1138,8 +1139,9 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
   // Supabase Realtime: INSERT (new messages) + UPDATE (status transitions)
   useEffect(() => {
     if (!conversationId) return;
+    setRealtimeDown(false);
     const supabase = createClient();
-    let realtimeOk = true;
+    let realtimeOk = false;
 
     const channel = supabase
       .channel(`messages:${conversationId}`)
@@ -1197,9 +1199,10 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           realtimeOk = true;
+          setRealtimeDown(false);
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-          console.warn("[realtime] chat-window subscribe status:", status);
           realtimeOk = false;
+          setRealtimeDown(true);
         }
       });
 
@@ -1692,6 +1695,12 @@ export function ChatWindow({ conversationId, orgId, onBack }: ChatWindowProps) {
 
       {/* Messages - WhatsApp style with subtle pattern background */}
       <div ref={messagesScrollRef} className="wa-chat-wallpaper flex-1 overflow-y-auto px-2 sm:px-3">
+        {realtimeDown && (
+          <div className="sticky top-0 z-10 flex items-center gap-2 rounded-b-md bg-warning-soft px-3 py-1.5 text-xs text-warning-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            Atualizando manualmente — conexão instável
+          </div>
+        )}
         <div className="flex flex-col py-4">
           {messages.length > 0 && hasMoreMessages && !normalizedMessageSearch && (
             <div className="flex justify-center pb-3">
