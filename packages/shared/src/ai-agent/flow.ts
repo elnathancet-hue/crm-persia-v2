@@ -441,6 +441,13 @@ function normalizeNode(raw: unknown): FlowNode | null {
     }
     case "action": {
       if (!isString(dataRaw.action_type)) return null;
+      const VALID_ACTION_TYPES: readonly string[] = [
+        "add_tag", "remove_tag", "move_pipeline_stage", "create_appointment",
+        "trigger_notification", "send_media", "stop_agent", "transfer_to_user",
+        "transfer_to_agent", "set_lead_custom_field", "send_whatsapp_message",
+        "round_robin_user", "close_conversation", "wait_seconds", "send_template_message",
+      ];
+      if (!VALID_ACTION_TYPES.includes(dataRaw.action_type as string)) return null;
       const action_type = dataRaw.action_type as FlowActionType;
       const config =
         dataRaw.config && typeof dataRaw.config === "object" && !Array.isArray(dataRaw.config)
@@ -455,6 +462,8 @@ function normalizeNode(raw: unknown): FlowNode | null {
     }
     case "condition": {
       if (!isString(dataRaw.condition_type)) return null;
+      const VALID_CONDITION_TYPES: readonly string[] = ["has_tag", "lead_custom_field_equals", "in_segment"];
+      if (!VALID_CONDITION_TYPES.includes(dataRaw.condition_type as string)) return null;
       const condition_type = dataRaw.condition_type as FlowConditionType;
       const config =
         dataRaw.config && typeof dataRaw.config === "object" && !Array.isArray(dataRaw.config)

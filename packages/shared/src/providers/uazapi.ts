@@ -107,11 +107,16 @@ export class UazapiAdapter implements WhatsAppProvider {
       });
       const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
       return { messageId: String(id), success: id !== "" };
-    } catch {
+    } catch (err) {
       if (opts.type === "ptt") {
         // PTT (voice note) — no legacy fallback, re-throw
-        throw new Error("PTT send failed and no legacy fallback available");
+        throw err;
       }
+      // Fallback legacy v1 so pra endpoint nao encontrado (404/405).
+      // Outros erros (401 auth, 400 payload, timeout) devem propagar.
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isEndpointMissing = errMsg.includes("(404)") || errMsg.includes("(405)");
+      if (!isEndpointMissing) throw err;
       let legacyResult: { MessageId: string } | undefined;
       switch (opts.type) {
         case "image":
