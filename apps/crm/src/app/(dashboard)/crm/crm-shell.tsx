@@ -430,7 +430,9 @@ function CrmTabs({
   productCount: number;
 }) {
   return (
-    <div className="flex gap-0.5 border-b border-border overflow-x-auto">
+    // PR-C5: role="tablist" + role="tab" + aria-selected (WAI-ARIA Tabs pattern).
+    // Antes usava <button aria-pressed> que e semantica de toggle, nao de tab.
+    <div role="tablist" aria-label="Módulos do CRM" className="flex gap-0.5 border-b border-border overflow-x-auto">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = active === tab.key;
@@ -451,16 +453,18 @@ function CrmTabs({
         return (
           <button
             key={tab.key}
+            role="tab"
             type="button"
             onClick={() => onChange(tab.key)}
-            aria-pressed={isActive}
+            aria-selected={isActive}
+            tabIndex={isActive ? 0 : -1}
             className={`relative inline-flex items-center gap-2 whitespace-nowrap rounded-t-md px-4 py-3 text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               isActive
                 ? "text-primary bg-primary/5"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
             }`}
           >
-            <Icon className={`size-4 ${isActive ? "text-primary" : ""}`} />
+            <Icon className={`size-4 ${isActive ? "text-primary" : ""}`} aria-hidden />
             <span>{tab.label}</span>
             {badgeValue !== null && badgeValue > 0 && (
               <Badge
