@@ -1,4 +1,17 @@
-export const metadata = { title: "CRM" };
+export async function generateMetadata({ searchParams }: CrmPageProps) {
+  const params = await searchParams;
+  const tab = typeof params.tab === "string" ? params.tab : "pipeline";
+  const titleMap: Record<string, string> = {
+    pipeline: "Funil",
+    leads: "Leads",
+    grupos: "Grupos",
+    segmentos: "Segmentação",
+    tags: "Tags",
+    atividades: "Atividades",
+    produtos: "Produtos",
+  };
+  return { title: `${titleMap[tab] ?? "CRM"} | CRM` };
+}
 import { redirect } from "next/navigation";
 import { getAuthContext } from "@/lib/auth";
 import { ensureDefaultPipeline } from "@/actions/crm";
@@ -319,8 +332,10 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
         initialStats: leadsListStats,
       }}
       activeSegment={
-        segmentIdFilter && activeSegmentName
-          ? { id: segmentIdFilter, name: activeSegmentName }
+        // PR-C5: sempre passa o segmento quando ha filtro ativo, mesmo que
+        // tenha sido deletado (exibe hint "segmento removido · Limpar").
+        segmentIdFilter
+          ? { id: segmentIdFilter, name: activeSegmentName ?? "(segmento removido)" }
           : null
       }
       activitiesData={{
@@ -341,6 +356,9 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       kanbanAgentSummaries={kanbanAgentSummaries}
       orgProducts={orgProducts}
       chatEnabled={chatEnabled}
+      canCreateFunil={role === "admin" || role === "owner"}
+      canManageTags={role === "admin" || role === "owner"}
+      canManageSegments={role === "admin" || role === "owner"}
       canManageGroups={role === "owner" || role === "admin"}
     />
   );
