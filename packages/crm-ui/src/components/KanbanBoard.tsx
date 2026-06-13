@@ -3418,8 +3418,10 @@ function AddDealDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Título *</Label>
+            <Label htmlFor="add-deal-title" className="text-sm font-medium">Título *</Label>
             <Input
+              id="add-deal-title"
+              name="title"
               value={titleInput}
               onChange={(e) => {
                 setTitleInput(e.target.value);
@@ -3446,8 +3448,10 @@ function AddDealDialog({
             )}
           </div>
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Valor (R$)</Label>
+            <Label htmlFor="add-deal-value" className="text-sm font-medium">Valor (R$)</Label>
             <Input
+              id="add-deal-value"
+              name="value"
               type="number"
               step="0.01"
               value={valueInput}
@@ -3481,7 +3485,13 @@ function AddDealDialog({
               onValueChange={(v) => setSelectedLeadId(v ?? "")}
             >
               <SelectTrigger className="w-full h-10 rounded-md">
-                <SelectValue placeholder="Selecione um lead" />
+                <SelectValue>
+                  {(() => {
+                    const sel = leads.find((l) => l.id === selectedLeadId);
+                    if (!sel) return "Selecione um lead";
+                    return sel.name + (sel.phone ? ` (${sel.phone})` : "");
+                  })()}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {leads.map((lead) => (
