@@ -7,6 +7,7 @@ import type {
   UpdateLeadProductInput,
 } from "../types";
 import type { CrmMutationContext } from "./context";
+import { sanitizeMutationError } from "./errors";
 
 export async function createOrgProduct(
   ctx: CrmMutationContext,
@@ -26,7 +27,7 @@ export async function createOrgProduct(
     .select("*")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao criar produto");
   return data as unknown as OrgProduct;
 }
 
@@ -48,7 +49,7 @@ export async function updateOrgProduct(
     .eq("id", productId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao atualizar produto");
 }
 
 export async function deleteOrgProduct(
@@ -62,7 +63,7 @@ export async function deleteOrgProduct(
     .eq("id", productId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao remover produto");
 }
 
 export async function addLeadProduct(
@@ -72,14 +73,13 @@ export async function addLeadProduct(
 ): Promise<LeadProduct> {
   const { db, orgId } = ctx;
 
-  // Valida que o produto pertence a esta org — evita referência cross-org.
-  const { data: prodCheck } = await db
-    .from("org_products")
-    .select("id")
-    .eq("id", input.product_id)
-    .eq("organization_id", orgId)
-    .maybeSingle();
-  if (!prodCheck) throw new Error("Produto não encontrado");
+  // Valida que lead e produto pertencem a esta org — evita referência cross-org.
+  const [leadCheck, prodCheck] = await Promise.all([
+    db.from("leads").select("id").eq("id", leadId).eq("organization_id", orgId).maybeSingle(),
+    db.from("org_products").select("id").eq("id", input.product_id).eq("organization_id", orgId).maybeSingle(),
+  ]);
+  if (!leadCheck.data) throw new Error("Lead não encontrado");
+  if (!prodCheck.data) throw new Error("Produto não encontrado");
 
   const { data, error } = await db
     .from("lead_products")
@@ -95,7 +95,7 @@ export async function addLeadProduct(
     .select("*, org_products(*)")
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao adicionar produto ao lead");
   return data as unknown as LeadProduct;
 }
 
@@ -129,7 +129,7 @@ export async function updateLeadProduct(
     .eq("id", leadProductId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao atualizar produto do lead");
 }
 
 export async function removeLeadProduct(
@@ -143,5 +143,5 @@ export async function removeLeadProduct(
     .eq("id", leadProductId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao remover produto do lead");
 }
