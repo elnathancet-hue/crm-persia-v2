@@ -1100,17 +1100,14 @@ export function RulesTab({
             </AccordionTrigger>
             <AccordionContent className="space-y-3 pb-4 pt-1">
               <div className="space-y-1.5 rounded-md border border-border/70 bg-muted/20 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="model">Modelo</Label>
-                    <HelpTooltip>
-                      <strong>GPT-5 mini</strong> é o padrão recomendado:
-                      rápido, preciso e com boa qualidade pra atendimento típico.
-                      Use <strong>GPT-5</strong> apenas se sentir que o
-                      agente está errando muito em casos complexos.
-                    </HelpTooltip>
-                  </div>
-                  {model === "gpt-5-mini" ? <DefaultBadge /> : null}
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="model">Modelo</Label>
+                  <HelpTooltip>
+                    <strong>GPT-5 mini</strong> é o padrão recomendado:
+                    rápido, preciso e com boa qualidade pra atendimento típico.
+                    Use <strong>GPT-5</strong> apenas se sentir que o
+                    agente está errando muito em casos complexos.
+                  </HelpTooltip>
                 </div>
                 <Select
                   value={model}
