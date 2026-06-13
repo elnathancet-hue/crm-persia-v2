@@ -7,5 +7,5 @@ import { redirect } from "next/navigation";
 export const metadata = { title: "Segmentos" };
 
 export default function SegmentsRedirect() {
-  redirect("/crm/settings?tab=segmentos");
+  redirect("/crm?tab=segmentos");
 }

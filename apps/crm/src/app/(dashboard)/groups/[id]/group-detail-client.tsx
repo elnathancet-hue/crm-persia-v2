@@ -655,7 +655,7 @@ export function GroupDetailClient({
         prev.map((m) => (m.sender_phone === msg.sender_phone ? { ...m, sender_lead_id: leadId } : m)),
       );
       toast.success("Lead criado!", {
-        action: { label: "Ver perfil", onClick: () => router.push(`/leads/${leadId}`) },
+        action: { label: "Ver perfil", onClick: () => router.push(`/crm?tab=leads&lead=${leadId}`) },
       });
     } catch (err: any) {
       toast.error(err.message || "Erro ao criar lead");
@@ -914,7 +914,7 @@ export function GroupDetailClient({
                         type="button"
                         disabled={!msg.sender_lead_id}
                         onClick={() =>
-                          msg.sender_lead_id && router.push(`/leads/${msg.sender_lead_id}`)
+                          msg.sender_lead_id && router.push(`/crm?tab=leads&lead=${msg.sender_lead_id}`)
                         }
                         className={`mb-1 flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border/40 bg-primary/10 text-[11px] font-semibold text-primary ${
                           msg.sender_lead_id
@@ -1028,7 +1028,7 @@ export function GroupDetailClient({
                           {!isOutbound && msg.sender_lead_id && (
                             <>
                               <DropdownMenuItem
-                                onClick={() => router.push(`/leads/${msg.sender_lead_id!}`)}
+                                onClick={() => router.push(`/crm?tab=leads&lead=${msg.sender_lead_id!}`)}
                               >
                                 <ExternalLink className="size-4" />
                                 Ver perfil
@@ -1094,7 +1094,7 @@ export function GroupDetailClient({
                               disabled={!msg.sender_lead_id}
                               onClick={() =>
                                 msg.sender_lead_id &&
-                                router.push(`/leads/${msg.sender_lead_id}`)
+                                router.push(`/crm?tab=leads&lead=${msg.sender_lead_id}`)
                               }
                               className={`flex max-w-[260px] items-center gap-1 px-1 text-left text-[11px] font-medium text-primary ${
                                 msg.sender_lead_id ? "hover:underline" : "cursor-default"

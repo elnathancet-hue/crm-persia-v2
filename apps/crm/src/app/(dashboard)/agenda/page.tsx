@@ -2,6 +2,7 @@ import { getAppointments } from "@/actions/agenda/appointments";
 import { getAgendaServices } from "@/actions/agenda/services";
 import { getOrgMeta } from "@/actions/agenda/org";
 import { getAuthContext } from "@/lib/auth";
+import { getLead } from "@/actions/leads";
 import { AgendaPageClient } from "./agenda-page-client";
 
 export const metadata = { title: "Agenda" };
@@ -15,8 +16,16 @@ function defaultRange() {
   return { from: from.toISOString(), to: to.toISOString() };
 }
 
-export default async function AgendaPage() {
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const range = defaultRange();
+  const params = await searchParams;
+  const prefillLeadId =
+    typeof params.leadId === "string" ? params.leadId : null;
+
   const [initialAppointments, services, ctx, org] = await Promise.all([
     getAppointments({
       from: range.from,
@@ -27,6 +36,21 @@ export default async function AgendaPage() {
     getAuthContext(),
     getOrgMeta(),
   ]);
+
+  // PR-C4: ?leadId= vem de "Agendar" na lista de leads. Busca nome do lead
+  // pra pre-preencher o drawer de criacao. Ignora erros (leadId invalido ou
+  // sem permissao) — abre agenda sem pre-fill.
+  let prefillLead: { id: string; name: string } | null = null;
+  if (prefillLeadId) {
+    try {
+      const result = await getLead(prefillLeadId);
+      if (result?.lead) {
+        prefillLead = { id: result.lead.id, name: result.lead.name ?? "" };
+      }
+    } catch {
+      // ignora
+    }
+  }
 
   // PR-AGENDA-VISUAL (mai/2026): header + tabs movidos pro client (paridade com
   // /crm — icone grande no header + tabs underline + sticky). Page server apenas
@@ -39,6 +63,7 @@ export default async function AgendaPage() {
       currentUserId={ctx.userId}
       orgId={ctx.orgId}
       orgSlug={org.slug}
+      prefillLead={prefillLead}
     />
   );
 }
