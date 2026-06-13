@@ -102,6 +102,25 @@ async function ensureLeadBelongsToOrg(
   }
 }
 
+/** Valida que uma row em `table` com `idCol = id` pertence ao org. */
+async function ensureRowBelongsToOrg(
+  ctx: AgendaMutationContext,
+  table: string,
+  idCol: string,
+  id: string,
+  label: string,
+): Promise<void> {
+  const { db, orgId } = ctx;
+  const { data, error } = await db
+    .from(table)
+    .select(idCol)
+    .eq(idCol, id)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (error) throw new Error(`${label}: ${error.message}`);
+  if (!data) throw new AppointmentValidationError(`${label} nao encontrado nesta organizacao`, label);
+}
+
 async function ensureNoConflict(
   ctx: AgendaMutationContext,
   args: {
@@ -160,6 +179,14 @@ export async function createAppointment(
   if (rest.lead_id) {
     await ensureLeadBelongsToOrg(ctx, rest.lead_id);
   }
+  // Valida que user_id, service_id e booking_page_id pertencem à org.
+  await ensureRowBelongsToOrg(ctx, "organization_members", "user_id", rest.user_id, "user_id");
+  if (rest.service_id) {
+    await ensureRowBelongsToOrg(ctx, "agenda_services", "id", rest.service_id, "service_id");
+  }
+  if (rest.booking_page_id) {
+    await ensureRowBelongsToOrg(ctx, "booking_pages", "id", rest.booking_page_id, "booking_page_id");
+  }
 
   if (rest.kind === "appointment" && enforce_conflict_check) {
     await ensureNoConflict(ctx, {
@@ -217,6 +244,9 @@ export async function updateAppointment(
   // pertencer a mesma org.
   if (input.lead_id) {
     await ensureLeadBelongsToOrg(ctx, input.lead_id);
+  }
+  if (input.service_id) {
+    await ensureRowBelongsToOrg(ctx, "agenda_services", "id", input.service_id, "service_id");
   }
 
   const patch: Record<string, unknown> = {};
@@ -379,6 +409,10 @@ export async function rescheduleAppointment(
   }
 
   const new_user_id = input.new_user_id ?? original.user_id;
+  // Valida que o novo responsável pertence ao org (evita hijack de agendamento).
+  if (input.new_user_id) {
+    await ensureRowBelongsToOrg(ctx, "organization_members", "user_id", input.new_user_id, "new_user_id");
+  }
   const new_duration = Math.round(
     (new Date(input.new_end_at).getTime() -
       new Date(input.new_start_at).getTime()) /

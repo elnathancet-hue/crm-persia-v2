@@ -85,6 +85,12 @@ export async function findMatchingLeadIds(
   if (!rules || !Array.isArray(rules.conditions) || rules.conditions.length === 0) {
     return null;
   }
+  // Cap: mais de 20 conditions = possível DoS de DB (Promise.all de 1 query por condition).
+  if (rules.conditions.length > 20) {
+    // eslint-disable-next-line no-console
+    console.error("[segments/match-leads] conditions.length > 20 — abortando para proteger DB");
+    return null;
+  }
 
   // Resolve cada condition em paralelo
   const sets = await Promise.all(
@@ -314,6 +320,9 @@ export async function findMatchingLeadIdsStrict(
 ): Promise<string[]> {
   if (!rules || !Array.isArray(rules.conditions) || rules.conditions.length === 0) {
     throw new StrictMatchError("Regras ausentes ou vazias");
+  }
+  if (rules.conditions.length > 20) {
+    throw new StrictMatchError("Segmento com mais de 20 conditions não é permitido");
   }
 
   const sets = await Promise.all(
