@@ -35,7 +35,9 @@ export function getChatMediaPath(
       const normalizedSupabaseUrl = supabaseUrl?.replace(/\/$/, "");
       const normalizedOrigin = `${url.protocol}//${url.host}`;
 
-      if (normalizedSupabaseUrl && !normalizedSupabaseUrl.startsWith(normalizedOrigin)) {
+      // Rejeitar se supabaseUrl nao foi fornecida (nao da pra validar)
+      // ou se a origem da URL nao bate exatamente com supabaseUrl.
+      if (!normalizedSupabaseUrl || normalizedOrigin !== normalizedSupabaseUrl) {
         return null;
       }
 
