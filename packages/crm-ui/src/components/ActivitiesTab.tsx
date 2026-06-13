@@ -219,6 +219,27 @@ const TYPE_META: Record<
     tone: "text-foreground",
     iconBg: "bg-muted text-muted-foreground",
   },
+  // PR-C2: entradas ausentes — exibiam o type cru na timeline.
+  lead_lost: {
+    label: "Lead marcado como perdido",
+    tone: "text-failure",
+    iconBg: "bg-failure-soft text-failure",
+  },
+  lead_won: {
+    label: "Lead marcado como ganho",
+    tone: "text-success",
+    iconBg: "bg-success-soft text-success",
+  },
+  pipeline_change: {
+    label: "Funil alterado",
+    tone: "text-progress",
+    iconBg: "bg-progress-soft text-progress",
+  },
+  status_change: {
+    label: "Status alterado",
+    tone: "text-warning",
+    iconBg: "bg-warning-soft text-warning",
+  },
 };
 
 function getTypeMeta(type: string) {
@@ -382,6 +403,21 @@ export function ActivitiesTab({
                           {item.description}
                         </p>
                       )}
+                      {/* PR-C2: loss_reason gravado em metadata por logActivity.
+                          description fica null nesses eventos — renderiza aqui. */}
+                      {!item.description &&
+                        item.type === "lead_lost" &&
+                        item.metadata != null &&
+                        typeof (item.metadata as Record<string, unknown>)
+                          .loss_reason === "string" && (
+                          <p className="mt-0.5 text-sm text-muted-foreground">
+                            Motivo:{" "}
+                            {
+                              (item.metadata as Record<string, unknown>)
+                                .loss_reason as string
+                            }
+                          </p>
+                        )}
                       {/* Lead clicavel */}
                       {item.leads && (
                         <div className="mt-2 flex items-center gap-1.5">
