@@ -140,7 +140,7 @@ async function fetchLeadsForTarget(
         .select("rules")
         .eq("id", target.target_id)
         .eq("organization_id", orgId)
-        .then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
+        .then((r: { data: unknown[] | null; error: { message: string } | null }) => r);
       if (segErr) throw new StrictMatchError(`Segmento "${target.target_id}": ${segErr.message}`);
       const rules = (seg as Array<{ rules: unknown }> | null)?.[0]?.rules as SegmentRules | undefined;
       if (!rules) throw new StrictMatchError(`Segmento "${target.target_id}": regras não encontradas`);
@@ -152,8 +152,12 @@ async function fetchLeadsForTarget(
 
     case "tag": {
       if (!target.target_id) { errors.push("Tag: target_id ausente"); return []; }
-      const tagQuery = dbAny.from("lead_tags").select("lead_id").eq("tag_id", target.target_id).eq("organization_id", orgId);
-      const { data: tagRows, error: tagErr } = await tagQuery.then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
+      const { data: tagRows, error: tagErr } = await dbAny
+        .from("lead_tags")
+        .select("lead_id")
+        .eq("tag_id", target.target_id)
+        .eq("organization_id", orgId)
+        .then((r: { data: unknown[] | null; error: { message: string } | null }) => r);
       if (tagErr) throw new StrictMatchError(`Tag "${target.target_id}": ${tagErr.message}`);
       const ids = ((tagRows ?? []) as { lead_id: string }[]).map((r) => r.lead_id);
       if (ids.length === 0) return [];
@@ -164,14 +168,22 @@ async function fetchLeadsForTarget(
       if (!target.target_id) { errors.push("Funil/etapa: target_id ausente"); return []; }
       // PR-K-CENTRIC: o Kanban do CRM usa leads.stage_id como source of truth.
       // Mantem fallback em deals.stage_id para campanhas/schemas legados.
-      const leadsQuery = dbAny.from("leads").select("id").eq("stage_id", target.target_id).eq("organization_id", orgId);
-      const { data: leadRows, error: leadErr } = await leadsQuery.then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
+      const { data: leadRows, error: leadErr } = await dbAny
+        .from("leads")
+        .select("id")
+        .eq("stage_id", target.target_id)
+        .eq("organization_id", orgId)
+        .then((r: { data: unknown[] | null; error: { message: string } | null }) => r);
       if (leadErr) throw new StrictMatchError(`Funil/etapa "${target.target_id}": ${leadErr.message}`);
       const leadIds = ((leadRows ?? []) as { id: string }[]).map((r) => r.id).filter(Boolean);
       if (leadIds.length > 0) return fetchLeadsByIds(db, orgId, [...new Set(leadIds)]);
 
-      const dealsQuery = dbAny.from("deals").select("lead_id").eq("stage_id", target.target_id).eq("organization_id", orgId);
-      const { data: dealRows, error: dealErr } = await dealsQuery.then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
+      const { data: dealRows, error: dealErr } = await dbAny
+        .from("deals")
+        .select("lead_id")
+        .eq("stage_id", target.target_id)
+        .eq("organization_id", orgId)
+        .then((r: { data: unknown[] | null; error: { message: string } | null }) => r);
       if (dealErr) throw new StrictMatchError(`Funil/etapa "${target.target_id}": ${dealErr.message}`);
       const ids = [...new Set(((dealRows ?? []) as { lead_id: string }[]).map((r) => r.lead_id))];
       if (ids.length === 0) return [];
@@ -230,7 +242,9 @@ async function fetchLeadsByIds(
     }),
   );
 
-  return results.flat().map((r) => ({ ...r, chat_jid: null }));
+  // chat_jid: a tabela leads nao tem essa coluna; o JID e derivado do phone
+  // quando necessario pelo caller. Sempre null aqui ate termos JID no schema.
+  return results.flat().map((r) => ({ ...r, chat_jid: null as null }));
 }
 
 // ─── Group targets ────────────────────────────────────────────────────────────
@@ -289,7 +303,7 @@ async function fetchGroupsForTarget(
       .select("id, group_jid, name")
       .eq("id", target.target_id)
       .eq("organization_id", orgId)
-      .then?.((r: { data: unknown[] | null; error: { message: string } | null }) => r) ?? { data: null, error: null };
+      .then((r: { data: unknown[] | null; error: { message: string } | null }) => r);
     if (error) throw new Error(`Grupo "${target.target_id}": ${error.message}`);
     return (data ?? []) as Array<{ id: string; group_jid: string | null; name: string | null }>;
   }
