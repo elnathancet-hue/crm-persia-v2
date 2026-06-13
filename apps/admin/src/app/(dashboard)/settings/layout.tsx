@@ -7,6 +7,7 @@ import {
   Calendar,
   Code2,
   CreditCard,
+  FileText,
   Key,
   ListChecks,
   MessageCircle,
@@ -27,6 +28,7 @@ const clientTabs = [
   { label: "Google Agenda", href: "/settings/google-calendar", icon: Calendar },
   { label: "Servidores MCP", href: "/settings/mcp-servers", icon: Code2 },
   { label: "Origens de Captura", href: "/settings/capture-sources", icon: Radio },
+  { label: "Templates", href: "/settings/templates", icon: FileText },
   { label: "Plano", href: "/settings/billing", icon: CreditCard },
 ];
 

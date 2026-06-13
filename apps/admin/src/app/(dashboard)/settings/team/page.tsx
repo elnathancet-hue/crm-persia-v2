@@ -10,11 +10,11 @@ import { Users, Plus, Loader2, X } from "lucide-react";
 import { NoContextFallback } from "@/components/no-context-fallback";
 import { toast } from "sonner";
 
+// Valores devem bater com ALLOWED_MEMBER_ROLES em apps/admin/src/actions/settings.ts
+// ("admin" | "agent" | "viewer"). "owner" é reservado ao criador da org.
 const ROLES = [
-  { value: "owner", label: "Dono" },
   { value: "admin", label: "Admin" },
-  { value: "gestor", label: "Gestor" },
-  { value: "usuario", label: "Agente" },
+  { value: "agent", label: "Agente" },
   { value: "viewer", label: "Visualizador" },
 ];
 
@@ -208,7 +208,7 @@ function CreateMemberModal({ onClose, onCreated, onContextExpired }: {
   const [email, setEmail] = useState("");
   const [phoneDigits, setPhoneDigits] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("usuario");
+  const [role, setRole] = useState("agent");
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const focusTrapRef = useFocusTrap(true);
