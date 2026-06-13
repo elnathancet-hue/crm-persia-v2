@@ -342,6 +342,7 @@ export function CrmShell(props: CrmShellProps) {
             initialPage={props.activitiesData.initialPage}
             initialTotalPages={props.activitiesData.initialTotalPages}
             listActivities={getOrgActivities}
+            leadHref={(id) => `/crm?tab=leads&lead=${id}`}
           />
         )}
 
