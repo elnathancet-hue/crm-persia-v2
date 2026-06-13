@@ -135,6 +135,16 @@ export async function createMcpServer(input: {
     if (parsed.data.auth_type === "headers" && !parsed.data.auth_token?.trim()) {
       return { ok: false, error: "Headers customizados requerem ao menos um header" };
     }
+    if (parsed.data.auth_type === "headers" && parsed.data.auth_token) {
+      try {
+        const parsed_headers = JSON.parse(parsed.data.auth_token);
+        if (typeof parsed_headers !== "object" || Array.isArray(parsed_headers) || parsed_headers === null) {
+          return { ok: false, error: "Headers devem ser um objeto JSON { \"Header-Name\": \"valor\" }" };
+        }
+      } catch {
+        return { ok: false, error: "Headers inválidos — JSON malformado" };
+      }
+    }
 
     const { supabase, orgId, userId } = await requireRole("admin");
     const { data, error } = await asAgentDb(supabase)
