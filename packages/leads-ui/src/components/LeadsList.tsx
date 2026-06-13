@@ -259,10 +259,33 @@ export function LeadsList({
   const [page, setPage] = React.useState(initialPage);
   const [totalPages, setTotalPages] = React.useState(initialTotalPages);
 
+  // PR-C6: ref que rastreia se usuario tem filtros client ativos.
+  // Atualizada a cada render (sem dep array) para refletir estado mais recente.
+  // Usada pela sync useEffect abaixo para evitar reset ao router.refresh().
+  const clientStateRef = React.useRef({
+    page: 1,
+    search: "",
+    statusFilter: "all",
+    tagCount: 0,
+    hasAdvanced: false,
+  });
+
   // Sync state quando o pai re-fetcha (ex.: router.refresh() depois de
   // um drawer salvar). Sem isso, atualizacoes externas de uma row nao
   // aparecem ate o usuario trocar de filtro/pagina.
+  //
+  // PR-C6: se usuario tem filtros/pagina ativos, nao sobrescreve com o
+  // resultado do server que sempre volta pra pagina 1 sem filtros — isso
+  // causava "lista pula pra pagina 1" ao salvar drawer com search ativa.
   React.useEffect(() => {
+    const ref = clientStateRef.current;
+    const hasActiveFilters =
+      ref.search !== "" ||
+      ref.statusFilter !== "all" ||
+      ref.tagCount > 0 ||
+      ref.page > 1 ||
+      ref.hasAdvanced;
+    if (hasActiveFilters) return;
     setLeads(initialLeads);
     setTotal(initialTotal);
     setPage(initialPage);
@@ -280,6 +303,16 @@ export function LeadsList({
   const [advancedFilters, setAdvancedFilters] =
     React.useState<LeadsAdvancedFiltersValue>({});
   const debounceRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // PR-C6: mantém clientStateRef atualizado pra sync useEffect saber quais
+  // filtros estão ativos sem criar dependência circular.
+  clientStateRef.current = {
+    page,
+    search,
+    statusFilter,
+    tagCount: selectedTagIds.length,
+    hasAdvanced: Object.keys(advancedFilters).length > 0,
+  };
 
   // PR-L4: bulk select state
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(
