@@ -1100,14 +1100,16 @@ export function RulesTab({
             </AccordionTrigger>
             <AccordionContent className="space-y-3 pb-4 pt-1">
               <div className="space-y-1.5 rounded-md border border-border/70 bg-muted/20 p-3">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="model">Modelo</Label>
-                  <HelpTooltip>
-                    <strong>GPT-5 mini</strong> é o padrão recomendado:
-                    rápido, barato, qualidade boa pra atendimento típico.
-                    Use <strong>GPT-5</strong> apenas se sentir que o
-                    agente está errando muito em casos complexos.
-                  </HelpTooltip>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="model">Modelo</Label>
+                    <HelpTooltip>
+                      <strong>GPT-5 mini</strong> é o padrão recomendado:
+                      rápido, barato, qualidade boa pra atendimento típico.
+                      Use <strong>GPT-5</strong> apenas se sentir que o
+                      agente está errando muito em casos complexos.
+                    </HelpTooltip>
+                  </div>
                   {model === "gpt-5-mini" ? <DefaultBadge /> : null}
                 </div>
                 <Select
@@ -1115,7 +1117,13 @@ export function RulesTab({
                   onValueChange={(v) => v && setModel(v)}
                 >
                   <SelectTrigger id="model">
-                    <SelectValue placeholder="Selecionar modelo…" />
+                    <SelectValue>
+                      {model === "gpt-5-mini" ? "GPT-5 mini (padrão)" :
+                       model === "gpt-4o-mini" ? "GPT-4o mini" :
+                       model === "gpt-4o" ? "GPT-4o" :
+                       model === "gpt-5" ? "GPT-5" :
+                       "Selecionar modelo…"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="gpt-5-mini">
@@ -1769,7 +1777,13 @@ export function RulesTab({
                       }
                     >
                       <SelectTrigger id="validation-on-block">
-                        <SelectValue placeholder="Selecionar ação…" />
+                        <SelectValue>
+                          {validationConfig.on_block === "rewrite" ? "Reescrever com IA" :
+                           validationConfig.on_block === "fallback" ? "Usar mensagem de reserva" :
+                           validationConfig.on_block === "pause_ai" ? "Pausar agente" :
+                           validationConfig.on_block === "alert_only" ? "Só registrar (envia mesmo assim)" :
+                           "Selecionar ação…"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="rewrite">Reescrever com IA</SelectItem>
@@ -2617,7 +2631,11 @@ function SourceModal({
                 <Label className="text-xs font-medium">Tipo</Label>
                 <Select value={srcType} onValueChange={(v) => v && setSrcType(v as SourceType)}>
                   <SelectTrigger data-size="sm">
-                    <SelectValue placeholder="Selecionar tipo…" />
+                    <SelectValue>
+                      {srcType === "json" ? "JSON inline — dados embutidos no agente" :
+                       srcType === "mcp" ? `MCP — servidor externo${noMcpServers ? " (nenhum configurado)" : ""}` :
+                       "Selecionar tipo…"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="json">JSON inline — dados embutidos no agente</SelectItem>
@@ -2655,7 +2673,9 @@ function SourceModal({
                   ) : (
                     <Select value={mcpId} onValueChange={(v) => { if (v) { setMcpId(v); setAllowedTools([]); } }}>
                       <SelectTrigger data-size="sm">
-                        <SelectValue placeholder="Selecionar servidor…" />
+                        <SelectValue>
+                          {mcpServers.find((s) => s.id === mcpId)?.name ?? "Selecionar servidor…"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {mcpServers.map((s) => (
@@ -2716,7 +2736,9 @@ function SourceModal({
                   <Label className="text-xs font-medium">Categoria</Label>
                   <Select value={dataType} onValueChange={(v) => v && setDataType(v as JsonDataType)}>
                     <SelectTrigger data-size="sm">
-                      <SelectValue placeholder="Selecionar categoria…" />
+                      <SelectValue>
+                        {JSON_DATA_TYPES.find((dt) => dt.value === dataType)?.label ?? "Selecionar categoria…"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {JSON_DATA_TYPES.map((dt) => (
@@ -2948,8 +2970,12 @@ function ImportTemplatesModal({
               onValueChange={(v) => v && setMode(v as ImportMode)}
             >
               <SelectTrigger data-size="sm">
-              <SelectValue placeholder="Selecionar modo…" />
-            </SelectTrigger>
+                <SelectValue>
+                  {mode === "merge" ? "Adicionar / atualizar por chave" :
+                   mode === "replace" ? "Substituir todos os templates" :
+                   "Selecionar modo…"}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="merge">Adicionar / atualizar por chave</SelectItem>
                 <SelectItem value="replace">Substituir todos os templates</SelectItem>
