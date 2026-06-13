@@ -4,11 +4,14 @@
 --   status = 'waiting'  AND  metadata->>'resume_at' <= now()
 --
 -- Sem index, cada tick faz full table scan em todas as execucoes "waiting".
--- O index parcial (WHERE status = 'waiting') cobre apenas as linhas relevantes,
--- e a expressao ::timestamptz permite comparacao <= direta sem cast em runtime.
+-- O index parcial (WHERE status = 'waiting') cobre apenas as linhas relevantes.
+--
+-- Nota: expressao de texto puro — cast ::timestamptz nao e IMMUTABLE (depende
+-- do timezone da sessao, proibido em indexes). ISO 8601 ordena corretamente
+-- como texto, entao a comparacao <= funciona sem cast.
 
 CREATE INDEX IF NOT EXISTS idx_flow_executions_resume_at
   ON public.flow_executions (
-    ((metadata->>'resume_at')::timestamptz)
+    (metadata->>'resume_at')
   )
   WHERE status = 'waiting';
