@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import { cancelAppointment as cancelSharedAppointment } from "@persia/shared/agenda";
 import { notifyLeadAppointmentCancelled } from "@/lib/agenda/notifications/dispatch";
+import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import { errorMessage, logError } from "@/lib/observability";
 import {
   deleteGoogleEvent,

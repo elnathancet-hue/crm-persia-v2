@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import type { NativeHandler } from "@persia/shared/ai-agent";
 import {
   rescheduleAppointment as rescheduleSharedAppointment,
