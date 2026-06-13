@@ -34,43 +34,38 @@ export async function listTags(
 }
 
 /**
- * Lista tags com contagem agregada de leads por tag (lead_count). Faz
- * em duas etapas (tags + lead_tags) pra nao depender de funcoes RPC e
- * funcionar em ambos os apps com seus respectivos clients.
+ * Lista tags com contagem agregada de leads por tag (lead_count).
+ * Usa RPC count_tags_for_org que faz GROUP BY no banco — uma unica query,
+ * sem transferencia de rows individuais de lead_tags nem risco de cap 1000.
  */
 export async function listTagsWithCount(
   ctx: CrmQueryContext,
 ): Promise<TagWithCount[]> {
   const { db, orgId } = ctx;
 
-  const { data: tags, error } = await db
-    .from("tags")
-    .select("*")
-    .eq("organization_id", orgId)
-    .order("created_at", { ascending: false });
+  if (!db.rpc) throw new Error("listTagsWithCount: db.rpc is required");
 
-  if (error) throw new Error(error.message);
-  if (!tags || tags.length === 0) return [];
+  const [tagsResult, countsResult] = await Promise.all([
+    db
+      .from("tags")
+      .select("*")
+      .eq("organization_id", orgId)
+      .order("created_at", { ascending: false }),
+    db.rpc("count_tags_for_org", { p_org_id: orgId }),
+  ]);
 
-  const tagIds = (tags as { id: string }[]).map((t) => t.id);
+  if (tagsResult.error) throw new Error(tagsResult.error.message);
+  if (countsResult.error) throw new Error(countsResult.error.message);
 
-  // Paginate lead_tags to avoid the PostgREST 1000-row cap (incorrect counts above).
-  const PAGE = 1000;
+  const tags = (tagsResult.data ?? []) as Tag[];
+  if (tags.length === 0) return [];
+
   const countMap: Record<string, number> = {};
-  for (let from = 0; ; from += PAGE) {
-    const { data, error: ltError } = await db
-      .from("lead_tags")
-      .select("tag_id")
-      .in("tag_id", tagIds)
-      .range(from, from + PAGE - 1);
-    if (ltError) throw new Error(ltError.message);
-    for (const lt of (data ?? []) as { tag_id: string }[]) {
-      countMap[lt.tag_id] = (countMap[lt.tag_id] ?? 0) + 1;
-    }
-    if ((data?.length ?? 0) < PAGE) break;
+  for (const row of (countsResult.data ?? []) as { tag_id: string; lead_count: number }[]) {
+    countMap[row.tag_id] = row.lead_count;
   }
 
-  return (tags as Tag[]).map((tag) => ({
+  return tags.map((tag) => ({
     ...tag,
     lead_count: countMap[tag.id] ?? 0,
   }));
