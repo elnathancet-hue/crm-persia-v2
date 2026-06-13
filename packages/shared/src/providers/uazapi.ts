@@ -92,7 +92,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       replyid: opts.replyTo,
     });
     const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendMedia(opts: SendMediaOptions): Promise<MessageResult> {
@@ -106,28 +106,31 @@ export class UazapiAdapter implements WhatsAppProvider {
         replyid: opts.replyTo,
       });
       const id = result.messageId || result.MessageId || (result as Record<string, string>).messageid || (result as Record<string, string>).id || "";
-      return { messageId: String(id), success: true };
+      return { messageId: String(id), success: id !== "" };
     } catch {
       if (opts.type === "ptt") {
         // PTT (voice note) — no legacy fallback, re-throw
         throw new Error("PTT send failed and no legacy fallback available");
       }
-      let result: { MessageId: string };
+      let legacyResult: { MessageId: string } | undefined;
       switch (opts.type) {
         case "image":
-          result = await this.client.sendImage({ phone: opts.phone, image: opts.media, caption: opts.caption });
+          legacyResult = await this.client.sendImage({ phone: opts.phone, image: opts.media, caption: opts.caption });
           break;
         case "audio":
-          result = await this.client.sendAudio({ phone: opts.phone, audio: opts.media });
+          legacyResult = await this.client.sendAudio({ phone: opts.phone, audio: opts.media });
           break;
         case "video":
-          result = await this.client.sendVideo({ phone: opts.phone, video: opts.media, caption: opts.caption });
+          legacyResult = await this.client.sendVideo({ phone: opts.phone, video: opts.media, caption: opts.caption });
           break;
         case "document":
-          result = await this.client.sendDocument({ phone: opts.phone, document: opts.media, fileName: opts.fileName || "arquivo" });
+          legacyResult = await this.client.sendDocument({ phone: opts.phone, document: opts.media, fileName: opts.fileName || "arquivo" });
           break;
+        default:
+          throw new Error(`Tipo de media nao suportado: ${opts.type}`);
       }
-      return { messageId: result!.MessageId, success: true };
+      const legacyId = legacyResult?.MessageId ?? "";
+      return { messageId: legacyId, success: legacyId !== "" };
     }
   }
 
@@ -139,7 +142,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       name: opts.name,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendButtons(opts: SendButtonsOptions): Promise<MessageResult> {
@@ -154,7 +157,7 @@ export class UazapiAdapter implements WhatsAppProvider {
         phoneNumber: b.type === "call" ? b.value : undefined,
       })),
     });
-    return { messageId: result.MessageId, success: true };
+    return { messageId: result.MessageId, success: result.MessageId !== "" };
   }
 
   async sendMenu(opts: SendMenuOptions): Promise<MessageResult> {
@@ -166,7 +169,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       choices: opts.choices,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendCarousel(opts: SendCarouselOptions): Promise<MessageResult> {
@@ -177,7 +180,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       choices: opts.choices,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendPix(opts: SendPixOptions): Promise<MessageResult> {
@@ -188,7 +191,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       pixName: opts.pixName,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendContact(opts: SendContactOptions): Promise<MessageResult> {
@@ -200,7 +203,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       email: opts.email,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendLocationButton(opts: SendLocationButtonOptions): Promise<MessageResult> {
@@ -209,7 +212,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       text: opts.text,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendPaymentRequest(opts: SendPaymentRequestOptions): Promise<MessageResult> {
@@ -230,7 +233,7 @@ export class UazapiAdapter implements WhatsAppProvider {
       boletoCode: opts.boletoCode,
     });
     const id = result.messageId || result.MessageId || "";
-    return { messageId: String(id), success: true };
+    return { messageId: String(id), success: id !== "" };
   }
 
   async sendPresence(opts: SendPresenceOptions): Promise<void> {

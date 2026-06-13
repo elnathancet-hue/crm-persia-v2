@@ -151,6 +151,9 @@ export interface TriggerNotificationHandlerResult {
 
 const FIXED_VARIABLE_PATTERN = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const CUSTOM_VARIABLE_PATTERN = /\{\{\s*custom\.([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
+// Combina custom.x e fixed em um unico regex — evita que valores custom
+// contendo {{lead_phone}} sejam re-expandidos em segunda passada.
+const ALL_VARIABLE_PATTERN = /\{\{\s*(?:custom\.([a-zA-Z_][a-zA-Z0-9_]*)|([a-zA-Z_][a-zA-Z0-9_]*))\s*\}\}/g;
 
 export function renderNotificationTemplate(
   template: string,
@@ -158,23 +161,15 @@ export function renderNotificationTemplate(
   custom: Record<string, string> | undefined,
 ): string {
   const customLookup = custom ?? {};
-
-  // Custom resolves first — `{{custom.x}}` would also match the generic
-  // pattern below as `custom`, so we have to expand them before.
-  let rendered = template.replace(CUSTOM_VARIABLE_PATTERN, (_match, key: string) => {
-    const value = customLookup[key];
-    return typeof value === "string" ? value : "";
-  });
-
-  // Then the fixed variables. Unknown names render as empty.
   const fixedLookup = fixed as unknown as Record<string, string>;
-  rendered = rendered.replace(FIXED_VARIABLE_PATTERN, (_match, key: string) => {
-    // Já consumimos os `custom.X` acima, então não tem como bater aqui.
-    const value = fixedLookup[key];
-    return typeof value === "string" ? value : "";
-  });
 
-  return rendered;
+  // Passada unica: custom antes de fixed pela ordem de alternativas no regex.
+  // Valores custom nao sao re-processados — elimina injecao de placeholders.
+  return template.replace(ALL_VARIABLE_PATTERN, (_match, customKey?: string, fixedKey?: string) => {
+    if (customKey !== undefined) return customLookup[customKey] ?? "";
+    if (fixedKey !== undefined) return fixedLookup[fixedKey] ?? "";
+    return "";
+  });
 }
 
 // Lista placeholders presentes no template — útil pra UI destacar

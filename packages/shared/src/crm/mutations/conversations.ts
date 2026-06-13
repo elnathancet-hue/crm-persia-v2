@@ -41,7 +41,7 @@ export async function findOrCreateConversationByLead(
   }
 
   // Find: conversa aberta mais recente do lead
-  const { data: existing } = await db
+  const { data: existing, error: findError } = await db
     .from("conversations")
     .select("id")
     .eq("organization_id", orgId)
@@ -50,6 +50,9 @@ export async function findOrCreateConversationByLead(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Erro transitorio (timeout, 503) != "nao existe" — evita criar conversa duplicada
+  if (findError) throw new Error(findError.message);
 
   if (existing) {
     return { conversationId: existing.id as string, created: false };
