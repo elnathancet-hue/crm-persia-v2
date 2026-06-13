@@ -1,6 +1,6 @@
 # Módulo `/crm` — Documentação técnica
 
-**Última atualização:** 2026-05-16
+**Última atualização:** 2026-06-13
 **Mantenedor:** Squad CRM Persia (skill `squad-crm-persia`)
 **Memória relacionada:** [`project_kanban_lead_centric.md`](../../../../../../../../../../Users/ELNATHAN/.claude/projects/D--tmp-crm-persia-monorepo/memory/project_kanban_lead_centric.md)
 
@@ -10,12 +10,14 @@
 
 ## 1. Visão geral
 
-`/crm` é o coração operacional do sistema. Tela única com **5 tabs** que cobrem o ciclo completo de gestão de leads:
+`/crm` é o coração operacional do sistema. Tela única com **7 tabs** que cobrem o ciclo completo de gestão de leads:
 
 | Tab | Conteúdo | Componente principal |
 |---|---|---|
 | **Funil** | Kanban lead-centric (1 lead = 1 card) | `KanbanBoard` (`@persia/crm-ui`) |
+| **Produtos** | Catálogo de produtos/serviços da org | `ProdutosTab` (local, migration 106) |
 | **Leads** | Tabela paginada (20/página) | `LeadsList` (`@persia/leads-ui`) |
+| **Grupos** | Lista de grupos de WhatsApp da org | `GroupsTab` (local fork, ~52 KB) |
 | **Segmentação** | Listagem de segmentos + ConditionBuilder | `SegmentsList` (`@persia/segments-ui`) |
 | **Tags** | CRUD de tags da org | `TagsList` (`@persia/tags-ui`) |
 | **Atividades** | Timeline org-wide (20/página, "Carregar mais") | `ActivitiesTab` (`@persia/crm-ui`) |
@@ -61,9 +63,10 @@ URL state preservado em query string: `?tab=`, `?pipeline=`, `?lead=`, `?segment
 
 ```
 apps/crm/src/app/(dashboard)/crm/
-├── page.tsx                  RSC: Promise.all(9 queries) + props pro shell
-├── crm-shell.tsx             Container client com 5 tabs + Providers + Header sticky
+├── page.tsx                  RSC: Promise.all(9+ queries) + props pro shell
+├── crm-shell.tsx             Container client com 7 tabs + Providers + Header sticky
 ├── crm-client.tsx            Wrapper do KanbanBoard com realtime + presence
+├── groups-tab.tsx            Tab Grupos (componente local, 52 KB — chat de grupos WA)
 └── README.md                 ← este arquivo
 ```
 
@@ -86,9 +89,10 @@ apps/crm/src/app/(dashboard)/crm/
 apps/crm/src/
 ├── components/leads/lead-list.tsx          Wrapper local do LeadsList (LeadsProvider + LeadInfoDrawer)
 ├── components/segments/segment-list.tsx    Wrapper local do SegmentsList
+├── components/produtos/produtos-tab.tsx    Catálogo de produtos/serviços (migration 106)
 ├── features/crm-kanban/crm-kanban-actions.ts   Adapter DI → KanbanActions
 ├── features/leads/crm-leads-actions.ts         Adapter DI → LeadsActions
-└── features/segments/                         Adapter DI → SegmentsActions
+└── features/segments/                          Adapter DI → SegmentsActions
 ```
 
 ---
@@ -113,11 +117,13 @@ apps/crm/src/
 └──────────────────────────────────────────────────────────────────┘
                               ↓ por tab
 ┌──────────────────────────────────────────────────────────────────┐
-│ Pipeline → CrmClient → KanbanBoard (drag-drop, bulks, realtime)  │
-│ Leads    → LeadList → LeadsList + LeadInfoDrawer                 │
-│ Seg.     → SegmentList → SegmentsList + ConditionBuilder         │
-│ Tags     → TagsPageClient → TagsList                             │
-│ Ativ.    → ActivitiesTab                                         │
+│ Pipeline  → CrmClient → KanbanBoard (drag-drop, bulks, realtime) │
+│ Produtos  → ProdutosTab (local)                                  │
+│ Leads     → LeadList → LeadsList + LeadInfoDrawer                │
+│ Grupos    → GroupsTab (local fork, grupos de WhatsApp)           │
+│ Seg.      → SegmentList → SegmentsList + ConditionBuilder        │
+│ Tags      → TagsPageClient → TagsList                            │
+│ Ativ.     → ActivitiesTab                                        │
 └──────────────────────────────────────────────────────────────────┘
                               ↓ user action
 ┌──────────────────────────────────────────────────────────────────┐
@@ -320,7 +326,10 @@ pnpm --filter @persia/crm dev                  # dev local
    - `SUPABASE_SERVICE_ROLE_KEY=<service>` (server-side only)
    - `CRM_API_SECRET=<token>` (Bearer pro `/api/crm`)
    - `N8N_WEBHOOK_URL=<n8n endpoint>` (opcional pra incoming-pipeline)
-2. **Migrations**: aplicar via SQL Editor do Supabase Dashboard (não `supabase db push` — bug permission denied).
+2. **Migrations**: aplicar via `cd apps/crm && npx supabase db push` (NUNCA via Dashboard — regra geral do projeto). Migrations relevantes pro módulo `/crm`:
+   - `039_lead_centric.sql` — fonte de truth do Kanban em `leads` (PR #202)
+   - `077_atomic_stage_reorder_and_pipeline_delete.sql` — RPCs `reorder_stages` e `delete_pipeline_cascade` (transações atômicas, PR-CRM-BUG)
+   - `106_products.sql` — tabela `org_products` (tab Produtos)
 3. **Dev server**: `pnpm --filter @persia/crm dev --turbo` (Turbopack — mais rápido que webpack no Windows).
 4. **Login**: criar profile via Auth Dashboard → garantir membership em `organization_members` com role >= agent.
 
@@ -348,6 +357,12 @@ pnpm --filter @persia/crm dev                  # dev local
 ### Outras pendências
 
 - `DealCard` na tab Negócios do drawer não tem botões editar/excluir inline (actions já prontas: `updateDealMeta` + `deleteDeal`).
+
+### Decisões fechadas (PR-C4 / auditoria jun/2026)
+
+**#17 — Rota legada `/leads/[id]`:** Todos os call-sites migrados para `/crm?tab=leads&lead=${id}`. Arquivos migrados: `group-detail-client.tsx` (4 locais), `lead-contact-panel.tsx`, `crm-shell.tsx` (`leadHref`). A rota `/leads/[id]` pode ser removida quando confirmado que não há mais links externos.
+
+**#20 — Edição manual de status do lead:** Status é sincronizado automaticamente via `trg_lead_stage_status_sync` (trigger DB). Não existe UI de edição direta de status — intencional. Se usuario precisar mudar status manualmente, deve mover card para stage com o `outcome` correspondente.
 
 ### Padrão global de filtros (Aplicar / Limpar)
 
@@ -379,6 +394,13 @@ Filtros não devem aplicar ao vivo no `onChange` — usuário edita localmente e
 | [#214](https://github.com/elnathancet-hue/crm-persia-v2/pull/214) | Cleanup lead-centric Fase A — admin agora opera 100% lead-centric. Remove `updateDealStage` / `getLeadOpenDealWithStages` / `moveDealStage` / `moveDealToStage` | [project_kanban_lead_centric.md](../../../../../../../../../../Users/ELNATHAN/.claude/projects/D--tmp-crm-persia-monorepo/memory/project_kanban_lead_centric.md) |
 | [#215](https://github.com/elnathancet-hue/crm-persia-v2/pull/215) | Cleanup lead-centric Fase B — remove 6 métodos `KanbanActions` sem callers (`bulkMoveDeals`, `bulkSetDealStatus`, `bulkDeleteDeals`, `bulkApplyTagsToDeals`, `markDealAsLost`, `bulkMarkDealsAsLost`) + 8 server actions + dead code `kanban-board.tsx` | idem |
 | [#216](https://github.com/elnathancet-hue/crm-persia-v2/pull/216) | Padrão global de filtros "Aplicar / Limpar" — migra Kanban `AdvancedFiltersPopover` + polimento DS no Audit admin. Pattern de referência: `LeadsAdvancedFilters` | — |
+| PR-CRM-BUG | fix(bugs): 8 bugs auditoria jun/2026 — `deals.lead_id NOT NULL`, `updateStageOrder` atômico (RPC `reorder_stages`), `deletePipeline` atômico (RPC `delete_pipeline_cascade`), fallback `createLeadWithDeal`, fire-and-forget activity log em `moveLeadStage` e `createPipeline`. Migration 077. | — |
+| PR-C1 | fix(crm-c1): kanban — select explícito em `listPipelines`, `listLeadsKanban`; select `withStagesAndDeals` remove colunas sensíveis | — |
+| PR-C2 | fix(crm-c2): `KanbanBoard` performance — deps `useMemo` completas, `sort()` fora do render, `DealCard` `React.memo` (auditoria jun/2026) | — |
+| PR-C3 | fix(crm-c3): segmento fantasma resolvido, role gates (`canCreateFunil`/`canManageTags`/`canManageSegments`), `generateMetadata` dinâmico por tab | — |
+| PR-C4 | fix(crm-c4): rotas legadas `/tags` + `/segments` redirect direto; agenda prefill `?leadId=`; todos call-sites `/leads/${id}` → `/crm?tab=leads&lead=${id}` (fecha decisão #17) | — |
+| PR-C5 | fix(crm-c5): `CrmTabs` WAI-ARIA (`role=tablist/tab`, `aria-selected`, `tabIndex`); skeleton neutro em `loading.tsx`; title dinâmico por tab via `generateMetadata` | — |
+| PR-C6 | fix(crm-c6): activity log fire-and-forget em `createLead` (`lead_created`) e tags (`tag_added`/`tag_removed`); `router.refresh` não reseta filtros ativos via `clientStateRef` | — |
 
 ### Decisões fundamentais
 
