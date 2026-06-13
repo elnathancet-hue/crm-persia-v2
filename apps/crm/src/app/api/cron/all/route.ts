@@ -14,6 +14,7 @@ import { runFollowupsTick } from "@/lib/ai-agent/followups/tick";
 import { processFollowUps } from "@/lib/flows/followup";
 import { processScheduledMessages, processScheduledGroupMessages } from "@/lib/whatsapp/send-scheduled-worker";
 import { processDueCampaignJobs } from "@/lib/campaigns/worker";
+import { runRemindersTick } from "@/lib/agenda/reminders/dispatch";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -21,12 +22,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [followups, agentFollowups, scheduled, scheduledGroups, campaigns] = await Promise.allSettled([
+  const [followups, agentFollowups, scheduled, scheduledGroups, campaigns, reminders] = await Promise.allSettled([
     processFollowUps(),
     runFollowupsTick(),
     processScheduledMessages(),
     processScheduledGroupMessages(),
     processDueCampaignJobs({ limit: 100, workerId: `cron-all-${Date.now()}` }),
+    runRemindersTick(),
   ]);
 
   return NextResponse.json({
@@ -46,6 +48,9 @@ export async function GET(request: NextRequest) {
     campaigns: campaigns.status === "fulfilled"
       ? campaigns.value
       : { error: (campaigns.reason instanceof Error ? campaigns.reason.message : String(campaigns.reason)) },
+    reminders: reminders.status === "fulfilled"
+      ? reminders.value
+      : { error: (reminders.reason instanceof Error ? reminders.reason.message : String(reminders.reason)) },
     timestamp: new Date().toISOString(),
   });
 }

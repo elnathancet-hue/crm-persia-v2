@@ -18,6 +18,7 @@ import {
   insertLeadActivity,
   successResult,
 } from "./shared";
+import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 
 // PR-AGENDA-TOOLS (mai/2026): AI Agent cria appointment do lead da
 // conversa diretamente pelo chat WhatsApp. Sem isso, o LLM tinha que
@@ -332,6 +333,18 @@ export const createAppointmentHandler: NativeHandler = async (context, input) =>
         timezone: created.timezone,
         status: created.status,
         google_event_id: googleEventId,
+      },
+    });
+
+    void dispatchWebhook(context.organization_id, "appointment.created", {
+      appointment: {
+        id: created.id,
+        title: created.title,
+        start_at: created.start_at,
+        end_at: created.end_at,
+        status: created.status,
+        lead_id: lead.id,
+        user_id: responsibleUserId,
       },
     });
 

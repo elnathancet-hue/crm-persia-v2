@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { ensureCanActOnUser } from "@/lib/agenda/security";
+import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import {
   notifyLeadAppointmentCancelled,
   notifyLeadAppointmentRescheduled,
@@ -149,6 +150,17 @@ export async function createAppointment(
     final,
   );
   revalidatePath("/agenda");
+  void dispatchWebhook(orgId, "appointment.created", {
+    appointment: {
+      id: created.id,
+      title: created.title,
+      start_at: created.start_at,
+      end_at: created.end_at,
+      status: created.status,
+      lead_id: created.lead_id ?? null,
+      user_id: created.user_id,
+    },
+  });
   return created;
 }
 
@@ -164,6 +176,17 @@ export async function updateAppointment(
   );
   revalidatePath("/agenda");
   revalidatePath(`/agenda/${id}`);
+  void dispatchWebhook(orgId, "appointment.updated", {
+    appointment: {
+      id: updated.id,
+      title: updated.title,
+      start_at: updated.start_at,
+      end_at: updated.end_at,
+      status: updated.status,
+      lead_id: updated.lead_id ?? null,
+      user_id: updated.user_id,
+    },
+  });
   return updated;
 }
 
@@ -178,6 +201,17 @@ export async function updateAppointmentStatus(
     status,
   );
   revalidatePath("/agenda");
+  void dispatchWebhook(orgId, "appointment.updated", {
+    appointment: {
+      id: updated.id,
+      title: updated.title,
+      start_at: updated.start_at,
+      end_at: updated.end_at,
+      status: updated.status,
+      lead_id: updated.lead_id ?? null,
+      user_id: updated.user_id,
+    },
+  });
   return updated;
 }
 
@@ -192,6 +226,17 @@ export async function cancelAppointment(
     input,
   );
   revalidatePath("/agenda");
+
+  void dispatchWebhook(orgId, "appointment.cancelled", {
+    appointment: {
+      id: updated.id,
+      title: updated.title,
+      start_at: updated.start_at,
+      lead_id: updated.lead_id ?? null,
+      user_id: updated.user_id,
+    },
+    reason: input.reason ?? null,
+  });
 
   // PR-AGENDA-NOTIFY (mai/2026): avisa lead via WhatsApp.
   // Fire-and-forget — se WhatsApp estiver fora/lead sem phone, log e
@@ -225,6 +270,22 @@ export async function rescheduleAppointment(
     input,
   );
   revalidatePath("/agenda");
+
+  void dispatchWebhook(orgId, "appointment.rescheduled", {
+    original: {
+      id: result.original.id,
+      start_at: result.original.start_at,
+    },
+    appointment: {
+      id: result.replacement.id,
+      title: result.replacement.title,
+      start_at: result.replacement.start_at,
+      end_at: result.replacement.end_at,
+      status: result.replacement.status,
+      lead_id: result.replacement.lead_id ?? null,
+      user_id: result.replacement.user_id,
+    },
+  });
 
   // PR-AGENDA-NOTIFY: avisa lead do novo horario (fire-and-forget).
   void notifyLeadAppointmentRescheduled(result.original, result.replacement)
