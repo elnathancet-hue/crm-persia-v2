@@ -26,6 +26,8 @@ import {
   updateLead,
 } from "@/actions/leads";
 import {
+  bulkApplyTagsToLeadsKanban,
+  bulkDeleteLeadsFromKanban,
   bulkMarkLeadsAsLost,
   bulkMarkLeadsAsWon,
   bulkMoveLeads,
@@ -53,7 +55,9 @@ export const crmKanbanActions: KanbanActions = {
   bulkMarkLeadsAsWon: (leadIds) => bulkMarkLeadsAsWon(leadIds),
   bulkMarkLeadsAsLost: (leadIds, input) =>
     bulkMarkLeadsAsLost(leadIds, input),
-  // bulkDeleteLeadsFromKanban + bulkApplyTagsToLeads: TODO (precisam shared)
+  bulkDeleteLeadsFromKanban: (leadIds) => bulkDeleteLeadsFromKanban(leadIds),
+  bulkApplyTagsToLeads: (leadIds, tagIds) =>
+    bulkApplyTagsToLeadsKanban(leadIds, tagIds),
 
   // ============ PIPELINES ============
   createPipeline: async (name) => {

@@ -21,6 +21,7 @@ import {
 import {
   ImportLeadsWizard,
   type ImportTag,
+  type ImportPipelineOption,
   downloadExport,
   makeExportFilename,
 } from "@persia/crm-ui";
@@ -32,6 +33,7 @@ import { useCurrentOrgId } from "@/lib/realtime/use-current-org-id";
 import { crmLeadsActions } from "@/features/leads/crm-leads-actions";
 import { createClient } from "@/lib/supabase/client";
 import { importLeads } from "@/actions/leads-import";
+import { listPipelinesForLead, listStagesForPipeline } from "@/actions/leads-kanban";
 import {
   assignLead,
   bulkAssignLeads,
@@ -134,15 +136,32 @@ export function LeadList(props: Props) {
   // Import wizard (PR-K1) — CRM-only por enquanto.
   const [importOpen, setImportOpen] = React.useState(false);
   const [importTags, setImportTags] = React.useState<ImportTag[]>([]);
+  const [importPipelines, setImportPipelines] = React.useState<ImportPipelineOption[]>([]);
 
   const openImport = React.useCallback(async () => {
     try {
-      const tags = await getOrgTags();
+      const [tags, pipelines] = await Promise.all([
+        getOrgTags(),
+        listPipelinesForLead(),
+      ]);
       setImportTags(
         tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
       );
+      // Carrega etapas de cada funil em paralelo (max ~10 funis tipicamente)
+      const pipelinesWithStages: ImportPipelineOption[] = await Promise.all(
+        pipelines.map(async (p) => {
+          try {
+            const stages = await listStagesForPipeline(p.id);
+            return { id: p.id, name: p.name, stages };
+          } catch {
+            return { id: p.id, name: p.name, stages: [] };
+          }
+        }),
+      );
+      setImportPipelines(pipelinesWithStages);
     } catch {
       setImportTags([]);
+      setImportPipelines([]);
     }
     setImportOpen(true);
   }, []);
@@ -406,6 +425,7 @@ export function LeadList(props: Props) {
         open={importOpen}
         onOpenChange={setImportOpen}
         tags={importTags}
+        pipelines={importPipelines}
         onImport={importLeads}
         onImported={() => router.refresh()}
         segmentsBasePath="/segments"

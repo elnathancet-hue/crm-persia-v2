@@ -73,6 +73,9 @@ export interface ImportDestination {
   create_segment?: boolean;
   segment_name?: string;
   segment_description?: string;
+  /** Funil de destino (opcional). Leads criados ficam nesta etapa do Kanban. */
+  pipeline_id?: string;
+  stage_id?: string;
 }
 
 export interface ImportLeadsInput {
@@ -90,11 +93,19 @@ export interface ImportLeadsResult {
   segment_id: string | null;
 }
 
+export interface ImportPipelineOption {
+  id: string;
+  name: string;
+  stages: { id: string; name: string }[];
+}
+
 interface ImportLeadsWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Tags existentes da organização (pra dropdown de aplicar tags). */
   tags: ImportTag[];
+  /** Funis + etapas disponíveis para selecionar destino no import (opcional). */
+  pipelines?: ImportPipelineOption[];
   /** Server action que executa a importacao. */
   onImport: (input: ImportLeadsInput) => Promise<ImportLeadsResult>;
   /** Callback quando import termina (pra parent revalidar/refetch). */
@@ -218,6 +229,7 @@ export function ImportLeadsWizard({
   open,
   onOpenChange,
   tags,
+  pipelines,
   onImport,
   onImported,
   segmentsBasePath = "/segments",
@@ -239,6 +251,9 @@ export function ImportLeadsWizard({
   const [createSegment, setCreateSegment] = React.useState<boolean>(true);
   const [segmentName, setSegmentName] = React.useState<string>("");
   const [segmentDescription, setSegmentDescription] = React.useState<string>("");
+  // Funil de destino (PR-C3): leads criados ficam nessa etapa do Kanban.
+  const [selectedPipelineId, setSelectedPipelineId] = React.useState<string>("");
+  const [selectedStageId, setSelectedStageId] = React.useState<string>("");
 
   // Estado de execucao
   const [isImporting, setIsImporting] = React.useState(false);
@@ -261,6 +276,8 @@ export function ImportLeadsWizard({
         setCreateSegment(true);
         setSegmentName("");
         setSegmentDescription("");
+        setSelectedPipelineId("");
+        setSelectedStageId("");
         setIsImporting(false);
         setResult(null);
       }, 300);
@@ -414,6 +431,8 @@ export function ImportLeadsWizard({
         create_segment: createSegment,
         segment_name: createSegment ? segmentName.trim() : undefined,
         segment_description: createSegment ? segmentDescription.trim() : undefined,
+        pipeline_id: selectedPipelineId || undefined,
+        stage_id: selectedStageId || undefined,
       };
 
       const res = await onImport({
@@ -508,6 +527,14 @@ export function ImportLeadsWizard({
               onChangeSegmentName={setSegmentName}
               segmentDescription={segmentDescription}
               onChangeSegmentDescription={setSegmentDescription}
+              pipelines={pipelines}
+              selectedPipelineId={selectedPipelineId}
+              onChangePipeline={(id) => {
+                setSelectedPipelineId(id);
+                setSelectedStageId("");
+              }}
+              selectedStageId={selectedStageId}
+              onChangeStage={setSelectedStageId}
             />
           )}
           {step === 4 && file && (
@@ -873,6 +900,11 @@ function Step3Destination({
   onChangeSegmentName,
   segmentDescription,
   onChangeSegmentDescription,
+  pipelines,
+  selectedPipelineId,
+  onChangePipeline,
+  selectedStageId,
+  onChangeStage,
 }: {
   tags: ImportTag[];
   selectedTagIds: string[];
@@ -891,9 +923,73 @@ function Step3Destination({
   onChangeSegmentName: (v: string) => void;
   segmentDescription: string;
   onChangeSegmentDescription: (v: string) => void;
+  pipelines?: ImportPipelineOption[];
+  selectedPipelineId: string;
+  onChangePipeline: (id: string) => void;
+  selectedStageId: string;
+  onChangeStage: (id: string) => void;
 }) {
+  const availableStages =
+    pipelines?.find((p) => p.id === selectedPipelineId)?.stages ?? [];
   return (
     <div className="space-y-6">
+      {/* Funil de destino (PR-C3) — só mostra se pipelines foram passados */}
+      {pipelines && pipelines.length > 0 && (
+        <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+          <p className="text-sm font-medium text-foreground">
+            Adicionar ao funil <span className="text-muted-foreground font-normal">(opcional)</span>
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="import-pipeline">Funil</Label>
+              <Select
+                value={selectedPipelineId}
+                onValueChange={(v) => onChangePipeline(v ?? "")}
+              >
+                <SelectTrigger id="import-pipeline" className="h-10">
+                  <SelectValue placeholder="Nenhum (sem funil)">
+                    {pipelines.find((p) => p.id === selectedPipelineId)?.name ?? null}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="import-stage">Etapa</Label>
+              <Select
+                value={selectedStageId}
+                onValueChange={(v) => onChangeStage(v ?? "")}
+                disabled={!selectedPipelineId || availableStages.length === 0}
+              >
+                <SelectTrigger id="import-stage" className="h-10">
+                  <SelectValue placeholder="Selecione o funil primeiro">
+                    {availableStages.find((s) => s.id === selectedStageId)?.name ?? null}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableStages.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {selectedPipelineId && !selectedStageId && (
+            <p className="text-xs text-warning">
+              Selecione a etapa para colocar os leads importados no funil.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Origem + Status */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">

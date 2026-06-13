@@ -395,6 +395,91 @@ export async function bulkMarkLeadsAsLost(
   return { updated_count: affectedIds.length };
 }
 
+// ============================================================
+// bulkDeleteLeads — exclui N leads permanentemente (lead-centric,
+// substitui bulkDeleteDeals pra cards cujo id é o leadId).
+// PR-C3: wired no bulkDeleteLeadsFromKanban server action.
+// ============================================================
+
+export async function bulkDeleteLeads(
+  ctx: CrmMutationContext,
+  leadIds: string[],
+): Promise<{ deleted_count: number }> {
+  const { db, orgId } = ctx;
+  if (leadIds.length === 0) return { deleted_count: 0 };
+  if (leadIds.length > BULK_LIMIT) {
+    throw new Error(`Maximo ${BULK_LIMIT} leads por operacao em massa.`);
+  }
+
+  const { data: deleted, error } = await db
+    .from("leads")
+    .delete()
+    .in("id", leadIds)
+    .eq("organization_id", orgId)
+    .select("id");
+
+  if (error) throw sanitizeMutationError(error, "Erro ao excluir leads");
+
+  return { deleted_count: ((deleted ?? []) as { id: string }[]).length };
+}
+
+// ============================================================
+// bulkApplyTagsToLeads — aplica N tags em N leads (lead-centric,
+// substitui bulkApplyTagsToDealLeads pra cards cujo id é o leadId).
+// PR-C3: wired no bulkApplyTagsToLeads server action.
+// ============================================================
+
+export async function bulkApplyTagsToLeads(
+  ctx: CrmMutationContext,
+  leadIds: string[],
+  tagIds: string[],
+): Promise<{ links_count: number }> {
+  const { db, orgId } = ctx;
+  if (leadIds.length === 0 || tagIds.length === 0) return { links_count: 0 };
+  if (leadIds.length > BULK_LIMIT) {
+    throw new Error(`Maximo ${BULK_LIMIT} leads por operacao em massa.`);
+  }
+
+  // Valida que todas as tags pertencem à org (defense-in-depth).
+  const { data: validTags, error: tagErr } = await db
+    .from("tags")
+    .select("id")
+    .eq("organization_id", orgId)
+    .in("id", tagIds);
+
+  if (tagErr) throw sanitizeMutationError(tagErr, "Erro ao validar tags");
+  const validTagIds = ((validTags ?? []) as { id: string }[]).map((t) => t.id);
+  if (validTagIds.length === 0) throw new Error("Nenhuma tag valida para esta organizacao");
+
+  // Upsert em lead_tags — duplicatas sao ignoradas.
+  const rows = leadIds.flatMap((leadId) =>
+    validTagIds.map((tagId) => ({
+      lead_id: leadId,
+      tag_id: tagId,
+      organization_id: orgId,
+    })),
+  );
+
+  const { data: inserted, error: linkErr } = await db
+    .from("lead_tags")
+    .upsert(rows as never, { onConflict: "lead_id,tag_id", ignoreDuplicates: true })
+    .select("lead_id");
+
+  if (linkErr) throw sanitizeMutationError(linkErr, "Erro ao aplicar tags");
+
+  await logActivity(
+    ctx,
+    leadIds.map((id) => ({
+      lead_id: id,
+      organization_id: orgId,
+      type: "stage_change" as BulkLeadActivityType, // reuse tipo generico
+      metadata: { tag_ids: validTagIds, bulk: true, action: "tags_applied" },
+    })),
+  );
+
+  return { links_count: ((inserted ?? []) as { lead_id: string }[]).length };
+}
+
 export async function bulkMarkLeadsAsWon(
   ctx: CrmMutationContext,
   leadIds: string[],
