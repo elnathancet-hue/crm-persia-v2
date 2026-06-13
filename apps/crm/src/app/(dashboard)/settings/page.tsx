@@ -25,6 +25,7 @@ export default async function SettingsPage() {
   ]);
 
   const org = (member as any)?.organizations;
+  if (!org) return null;
 
   return (
     <OrgSettingsClient

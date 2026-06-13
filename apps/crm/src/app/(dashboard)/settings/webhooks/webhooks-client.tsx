@@ -44,6 +44,7 @@ import {
   deleteWebhook,
   toggleWebhookActive,
 } from "@/actions/webhooks";
+import { toast } from "sonner";
 
 interface WebhookItem {
   id: string;
@@ -95,8 +96,8 @@ export function WebhooksPageClient({
         setWebhooks((prev) => [newWebhook as WebhookItem, ...prev]);
       }
       setCreateOpen(false);
-    } catch {
-      // silently fail
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar webhook");
     } finally {
       setSaving(false);
     }
@@ -111,8 +112,8 @@ export function WebhooksPageClient({
           w.id === webhook.id ? { ...w, is_active: !w.is_active } : w
         )
       );
-    } catch {
-      // silently fail
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao atualizar webhook");
     } finally {
       setSaving(false);
     }
@@ -126,8 +127,8 @@ export function WebhooksPageClient({
     try {
       await deleteWebhook(id);
       setWebhooks((prev) => prev.filter((w) => w.id !== id));
-    } catch {
-      // silently fail
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir webhook");
     } finally {
       setSaving(false);
     }

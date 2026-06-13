@@ -34,6 +34,7 @@ import { RelativeTime } from "@persia/ui";
 import { DialogHero } from "@persia/ui/dialog-hero";
 import { Switch } from "@persia/ui/switch";
 import { createQueue, updateQueue, deleteQueue } from "@/actions/queues";
+import { toast } from "sonner";
 
 interface Queue {
   id: string;
@@ -139,8 +140,8 @@ export function QueuesPageClient({
         }
       }
       setDialogOpen(false);
-    } catch {
-      // silently fail
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar fila");
     } finally {
       setSaving(false);
     }
@@ -159,8 +160,8 @@ export function QueuesPageClient({
       setQueues((prev) => prev.filter((q) => q.id !== deletingQueue.id));
       setDeleteOpen(false);
       setDeletingQueue(null);
-    } catch {
-      // silently fail
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir fila");
     } finally {
       setSaving(false);
     }
