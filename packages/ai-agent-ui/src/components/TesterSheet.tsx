@@ -113,10 +113,11 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
   const [catalogs, setCatalogs] = React.useState<FlowCatalogs>(EMPTY_FLOW_CATALOGS);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
-  // Carrega catalogs (stages + segments) lazy quando painel simular abre.
-  // FlowCatalogs já existe via actions.getFlowCatalogs do PR 4.
+  // Carrega catalogs (stages + segments) quando o tester abre — necessário
+  // para o EmptyState saber se há etapas cadastradas (stagesCount) e para
+  // o painel de simulação de evento ter pickers populados.
   React.useEffect(() => {
-    if (!simulatePanelOpen || !actions.getFlowCatalogs) return;
+    if (!open || !actions.getFlowCatalogs) return;
     let cancelled = false;
     actions
       .getFlowCatalogs(configId)
@@ -129,7 +130,7 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [simulatePanelOpen, configId, actions]);
+  }, [open, configId, actions]);
   // PR-TESTER-CANCEL (mai/2026): UX escape pra runs gpt-5* longos.
   // Server action nao aceita AbortSignal nativamente, entao usamos um
   // flag mutavel: cancel marca cancelledRef.current=true; a continuation
@@ -366,7 +367,7 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
           className="flex-1 overflow-y-auto px-4 py-2 space-y-3 bg-muted/20"
         >
           {turns.length === 0 ? (
-            <EmptyState faithfulMode={faithfulMode} stagesCount={0} />
+            <EmptyState faithfulMode={faithfulMode} stagesCount={catalogs.pipeline_stages.length} />
           ) : (
             turns.map((turn, i) => <TurnRenderer key={i} turn={turn} />)
           )}
@@ -375,8 +376,8 @@ export function TesterSheet({ configId, open, onOpenChange }: Props) {
               <Loader2 className="size-3 animate-spin" />
               {faithfulMode
                 ? expediteDebounce
-                  ? "Rodando pipeline..."
-                  : "Aguardando janela de debounce + pipeline..."
+                  ? "Processando..."
+                  : "Aguardando antes de processar..."
                 : "Agente pensando..."}
             </div>
           ) : null}
@@ -786,9 +787,9 @@ function labelForSkip(reason: TesterSkipReason): string {
     case "native_agent_handoff":
       return "Palavra de reativacao detectada";
     case "rate_limited":
-      return "Rate limit atingido";
+      return "Agente pausado temporariamente";
     case "cost_ceiling":
-      return "Limite de uso atingido";
+      return "Agente pausado temporariamente";
     default:
       return "Pipeline pulou";
   }
@@ -873,7 +874,11 @@ function SimulateEventPanel({
               disabled={disabled}
             >
               <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Selecionar gatilho…" />
+                <SelectValue>
+                  {triggerType === "pipeline_stage_entered"
+                    ? "Lead entrou em etapa do funil"
+                    : "Lead entrou em segmentação"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pipeline_stage_entered">

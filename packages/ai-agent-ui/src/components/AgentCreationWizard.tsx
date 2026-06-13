@@ -49,7 +49,7 @@ const MODEL_OPTIONS = [
   },
   {
     value: "gpt-4o-mini",
-    label: "Econômico",
+    label: "Ágil",
     tagline: "Mais rápido e leve. Bom pra fluxos simples.",
   },
   {
