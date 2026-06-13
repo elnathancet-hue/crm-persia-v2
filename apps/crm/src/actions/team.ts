@@ -96,6 +96,27 @@ export async function updateMemberRole(memberId: string, role: string) {
       metadata: { role },
     },
     async (admin) => {
+      // Guard: não rebaixar o último admin ativo
+      if (role !== "admin") {
+        const { data: current } = await admin
+          .from("organization_members")
+          .select("role")
+          .eq("id", memberId)
+          .eq("organization_id", orgId)
+          .single();
+        if (current?.role === "admin") {
+          const { count } = await admin
+            .from("organization_members")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", orgId)
+            .eq("role", "admin")
+            .eq("is_active", true);
+          if ((count ?? 0) <= 1) {
+            throw new Error("Não é possível rebaixar o único admin ativo da organização");
+          }
+        }
+      }
+
       const { error } = await admin
         .from("organization_members")
         .update({ role })
@@ -175,6 +196,19 @@ export async function updateMemberPermissions(
 
       if (!member) throw new Error("Membro nao encontrado");
       if (member.role === "owner") throw new Error("Nao pode alterar permissoes do dono");
+
+      // Guard: não rebaixar o último admin ativo
+      if (role !== "admin" && member.role === "admin") {
+        const { count } = await admin
+          .from("organization_members")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", orgId)
+          .eq("role", "admin")
+          .eq("is_active", true);
+        if ((count ?? 0) <= 1) {
+          throw new Error("Não é possível rebaixar o único admin ativo da organização");
+        }
+      }
 
       const { error } = await admin
         .from("organization_members")

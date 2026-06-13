@@ -64,7 +64,8 @@ export async function updateQueue(id: string, formData: FormData) {
   const isActive = formData.get("is_active");
   const setLeadOwner = formData.get("set_lead_owner");
 
-  if (name) updateData.name = name;
+  if (name !== undefined && name.trim() === "") throw new Error("Nome é obrigatório");
+  if (name) updateData.name = name.trim();
   if (distributionType) updateData.distribution_type = distributionType;
   if (description !== null) updateData.description = description;
   if (isActive !== null) updateData.is_active = isActive !== "false";

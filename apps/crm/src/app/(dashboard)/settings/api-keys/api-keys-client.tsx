@@ -216,6 +216,7 @@ export function ApiKeysClient({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createdKey, setCreatedKey] = React.useState<string | null>(null);
   const [revoking, setRevoking] = React.useState<string | null>(null);
+  const [revokeConfirm, setRevokeConfirm] = React.useState<{ id: string; name: string } | null>(null);
 
   function handleCreated(fullKey: string, record: ApiKeyRow) {
     setCreateOpen(false);
@@ -223,9 +224,10 @@ export function ApiKeysClient({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
     setCreatedKey(fullKey);
   }
 
-  async function handleRevoke(id: string, name: string) {
-    if (!confirm(`Revogar a chave "${name}"? Formulários que usam ela pararão de funcionar.`)) return;
-
+  async function confirmRevoke() {
+    if (!revokeConfirm) return;
+    const { id } = revokeConfirm;
+    setRevokeConfirm(null);
     setRevoking(id);
     try {
       const res = await revokeApiKey(id);
@@ -336,7 +338,7 @@ export function ApiKeysClient({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
                           variant="ghost"
                           size="icon"
                           className="text-destructive"
-                          onClick={() => handleRevoke(key.id, key.name)}
+                          onClick={() => setRevokeConfirm({ id: key.id, name: key.name })}
                           disabled={revoking === key.id}
                           aria-label="Revogar chave"
                         >
@@ -355,6 +357,30 @@ export function ApiKeysClient({ initialKeys }: { initialKeys: ApiKeyRow[] }) {
           </Card>
         )}
       </div>
+
+      {/* Revoke confirmation dialog */}
+      <Dialog open={!!revokeConfirm} onOpenChange={(open) => { if (!open) setRevokeConfirm(null); }}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Revogar chave de API</DialogTitle>
+            <DialogHero
+              icon={<ShieldOff className="size-5" />}
+              title="Revogar chave de API"
+              tagline={revokeConfirm ? `"${revokeConfirm.name}" — formulários que usam esta chave pararão de funcionar.` : ""}
+              tone="destructive"
+            />
+          </DialogHeader>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="outline" onClick={() => setRevokeConfirm(null)} disabled={!!revoking}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmRevoke} disabled={!!revoking}>
+              {revoking && <Loader2 className="size-4 animate-spin" />}
+              Revogar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -16,6 +16,13 @@ import { toast } from "sonner";
 import { Badge } from "@persia/ui/badge";
 import { Button } from "@persia/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@persia/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@persia/ui/dialog";
+import { DialogHero } from "@persia/ui/dialog-hero";
 import { RelativeTime } from "@persia/ui";
 import {
   Select,
@@ -42,6 +49,7 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
   const [pending, setPending] = React.useState<"refresh" | "default" | "disconnect" | null>(
     null,
   );
+  const [confirmDisconnect, setConfirmDisconnect] = React.useState(false);
 
   // Toast pós-callback (?status=ok|error&msg=...)
   React.useEffect(() => {
@@ -103,9 +111,6 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
   }
 
   async function handleDisconnect() {
-    if (!confirm("Desconectar Google Calendar? Você poderá reconectar depois.")) {
-      return;
-    }
     setPending("disconnect");
     try {
       const res = await disconnectGoogleCalendar();
@@ -253,7 +258,7 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleDisconnect}
+              onClick={() => setConfirmDisconnect(true)}
               disabled={pending === "disconnect"}
             >
               {pending === "disconnect" ? (
@@ -328,6 +333,34 @@ export function GoogleCalendarSettingsClient({ initialStatus }: Props) {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Confirm disconnect dialog */}
+      <Dialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
+        <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+          <DialogHeader className="border-b border-border bg-card p-5">
+            <DialogTitle className="sr-only">Desconectar Google Calendar</DialogTitle>
+            <DialogHero
+              icon={<LogOut className="size-5" />}
+              title="Desconectar Google Calendar"
+              tagline="Agendamentos automáticos da IA serão pausados até reconectar."
+              tone="destructive"
+            />
+          </DialogHeader>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="outline" onClick={() => setConfirmDisconnect(false)} disabled={pending === "disconnect"}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={pending === "disconnect"}
+              onClick={() => { setConfirmDisconnect(false); handleDisconnect(); }}
+            >
+              {pending === "disconnect" && <Loader2 className="size-4 animate-spin" />}
+              Desconectar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
