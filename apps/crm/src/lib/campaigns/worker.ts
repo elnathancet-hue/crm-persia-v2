@@ -20,11 +20,13 @@ import { logError, logInfo } from "@/lib/observability";
 const BACKOFF_MS = [60_000, 300_000, 900_000]; // 1, 5, 15 min
 const MAX_ATTEMPTS = 3;
 
+// Module-level singleton — evita nova instância a cada tick
+const _supabaseWorker = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  return _supabaseWorker;
 }
 
 interface WorkerOptions {
@@ -112,8 +114,12 @@ export async function processDueCampaignJobs(opts: WorkerOptions = {}): Promise<
 
   let sent = 0, failed = 0, skipped = 0;
 
+  // Caches scoped ao tick: evita re-query de campaign/step repetidos
+  const campaignCache = new Map<string, CampaignRow | null>();
+  const stepCache = new Map<string, StepRow | null>();
+
   for (const job of (jobs ?? []) as JobRow[]) {
-    const result = await processJob(supabase as never, job, workerId);
+    const result = await processJob(supabase as never, job, workerId, campaignCache, stepCache);
     if (result === "sent") sent++;
     else if (result === "failed") failed++;
     else if (result === "skipped") skipped++;
@@ -129,6 +135,8 @@ async function processJob(
   supabase: ReturnType<typeof createClient>,
   job: JobRow,
   workerId: string,
+  campaignCache: Map<string, CampaignRow | null>,
+  stepCache: Map<string, StepRow | null>,
 ): Promise<"sent" | "failed" | "skipped" | "locked" | "rescheduled"> {
   // Lock atômico: só atualiza se ainda queued
   const { data: locked, error: lockErr } = await supabase
@@ -147,19 +155,21 @@ async function processJob(
   if (lockErr || !locked) return "locked"; // outro worker pegou
 
   try {
-    // Buscar campanha
-    const { data: campaign } = await supabase
-      .from("crm_campaigns")
-      .select("id, organization_id, status, send_window_start, send_window_end, timezone, kind")
-      .eq("id", job.campaign_id)
-      .single();
+    // Buscar campanha (com cache por campaign_id dentro do tick)
+    if (!campaignCache.has(job.campaign_id)) {
+      const { data: campaignData } = await supabase
+        .from("crm_campaigns")
+        .select("id, organization_id, status, send_window_start, send_window_end, timezone, kind")
+        .eq("id", job.campaign_id)
+        .single();
+      campaignCache.set(job.campaign_id, (campaignData as CampaignRow | null) ?? null);
+    }
+    const c = campaignCache.get(job.campaign_id) ?? null;
 
-    if (!campaign) {
+    if (!c) {
       await cancelJob(supabase, job.id, "Campanha não encontrada");
       return "skipped";
     }
-
-    const c = campaign as CampaignRow;
 
     if (c.status === "cancelled") {
       await updateJobStatus(supabase, job.id, "cancelled");
@@ -210,12 +220,16 @@ async function processJob(
       }
     }
 
-    // Buscar step
-    const { data: step } = await supabase
-      .from("crm_campaign_steps")
-      .select("id, send_mode, message_text, media_type, media_url, media_filename, media_mime_type, caption")
-      .eq("id", job.step_id)
-      .single();
+    // Buscar step (com cache por step_id dentro do tick)
+    if (!stepCache.has(job.step_id)) {
+      const { data: stepData } = await supabase
+        .from("crm_campaign_steps")
+        .select("id, send_mode, message_text, media_type, media_url, media_filename, media_mime_type, caption")
+        .eq("id", job.step_id)
+        .single();
+      stepCache.set(job.step_id, (stepData as StepRow | null) ?? null);
+    }
+    const step = stepCache.get(job.step_id) ?? null;
 
     if (!step) {
       await cancelJob(supabase, job.id, "Step não encontrado");

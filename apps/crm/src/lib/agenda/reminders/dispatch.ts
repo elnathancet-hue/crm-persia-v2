@@ -86,6 +86,9 @@ export async function runRemindersTick(): Promise<ReminderTickResult> {
   let skipped = 0;
   const errors: string[] = [];
 
+  // Provider cache: evita re-query a whatsapp_connections para a mesma org no mesmo tick
+  const providerCache = new Map<string, ReturnType<typeof createProvider> | null>();
+
   for (const row of rows) {
     try {
       const ctx = await loadAppointmentContext(db, row);
@@ -137,10 +140,14 @@ export async function runRemindersTick(): Promise<ReminderTickResult> {
         host_name: ctx.hostName,
       });
 
-      // Provider
-      const provider = await loadProvider(db, ctx.appointment.organization_id);
+      // Provider com cache por org
+      const orgId = ctx.appointment.organization_id;
+      if (!providerCache.has(orgId)) {
+        providerCache.set(orgId, await loadProvider(db, orgId));
+      }
+      const provider = providerCache.get(orgId) ?? null;
       if (!provider) {
-        await bumpAttempt(db, row.id, "whatsapp_unavailable");
+        await bumpAttempt(db, row.id, row.attempted_count, "whatsapp_unavailable");
         failed++;
         errors.push("whatsapp_unavailable");
         continue;
@@ -152,7 +159,7 @@ export async function runRemindersTick(): Promise<ReminderTickResult> {
         message,
       });
       if (!result.success) {
-        await bumpAttempt(db, row.id, "send_failed");
+        await bumpAttempt(db, row.id, row.attempted_count, "send_failed");
         failed++;
         errors.push("send_failed");
         continue;
@@ -162,7 +169,7 @@ export async function runRemindersTick(): Promise<ReminderTickResult> {
       sent++;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown";
-      await bumpAttempt(db, row.id, msg).catch(() => {});
+      await bumpAttempt(db, row.id, row.attempted_count, msg).catch(() => {});
       failed++;
       errors.push(msg);
     }
@@ -182,13 +189,15 @@ async function loadAppointmentContext(
   const [apptRes, cfgRes, orgRes] = await Promise.all([
     db
       .from("appointments")
-      .select("*")
+      .select(
+        "id, organization_id, status, deleted_at, lead_id, user_id, title, start_at, timezone, location, meeting_url, duration_minutes",
+      )
       .eq("id", row.appointment_id)
       .eq("organization_id", row.organization_id)
       .maybeSingle(),
     db
       .from("agenda_reminder_configs")
-      .select("*")
+      .select("id, organization_id, is_active, template_text")
       .eq("id", row.reminder_config_id)
       .eq("organization_id", row.organization_id)
       .maybeSingle(),
@@ -278,14 +287,8 @@ async function markSendStatus(
     .eq("status", "pending"); // idempotency: nao reescreve se ja foi sent
 }
 
-async function bumpAttempt(db: LooseDb, sendId: string, error: string) {
-  // Le current attempted_count (race-tolerant pra MVP)
-  const { data: current } = await db
-    .from("agenda_reminder_sends")
-    .select("attempted_count")
-    .eq("id", sendId)
-    .maybeSingle();
-  const next = ((current?.attempted_count as number | undefined) ?? 0) + 1;
+async function bumpAttempt(db: LooseDb, sendId: string, currentCount: number, error: string) {
+  const next = currentCount + 1;
   const newStatus = next >= MAX_ATTEMPTS ? "failed" : "pending";
   await db
     .from("agenda_reminder_sends")

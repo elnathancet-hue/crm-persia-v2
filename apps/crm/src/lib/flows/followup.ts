@@ -1,11 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { resumeExecution } from "./engine";
 
+// Module-level singleton — evita nova instância a cada tick
+const _supabaseFollowup = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  return _supabaseFollowup;
 }
 
 /**
