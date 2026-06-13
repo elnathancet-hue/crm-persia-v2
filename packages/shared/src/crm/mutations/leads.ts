@@ -123,6 +123,19 @@ export async function createLead(
   if (!data) throw new Error("Lead nao foi criado");
 
   const created = data as CreatedLead;
+  // PR-C6: activity log "lead_created" — fire-and-forget pra nao falhar a criacao.
+  void ctx.db
+    .from("lead_activities")
+    .insert({
+      lead_id: created.id,
+      organization_id: orgId,
+      type: "lead_created",
+      description: "Lead criado",
+      metadata: { source: created.source ?? "manual" },
+    } as never)
+    .then(({ error }: { error: { message: string } | null }) => {
+      if (error) console.error("[createLead] activity log:", error.message);
+    });
   ctx.onLeadChanged?.(created.id);
   return created;
 }

@@ -137,7 +137,7 @@ export async function addTagToLead(
 
   const { data: tag } = await db
     .from("tags")
-    .select("id")
+    .select("id, name")
     .eq("id", tagId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -157,6 +157,21 @@ export async function addTagToLead(
     }
     throw sanitizeMutationError(error, "Erro ao associar tag ao lead");
   }
+
+  // PR-C6: activity log "tag_added" — fire-and-forget.
+  const tagName = (tag as { id: string; name: string }).name;
+  void db
+    .from("lead_activities")
+    .insert({
+      lead_id: leadId,
+      organization_id: orgId,
+      type: "tag_added",
+      description: `Tag adicionada: ${tagName}`,
+      metadata: { tag_id: tagId, tag_name: tagName },
+    } as never)
+    .then(({ error: e }: { error: { message: string } | null }) => {
+      if (e) console.error("[addTagToLead] activity log:", e.message);
+    });
 
   ctx.onLeadChanged?.(leadId);
 }
@@ -180,6 +195,33 @@ export async function removeTagFromLead(
     .eq("organization_id", orgId);
 
   if (error) throw sanitizeMutationError(error, "Erro ao remover tag do lead");
+
+  // PR-C6: activity log "tag_removed" — fire-and-forget. Busca o nome da tag
+  // no banco (a tag ainda existe, so a associacao foi removida).
+  void db
+    .from("tags")
+    .select("name")
+    .eq("id", tagId)
+    .eq("organization_id", orgId)
+    .maybeSingle()
+    .then(({ data: t }: { data: { name: string } | null }) => {
+      const tagName = t?.name ?? tagId;
+      return db
+        .from("lead_activities")
+        .insert({
+          lead_id: leadId,
+          organization_id: orgId,
+          type: "tag_removed",
+          description: `Tag removida: ${tagName}`,
+          metadata: { tag_id: tagId, tag_name: tagName },
+        } as never);
+    })
+    .then(({ error: e }: { error: { message: string } | null }) => {
+      if (e) console.error("[removeTagFromLead] activity log:", e.message);
+    })
+    .catch((e: unknown) => {
+      console.error("[removeTagFromLead] activity log threw:", e);
+    });
 
   ctx.onLeadChanged?.(leadId);
 }
