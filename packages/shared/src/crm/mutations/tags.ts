@@ -5,6 +5,7 @@
 
 import type { Tag } from "../types";
 import type { CrmMutationContext } from "./context";
+import { sanitizeMutationError } from "./errors";
 
 const DEFAULT_TAG_COLOR = "#6366f1";
 
@@ -34,7 +35,7 @@ export async function createTag(
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao criar tag");
   if (!data) throw new Error("Tag nao foi criada");
   return data as Tag;
 }
@@ -73,7 +74,7 @@ export async function updateTag(
     .eq("id", tagId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao atualizar tag");
 }
 
 /**
@@ -110,7 +111,7 @@ export async function deleteTag(
     .eq("id", tagId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao remover tag");
 }
 
 /**
@@ -154,7 +155,7 @@ export async function addTagToLead(
       // Associacao ja existia — operacao idempotente, nao eh erro.
       return;
     }
-    throw new Error(error.message);
+    throw sanitizeMutationError(error, "Erro ao associar tag ao lead");
   }
 
   ctx.onLeadChanged?.(leadId);
@@ -178,7 +179,7 @@ export async function removeTagFromLead(
     .eq("tag_id", tagId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao remover tag do lead");
 
   ctx.onLeadChanged?.(leadId);
 }

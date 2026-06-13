@@ -5,6 +5,7 @@
 // + { data, error }).
 
 import type { CrmMutationContext } from "./context";
+import { sanitizeMutationError } from "./errors";
 
 export interface CreateLeadInput {
   name?: string | null;
@@ -112,7 +113,7 @@ export async function createLead(
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao criar lead");
   if (!data) throw new Error("Lead nao foi criado");
 
   const created = data as CreatedLead;
@@ -180,7 +181,7 @@ export async function updateLead(
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao atualizar lead");
   if (!data) throw new Error("Lead nao encontrado nesta organizacao");
 
   ctx.onLeadChanged?.(leadId);
@@ -203,5 +204,5 @@ export async function deleteLead(
     .eq("id", leadId)
     .eq("organization_id", orgId);
 
-  if (error) throw new Error(error.message);
+  if (error) throw sanitizeMutationError(error, "Erro ao remover lead");
 }
