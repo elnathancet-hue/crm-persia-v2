@@ -63,7 +63,7 @@ export default async function BillingPage() {
           <div className="flex-1 min-w-0">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Plano atual</p>
             <p className="font-semibold text-foreground mt-0.5">
-              {(org as { name?: string }).name ?? "—"}
+              {planLabels[plan] ?? plan}
             </p>
           </div>
           <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${colorClass}`}>
