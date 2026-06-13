@@ -178,6 +178,17 @@ export async function updateQueue(queueId: string, data: Record<string, unknown>
 
 export async function deleteQueue(queueId: string) {
   const { admin, orgId } = await requireSuperadminForOrg();
+
+  // Guard: não deletar fila com conversas ativas (evita FK violation + orphans)
+  const { count: activeConversations } = await admin
+    .from("conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("queue_id", queueId)
+    .eq("organization_id", orgId);
+  if ((activeConversations ?? 0) > 0) {
+    return { error: `Não é possível excluir: ${activeConversations} conversa(s) ativa(s) nesta fila. Mova-as primeiro.` };
+  }
+
   await admin.from("queue_members").delete().eq("queue_id", queueId).eq("organization_id", orgId);
   const { error } = await admin.from("queues").delete().eq("id", queueId).eq("organization_id", orgId);
   if (error) return { error: error.message };
@@ -254,9 +265,16 @@ export async function createAssistant(data: {
   return { data: assistant, error: null };
 }
 
+const ASSISTANT_ALLOWED_FIELDS = ["name", "prompt", "category", "tone", "welcome_msg", "off_hours_msg", "schedule", "model", "is_active", "message_splitting"] as const;
+
 export async function updateAssistant(assistantId: string, data: Record<string, unknown>) {
   const { admin, orgId } = await requireSuperadminForOrg();
-  const { error } = await admin.from("ai_assistants").update({ ...data, updated_at: new Date().toISOString() }).eq("id", assistantId).eq("organization_id", orgId);
+  // Whitelist — previne mass assignment (ex: organization_id sobrescrição)
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  for (const key of ASSISTANT_ALLOWED_FIELDS) {
+    if (key in data) patch[key] = data[key];
+  }
+  const { error } = await admin.from("ai_assistants").update(patch).eq("id", assistantId).eq("organization_id", orgId);
   if (error) return { error: error.message };
   revalidatePath("/settings/ai");
   revalidatePath("/automations/assistant");
