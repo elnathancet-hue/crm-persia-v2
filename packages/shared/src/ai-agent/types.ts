@@ -209,6 +209,53 @@ export const DEFAULT_GUARDRAILS: AgentGuardrails = {
 };
 
 // ============================================================================
+// Structured Prompt Config — editor estruturado SDR (migration 124)
+// ============================================================================
+
+export type TonePreset =
+  | "direct_commercial"
+  | "consultive_empathic"
+  | "formal_institutional"
+  | "casual_youth";
+
+export interface StructuredPromptIdentity {
+  agent_name: string;
+  company: string;
+  segment: string;
+  channel: string;
+  region: string;
+  goal: string;
+}
+
+export interface StructuredPromptTone {
+  preset: TonePreset;
+  custom_instruction: string;
+}
+
+export interface StructuredPromptCommercialRule {
+  /** UUID gerado no client (nanoid). Estável entre edições. */
+  id: string;
+  title: string;
+  /** Ex: "Pessoa Física (PF)", "PJ / MEI", "Menores de Idade". */
+  profile_label: string;
+  description: string;
+}
+
+/**
+ * Configuração estruturada do prompt SDR.
+ * compileStructuredPrompt() converte isso no system_prompt final.
+ */
+export interface StructuredPromptConfig {
+  version: 1;
+  identity: StructuredPromptIdentity;
+  tone: StructuredPromptTone;
+  /** Instruções gerais de comportamento (texto livre, variáveis {{agent_name}} etc.). */
+  master_prompt: string;
+  commercial_rules: StructuredPromptCommercialRule[];
+  prohibited_actions: string[];
+}
+
+// ============================================================================
 // Agent configuration (agent_configs row)
 // ============================================================================
 
@@ -275,6 +322,11 @@ export interface AgentConfig {
   // Migration 113: fontes de dados estruturadas (MCP ou JSON inline).
   // Default [] para compatibilidade — runner usa ?? [].
   structured_sources?: StructuredSource[];
+  // Migration 124: editor estruturado de prompt SDR. Quando presente,
+  // a UI exibe o formulário (identidade, tom, regras, proibições) em vez
+  // do textarea de texto corrido. compileStructuredPrompt() gera
+  // o system_prompt final ao salvar. null = agente legado.
+  structured_prompt_config?: StructuredPromptConfig | null;
   status: AgentStatus;
   created_at: string;
   updated_at: string;
@@ -631,6 +683,8 @@ export interface CreateAgentInput {
   validation_config?: ValidationConfig;
   // Migration 113: fontes de dados estruturadas.
   structured_sources?: StructuredSource[];
+  // Migration 124: editor estruturado de prompt SDR.
+  structured_prompt_config?: StructuredPromptConfig | null;
 }
 
 export interface UpdateAgentInput extends Partial<CreateAgentInput> {

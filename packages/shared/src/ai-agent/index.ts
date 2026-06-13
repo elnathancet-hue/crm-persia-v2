@@ -29,3 +29,5 @@ export * from "./flow";
 export * from "./flow-validation";
 // Backlog #5 Auditoria (mai/2026): paridade Admin/CRM no template seed.
 export * from "./template-materializer";
+// Migration 124: editor estruturado de prompt SDR.
+export * from "./structured-prompt";

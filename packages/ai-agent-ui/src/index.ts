@@ -39,6 +39,9 @@ export { NotificationsTab } from "./components/NotificationsTab";
 export { SchedulingTab } from "./components/SchedulingTab";
 export { PlaceholderTab } from "./components/PlaceholderTab";
 
+// Migration 124: editor estruturado de prompt SDR.
+export { StructuredPromptEditor } from "./components/StructuredPromptEditor";
+
 // Leaf components (pra uso direto fora dos tabs padrao)
 export { AgentStatusBadge } from "./components/AgentStatusBadge";
 export { ActiveLimitsProgress } from "./components/ActiveLimitsProgress";

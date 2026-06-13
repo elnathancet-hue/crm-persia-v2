@@ -55,10 +55,12 @@ import type {
   McpStructuredSource,
   JsonStructuredSource,
   MessageTemplate,
+  StructuredPromptConfig,
   StructuredSource,
   UpdateAgentInput,
   ValidationConfig,
 } from "@persia/shared/ai-agent";
+import { compileStructuredPrompt } from "@persia/shared/ai-agent";
 import {
   AFTER_HOURS_MESSAGE_DEFAULT,
   AFTER_HOURS_MESSAGE_MAX_LENGTH,
@@ -92,6 +94,7 @@ import {
 import { EntryConditionsCard } from "./EntryConditionsCard";
 import { DocumentsTab } from "./DocumentsTab";
 import { PromptBuilderSection } from "./PromptBuilderSection";
+import { StructuredPromptEditor } from "./StructuredPromptEditor";
 import { UnsavedChangesGuard } from "./use-unsaved-changes-guard";
 import { useAgentActions } from "../context";
 import {
@@ -268,6 +271,11 @@ export function RulesTab({
   const [structuredSources, setStructuredSources] = React.useState<StructuredSource[]>(
     agent.structured_sources ?? [],
   );
+  // Migration 124: editor estruturado de prompt SDR. null = agente legado.
+  const [structuredPromptConfig, setStructuredPromptConfig] =
+    React.useState<StructuredPromptConfig | null>(
+      agent.structured_prompt_config ?? null,
+    );
   const [sourceModalOpen, setSourceModalOpen] = React.useState(false);
   const [editingSource, setEditingSource] = React.useState<StructuredSource | null>(null);
   const [mcpServers, setMcpServers] = React.useState<Array<{
@@ -391,6 +399,7 @@ export function RulesTab({
     setTemplates(agent.message_templates ?? []);
     setValidationConfig(normalizeValidationConfig(agent.validation_config));
     setStructuredSources(agent.structured_sources ?? []);
+    setStructuredPromptConfig(agent.structured_prompt_config ?? null);
   }, [
     agent.id,
     agent.name,
@@ -508,6 +517,10 @@ export function RulesTab({
   const sourcesDirty =
     JSON.stringify(structuredSources) !== JSON.stringify(agent.structured_sources ?? []);
 
+  const structuredPromptDirty =
+    JSON.stringify(structuredPromptConfig) !==
+    JSON.stringify(agent.structured_prompt_config ?? null);
+
   const dirty =
     promptDirty ||
     nameDirty ||
@@ -520,7 +533,8 @@ export function RulesTab({
     humanizationDirty ||
     templatesDirty ||
     validationDirty ||
-    sourcesDirty;
+    sourcesDirty ||
+    structuredPromptDirty;
 
   // Sincroniza ref do dirty pro useEffect de resync acima ler sem
   // recriar deps. Padrao "ref reflete state recente" — comum em
@@ -595,6 +609,13 @@ export function RulesTab({
     if (templatesDirty) patch.message_templates = templates;
     if (validationDirty) patch.validation_config = validationConfig;
     if (sourcesDirty) patch.structured_sources = structuredSources;
+    if (structuredPromptDirty) {
+      patch.structured_prompt_config = structuredPromptConfig;
+      // Quando o editor estruturado muda, recompila o system_prompt.
+      if (structuredPromptConfig) {
+        patch.system_prompt = compileStructuredPrompt(structuredPromptConfig);
+      }
+    }
     onChange(patch, "Configurações salvas");
   }, [
     promptDirty,
@@ -630,6 +651,8 @@ export function RulesTab({
     validationConfig,
     sourcesDirty,
     structuredSources,
+    structuredPromptDirty,
+    structuredPromptConfig,
     onChange,
   ]);
 
@@ -736,15 +759,76 @@ export function RulesTab({
               )}
             </div>
           </div>
-          {/* PR 22 (mai/2026): prompt agora tem 2 modos de edição
-              (texto corrido OU por partes). Antes era só textarea
-              monoespaçada — cliente leigo se perdia. Agora pode
-              dividir em Persona/Missão/Regras/Estilo/Conhecimento. */}
-          <PromptBuilderSection
-            value={prompt}
-            onChange={setPrompt}
-            agentId={agent.id}
-          />
+          {/* Migration 124: editor estruturado SDR substitui o textarea
+              corrido quando structured_prompt_config está definido.
+              Agentes legados (sem config) continuam com o PromptBuilderSection.
+              Botão "Usar editor estruturado" ativa o novo modo para o agente. */}
+          {structuredPromptConfig !== null ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Configuração do Agente SDR
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStructuredPromptConfig(null)}
+                  className="text-xs text-muted-foreground h-auto py-1"
+                >
+                  Voltar ao editor de texto
+                </Button>
+              </div>
+              <StructuredPromptEditor
+                value={structuredPromptConfig}
+                onChange={(next, compiled) => {
+                  setStructuredPromptConfig(next);
+                  setPrompt(compiled);
+                }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Instrução do agente
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setStructuredPromptConfig({
+                      version: 1,
+                      identity: {
+                        agent_name: agent.name,
+                        company: "",
+                        segment: "",
+                        channel: "WhatsApp",
+                        region: "",
+                        goal: "",
+                      },
+                      tone: {
+                        preset: "direct_commercial",
+                        custom_instruction: "",
+                      },
+                      master_prompt: prompt,
+                      commercial_rules: [],
+                      prohibited_actions: [],
+                    })
+                  }
+                  className="text-xs h-auto py-1"
+                >
+                  ✦ Usar editor estruturado
+                </Button>
+              </div>
+              <PromptBuilderSection
+                value={prompt}
+                onChange={setPrompt}
+                agentId={agent.id}
+              />
+            </div>
+          )}
 
           <section className="space-y-3 pt-1">
             <div className="flex items-center gap-1.5">
