@@ -18,7 +18,12 @@ export async function getOrgSettings() {
 
 export async function updateOrgSettings(updates: { name?: string; niche?: string; services?: Record<string, boolean>; }) {
   const { admin, orgId, userId } = await requireSuperadminForOrg();
-  const { error } = await admin.from("organizations").update({ ...updates, updated_at: new Date().toISOString() }).eq("id", orgId);
+  // Whitelist explícita — defesa contra raw POST com chaves arbitrárias.
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) patch.name = updates.name;
+  if (updates.niche !== undefined) patch.niche = updates.niche;
+  if (updates.services !== undefined) patch.services = updates.services;
+  const { error } = await admin.from("organizations").update(patch).eq("id", orgId);
   if (error) {
     await auditFailure({ userId, orgId, action: "update_org_settings", entityType: "organization", entityId: orgId, error });
     return { error: error.message };
@@ -55,10 +60,15 @@ export async function getTeamMembers() {
   }));
 }
 
+const ALLOWED_MEMBER_ROLES = ["admin", "agent", "viewer"] as const;
+
 export async function createTeamMember(data: {
   firstName: string; lastName: string; email: string; phone: string; password: string; role: string;
 }) {
   const { admin, orgId, userId } = await requireSuperadminForOrg();
+  if (!(ALLOWED_MEMBER_ROLES as readonly string[]).includes(data.role)) {
+    return { error: `Role inválida: ${data.role}` };
+  }
 
   const { data: newUser, error: authErr } = await admin.auth.admin.createUser({
     email: data.email,
@@ -103,7 +113,9 @@ export async function createTeamMember(data: {
 
 export async function updateMemberRole(memberId: string, role: string) {
   const { admin, orgId, userId } = await requireSuperadminForOrg();
-  // Verify member belongs to active org
+  if (!(ALLOWED_MEMBER_ROLES as readonly string[]).includes(role)) {
+    return { error: `Role inválida: ${role}` };
+  }
   const { error } = await admin.from("organization_members").update({ role }).eq("id", memberId).eq("organization_id", orgId);
   if (error) {
     await auditFailure({ userId, orgId, action: "update_member_role", entityType: "member", entityId: memberId, metadata: { role }, error });
