@@ -54,7 +54,14 @@ export interface ImportLeadsResult {
 
 function normalizePhone(value: unknown): string {
   if (value === null || value === undefined) return "";
-  return String(value).replace(/\D/g, "");
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return "";
+  // Número BR sem DDI (10 dígitos = fixo, 11 = celular): adiciona +55 para
+  // casar com leads criados via WhatsApp webhook (chegam como +5511XXXXXXXXX).
+  if (digits.length === 10 || digits.length === 11) return "+55" + digits;
+  // Já tem DDI ou formato desconhecido: só prefixa +.
+  // Espelha o trigger normalize_lead_phone do DB (+digits).
+  return "+" + digits;
 }
 
 function normalizeEmail(value: unknown): string {

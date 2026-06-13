@@ -639,6 +639,7 @@ export function LeadInfoDrawer({
     address_complement: string | null;
     notes: string | null;
     conversation_summary: string | null;
+    metadata?: Record<string, unknown> | null;
   };
 
   const updateMutation = useDialogMutation<UpdateLeadPayload, { id: string }>({
@@ -675,6 +676,7 @@ export function LeadInfoDrawer({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    const existingMeta = (lead.metadata as Record<string, unknown>) ?? {};
     updateMutation.run({
       name: form.name || null,
       email: form.email || null,
@@ -691,6 +693,9 @@ export function LeadInfoDrawer({
       address_complement: form.address_complement || null,
       notes: form.notes || null,
       conversation_summary: form.conversation_summary || null,
+      // Landline: armazenado em metadata para não impactar campanhas WhatsApp.
+      // Merge com metadata existente para preservar outras chaves (ex: avatar_url).
+      metadata: { ...existingMeta, landline: form.landline || null },
     });
   }
   const isPending = updateMutation.pending;
