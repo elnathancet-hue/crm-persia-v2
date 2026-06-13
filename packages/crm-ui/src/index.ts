@@ -87,6 +87,7 @@ export {
   type ImportLeadsResult,
   type ImportFieldMapping,
   type ImportDestination,
+  type ImportPipelineOption,
   type DuplicateStrategy,
 } from "./components/ImportLeadsWizard";
 // PR-V1c: timeline global de activities movida de apps/crm pro pacote.

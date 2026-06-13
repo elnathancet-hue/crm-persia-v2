@@ -262,7 +262,7 @@ export function LeadContactPanel({ lead, conversationId, onOpenLeadDrawer, onClo
     window.open(`https://wa.me/${lead.phone.replace(/\D/g, "")}`, "_blank");
   }
 
-  const editLeadHref = lead.id ? `/leads/${lead.id}` : undefined;
+  const editLeadHref = lead.id ? `/crm?tab=leads&lead=${lead.id}` : undefined;
 
   function openLead() {
     if (onOpenLeadDrawer) onOpenLeadDrawer();

@@ -7,5 +7,5 @@ import { redirect } from "next/navigation";
 export const metadata = { title: "Etiquetas" };
 
 export default function TagsRedirect() {
-  redirect("/crm/settings?tab=etiquetas");
+  redirect("/crm?tab=tags");
 }

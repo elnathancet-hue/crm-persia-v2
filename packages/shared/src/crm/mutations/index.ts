@@ -83,6 +83,8 @@ export {
   bulkMoveLeads,
   bulkMarkLeadsAsLost,
   bulkMarkLeadsAsWon,
+  bulkDeleteLeads,
+  bulkApplyTagsToLeads,
 } from "./leads-kanban";
 
 // Produtos/Serviços (migration 106)

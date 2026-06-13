@@ -215,6 +215,9 @@ export {
   bulkMoveLeads,
   bulkMarkLeadsAsLost,
   bulkMarkLeadsAsWon,
+  // PR-C3: bulk delete + bulk apply tags (lead-centric)
+  bulkDeleteLeads,
+  bulkApplyTagsToLeads,
 } from "./mutations";
 
 // PR-S5: type tambem exportado pro caller wrappear retorno

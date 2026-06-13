@@ -31,6 +31,9 @@ export interface ImportDestination {
   create_segment?: boolean;
   segment_name?: string;
   segment_description?: string;
+  /** PR-C3: funil + etapa de destino. Leads criados ficam nessa etapa do Kanban. */
+  pipeline_id?: string;
+  stage_id?: string;
 }
 
 export interface ImportLeadsInput {
@@ -54,7 +57,14 @@ export interface ImportLeadsResult {
 
 function normalizePhone(value: unknown): string {
   if (value === null || value === undefined) return "";
-  return String(value).replace(/\D/g, "");
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) return "";
+  // Número BR sem DDI (10 dígitos = fixo, 11 = celular): adiciona +55 para
+  // casar com leads criados via WhatsApp webhook (chegam como +5511XXXXXXXXX).
+  if (digits.length === 10 || digits.length === 11) return "+55" + digits;
+  // Já tem DDI ou formato desconhecido: só prefixa +.
+  // Espelha o trigger normalize_lead_phone do DB (+digits).
+  return "+" + digits;
 }
 
 function normalizeEmail(value: unknown): string {
@@ -327,6 +337,25 @@ export async function importLeads(
   let createdCount = 0;
   const createdLeadIds: string[] = [];
 
+  // PR-C3: valida pipeline+stage se fornecidos (cross-tenant guard).
+  const destPipelineId = input.destination.pipeline_id || null;
+  const destStageId = input.destination.stage_id || null;
+  if (destPipelineId || destStageId) {
+    if (!destPipelineId || !destStageId) {
+      throw new Error("Informe o funil E a etapa para definir o destino dos leads.");
+    }
+    const { data: stageCheck } = await supabase
+      .from("pipeline_stages")
+      .select("id")
+      .eq("id", destStageId)
+      .eq("pipeline_id", destPipelineId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (!stageCheck) {
+      throw new Error("Funil/etapa de destino não encontrado nesta organização.");
+    }
+  }
+
   if (toInsert.length > 0) {
     const insertRows = toInsert.map((c) => ({
       organization_id: orgId,
@@ -337,6 +366,10 @@ export async function importLeads(
       status: input.destination.status ?? "new",
       channel: "whatsapp",
       metadata: c.notes ? { import_notes: c.notes } : {},
+      // PR-C3: coloca o lead na etapa do Kanban se escolhida no wizard.
+      ...(destPipelineId && destStageId
+        ? { pipeline_id: destPipelineId, stage_id: destStageId, sort_order: 0 }
+        : {}),
     }));
 
     // Supabase nao tem batch limit pratico de 5000 mas pra seguranca

@@ -108,6 +108,8 @@ export interface LeadWithTags {
   notes?: string | null;
   /** Resumo da conversa gerado pela IA (migration 107). Exibido no drawer. */
   conversation_summary?: string | null;
+  /** Valor esperado do negócio (migration 030). Exibido e editável no drawer. */
+  expected_value?: number | null;
   /** Lead Capture API — origin + UTM tracking (migration 109). */
   capture_source_id?: string | null;
   utm_source?: string | null;

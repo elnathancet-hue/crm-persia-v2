@@ -208,6 +208,7 @@ interface FormState {
   address_complement: string;
   notes: string;
   conversation_summary: string;
+  expected_value: string;
 }
 
 function leadToFormState(lead: LeadWithTags): FormState {
@@ -230,6 +231,8 @@ function leadToFormState(lead: LeadWithTags): FormState {
     address_complement: lead.address_complement ?? "",
     notes: lead.notes ?? "",
     conversation_summary: lead.conversation_summary ?? "",
+    expected_value:
+      lead.expected_value != null ? String(lead.expected_value) : "",
   };
 }
 
@@ -639,6 +642,8 @@ export function LeadInfoDrawer({
     address_complement: string | null;
     notes: string | null;
     conversation_summary: string | null;
+    metadata?: Record<string, unknown> | null;
+    expected_value?: number | null;
   };
 
   const updateMutation = useDialogMutation<UpdateLeadPayload, { id: string }>({
@@ -675,6 +680,7 @@ export function LeadInfoDrawer({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    const existingMeta = (lead.metadata as Record<string, unknown>) ?? {};
     updateMutation.run({
       name: form.name || null,
       email: form.email || null,
@@ -691,6 +697,12 @@ export function LeadInfoDrawer({
       address_complement: form.address_complement || null,
       notes: form.notes || null,
       conversation_summary: form.conversation_summary || null,
+      // Landline: armazenado em metadata para não impactar campanhas WhatsApp.
+      // Merge com metadata existente para preservar outras chaves (ex: avatar_url).
+      metadata: { ...existingMeta, landline: form.landline || null },
+      expected_value: form.expected_value
+        ? parseFloat(form.expected_value)
+        : null,
     });
   }
   const isPending = updateMutation.pending;
@@ -1105,6 +1117,17 @@ export function LeadInfoDrawer({
                       value={form.landline}
                       onChange={(e) => set("landline", e.target.value)}
                       placeholder="(00) 3000-0000"
+                    />
+                  </Field>
+                  <Field label="Valor esperado">
+                    <Input
+                      name="lead_expected_value"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.expected_value}
+                      onChange={(e) => set("expected_value", e.target.value)}
+                      placeholder="0,00"
                     />
                   </Field>
                   <Field label="Responsável">

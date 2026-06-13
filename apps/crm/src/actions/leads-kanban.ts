@@ -10,6 +10,8 @@ import { requireRole } from "@/lib/auth";
 import { revalidateLeadCaches } from "@/lib/cache/lead-revalidation";
 import { cacheLeadAvatarFromUrl } from "@/lib/lead-avatar-cache";
 import {
+  bulkApplyTagsToLeads as bulkApplyTagsToLeadsShared,
+  bulkDeleteLeads as bulkDeleteLeadsShared,
   bulkMarkLeadsAsLost as bulkMarkLeadsAsLostShared,
   bulkMarkLeadsAsWon as bulkMarkLeadsAsWonShared,
   bulkMoveLeads as bulkMoveLeadsShared,
@@ -357,6 +359,39 @@ export async function bulkMarkLeadsAsLost(
       leadIds,
       input,
     );
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return { error: asErrorMessage(err) };
+  }
+}
+
+export async function bulkDeleteLeadsFromKanban(
+  leadIds: string[],
+): Promise<ActionResult<{ deleted_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const result = await bulkDeleteLeadsShared({ db: supabase, orgId }, leadIds);
+    revalidateLeadCaches();
+    revalidatePath("/crm");
+    return { data: result };
+  } catch (err) {
+    return { error: asErrorMessage(err) };
+  }
+}
+
+export async function bulkApplyTagsToLeadsKanban(
+  leadIds: string[],
+  tagIds: string[],
+): Promise<ActionResult<{ links_count: number }>> {
+  try {
+    const { supabase, orgId } = await requireRole("agent");
+    const result = await bulkApplyTagsToLeadsShared(
+      { db: supabase, orgId },
+      leadIds,
+      tagIds,
+    );
+    revalidateLeadCaches();
     revalidatePath("/crm");
     return { data: result };
   } catch (err) {

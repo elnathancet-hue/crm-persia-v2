@@ -37,6 +37,12 @@ export interface UpdateLeadInput extends Partial<CreateLeadInput> {
   conversation_summary?: string | null;
   /** Valor esperado do negócio (coluna expected_value no Kanban). */
   expected_value?: number | null;
+  /**
+   * Patch parcial do JSONB metadata. Mesclado com metadata existente
+   * (shallow merge via `||` operator no DB). Usado para campos que não
+   * têm coluna própria (ex: landline).
+   */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CreatedLead {
@@ -172,6 +178,10 @@ export async function updateLead(
       input.expected_value != null && Number.isFinite(input.expected_value)
         ? input.expected_value
         : null;
+  // Metadata: caller é responsável por mesclar com o objeto existente
+  // antes de passar (ex: `{ ...lead.metadata, landline: form.landline }`).
+  // null limpa o campo inteiro.
+  if (input.metadata !== undefined) updateData.metadata = input.metadata;
 
   const { data, error } = await db
     .from("leads")

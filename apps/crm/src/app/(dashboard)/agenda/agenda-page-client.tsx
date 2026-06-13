@@ -22,6 +22,7 @@ import {
   type AgendaCallbacks,
   type AgendaSettingsActions,
   type AgendaTab,
+  type LeadOption,
 } from "@persia/agenda-ui";
 import { useDebouncedCallback } from "@persia/leads-ui";
 import type {
@@ -50,6 +51,8 @@ interface Props {
   currentUserId: string;
   orgId: string | null;
   orgSlug: string;
+  /** PR-C4: lead pre-selecionado quando abre via ?leadId= da lista de leads. */
+  prefillLead?: { id: string; name: string } | null;
 }
 
 /**
@@ -63,6 +66,7 @@ export function AgendaPageClient({
   currentUserId,
   orgId,
   orgSlug,
+  prefillLead,
 }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<AgendaTab>("overview");
@@ -75,6 +79,7 @@ export function AgendaPageClient({
     start: Date;
     end: Date;
   } | null>(null);
+  const [createPrefillLead, setCreatePrefillLead] = useState<LeadOption | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(
     null,
   );
@@ -98,6 +103,16 @@ export function AgendaPageClient({
       cancelled = true;
     };
   }, [currentUserId]);
+
+  // PR-C4: ?leadId= abre drawer de criar agendamento com lead pre-selecionado.
+  useEffect(() => {
+    if (prefillLead) {
+      setCreatePrefillLead(prefillLead);
+      setCreateKind("appointment");
+    }
+    // so roda na montagem — prefillLead vem de SSR e nao muda
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refetch = useCallback(() => {
     crmAgendaActions
@@ -162,6 +177,7 @@ export function AgendaPageClient({
   const handleCreateClose = useCallback(() => {
     setCreateKind(null);
     setCreatePrefill(null);
+    setCreatePrefillLead(null);
   }, []);
 
   const handleNovoMenuSelect = useCallback((kind: AppointmentKind) => {
@@ -244,6 +260,7 @@ export function AgendaPageClient({
           initialKind={createKind ?? "appointment"}
           services={services}
           prefillSlot={createPrefill}
+          initialLead={createPrefillLead}
           onClose={handleCreateClose}
         />
 
